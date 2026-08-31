@@ -26,7 +26,15 @@ const initialMessages: ChatMessage[] = [
   { id: 3, role: 'ai', text: questions.transfer.prompt, choices: questions.transfer.choices },
 ];
 
-const getNextQuestion = (key: QuestionKey, answer: string): Question | undefined => {
+const recoveryQuestions: Question[] = [
+  { key: 'recovery', prompt: '피해구제 절차를 진행하기 위해 현재 가장 필요한 도움을 선택해주세요.', choices: ['피해 금액과 거래 내역을 정리하고 싶어요', '은행에 지급정지를 요청했어요', '신고 및 피해구제 절차가 궁금해요', '아직 무엇부터 해야 할지 모르겠어요'] },
+  { key: 'recovery', prompt: '피해 거래를 확인할 수 있는 자료를 가지고 있나요?', choices: ['거래 내역이 있어요', '문자·통화 기록이 있어요', '자료를 찾고 있어요', '자료가 없어요'] },
+  { key: 'recovery', prompt: '은행에 피해 사실이나 지급정지를 요청했나요?', choices: ['요청했습니다', '아직 요청하지 않았습니다', '은행과 상담 중입니다', '잘 모르겠습니다'] },
+  { key: 'recovery', prompt: '신고 또는 피해구제 신청 진행 상황을 알려주세요.', choices: ['신고를 완료했습니다', '신고를 준비 중입니다', '절차를 안내받고 싶어요', '잘 모르겠습니다'] },
+];
+
+const getNextQuestion = (key: QuestionKey, answer: string, recoveryStep = 0): Question | undefined => {
+  if (key === 'recovery') return recoveryQuestions[(recoveryStep + 1) % recoveryQuestions.length];
   if (key === 'transfer') return answer.startsWith('아니요') ? questions.personal : questions.amount;
   if (key === 'amount') return questions.personal;
   if (key === 'personal') return answer.startsWith('제공하지') ? questions.link : questions.personalDegree;
@@ -43,6 +51,7 @@ export const CompactSafetyChat: React.FC<CompactSafetyChatProps> = ({ onResponse
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [input, setInput] = useState('');
   const [currentQuestion, setCurrentQuestion] = useState<QuestionKey>('transfer');
+  const [recoveryStep, setRecoveryStep] = useState(0);
   const [selectedChoices, setSelectedChoices] = useState<string[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [isListening, setIsListening] = useState(false);
@@ -53,26 +62,34 @@ export const CompactSafetyChat: React.FC<CompactSafetyChatProps> = ({ onResponse
     if (!recoveryMode && currentQuestion === 'recovery') {
       setMessages(initialMessages);
       setCurrentQuestion('transfer');
+      setRecoveryStep(0);
       setSelectedChoices([]);
       return;
     }
     if (!recoveryMode || currentQuestion === 'recovery') return;
     setMessages((current) => [...current, { id: Date.now(), role: 'ai', text: '피해를 입은 사실이 확인되어 구제모드로 방향을 전환합니다. 지금 필요한 도움을 선택해주세요.', choices: recoveryChoices }]);
     setCurrentQuestion('recovery');
+    setRecoveryStep(0);
     setSelectedChoices([]);
   }, [currentQuestion, recoveryMode]);
+
+  useEffect(() => {
+    const container = document.querySelector<HTMLElement>('[aria-label="Customer Agent Chat"] .overflow-y-auto');
+    if (container) container.scrollTop = container.scrollHeight;
+  }, [messages, latestChoices]);
 
   const respond = (answer: string) => {
     const trimmed = answer.trim();
     if ((!trimmed && attachments.length === 0) || currentQuestion === 'done') return;
     onResponse?.(currentQuestion, trimmed);
-    const next = getNextQuestion(currentQuestion, trimmed);
+    const next = getNextQuestion(currentQuestion, trimmed, recoveryStep);
     const response: ChatMessage[] = [{ id: Date.now(), role: 'user', text: trimmed || '첨부 파일을 보냈습니다.', attachments }];
     if (requiresCounselor(currentQuestion, trimmed)) response.push({ id: Date.now() + 1, role: 'counselor', text: '위험 신호가 감지되었습니다. 필요하면 상담사 확인을 요청할 수 있습니다. AI가 우선 확인을 계속하겠습니다.' });
     response.push({ id: Date.now() + 2, role: 'ai', text: acknowledgement(currentQuestion, trimmed) });
     response.push(next ? { id: Date.now() + 3, role: 'ai', text: next.prompt, choices: next.choices } : { id: Date.now() + 3, role: 'ai', text: '필요한 답변을 모두 확인했습니다. 추가 내용은 아래 입력창에 남겨주세요.' });
     setMessages((current) => [...current, ...response]);
     setCurrentQuestion(next?.key ?? 'done');
+    if (currentQuestion === 'recovery') setRecoveryStep((current) => (current + 1) % recoveryQuestions.length);
     setSelectedChoices([]); setAttachments([]); setInput('');
   };
   const addAttachments = (event: React.ChangeEvent<HTMLInputElement>) => { setAttachments((current) => [...current, ...Array.from(event.target.files ?? []).map((file) => ({ name: file.name, preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined, isImage: file.type.startsWith('image/') }))]); event.target.value = ''; };

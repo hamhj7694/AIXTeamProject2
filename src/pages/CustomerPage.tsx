@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { AlertTriangle, ArrowLeft, Check, Clock3 } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { AppLayout } from '../components/layout/AppLayout';
@@ -46,6 +46,13 @@ export const CustomerPage: React.FC = () => {
   });
   const [answeredQuestions, setAnsweredQuestions] = useState<QuestionKey[]>([]);
   const [recoveryMode, setRecoveryMode] = useState(false);
+  const [humanTakeover, setHumanTakeover] = useState(() => window.localStorage.getItem('human-takeover') === 'true');
+  useEffect(() => {
+    const syncHumanTakeover = () => setHumanTakeover(window.localStorage.getItem('human-takeover') === 'true');
+    window.addEventListener('human-takeover-change', syncHumanTakeover);
+    window.addEventListener('storage', syncHumanTakeover);
+    return () => { window.removeEventListener('human-takeover-change', syncHumanTakeover); window.removeEventListener('storage', syncHumanTakeover); };
+  }, []);
 
   const handleResponse = (question: QuestionKey, answer: string) => {
     setAnsweredQuestions((current) => current.includes(question) ? current : [...current, question]);
@@ -92,7 +99,7 @@ export const CustomerPage: React.FC = () => {
               <p className="text-xs text-rose-700">은행 확인 중 · #{currentCase.id}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2"><span className={`rounded-full px-2.5 py-1 text-[11px] font-extrabold ${recoveryMode ? 'bg-rose-100 text-rose-700' : 'bg-blue-50 text-blue-700'}`}>{recoveryMode ? '구제모드' : currentCase.status}</span><span className="rounded-full bg-white/70 px-2.5 py-1 text-[11px] font-bold text-slate-500">{recoveryMode ? '피해 대응 진행 중' : '일반 상담'}</span></div>
+          <div className="flex items-center gap-2"><span className={`rounded-full px-2.5 py-1 text-[11px] font-extrabold ${recoveryMode ? 'bg-rose-100 text-rose-700' : 'bg-blue-50 text-blue-700'}`}>{recoveryMode ? '구제모드' : currentCase.status}</span><span className="rounded-full bg-white/70 px-2.5 py-1 text-[11px] font-bold text-slate-500">{recoveryMode ? '피해 대응 진행 중' : '상황 확인 및 상담'}</span></div>
         </div>
 
         <div className="grid gap-4 lg:grid-cols-[1.35fr_1fr]">
@@ -102,7 +109,7 @@ export const CustomerPage: React.FC = () => {
               <p className="text-sm leading-7 text-slate-700">{currentCase.summary} <b>확인 전까지 송금하지 마세요.</b></p>
             </section>
             <CompactSafetyChat onResponse={handleResponse} recoveryMode={recoveryMode} />
-            <button onClick={() => setRecoveryMode((current) => !current)} className={`w-full rounded-xl border py-3 text-sm font-bold transition ${recoveryMode ? 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50' : 'border-rose-200 bg-white text-rose-600 hover:bg-rose-50'}`}>{recoveryMode ? '일반 상담으로 돌아가기' : '이미 피해를 입었어요 → 구제모드 시작'}</button>
+            <button onClick={() => setRecoveryMode((current) => !current)} className={`w-full rounded-xl border py-3 text-sm font-bold transition ${recoveryMode ? 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50' : 'border-rose-200 bg-white text-rose-600 hover:bg-rose-50'}`}>{recoveryMode ? '상담으로 돌아가기' : '이미 피해를 입었어요 → 구제모드 시작'}</button>
           </div>
 
           <div className="space-y-4">
@@ -120,7 +127,7 @@ export const CustomerPage: React.FC = () => {
                 <StatusRow label="개인정보 노출" value={liveStatus.personal} />
                 <StatusRow label="공식기관 검증" value={liveStatus.verification} />
                 <StatusRow label="은행 확인 및 조치 상태" value={`${liveStatus.bank} · ${liveStatus.bankAction}`} />
-                <StatusRow label="담당자 참여" value={liveStatus.human} />
+                <StatusRow label="담당자 참여" value={humanTakeover ? '담당자 참여 중' : liveStatus.human} />
               </div>
               <p className="mt-4 inline-flex items-center gap-1 text-sm text-slate-400"><Clock3 size={14} /> 챗봇 답변을 선택하면 바로 갱신됩니다.</p>
             </section>

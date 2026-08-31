@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
-import { BankPage, DiagnosisPage } from '../pages/CasePages';
+import { DiagnosisPage } from '../pages/CasePages';
+import { BankPage } from '../pages/BankPage';
 import { CustomerPage } from '../pages/CustomerPage';
 import { CaseEntryPageV2 } from '../pages/CaseEntryPageV2';
 import { CaseVerificationPage } from '../pages/CaseVerificationPage';
