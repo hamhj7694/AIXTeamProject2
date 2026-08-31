@@ -1,51 +1,18 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { LayoutDashboard, Sparkles } from 'lucide-react';
 import { Header } from './Header';
+import { CaseRoleNav } from '../case/CaseRoleNav';
 
-interface AppLayoutProps {
-  children: React.ReactNode;
-}
-
+interface AppLayoutProps { children: React.ReactNode; }
 const navItems = [
-  { label: '상담', path: '/', icon: '◎' },
-  { label: '안전안내', path: '/safety', icon: '✓' },
-  { label: '기록', path: '/history', icon: '▣' },
-  { label: '대응법', path: '/response-guide', icon: '☰' },
+  { label: '통화 진단', path: '/', icon: Sparkles },
+  { label: 'Case 목록', path: '/cases', icon: LayoutDashboard },
 ];
 
 export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const location = useLocation();
-
-  return (
-    <div className="flex flex-col min-h-screen bg-slate-50 text-slate-800">
-      <Header />
-      <main className="flex-1 w-full pb-24">
-        {children}
-      </main>
-
-      <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white/95 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-4xl items-center justify-between gap-2 px-3 py-2">
-          {navItems.map((item) => {
-            const active = location.pathname === item.path;
-
-            return (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={[
-                  'flex flex-1 flex-col items-center justify-center rounded-xl px-2 py-2 text-[11px] font-medium transition-colors',
-                  active
-                    ? 'bg-slate-900 text-white shadow-sm'
-                    : 'text-slate-600 hover:bg-slate-100',
-                ].join(' ')}
-              >
-                <span className="mb-1 text-base leading-none">{item.icon}</span>
-                <span>{item.label}</span>
-              </Link>
-            );
-          })}
-        </div>
-      </nav>
-    </div>
-  );
+  const caseMatch = location.pathname.match(/^\/cases\/([^/]+)/);
+  const activeCaseId = caseMatch?.[1] ?? 'VP-014';
+  return <div className="min-h-screen bg-[#f5f7fb] text-slate-900"><Header /><main className="mx-auto w-full max-w-[1440px] px-4 pb-14 sm:px-6 lg:px-8">{children}</main><nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white/95 backdrop-blur lg:bottom-auto lg:left-6 lg:top-[88px] lg:w-56 lg:rounded-2xl lg:border lg:shadow-sm"><div className="mx-auto flex max-w-3xl justify-around gap-1 p-2 lg:block lg:max-w-none">{navItems.map(({ label, path, icon: Icon }) => { const active = path === '/' ? location.pathname === '/' : location.pathname.startsWith(path); return <Link key={path} to={path} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-semibold transition lg:mb-1 lg:text-sm ${active ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><Icon size={17} /><span>{label}</span></Link>; })}<div className="hidden lg:block"><CaseRoleNav caseId={activeCaseId} compact /></div></div></nav><div className="lg:pl-64" /></div>;
 };

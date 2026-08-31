@@ -1,19 +1,4 @@
 import React from 'react';
+import { Bell, ShieldCheck } from 'lucide-react';
 
-export const Header: React.FC = () => {
-  return (
-    <header className="w-full bg-white border-b border-gray-200 sticky top-0 z-40">
-      <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">안전 상담</h1>
-        <button
-          title="도움말"
-          className="w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors"
-        >
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-        </button>
-      </div>
-    </header>
-  );
-};
+export const Header: React.FC = () => <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur"><div className="mx-auto flex h-16 max-w-[1440px] items-center justify-between px-4 sm:px-6 lg:px-8"><div className="flex items-center gap-2.5"><div className="grid h-9 w-9 place-items-center rounded-xl bg-blue-600 text-white"><ShieldCheck size={20} /></div><div><p className="text-sm font-extrabold tracking-tight">송금방지턱</p><p className="text-[10px] font-medium text-slate-400">AI 독립검증형 안전 플랫폼</p></div></div><div className="flex items-center gap-3"><span className="hidden rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 sm:inline-flex">● 시스템 정상</span><button className="rounded-xl p-2 text-slate-500 hover:bg-slate-100" aria-label="알림"><Bell size={18} /></button><div className="grid h-8 w-8 place-items-center rounded-full bg-slate-900 text-xs font-bold text-white">홍</div></div></div></header>;
