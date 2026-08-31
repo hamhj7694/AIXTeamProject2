@@ -21,8 +21,11 @@ export const ManagerRoomNavigation: React.FC<ManagerRoomNavigationProps> = ({
   onViewChange,
 }) => {
   return (
-    <nav aria-label="담당자 ROOM 화면" className="border-b border-slate-200 bg-white">
-      <div className="mx-auto flex max-w-7xl gap-1 overflow-x-auto px-4 sm:px-6 lg:px-8">
+    <nav
+      aria-label="담당자 ROOM 화면"
+      className="-mt-px rounded-b-xl border border-slate-200 bg-white"
+    >
+      <div className="flex gap-1 overflow-x-auto px-2 sm:px-3">
         {navigationItems.map((item) => {
           const active = currentView === item.view;
 
@@ -33,10 +36,10 @@ export const ManagerRoomNavigation: React.FC<ManagerRoomNavigationProps> = ({
               onClick={() => onViewChange(item.view)}
               aria-current={active ? 'page' : undefined}
               className={cn(
-                'whitespace-nowrap border-b-2 px-4 py-4 text-sm font-semibold transition-colors',
+                'whitespace-nowrap border-b-2 px-3 py-3 text-xs font-bold transition-colors sm:text-sm',
                 active
-                  ? 'border-slate-900 text-slate-950'
-                  : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800'
+                  ? 'border-blue-600 text-blue-700'
+                  : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-900'
               )}
             >
               {item.label}

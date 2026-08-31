@@ -15,6 +15,21 @@ export interface ManagerRoomCase {
   dataSource: 'MVP Mock';
 }
 
+export interface ManagerRoomMessage {
+  id: string;
+  role: 'manager' | 'assistant';
+  content: string;
+}
+
+export interface ManagerRoomWorkspaceMock {
+  brief: string;
+  riskEvidence: string[];
+  counterEvidence: string[];
+  unknowns: string[];
+  recommendedQuestion: string;
+  initialMessages: ManagerRoomMessage[];
+}
+
 export const isManagerRoomView = (
   value: string | null
 ): value is ManagerRoomView => {

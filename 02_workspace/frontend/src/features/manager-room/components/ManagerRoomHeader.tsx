@@ -1,4 +1,6 @@
 import React from 'react';
+import { ArrowLeft } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { Badge } from '../../../components/ui/Badge';
 import { Button } from '../../../components/ui/Button';
 import { ManagerRoomCase } from '../types';
@@ -15,39 +17,31 @@ export const ManagerRoomHeader: React.FC<ManagerRoomHeaderProps> = ({
   onOpenCustomerView,
 }) => {
   return (
-    <header className="border-b border-slate-200 bg-white">
-      <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
-        <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
-          <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-center">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              disabled
-              title="사건 목록 Route가 연결되면 사용할 수 있습니다."
-              className="shrink-0"
-            >
-              ← 사건 목록
-            </Button>
+    <header className="rounded-t-xl border border-slate-200 bg-white shadow-sm">
+      <div className="p-4 sm:p-5">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div className="min-w-0">
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <Link
+                to="/cases"
+                className="inline-flex items-center gap-1 text-xs font-bold text-slate-500 transition hover:text-blue-600"
+              >
+                <ArrowLeft size={15} />
+                Case로 돌아가기
+              </Link>
+              <span aria-hidden="true" className="text-slate-300">·</span>
+              <span className="text-xs font-bold text-slate-400">
+                CASE #{caseInfo.caseId}
+              </span>
+              <Badge variant="default">{caseInfo.dataSource}</Badge>
+            </div>
 
-            <div className="min-w-0 border-slate-200 sm:border-l sm:pl-5">
-              <div className="mb-2 flex flex-wrap items-center gap-2">
-                <span className="text-sm font-semibold text-slate-500">
-                  {caseInfo.caseId}
-                </span>
-                <Badge variant="default">{caseInfo.dataSource}</Badge>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="mr-1 truncate text-xl font-bold text-slate-950">
-                  {caseInfo.title}
-                </h1>
-                <Badge variant="danger" size="md">
-                  위험 {caseInfo.risk}
-                </Badge>
-                <Badge variant="warning" size="md">
-                  {caseInfo.status}
-                </Badge>
-              </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="mr-1 truncate text-xl font-black tracking-tight text-slate-950">
+                {caseInfo.title}
+              </h1>
+              <Badge variant="danger">위험 {caseInfo.risk}</Badge>
+              <Badge variant="warning">{caseInfo.status}</Badge>
             </div>
           </div>
 
