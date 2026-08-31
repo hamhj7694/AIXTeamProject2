@@ -45,6 +45,7 @@ export const CustomerPage: React.FC = () => {
     human: '참여 대기 중',
   });
   const [answeredQuestions, setAnsweredQuestions] = useState<QuestionKey[]>([]);
+  const [recoveryMode, setRecoveryMode] = useState(false);
 
   const handleResponse = (question: QuestionKey, answer: string) => {
     setAnsweredQuestions((current) => current.includes(question) ? current : [...current, question]);
@@ -91,7 +92,7 @@ export const CustomerPage: React.FC = () => {
               <p className="text-xs text-rose-700">은행 확인 중 · #{currentCase.id}</p>
             </div>
           </div>
-          <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-extrabold text-blue-700">{currentCase.status}</span>
+          <div className="flex items-center gap-2"><span className={`rounded-full px-2.5 py-1 text-[11px] font-extrabold ${recoveryMode ? 'bg-rose-100 text-rose-700' : 'bg-blue-50 text-blue-700'}`}>{recoveryMode ? '구제모드' : currentCase.status}</span><span className="rounded-full bg-white/70 px-2.5 py-1 text-[11px] font-bold text-slate-500">{recoveryMode ? '피해 대응 진행 중' : '일반 상담'}</span></div>
         </div>
 
         <div className="grid gap-4 lg:grid-cols-[1.35fr_1fr]">
@@ -100,8 +101,8 @@ export const CustomerPage: React.FC = () => {
               <h2 className="mb-4 text-sm font-extrabold">AI Brief</h2>
               <p className="text-sm leading-7 text-slate-700">{currentCase.summary} <b>확인 전까지 송금하지 마세요.</b></p>
             </section>
-            <CompactSafetyChat onResponse={handleResponse} />
-            <button className="w-full rounded-xl border border-rose-200 bg-white py-3 text-sm font-bold text-rose-600 hover:bg-rose-50">이미 피해를 입었어요 → Recovery Mode 시작</button>
+            <CompactSafetyChat onResponse={handleResponse} recoveryMode={recoveryMode} />
+            <button onClick={() => setRecoveryMode((current) => !current)} className={`w-full rounded-xl border py-3 text-sm font-bold transition ${recoveryMode ? 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50' : 'border-rose-200 bg-white text-rose-600 hover:bg-rose-50'}`}>{recoveryMode ? '일반 상담으로 돌아가기' : '이미 피해를 입었어요 → 구제모드 시작'}</button>
           </div>
 
           <div className="space-y-4">
@@ -130,6 +131,7 @@ export const CustomerPage: React.FC = () => {
               <div className="h-2 rounded-full bg-slate-100"><div className="h-2 rounded-full bg-blue-600 transition-all duration-500" style={{ width: progressPercent }} /></div>
               <p className="mt-3 text-xs leading-5 text-slate-500">왼쪽 챗봇 질문에 답변하면 확인 상태와 진행률이 자동으로 반영됩니다.</p>
             </section>
+            {recoveryMode && <section className="rounded-2xl border border-rose-200 bg-rose-50 p-5 shadow-sm"><h2 className="text-sm font-extrabold text-rose-800">피해 발생 후 안내</h2><div className="mt-3 space-y-2 text-sm leading-6 text-rose-900"><p>• 추가 송금과 상대방의 연락을 중단하세요.</p><p>• 거래 내역과 대화·문자·첨부 파일을 보관하세요.</p><p>• 은행에 지급정지 및 피해구제 절차를 문의하세요.</p><p>• 필요한 신고와 증빙 제출 상태를 이 Case에서 확인하세요.</p></div><p className="mt-3 rounded-xl bg-white/70 p-3 text-xs font-semibold text-rose-700">실제 금융 조치는 금융기관 담당자의 확인 후 진행됩니다.</p></section>}
           </div>
         </div>
       </div>
