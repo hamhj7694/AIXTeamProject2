@@ -55,6 +55,8 @@ export const CustomerPage: React.FC = () => {
   }, []);
 
   const handleResponse = (question: QuestionKey, answer: string) => {
+    window.localStorage.setItem('customer-last-response', JSON.stringify({ question, answer, at: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) }));
+    window.dispatchEvent(new Event('customer-response-change'));
     setAnsweredQuestions((current) => current.includes(question) ? current : [...current, question]);
     setLiveStatus((current) => {
       if (question === 'transfer') {
