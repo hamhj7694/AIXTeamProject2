@@ -36,7 +36,7 @@ const getRiskColor = (level: string) => {
 /**
  * 위험도별 조치사항
  */
-const getActionsByRiskLevel = (level: string): string[] => {
+const getActionsByRiskLevel = (level: 'critical' | 'high' | 'medium' | 'low'): string[] => {
   const actions = {
     critical: [
       '⛔ 지금 바로 모든 행동을 멈추세요',
