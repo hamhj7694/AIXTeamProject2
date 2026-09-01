@@ -9,6 +9,8 @@
 
 일반 Backend는 단순 CRUD 서버가 아니라 서비스의 **통합·조정 계층(Orchestration Layer)** 이다.
 
+이 Orchestration Layer는 별도의 자율 AI Agent가 아니라 **일반 Backend의 결정론적 Workflow 코드**로 구현한다. Event와 Case State에 따라 필요한 AI 작업만 선택하고, 의존성이 없는 작업은 병렬 실행하며, 권한·버전·저장·재시도·Event 발행은 일반 코드가 책임진다. 상세 실행 구조는 `ai_system_design/01_backend_workflow_orchestrator.md`를 따른다.
+
 ```text
 CSR Frontend
     │
