@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import {
   createManagerRoomMockResponse,
-  managerRoomCustomerMessagesMock,
   managerRoomWorkspaceMock,
 } from '../../data/managerRoomMock';
 import {
@@ -15,18 +14,24 @@ import { WorkspaceChat } from './WorkspaceChat';
 
 type ConversationView = 'ai' | 'customer';
 
-export const AiWorkspace: React.FC = () => {
+interface AiWorkspaceProps {
+  customerMessages: ManagerRoomCustomerMessage[];
+  onCustomerMessagesChange: React.Dispatch<
+    React.SetStateAction<ManagerRoomCustomerMessage[]>
+  >;
+}
+
+export const AiWorkspace: React.FC<AiWorkspaceProps> = ({
+  customerMessages,
+  onCustomerMessagesChange,
+}) => {
   const [messages, setMessages] = useState<ManagerRoomMessage[]>(
     managerRoomWorkspaceMock.initialMessages
   );
   const [input, setInput] = useState('');
   const [conversationView, setConversationView] =
     useState<ConversationView>('ai');
-  const [customerMessages, setCustomerMessages] = useState<
-    ManagerRoomCustomerMessage[]
-  >(managerRoomCustomerMessagesMock);
   const [customerInput, setCustomerInput] = useState('');
-  const [voiceCallActive, setVoiceCallActive] = useState(false);
 
   const sendMockRequest = (request: string) => {
     const trimmedRequest = request.trim();
@@ -54,7 +59,7 @@ export const AiWorkspace: React.FC = () => {
     const trimmedInput = customerInput.trim();
     if (!trimmedInput) return;
 
-    setCustomerMessages((currentMessages) => [
+    onCustomerMessagesChange((currentMessages) => [
       ...currentMessages,
       {
         id: `customer-consultation-manager-${Date.now()}`,
@@ -75,35 +80,6 @@ export const AiWorkspace: React.FC = () => {
         : recommendedQuestion
     );
     setConversationView('customer');
-  };
-
-  const startVoiceCall = () => {
-    if (voiceCallActive) return;
-
-    // 실제 전화 연결 없이 통화 상태와 상담 기록만 관리하는 MVP 동작이다.
-    setVoiceCallActive(true);
-    setCustomerMessages((currentMessages) => [
-      ...currentMessages,
-      {
-        id: `customer-consultation-call-start-${Date.now()}`,
-        role: 'system',
-        content: '담당자가 고객과 음성 통화를 시작했습니다.',
-      },
-    ]);
-  };
-
-  const endVoiceCall = () => {
-    if (!voiceCallActive) return;
-
-    setVoiceCallActive(false);
-    setCustomerMessages((currentMessages) => [
-      ...currentMessages,
-      {
-        id: `customer-consultation-call-end-${Date.now()}`,
-        role: 'system',
-        content: '음성 통화가 종료되었습니다.',
-      },
-    ]);
   };
 
   return (
@@ -188,11 +164,8 @@ export const AiWorkspace: React.FC = () => {
           <CustomerConsultation
             messages={customerMessages}
             input={customerInput}
-            voiceCallActive={voiceCallActive}
             onInputChange={setCustomerInput}
             onSubmit={sendCustomerMessage}
-            onStartVoiceCall={startVoiceCall}
-            onEndVoiceCall={endVoiceCall}
           />
         )}
       </section>

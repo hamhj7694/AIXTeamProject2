@@ -10,6 +10,8 @@ import {
 
 interface ProgressTimelineProps {
   events: ManagerRoomProgressEvent[];
+  embedded?: boolean;
+  scrollable?: boolean;
 }
 
 type EventFilter = 'key' | 'all';
@@ -46,6 +48,8 @@ const phaseConfig: Array<{
 
 export const ProgressTimeline: React.FC<ProgressTimelineProps> = ({
   events,
+  embedded = false,
+  scrollable = false,
 }) => {
   const [eventFilter, setEventFilter] = useState<EventFilter>('key');
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
@@ -53,9 +57,8 @@ export const ProgressTimeline: React.FC<ProgressTimelineProps> = ({
   const visibleEvents =
     eventFilter === 'key' ? events.filter((event) => event.isKey) : events;
 
-  return (
-    <Card className="rounded-xl border-slate-200 p-0 shadow-sm">
-      <section aria-labelledby="progress-timeline-title">
+  const content = (
+    <section aria-labelledby="progress-timeline-title">
         <div className="flex flex-col gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
           <div>
             <div className="flex flex-wrap items-center gap-2">
@@ -99,7 +102,12 @@ export const ProgressTimeline: React.FC<ProgressTimelineProps> = ({
           </div>
         </div>
 
-        <div>
+        <div
+          className={cn(
+            scrollable &&
+              'max-h-[420px] overflow-y-auto overscroll-contain [scrollbar-width:thin]'
+          )}
+        >
           {phaseConfig.map((phase) => {
             const phaseEvents = visibleEvents.filter(
               (event) => event.phase === phase.phase
@@ -196,7 +204,14 @@ export const ProgressTimeline: React.FC<ProgressTimelineProps> = ({
             );
           })}
         </div>
-      </section>
+    </section>
+  );
+
+  return embedded ? (
+    content
+  ) : (
+    <Card className="rounded-xl border-slate-200 p-0 shadow-sm">
+      {content}
     </Card>
   );
 };

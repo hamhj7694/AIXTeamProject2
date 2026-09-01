@@ -2,6 +2,7 @@ import React from 'react';
 import { Badge } from '../../../../components/ui/Badge';
 import { Card } from '../../../../components/ui/Card';
 import { managerRoomProgressMock } from '../../data/managerRoomMock';
+import { ManagerRoomChecklistItem, ManagerRoomMemoItem } from '../../types';
 import { CaseMemo } from './CaseMemo';
 import { InvestigationChecklist } from './InvestigationChecklist';
 import { ProgressTimeline } from './ProgressTimeline';
@@ -30,22 +31,39 @@ const progressSummary = [
   },
 ];
 
-export const CaseProgress: React.FC = () => {
-  return (
-    <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)]">
-      <div className="min-w-0 space-y-4">
-        <Card className="rounded-xl border-blue-100 p-4 shadow-sm">
-          <section aria-labelledby="case-progress-summary-title">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2
-                id="case-progress-summary-title"
-                className="text-base font-extrabold text-slate-950"
-              >
-                사건 진행 요약
-              </h2>
-              <Badge variant="default">MVP Mock</Badge>
-            </div>
+interface CaseProgressProps {
+  checklistItems: ManagerRoomChecklistItem[];
+  onChecklistItemsChange: React.Dispatch<
+    React.SetStateAction<ManagerRoomChecklistItem[]>
+  >;
+  memos: ManagerRoomMemoItem[];
+  onMemosChange: React.Dispatch<React.SetStateAction<ManagerRoomMemoItem[]>>;
+}
 
+export const CaseProgress: React.FC<CaseProgressProps> = ({
+  checklistItems,
+  onChecklistItemsChange,
+  memos,
+  onMemosChange,
+}) => {
+  return (
+    <div className="grid gap-4 lg:grid-cols-2 lg:items-stretch">
+      <Card className="min-w-0 overflow-hidden rounded-xl border-slate-200 p-0 shadow-sm">
+        <section aria-labelledby="case-progress-status-title">
+          <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-4 py-4 sm:px-5">
+            <h2
+              id="case-progress-status-title"
+              className="text-lg font-black text-slate-950"
+            >
+              사건 진행 현황
+            </h2>
+            <Badge variant="default">MVP Mock</Badge>
+          </div>
+
+          <div className="p-4 sm:p-5">
+            <h3 className="text-sm font-extrabold text-slate-900">
+              사건 진행 요약
+            </h3>
             <div className="mt-3 space-y-2">
               {progressSummary.map((summary) => (
                 <div
@@ -61,22 +79,50 @@ export const CaseProgress: React.FC = () => {
                 </div>
               ))}
             </div>
-
-            <p className="mt-3 border-t border-slate-100 pt-3 text-[11px] leading-5 text-slate-500">
+            <p className="mt-3 text-[11px] leading-5 text-slate-500">
               조사 체크와 최종 판단은 담당자가 직접 수행합니다.
             </p>
-          </section>
-        </Card>
+          </div>
 
-        <InvestigationChecklist
-          initialItems={managerRoomProgressMock.checklist}
-        />
-        <CaseMemo />
-      </div>
+          <div className="border-t border-slate-200">
+            <ProgressTimeline
+              events={managerRoomProgressMock.events}
+              embedded
+              scrollable
+            />
+          </div>
+        </section>
+      </Card>
 
-      <div className="min-w-0">
-        <ProgressTimeline events={managerRoomProgressMock.events} />
-      </div>
+      <Card className="min-w-0 rounded-xl border-slate-200 p-0 shadow-sm">
+        <section aria-labelledby="investigation-and-memo-title">
+          <div className="border-b border-slate-200 px-4 py-4 sm:px-5">
+            <h2
+              id="investigation-and-memo-title"
+              className="text-lg font-black text-slate-950"
+            >
+              조사 및 메모
+            </h2>
+          </div>
+
+          <div className="p-4 sm:p-5">
+            <InvestigationChecklist
+              items={checklistItems}
+              onItemsChange={onChecklistItemsChange}
+              embedded
+            />
+          </div>
+
+          <div className="border-t border-slate-200 p-4 sm:p-5">
+            <CaseMemo
+              memos={memos}
+              onMemosChange={onMemosChange}
+              embedded
+              scrollableList
+            />
+          </div>
+        </section>
+      </Card>
     </div>
   );
 };

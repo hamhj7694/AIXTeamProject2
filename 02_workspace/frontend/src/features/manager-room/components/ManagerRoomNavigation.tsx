@@ -8,12 +8,13 @@ interface ManagerRoomNavigationProps {
 }
 
 const navigationItems: Array<{
-  view: Exclude<ManagerRoomView, 'customer'>;
+  view: ManagerRoomView;
   label: string;
 }> = [
   { view: 'workspace', label: 'AI 사건 워크스페이스' },
   { view: 'progress', label: '사건 진행 흐름' },
   { view: 'evidence', label: '근거 확인' },
+  { view: 'report', label: '최종 리포트' },
 ];
 
 export const ManagerRoomNavigation: React.FC<ManagerRoomNavigationProps> = ({

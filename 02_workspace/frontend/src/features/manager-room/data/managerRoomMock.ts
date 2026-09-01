@@ -1,11 +1,28 @@
 import {
   ManagerRoomCase,
+  ManagerRoomAssignee,
+  ManagerRoomChecklistItem,
   ManagerRoomCustomerMessage,
+  ManagerRoomFinalReport,
   ManagerRoomFdsMock,
   ManagerRoomProgressMock,
   ManagerRoomSttMock,
+  ManagerRoomMemoItem,
   ManagerRoomWorkspaceMock,
 } from '../types';
+
+export const managerRoomAssigneesMock: ManagerRoomAssignee[] = [
+  {
+    role: '사건 담당자',
+    name: '김OO',
+    workStatus: '사건 조사 중',
+  },
+  {
+    role: '고객 상담 담당자',
+    name: '이OO',
+    workStatus: '고객 확인 지원',
+  },
+];
 
 // URL의 caseId만 실제 화면 흐름에서 받고, 나머지는 API 교체 전까지 사용할 가상 정보다.
 export const createManagerRoomCaseMock = (
@@ -71,6 +88,56 @@ export const managerRoomCustomerMessagesMock: ManagerRoomCustomerMessage[] = [
       '수사기관에서 자금 확인이 필요하다고 해서 안내받은 계좌로 송금하려고 했습니다.',
   },
 ];
+
+interface CreateManagerRoomFinalReportMockParams {
+  caseInfo: ManagerRoomCase;
+  closedAt: string;
+  reportUpdatedAt: string;
+  customerMessages: ManagerRoomCustomerMessage[];
+  checklistItems: ManagerRoomChecklistItem[];
+  internalMemos: ManagerRoomMemoItem[];
+}
+
+export const createManagerRoomFinalReportMock = ({
+  caseInfo,
+  closedAt,
+  reportUpdatedAt,
+  customerMessages,
+  checklistItems,
+  internalMemos,
+}: CreateManagerRoomFinalReportMockParams): ManagerRoomFinalReport => {
+  const customerStatements = customerMessages
+    .filter((message) => message.role !== 'system')
+    .map((message) =>
+      `${message.role === 'customer' ? '고객 진술' : '담당자 안내'}: ${message.content}`
+    );
+  const completedChecklistCount = checklistItems.filter(
+    (item) => item.completed
+  ).length;
+
+  return {
+    caseId: caseInfo.caseId,
+    risk: caseInfo.risk,
+    status: '종료',
+    assignee: managerRoomAssigneesMock[0].name,
+    closedAt,
+    reportUpdatedAt,
+    summary: managerRoomWorkspaceMock.brief,
+    riskEvidence: managerRoomWorkspaceMock.riskEvidence,
+    counterEvidence: managerRoomWorkspaceMock.counterEvidence,
+    customerFindings: customerStatements.length
+      ? customerStatements
+      : ['고객의 직접 확인 내용이 아직 기록되지 않았습니다.'],
+    unknowns: managerRoomWorkspaceMock.unknowns,
+    checklistItems: checklistItems.map((item) => ({ ...item })),
+    internalMemos: internalMemos.map((memo) => ({ ...memo })),
+    resolution: [
+      '담당자가 현재까지 수집된 FDS 신호, 통화·STT 자료와 고객 상담 내용을 확인했습니다.',
+      `조사 체크리스트 ${checklistItems.length}개 중 ${completedChecklistCount}개를 확인했습니다.`,
+      `내부 메모 ${internalMemos.length}건을 포함해 담당자 확인 내용을 기록했습니다.`,
+    ],
+  };
+};
 
 // 실제 LLM 호출 없이 담당자의 요청 키워드에 맞는 조사 보조 문구만 반환한다.
 export const createManagerRoomMockResponse = (request: string): string => {
