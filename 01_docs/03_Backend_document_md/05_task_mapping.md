@@ -3,6 +3,8 @@
 > 기준 문서: [개발 구현 체크리스트 | Frontend · Backend API · MySQL](https://app.notion.com/p/3cdc753ff28a81f9b261c9d157543bac?pvs=204)  
 > 목적: 프론트엔드·일반 Backend·AI API·DB/RAG·실시간 연동 작업의 **담당자 배정과 의존성 관리**에 사용한다.
 
+> 이 문서는 공통 Task ID와 의존성의 기준이다. 실제 담당자 배정은 `team_work/00_task_catalog.md`, 개인 진행상황은 `team_work/{ham|eom|lee}.md`에서 관리한다.
+
 ---
 
 ## 1. 작업 코드 규칙

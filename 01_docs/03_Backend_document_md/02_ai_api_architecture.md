@@ -411,33 +411,29 @@ Risk/맥락 변화 확인
 
 ```text
 AI API
-├─ Diagnosis Service
-│   ├─ Full Text Analyzer
-│   ├─ Window Analyzer
-│   ├─ Feature Extractor
-│   └─ Risk Model
-│
-├─ Case Intelligence Service
+├─ Case Intelligence AI
+│   ├─ Full / Window Analyzer
+│   ├─ Feature Extractor / Risk Model
 │   ├─ Case Structurer
 │   ├─ Question Planner
-│   ├─ Verification Planner
-│   └─ Case Report AI
+│   └─ Bank Copilot Support
 │
-├─ Voice Intelligence Service
-│   ├─ Streaming STT
-│   ├─ Speaker Handling
-│   ├─ Delta Analyzer
-│   └─ Consultation Summarizer
+├─ Knowledge & Verification AI
+│   ├─ Retriever / Reranker
+│   ├─ Verification / Response RAG
+│   └─ Recovery / Institution RAG
 │
-└─ Knowledge / RAG Service
-    ├─ Retriever
-    ├─ Verification RAG
-    ├─ Response RAG
-    ├─ Recovery RAG
-    └─ Institution RAG
+├─ Case Report AI
+│   ├─ LIVE Initialize / Section Update
+│   └─ FINAL Report
+│
+└─ Voice Intelligence Pipeline
+    ├─ Streaming STT / Speaker Handling
+    ├─ Delta Analyzer
+    └─ Consultation Summarizer
 ```
 
-위 서비스 분할은 구현 조직화를 위한 문서 구조이며 실제 프로세스/컨테이너 분리는 개발 환경에 맞게 결정한다.
+중앙 호출 순서와 병렬 실행은 AI Agent가 아니라 일반 Backend Workflow가 담당한다. 위 구성은 논리적 책임 경계이며 각 기능을 별도 프로세스·컨테이너·자율 Agent로 분리한다는 의미가 아니다. 상세 설계는 `ai_system_design/**`를 따른다.
 
 ---
 
