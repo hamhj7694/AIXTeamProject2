@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "report_initialize_response.schema.json",
+  "title": "Report Initialize Response",
+  "description": "AI API가 초기 LIVE Report Section과 근거 연결을 반환하는 내부 계약 초안입니다. DB 저장 및 version 관리는 General API의 책임이며, Pydantic 모델과 정합성을 유지합니다.",
+  "x-contract-status": "DRAFT_PENDING_CASE_DTO",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["case_id", "request_id", "schema_version", "result", "warnings", "processing_ms"],
+  "properties": {
+    "case_id": { "type": "string", "minLength": 1 },
+    "request_id": { "type": "string", "minLength": 1 },
+    "schema_version": { "const": "1.0" },
+    "model": { "type": "string" },
+    "model_version": { "type": "string" },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["report_type", "sections"],
+      "properties": {
+        "report_type": { "const": "LIVE" },
+        "sections": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["section_key", "operation", "content", "source_ids"],
+            "properties": {
+              "section_key": {
+                "enum": ["summary", "risk_context", "transfer_status", "exposure_status", "verification_status", "current_actions", "unresolved_items", "next_checks"]
+              },
+              "operation": { "const": "UPSERT" },
+              "content": { "type": "object" },
+              "source_ids": {
+                "type": "array",
+                "items": { "type": "string", "minLength": 1 },
+                "uniqueItems": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "processing_ms": { "type": "number", "minimum": 0 }
+  }
+}
