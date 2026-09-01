@@ -75,8 +75,9 @@ class MySqlCaseRepository:
 
     async def create(self, record: dict[str, Any]) -> dict[str, Any]:
         pool = await self._get_pool()
-        created_at = datetime.fromisoformat(record["created_at"])
-        updated_at = datetime.fromisoformat(record["updated_at"])
+        # MySQL DATETIME은 timezone 정보를 저장하지 않으므로 UTC offset을 제거한다.
+        created_at = datetime.fromisoformat(record["created_at"]).replace(tzinfo=None)
+        updated_at = datetime.fromisoformat(record["updated_at"]).replace(tzinfo=None)
         diagnosis = record["diagnosis"]
         report = record["initial_report"]
         async with pool.acquire() as connection:
