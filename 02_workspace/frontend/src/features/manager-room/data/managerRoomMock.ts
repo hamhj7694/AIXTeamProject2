@@ -29,7 +29,7 @@ export const createManagerRoomCaseMock = (
   caseId: string
 ): ManagerRoomCase => ({
   caseId,
-  title: '보이스피싱 의심 사건',
+  title: caseId === 'VP-099' ? 'UI 스크롤 테스트 사건' : '보이스피싱 의심 사건',
   risk: 'HIGH',
   status: '확인 중',
   dataSource: 'MVP Mock',
@@ -91,6 +91,7 @@ export const managerRoomCustomerMessagesMock: ManagerRoomCustomerMessage[] = [
 
 interface CreateManagerRoomFinalReportMockParams {
   caseInfo: ManagerRoomCase;
+  workspace: ManagerRoomWorkspaceMock;
   closedAt: string;
   reportUpdatedAt: string;
   customerMessages: ManagerRoomCustomerMessage[];
@@ -100,6 +101,7 @@ interface CreateManagerRoomFinalReportMockParams {
 
 export const createManagerRoomFinalReportMock = ({
   caseInfo,
+  workspace,
   closedAt,
   reportUpdatedAt,
   customerMessages,
@@ -114,6 +116,9 @@ export const createManagerRoomFinalReportMock = ({
   const completedChecklistCount = checklistItems.filter(
     (item) => item.completed
   ).length;
+  const hasCustomerResponse = customerMessages.some(
+    (message) => message.role === 'customer'
+  );
 
   return {
     caseId: caseInfo.caseId,
@@ -122,13 +127,13 @@ export const createManagerRoomFinalReportMock = ({
     assignee: managerRoomAssigneesMock[0].name,
     closedAt,
     reportUpdatedAt,
-    summary: managerRoomWorkspaceMock.brief,
-    riskEvidence: managerRoomWorkspaceMock.riskEvidence,
-    counterEvidence: managerRoomWorkspaceMock.counterEvidence,
+    summary: workspace.brief,
+    riskEvidence: workspace.riskEvidence,
+    counterEvidence: workspace.counterEvidence,
     customerFindings: customerStatements.length
       ? customerStatements
       : ['고객의 직접 확인 내용이 아직 기록되지 않았습니다.'],
-    unknowns: managerRoomWorkspaceMock.unknowns,
+    unknowns: workspace.unknowns,
     checklistItems: checklistItems.map((item) => ({ ...item })),
     internalMemos: internalMemos.map((memo) => ({ ...memo })),
     resolution: [
@@ -136,8 +141,62 @@ export const createManagerRoomFinalReportMock = ({
       `조사 체크리스트 ${checklistItems.length}개 중 ${completedChecklistCount}개를 확인했습니다.`,
       `내부 메모 ${internalMemos.length}건을 포함해 담당자 확인 내용을 기록했습니다.`,
     ],
+    evidenceSources: [
+      'FDS 위험 신호',
+      '통화·STT 자료 (MVP Mock 발췌)',
+      ...(hasCustomerResponse ? ['고객 상담 응답'] : []),
+      ...(checklistItems.length || internalMemos.length
+        ? ['담당자 조사 기록']
+        : []),
+    ],
   };
 };
+
+const managerRoomScrollTestWorkspaceMock: ManagerRoomWorkspaceMock = {
+  ...managerRoomWorkspaceMock,
+  brief:
+    '수사기관 사칭과 긴급 송금 요구 정황을 바탕으로 근거 목록의 독립 스크롤 동작을 확인하는 UI 테스트용 사건입니다.',
+  riskEvidence: [
+    '수사기관을 사칭하는 발화가 확인됨',
+    '자금 검증을 이유로 송금을 요구함',
+    '즉시 송금을 요구하는 긴급성 표현이 반복됨',
+    '제3자에게 통화 내용을 알리지 말라고 요구함',
+    '특정 계좌로 자금 이동을 지시함',
+    '개인정보 확인을 요구함',
+    '공식 기관의 일반적인 안내 방식과 다른 절차를 제시함',
+    '통화를 종료하지 않은 상태에서 금융 행동을 요구함',
+    '추가 송금 가능성을 암시함',
+    '고객의 불안감을 높이는 표현이 반복됨',
+  ],
+  counterEvidence: [
+    '고객이 아직 실제 송금을 완료하지 않음',
+    '고객이 일부 안내 내용에 의문을 표현함',
+    '고객이 수취인과의 관계를 다시 확인하려고 함',
+    '금융기관 담당자와 직접 확인을 진행하고 있음',
+    '추가 송금은 아직 진행되지 않음',
+    '고객이 일부 개인정보 제공을 중단함',
+    '담당자 확인 과정에 적극적으로 응답하고 있음',
+  ],
+  unknowns: [
+    '수취인과 고객의 실제 관계',
+    '송금 목적에 대한 고객 본인의 설명',
+    '상대방이 안내한 기관 및 연락처의 진위',
+    '고객이 이미 제공한 개인정보 범위',
+    '원격제어 앱 설치 여부',
+    '이전 송금 여부',
+    '추가 송금 요청 여부',
+    '상대방과 최초 연락이 이루어진 경로',
+    '고객이 안내받은 계좌의 실제 명의',
+    '공식 기관에 별도로 사실 확인을 했는지 여부',
+  ],
+};
+
+export const getManagerRoomWorkspaceMock = (
+  caseId: string
+): ManagerRoomWorkspaceMock =>
+  caseId === 'VP-099'
+    ? managerRoomScrollTestWorkspaceMock
+    : managerRoomWorkspaceMock;
 
 // 실제 LLM 호출 없이 담당자의 요청 키워드에 맞는 조사 보조 문구만 반환한다.
 export const createManagerRoomMockResponse = (request: string): string => {
@@ -323,3 +382,32 @@ export const managerRoomProgressMock: ManagerRoomProgressMock = {
     },
   ],
 };
+
+const managerRoomScrollTestProgressMock: ManagerRoomProgressMock = {
+  ...managerRoomProgressMock,
+  currentFocus: '긴 조사 체크리스트의 독립 스크롤 및 진행률 반영 확인',
+  checklist: [
+    { id: 'test-check-identity', label: '고객 본인 확인', completed: true },
+    { id: 'test-check-transfer', label: '현재 송금 여부 확인', completed: true },
+    { id: 'test-check-purpose', label: '송금 목적 확인', completed: true },
+    { id: 'test-check-recipient-relation', label: '수취인과 고객의 관계 확인', completed: false },
+    { id: 'test-check-account-owner', label: '수취 계좌 명의 확인', completed: false },
+    { id: 'test-check-impersonated-agency', label: '상대방 사칭 기관 확인', completed: false },
+    { id: 'test-check-phone', label: '상대방 연락처 확인', completed: false },
+    { id: 'test-check-official-agency', label: '공식 기관 별도 확인 여부', completed: false },
+    { id: 'test-check-personal-info', label: '개인정보 제공 여부 확인', completed: false },
+    { id: 'test-check-account-info', label: '계좌정보 제공 여부 확인', completed: false },
+    { id: 'test-check-remote-app', label: '원격제어 앱 설치 여부 확인', completed: false },
+    { id: 'test-check-extra-transfer', label: '추가 송금 요구 여부 확인', completed: false },
+    { id: 'test-check-history', label: '기존 송금 내역 확인', completed: false },
+    { id: 'test-check-message', label: '고객이 받은 문자·메신저 확인', completed: false },
+    { id: 'test-check-final', label: '담당자 최종 확인', completed: false },
+  ],
+};
+
+export const getManagerRoomProgressMock = (
+  caseId: string
+): ManagerRoomProgressMock =>
+  caseId === 'VP-099'
+    ? managerRoomScrollTestProgressMock
+    : managerRoomProgressMock;

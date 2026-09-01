@@ -43,7 +43,11 @@ export const ManagerRoomHeader: React.FC<ManagerRoomHeaderProps> = ({
                 {caseInfo.title}
               </h1>
               <Badge variant="danger">위험 {caseInfo.risk}</Badge>
-              <Badge variant="warning">{caseInfo.status}</Badge>
+              <Badge
+                variant={caseInfo.status === '확인 중' ? 'primary' : 'warning'}
+              >
+                {caseInfo.status}
+              </Badge>
             </div>
           </div>
 

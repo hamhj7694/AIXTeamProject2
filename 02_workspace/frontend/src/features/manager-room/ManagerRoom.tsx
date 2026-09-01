@@ -18,8 +18,9 @@ import { AiWorkspace } from './components/workspace/AiWorkspace';
 import {
   createManagerRoomCaseMock,
   createManagerRoomFinalReportMock,
+  getManagerRoomProgressMock,
+  getManagerRoomWorkspaceMock,
   managerRoomCustomerMessagesMock,
-  managerRoomProgressMock,
 } from './data/managerRoomMock';
 import {
   isManagerRoomView,
@@ -33,6 +34,8 @@ import {
 export const ManagerRoom: React.FC = () => {
   const { caseId = 'UNKNOWN-CASE' } = useParams<{ caseId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
+  const workspaceMock = getManagerRoomWorkspaceMock(caseId);
+  const progressMock = getManagerRoomProgressMock(caseId);
   const [caseInfo, setCaseInfo] = useState(() =>
     createManagerRoomCaseMock(caseId)
   );
@@ -41,7 +44,7 @@ export const ManagerRoom: React.FC = () => {
   >(managerRoomCustomerMessagesMock);
   const [checklistItems, setChecklistItems] = useState<
     ManagerRoomChecklistItem[]
-  >(managerRoomProgressMock.checklist);
+  >(progressMock.checklist);
   const [caseMemos, setCaseMemos] = useState<ManagerRoomMemoItem[]>([]);
   const [closedAt, setClosedAt] = useState<string | null>(null);
   const [finalReport, setFinalReport] =
@@ -117,6 +120,7 @@ export const ManagerRoom: React.FC = () => {
     setFinalReport(
       createManagerRoomFinalReportMock({
         caseInfo,
+        workspace: workspaceMock,
         closedAt: firstClosedAt,
         reportUpdatedAt,
         customerMessages,
@@ -152,11 +156,13 @@ export const ManagerRoom: React.FC = () => {
         <div className="py-4">
           {currentView === 'workspace' ? (
             <AiWorkspace
+              workspace={workspaceMock}
               customerMessages={customerMessages}
               onCustomerMessagesChange={setCustomerMessages}
             />
           ) : currentView === 'progress' ? (
             <CaseProgress
+              progress={progressMock}
               checklistItems={checklistItems}
               onChecklistItemsChange={setChecklistItems}
               memos={caseMemos}

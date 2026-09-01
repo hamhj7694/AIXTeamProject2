@@ -36,6 +36,7 @@ export interface ManagerRoomFinalReport {
   checklistItems: ManagerRoomChecklistItem[];
   internalMemos: ManagerRoomMemoItem[];
   resolution: string[];
+  evidenceSources: string[];
 }
 
 export interface ManagerRoomMessage {

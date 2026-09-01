@@ -1,7 +1,8 @@
 import React from 'react';
-import { ClipboardCheck, FileClock } from 'lucide-react';
+import { FileClock } from 'lucide-react';
 import { Badge } from '../../../../components/ui/Badge';
 import { Card } from '../../../../components/ui/Card';
+import { cn } from '../../../../utils/helpers';
 import { ManagerRoomCase, ManagerRoomFinalReport } from '../../types';
 
 interface FinalReportProps {
@@ -9,36 +10,62 @@ interface FinalReportProps {
   report: ManagerRoomFinalReport | null;
 }
 
-interface ReportListProps {
+interface DocumentSectionProps {
+  number: number;
   title: string;
-  items: string[];
-  className: string;
-  titleClassName: string;
-  bulletClassName: string;
+  introduction?: string;
+  children: React.ReactNode;
 }
 
-const ReportList: React.FC<ReportListProps> = ({
+const DocumentSection: React.FC<DocumentSectionProps> = ({
+  number,
   title,
-  items,
-  className,
-  titleClassName,
-  bulletClassName,
+  introduction,
+  children,
 }) => (
-  <section className={`rounded-xl border p-4 sm:p-5 ${className}`}>
-    <h3 className={`text-sm font-extrabold ${titleClassName}`}>{title}</h3>
-    <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-700">
+  <section className="border-t border-slate-200 py-7 sm:py-8">
+    <h3 className="text-base font-black tracking-tight text-slate-950 sm:text-lg">
+      {number}. {title}
+    </h3>
+    {introduction && (
+      <p className="mt-3 text-sm leading-7 text-slate-600">{introduction}</p>
+    )}
+    <div className="mt-4">{children}</div>
+  </section>
+);
+
+interface ReportBulletListProps {
+  items: string[];
+  accent?: 'default' | 'danger';
+  emptyText?: string;
+}
+
+const ReportBulletList: React.FC<ReportBulletListProps> = ({
+  items,
+  accent = 'default',
+  emptyText = '현재 기록된 내용이 없습니다.',
+}) => {
+  if (!items.length) {
+    return <p className="text-sm leading-7 text-slate-500">{emptyText}</p>;
+  }
+
+  return (
+    <ul className="space-y-2.5 text-sm leading-7 text-slate-700">
       {items.map((item, index) => (
-        <li key={`${item}-${index}`} className="flex gap-2.5">
+        <li key={`${item}-${index}`} className="flex items-start gap-3">
           <span
             aria-hidden="true"
-            className={`mt-2.5 h-1.5 w-1.5 shrink-0 rounded-full ${bulletClassName}`}
+            className={cn(
+              'mt-[11px] h-1.5 w-1.5 shrink-0 rounded-full',
+              accent === 'danger' ? 'bg-rose-500' : 'bg-slate-400'
+            )}
           />
           <span>{item}</span>
         </li>
       ))}
     </ul>
-  </section>
-);
+  );
+};
 
 export const FinalReport: React.FC<FinalReportProps> = ({ caseInfo, report }) => {
   if (!report) {
@@ -66,119 +93,148 @@ export const FinalReport: React.FC<FinalReportProps> = ({ caseInfo, report }) =>
     );
   }
 
-  const basicInformation = [
-    ['Case ID', report.caseId],
-    ['위험 수준', report.risk],
-    ['사건 상태', report.status],
-    ['담당자', report.assignee],
-    ['최초 종료 시각', report.closedAt],
-    ['리포트 최종 갱신', report.reportUpdatedAt],
-  ] as const;
+  const completedChecklistItems = report.checklistItems
+    .filter((item) => item.completed)
+    .map((item) => `${item.label} · 확인 완료`);
+  const pendingChecklistItems = report.checklistItems
+    .filter((item) => !item.completed)
+    .map((item) => `${item.label} · 추가 확인 필요`);
 
   return (
-    <article aria-labelledby="final-report-title" className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 id="final-report-title" className="text-lg font-black text-slate-950">
-              최종 리포트
-            </h2>
-            <Badge variant="success">생성 완료</Badge>
+    <article aria-labelledby="final-report-title" className="mx-auto max-w-5xl">
+      <Card className="overflow-hidden rounded-xl border-slate-200 bg-white p-0 shadow-sm">
+        <header className="border-b border-slate-300 px-5 py-7 sm:px-10 sm:py-10">
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">
+                Case report
+              </p>
+              <h2
+                id="final-report-title"
+                className="mt-2 text-2xl font-black tracking-tight text-slate-950 sm:text-3xl"
+              >
+                최종 사건 보고서
+              </h2>
+              <p className="mt-2 text-sm font-bold text-slate-500">
+                CASE #{report.caseId}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="danger">위험도 {report.risk}</Badge>
+              <Badge variant="success">{report.status}</Badge>
+              <Badge variant="default">MVP Mock</Badge>
+            </div>
           </div>
-          <p className="mt-1 text-sm leading-6 text-slate-600">
-            마지막 갱신 시점까지 기록된 조사 및 확인 내용을 정리했습니다.
-          </p>
-        </div>
-        <Badge variant="default">MVP Mock</Badge>
-      </div>
 
-      <Card className="overflow-hidden rounded-xl border-slate-200 p-0 shadow-sm">
-        <section className="border-b border-slate-200 bg-slate-50/70 p-4 sm:p-5">
-          <div className="flex items-center gap-2">
-            <ClipboardCheck size={18} className="text-blue-600" />
-            <h3 className="text-sm font-extrabold text-slate-950">사건 기본 정보</h3>
-          </div>
-          <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-            {basicInformation.map(([label, value]) => (
-              <div key={label} className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
-                <dt className="text-[11px] font-bold text-slate-500">{label}</dt>
-                <dd className="mt-1 break-words text-sm font-extrabold text-slate-900">
-                  {value}
-                </dd>
-              </div>
-            ))}
+          <dl className="mt-7 grid gap-x-8 gap-y-4 border-t border-slate-200 pt-6 sm:grid-cols-3">
+            <div>
+              <dt className="text-xs font-bold text-slate-500">담당자</dt>
+              <dd className="mt-1 text-sm font-extrabold text-slate-900">
+                {report.assignee}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs font-bold text-slate-500">최초 종료</dt>
+              <dd className="mt-1 text-sm font-extrabold text-slate-900">
+                {report.closedAt}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs font-bold text-slate-500">
+                리포트 최종 갱신
+              </dt>
+              <dd className="mt-1 text-sm font-extrabold text-slate-900">
+                {report.reportUpdatedAt}
+              </dd>
+            </div>
           </dl>
-        </section>
+        </header>
 
-        <div className="space-y-4 p-4 sm:p-5">
-          <section className="rounded-xl border border-blue-100 bg-blue-50/40 p-4 sm:p-5">
-            <h3 className="text-sm font-extrabold text-blue-900">사건 요약</h3>
-            <p className="mt-3 text-sm leading-7 text-slate-700">{report.summary}</p>
-          </section>
+        <div className="px-5 sm:px-10">
+          <DocumentSection number={1} title="사건 개요">
+            <p className="text-sm leading-8 text-slate-700">{report.summary}</p>
+          </DocumentSection>
 
-          <div className="grid gap-4 lg:grid-cols-2">
-            <ReportList
-              title="주요 위험 근거"
-              items={report.riskEvidence}
-              className="border-rose-100 bg-rose-50/40"
-              titleClassName="text-rose-800"
-              bulletClassName="bg-rose-500"
+          <DocumentSection
+            number={2}
+            title="주요 확인 결과"
+            introduction="조사 체크리스트와 현재 기록을 기준으로 확인 상태를 정리했습니다."
+          >
+            <div className="grid gap-6 sm:grid-cols-2">
+              <div>
+                <h4 className="text-sm font-extrabold text-slate-900">
+                  확인 완료 항목
+                </h4>
+                <div className="mt-2">
+                  <ReportBulletList
+                    items={completedChecklistItems}
+                    emptyText="현재 체크리스트에서 확인 완료로 기록된 항목이 없습니다."
+                  />
+                </div>
+              </div>
+              <div>
+                <h4 className="text-sm font-extrabold text-slate-900">
+                  판단 참고 사항
+                </h4>
+                <div className="mt-2">
+                  <ReportBulletList items={report.counterEvidence} />
+                </div>
+              </div>
+            </div>
+          </DocumentSection>
+
+          <DocumentSection
+            number={3}
+            title="주요 위험 정황"
+            introduction="조사 과정에서 다음과 같은 위험 정황이 확인되었습니다."
+          >
+            <ReportBulletList items={report.riskEvidence} accent="danger" />
+          </DocumentSection>
+
+          <DocumentSection number={4} title="조사 및 고객 확인 결과">
+            <div className="space-y-6">
+              <div>
+                <h4 className="text-sm font-extrabold text-slate-900">
+                  고객 상담 기록
+                </h4>
+                <div className="mt-2">
+                  <ReportBulletList items={report.customerFindings} />
+                </div>
+              </div>
+              <div>
+                <h4 className="text-sm font-extrabold text-slate-900">
+                  담당자 내부 메모
+                </h4>
+                <div className="mt-2">
+                  <ReportBulletList
+                    items={report.internalMemos.map((memo) => memo.content)}
+                    emptyText="현재 작성된 내부 메모가 없습니다."
+                  />
+                </div>
+              </div>
+            </div>
+          </DocumentSection>
+
+          <DocumentSection number={5} title="담당자 처리 결과">
+            <ReportBulletList items={report.resolution} />
+          </DocumentSection>
+
+          <DocumentSection number={6} title="미확인 및 후속 확인 사항">
+            <ReportBulletList
+              items={[...report.unknowns, ...pendingChecklistItems]}
+              emptyText="현재 기록 기준 추가로 확인이 필요한 항목이 없습니다."
             />
-            <ReportList
-              title="반대 근거"
-              items={report.counterEvidence}
-              className="border-emerald-100 bg-emerald-50/40"
-              titleClassName="text-emerald-800"
-              bulletClassName="bg-emerald-500"
-            />
-          </div>
+          </DocumentSection>
 
-          <ReportList
-            title="고객 확인 결과"
-            items={report.customerFindings}
-            className="border-blue-100 bg-blue-50/30"
-            titleClassName="text-blue-900"
-            bulletClassName="bg-blue-500"
-          />
-          <ReportList
-            title="미확인 사항"
-            items={report.unknowns}
-            className="border-amber-100 bg-amber-50/40"
-            titleClassName="text-amber-800"
-            bulletClassName="bg-amber-500"
-          />
-          <ReportList
-            title="조사 체크리스트"
-            items={report.checklistItems.map(
-              (item) => `${item.completed ? '확인 완료' : '미확인'} · ${item.label}`
-            )}
-            className="border-blue-100 bg-blue-50/30"
-            titleClassName="text-blue-900"
-            bulletClassName="bg-blue-500"
-          />
-          <ReportList
-            title="내부 메모"
-            items={
-              report.internalMemos.length
-                ? report.internalMemos.map((memo) => memo.content)
-                : ['작성된 내부 메모가 없습니다.']
-            }
-            className="border-slate-200 bg-white"
-            titleClassName="text-slate-900"
-            bulletClassName="bg-slate-400"
-          />
-          <ReportList
-            title="담당자 처리 결과"
-            items={report.resolution}
-            className="border-slate-200 bg-slate-50"
-            titleClassName="text-slate-900"
-            bulletClassName="bg-slate-500"
-          />
+          <DocumentSection number={7} title="근거 출처">
+            <ReportBulletList items={report.evidenceSources} />
+          </DocumentSection>
         </div>
 
-        <p className="border-t border-slate-200 bg-slate-50 px-4 py-3 text-xs leading-5 text-slate-500 sm:px-5">
-          본 리포트는 사건 처리 과정에서 수집된 정보와 담당자의 확인 내용을 정리한 업무 기록입니다.
-        </p>
+        <footer className="border-t border-slate-300 bg-slate-50 px-5 py-5 text-xs leading-6 text-slate-500 sm:px-10">
+          본 보고서는 사건 처리 과정에서 수집된 정보와 담당자의 확인 내용을
+          문서화한 업무 기록입니다. 최종 판단과 조치의 주체는 담당자입니다.
+        </footer>
       </Card>
     </article>
   );

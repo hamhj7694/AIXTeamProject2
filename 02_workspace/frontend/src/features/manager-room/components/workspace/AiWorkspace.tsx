@@ -1,11 +1,9 @@
 import React, { useState } from 'react';
-import {
-  createManagerRoomMockResponse,
-  managerRoomWorkspaceMock,
-} from '../../data/managerRoomMock';
+import { createManagerRoomMockResponse } from '../../data/managerRoomMock';
 import {
   ManagerRoomCustomerMessage,
   ManagerRoomMessage,
+  ManagerRoomWorkspaceMock,
 } from '../../types';
 import { CaseOverview } from './CaseOverview';
 import { CustomerConsultation } from './CustomerConsultation';
@@ -15,6 +13,7 @@ import { WorkspaceChat } from './WorkspaceChat';
 type ConversationView = 'ai' | 'customer';
 
 interface AiWorkspaceProps {
+  workspace: ManagerRoomWorkspaceMock;
   customerMessages: ManagerRoomCustomerMessage[];
   onCustomerMessagesChange: React.Dispatch<
     React.SetStateAction<ManagerRoomCustomerMessage[]>
@@ -22,11 +21,12 @@ interface AiWorkspaceProps {
 }
 
 export const AiWorkspace: React.FC<AiWorkspaceProps> = ({
+  workspace,
   customerMessages,
   onCustomerMessagesChange,
 }) => {
   const [messages, setMessages] = useState<ManagerRoomMessage[]>(
-    managerRoomWorkspaceMock.initialMessages
+    workspace.initialMessages
   );
   const [input, setInput] = useState('');
   const [conversationView, setConversationView] =
@@ -71,7 +71,7 @@ export const AiWorkspace: React.FC<AiWorkspaceProps> = ({
   };
 
   const useRecommendedQuestion = () => {
-    const recommendedQuestion = managerRoomWorkspaceMock.recommendedQuestion;
+    const recommendedQuestion = workspace.recommendedQuestion;
 
     // 작성 중인 Draft를 지우지 않고 다음 문단에 추천 질문을 추가한다.
     setCustomerInput((currentInput) =>
@@ -97,9 +97,9 @@ export const AiWorkspace: React.FC<AiWorkspaceProps> = ({
           </h2>
         </div>
 
-        <CaseOverview workspace={managerRoomWorkspaceMock} />
+        <CaseOverview workspace={workspace} />
         <RecommendedQuestion
-          question={managerRoomWorkspaceMock.recommendedQuestion}
+          question={workspace.recommendedQuestion}
           onUseInCustomerConsultation={useRecommendedQuestion}
         />
       </section>
