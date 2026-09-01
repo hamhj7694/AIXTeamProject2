@@ -8,7 +8,7 @@ import {
   VerifyPage,
 } from '../pages/CasePages';
 import { CasesTablePage } from '../pages/CasesTablePage';
-import { ManagerRoomPage } from '../pages/ManagerRoomPage';
+import { ManagerRoomPage } from '../features/manager-room/ManagerRoomPage';
 
 export const AppRoutes: React.FC = () => (
   <Router>

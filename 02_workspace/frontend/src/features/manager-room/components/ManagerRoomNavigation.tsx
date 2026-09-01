@@ -13,7 +13,7 @@ const navigationItems: Array<{
 }> = [
   { view: 'workspace', label: 'AI 사건 워크스페이스' },
   { view: 'progress', label: '사건 진행 흐름' },
-  { view: 'evidence', label: '원본 Evidence' },
+  { view: 'evidence', label: '근거 확인' },
 ];
 
 export const ManagerRoomNavigation: React.FC<ManagerRoomNavigationProps> = ({
@@ -38,7 +38,7 @@ export const ManagerRoomNavigation: React.FC<ManagerRoomNavigationProps> = ({
               className={cn(
                 'whitespace-nowrap border-b-2 px-3 py-3 text-xs font-bold transition-colors sm:text-sm',
                 active
-                  ? 'border-blue-600 text-blue-700'
+                  ? 'border-blue-600 bg-blue-50/70 text-blue-800'
                   : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-900'
               )}
             >

@@ -7,21 +7,15 @@ import { ManagerRoomCase } from '../types';
 
 interface ManagerRoomHeaderProps {
   caseInfo: ManagerRoomCase;
-  customerViewActive: boolean;
-  onOpenCustomerView: () => void;
 }
 
-export const ManagerRoomHeader: React.FC<ManagerRoomHeaderProps> = ({
-  caseInfo,
-  customerViewActive,
-  onOpenCustomerView,
-}) => {
+export const ManagerRoomHeader: React.FC<ManagerRoomHeaderProps> = ({ caseInfo }) => {
   return (
     <header className="rounded-t-xl border border-slate-200 bg-white shadow-sm">
       <div className="p-4 sm:p-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div className="min-w-0">
-            <div className="mb-3 flex flex-wrap items-center gap-2">
+            <div className="mb-2.5 flex flex-wrap items-center gap-2">
               <Link
                 to="/cases"
                 className="inline-flex items-center gap-1 text-xs font-bold text-slate-500 transition hover:text-blue-600"
@@ -37,7 +31,7 @@ export const ManagerRoomHeader: React.FC<ManagerRoomHeaderProps> = ({
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="mr-1 truncate text-xl font-black tracking-tight text-slate-950">
+              <h1 className="mr-1 truncate text-2xl font-black tracking-tight text-slate-950">
                 {caseInfo.title}
               </h1>
               <Badge variant="danger">위험 {caseInfo.risk}</Badge>
@@ -48,17 +42,9 @@ export const ManagerRoomHeader: React.FC<ManagerRoomHeaderProps> = ({
           <div className="flex flex-wrap items-center gap-2 sm:justify-end">
             <Button
               type="button"
-              variant={customerViewActive ? 'primary' : 'secondary'}
-              onClick={onOpenCustomerView}
-              aria-pressed={customerViewActive}
-            >
-              고객 ROOM 보기
-            </Button>
-            <Button
-              type="button"
               variant="danger"
               disabled
-              title="사건 종료 기능은 STEP 6에서 구현합니다."
+              title="현재 MVP에서는 비활성화된 기능입니다."
             >
               사건 종료하기
             </Button>
