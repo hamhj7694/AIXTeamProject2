@@ -6,7 +6,7 @@ import { CaseRecord } from '../data/mock/caseData';
 import { caseApi } from '../services/caseApi';
 
 const displayId = (id: string) => id.replace(/^VP-/, '');
-const victimNames: Record<string, string> = { 'VP-014': '엄정희', 'VP-013': '김민수', 'VP-012': '이서윤' };
+const victimNames: Record<string, string> = { 'VP-099': '테스트', 'VP-014': '엄정희', 'VP-013': '김민수', 'VP-012': '이서윤' };
 const maskName = (name: string) => name.length >= 3 ? `${name[0]}${'*'.repeat(name.length - 2)}${name[name.length - 1]}` : name;
 const normalizeSearch = (value: string) => value.toLowerCase().replace(/[\s,._-]/g, '');
 const searchText = (item: CaseRecord) => normalizeSearch([item.id, displayId(item.id), victimNames[item.id], maskName(victimNames[item.id] ?? ''), item.type, item.risk, item.status, item.transferred ? '송금 Y 피해 Y' : '송금 N 피해 N', item.amount || '-', item.summary, item.createdAt, item.updatedAt].join(' '));

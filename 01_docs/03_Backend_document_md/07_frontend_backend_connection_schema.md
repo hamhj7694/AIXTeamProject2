@@ -60,6 +60,17 @@ React CSR
 - Client는 오래된 `base_version`으로 Patch하지 않으며, `409 VERSION_CONFLICT` 수신 시 해당 Entity 또는 Bundle을 재조회한다.
 - 사용자 Command 성공은 저장 성공을 의미한다. UI 낙관 갱신은 `client_request_id`로 서버 Event와 중복 제거할 수 있을 때만 적용한다.
 
+### 구현 소유권
+
+| 연결 구간 | 소유자 | 최종 편집 Contract |
+|---|---|---|
+| Frontend ↔ General API | lee | `contracts/public_api/**` |
+| General API Workflow·DB·Realtime | lee | 공개 응답·DB Migration·Event |
+| General API ↔ AI API | eom 제공 / lee 소비 | `contracts/ai_internal/**`는 eom 최종 편집 |
+| AI 모델·LLM·RAG·STT ↔ AI API | eom | AI Schema·Fixture·Model/Prompt version |
+
+lee는 eom이 제공한 AI Fixture로 Frontend↔General API 연결을 먼저 완성할 수 있다. 실제 AI API가 준비되면 동일 내부 Contract를 유지한 채 Client 설정만 전환한다. ham은 현재 연결 작업에서 제외한다.
+
 ---
 
 ## 3. Frontend 상태 경계

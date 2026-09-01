@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "report_initialize_request.schema.json",
+  "title": "Report Initialize Request",
+  "description": "General API가 최초 진단 결과를 바탕으로 LIVE Case Report 생성을 요청할 때 사용하는 내부 계약 초안입니다. eom의 Case DTO 및 Diagnosis Contract 확정 후 Pydantic 모델과 함께 확정합니다.",
+  "x-contract-status": "DRAFT_PENDING_CASE_DTO",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "case", "diagnosis"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "request_id": { "type": "string", "minLength": 1 },
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["case_id", "risk", "type", "mode", "status", "latest_summary"],
+      "properties": {
+        "case_id": { "type": "string", "minLength": 1 },
+        "risk": { "enum": ["LOW", "MEDIUM", "HIGH"] },
+        "type": { "type": "string", "minLength": 1 },
+        "mode": { "enum": ["PREVENT", "RECOVERY", "CLOSED"] },
+        "status": { "enum": ["NEW", "TRIAGE", "VERIFYING", "IN_PROGRESS", "CLOSED"] },
+        "latest_summary": { "type": "string" }
+      }
+    },
+    "diagnosis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["full_analysis", "segments", "features"],
+      "properties": {
+        "full_analysis": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["summary", "evidence"],
+          "properties": {
+            "summary": { "type": "string" },
+            "suspected_type": { "type": "string" },
+            "evidence": { "$ref": "#/$defs/evidenceList" }
+          }
+        },
+        "segments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": ["segment_id", "text", "risk", "evidence"],
+            "properties": {
+              "segment_id": { "type": "string", "minLength": 1 },
+              "text": { "type": "string" },
+              "risk": { "enum": ["LOW", "MEDIUM", "HIGH"] },
+              "evidence": { "$ref": "#/$defs/evidenceList" }
+            }
+          }
+        },
+        "features": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": ["feature_name", "feature_value", "evidence"],
+            "properties": {
+              "feature_name": { "type": "string", "minLength": 1 },
+              "feature_value": {},
+              "evidence": { "$ref": "#/$defs/evidenceList" }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "evidenceList": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source_type", "source_id"],
+        "properties": {
+          "source_type": {
+            "enum": ["CASE_INPUT", "ANALYSIS_SEGMENT", "CONTEXT_FEATURE", "MESSAGE", "VERIFICATION", "RAG", "ACTION", "EVENT", "VOICE_TRANSCRIPT"]
+          },
+          "source_id": { "type": "string", "minLength": 1 },
+          "quote": { "type": "string" }
+        }
+      }
+    }
+  }
+}

@@ -1,28 +1,33 @@
-import React, { FormEvent, useRef, useState } from 'react';
+import React, { FormEvent, useState } from 'react';
 import { Badge } from '../../../../components/ui/Badge';
 import { Button } from '../../../../components/ui/Button';
 import { Card } from '../../../../components/ui/Card';
+import { ManagerRoomMemoItem } from '../../types';
 
-interface MemoItem {
-  id: string;
-  content: string;
+interface CaseMemoProps {
+  memos: ManagerRoomMemoItem[];
+  onMemosChange: React.Dispatch<React.SetStateAction<ManagerRoomMemoItem[]>>;
+  embedded?: boolean;
+  scrollableList?: boolean;
 }
 
-export const CaseMemo: React.FC = () => {
-  const [memos, setMemos] = useState<MemoItem[]>([]);
+export const CaseMemo: React.FC<CaseMemoProps> = ({
+  memos,
+  onMemosChange,
+  embedded = false,
+  scrollableList = false,
+}) => {
   const [newMemo, setNewMemo] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState('');
-  const nextMemoId = useRef(1);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const trimmedMemo = newMemo.trim();
     if (!trimmedMemo) return;
-    const memoId = `manager-memo-${nextMemoId.current}`;
-    nextMemoId.current += 1;
+    const memoId = `manager-memo-${Date.now()}`;
 
-    setMemos((currentMemos) => [
+    onMemosChange((currentMemos) => [
       ...currentMemos,
       {
         id: memoId,
@@ -32,7 +37,7 @@ export const CaseMemo: React.FC = () => {
     setNewMemo('');
   };
 
-  const startEditing = (memo: MemoItem) => {
+  const startEditing = (memo: ManagerRoomMemoItem) => {
     setEditingId(memo.id);
     setEditingValue(memo.content);
   };
@@ -47,7 +52,7 @@ export const CaseMemo: React.FC = () => {
     if (!trimmedValue) return;
 
     // 선택한 항목만 교체해 다른 메모의 내용과 순서를 보존한다.
-    setMemos((currentMemos) =>
+    onMemosChange((currentMemos) =>
       currentMemos.map((memo) =>
         memo.id === id ? { ...memo, content: trimmedValue } : memo
       )
@@ -56,7 +61,7 @@ export const CaseMemo: React.FC = () => {
   };
 
   const deleteMemo = (id: string) => {
-    setMemos((currentMemos) =>
+    onMemosChange((currentMemos) =>
       currentMemos.filter((memo) => memo.id !== id)
     );
 
@@ -65,9 +70,8 @@ export const CaseMemo: React.FC = () => {
     }
   };
 
-  return (
-    <Card className="rounded-xl border-slate-200 p-4 shadow-sm">
-      <section aria-labelledby="case-memo-title">
+  const content = (
+    <section aria-labelledby="case-memo-title">
         <div className="flex flex-wrap items-center gap-2">
           <h2 id="case-memo-title" className="text-base font-extrabold text-slate-950">
             내부 메모
@@ -100,7 +104,13 @@ export const CaseMemo: React.FC = () => {
           </div>
         </form>
 
-        <div className="mt-3 border-t border-slate-200 pt-3">
+        <div
+          className={`mt-3 border-t border-slate-200 pt-3 ${
+            scrollableList
+              ? 'max-h-64 overflow-y-auto overscroll-contain pr-1 [scrollbar-width:thin]'
+              : ''
+          }`}
+        >
           {memos.length === 0 ? (
             <p className="text-xs text-slate-400">아직 작성된 메모가 없습니다.</p>
           ) : (
@@ -169,7 +179,14 @@ export const CaseMemo: React.FC = () => {
             </ul>
           )}
         </div>
-      </section>
+    </section>
+  );
+
+  return embedded ? (
+    content
+  ) : (
+    <Card className="rounded-xl border-slate-200 p-4 shadow-sm">
+      {content}
     </Card>
   );
 };

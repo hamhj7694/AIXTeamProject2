@@ -2,6 +2,7 @@ export const MANAGER_ROOM_VIEWS = [
   'workspace',
   'progress',
   'evidence',
+  'report',
 ] as const;
 
 export type ManagerRoomView = (typeof MANAGER_ROOM_VIEWS)[number];
@@ -12,6 +13,30 @@ export interface ManagerRoomCase {
   risk: 'HIGH' | 'MEDIUM' | 'LOW';
   status: string;
   dataSource: 'MVP Mock';
+}
+
+export interface ManagerRoomAssignee {
+  role: string;
+  name: string;
+  workStatus: string;
+}
+
+export interface ManagerRoomFinalReport {
+  caseId: string;
+  risk: ManagerRoomCase['risk'];
+  status: string;
+  assignee: string;
+  closedAt: string;
+  reportUpdatedAt: string;
+  summary: string;
+  riskEvidence: string[];
+  counterEvidence: string[];
+  customerFindings: string[];
+  unknowns: string[];
+  checklistItems: ManagerRoomChecklistItem[];
+  internalMemos: ManagerRoomMemoItem[];
+  resolution: string[];
+  evidenceSources: string[];
 }
 
 export interface ManagerRoomMessage {
@@ -73,6 +98,11 @@ export interface ManagerRoomChecklistItem {
   id: string;
   label: string;
   completed: boolean;
+}
+
+export interface ManagerRoomMemoItem {
+  id: string;
+  content: string;
 }
 
 export interface ManagerRoomProgressMock {

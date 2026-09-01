@@ -48,6 +48,16 @@
 - ham, eom, lee는 각각 자신의 작업자 폴더만 진행상황 기록용으로 수정한다.
 - 진행상황 때문에 다른 작업자의 파일이나 공통 기준 문서를 수정하지 않는다.
 
+## 현재 작업 책임
+
+| 작업자 | 책임 | 소유 경계 |
+|---|---|---|
+| eom | AI 모델·AI API | `backend/ai_api`, `contracts/ai_internal` |
+| lee | Frontend·General API·DB 통합 | `frontend`, `backend/general_api`, `contracts/public_api`, `migrations` |
+| ham | 현재 작업 제외 | `PAUSED`, 합류 시 재배정 |
+
+세부 배정과 인계 상태는 `team_work/README.md`와 `team_work/00_task_catalog.md`를 최종 기준으로 한다.
+
 ## 작업 순서
 
 ```text
@@ -55,7 +65,9 @@
   ↓
 ai_system_design에서 AI/일반 코드 경계 확인
   ↓
-00_task_catalog에서 담당 Task 확인
+Public Contract(lee)와 AI Internal Contract(eom) 합의
+  ↓
+00_task_catalog에서 담당 Task·소유 경계 확인
   ↓
 자신의 작업자 문서에 TODO·진행·로그 기록
   ↓

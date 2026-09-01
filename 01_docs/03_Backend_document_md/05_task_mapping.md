@@ -5,6 +5,8 @@
 
 > 이 문서는 공통 Task ID와 의존성의 기준이다. 실제 담당자 배정은 `team_work/00_task_catalog.md`, 개인 진행상황은 `team_work/{ham|eom|lee}/todo.md`에서 관리한다.
 
+> 현재 배정 원칙은 **AI 계열(`AI`, AI 내부 Contract)=eom**, **Frontend·일반 Backend·서비스 DB·Realtime·통합(`FE`, `BE`, `DB`, `RT`, `INT`)=lee**다. ham은 현재 작업에서 제외한다. 아래 상세 표의 `TBD`는 공통 템플릿 값이며 실제 소유권은 `team_work/00_task_catalog.md`가 우선한다.
+
 ---
 
 ## 1. 작업 코드 규칙
@@ -19,7 +21,7 @@ INT  = Integration / E2E
 DOC  = 문서/설계
 ```
 
-담당자 칸은 팀에서 직접 입력한다.
+공통 Task 정의를 재사용하기 위해 상세 표의 담당자 칸은 템플릿으로 유지한다. 현재 담당자는 `team_work/00_task_catalog.md`에서 확정한다.
 
 ---
 
