@@ -3,7 +3,7 @@
 > 기준 문서: [개발 구현 체크리스트 | Frontend · Backend API · MySQL](https://app.notion.com/p/3cdc753ff28a81f9b261c9d157543bac?pvs=204)  
 > 이 문서는 **노션에 표시된 체크 상태를 출발점**으로 사용한다. 노션에서 완료가 명시되지 않은 Backend/AI/DB 작업은 임의로 완료 처리하지 않는다.
 
-> 이 문서는 전체 범위의 기준 TODO다. 브랜치별 실제 진행상황과 작업 로그는 충돌 방지를 위해 `team_work/{ham|eom|lee}.md`에만 기록한다.
+> 이 문서는 전체 범위의 기준 TODO다. 브랜치별 실제 진행상황과 작업 로그는 충돌 방지를 위해 `team_work/{ham|eom|lee}/todo.md`에만 기록한다.
 
 ---
 

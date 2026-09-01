@@ -7,3 +7,5 @@ vite.config.d.ts
 .env
 .env.*
 !.env.example
+__pycache__/
+*.py[cod]

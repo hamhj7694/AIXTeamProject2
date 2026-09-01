@@ -22,10 +22,11 @@
 │  ├─ 04_case_report_ai.md
 │  └─ 05_voice_intelligence_pipeline.md
 └─ team_work/
+   ├─ README.md
    ├─ 00_task_catalog.md
-   ├─ ham.md
-   ├─ eom.md
-   └─ lee.md
+   ├─ ham/{task_mapping.md,todo.md}
+   ├─ eom/{task_mapping.md,todo.md}
+   └─ lee/{task_mapping.md,todo.md}
 ```
 
 ## 문서 역할
@@ -35,7 +36,8 @@
 | `01~07` | Backend·AI API·DB·Frontend 연결의 공통 기준 |
 | `ai_system_design` | AI와 일반 코드의 경계, 입력·출력, 호출·병렬 실행 설계 |
 | `team_work/00_task_catalog.md` | 전체 Task ID, 의존성, 최초 담당자 배정 |
-| `team_work/{worker}.md` | 개인 TODO, 진행상태, 작업 로그, Commit/PR |
+| `team_work/{worker}/task_mapping.md` | 개인 담당 범위, Task ID, 코드 소유권 |
+| `team_work/{worker}/todo.md` | 개인 TODO, 진행상태, Blocker, 작업 로그 |
 
 ## 수정 규칙
 
@@ -43,7 +45,7 @@
 - 공통 기준 변경을 사용자가 명시적으로 요청한 경우에만 영향과 이유를 설명하고 최소 수정한다.
 - AI 시스템 책임이나 Contract 변경은 `ai_system_design`에 기록한다.
 - 전체 Task 배정은 한 명의 조정자가 `team_work/00_task_catalog.md`에서 관리한다.
-- ham, eom, lee는 각각 자신의 단일 작업 문서만 수정한다.
+- ham, eom, lee는 각각 자신의 작업자 폴더만 진행상황 기록용으로 수정한다.
 - 진행상황 때문에 다른 작업자의 파일이나 공통 기준 문서를 수정하지 않는다.
 
 ## 작업 순서

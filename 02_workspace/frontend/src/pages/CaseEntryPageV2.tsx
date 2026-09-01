@@ -1,15 +1,29 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { ArrowLeft, ChevronRight, ShieldCheck, UserRound, WalletCards } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { AppLayout } from '../components/layout/AppLayout';
-import { getCase } from '../data/mock/caseData';
+import { CaseDetail } from '../data/mock/caseData';
+import { caseApi } from '../services/caseApi';
 
 const badgeClass = (risk: string) => risk === 'HIGH' ? 'bg-rose-50 text-rose-700' : risk === 'LOW' ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700';
 const statusClass = (status: string) => status === '확인중' ? 'bg-blue-50 text-blue-700' : status === '후속조치' ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700';
 
 export const CaseEntryPageV2: React.FC = () => {
   const { caseId = 'VP-014' } = useParams();
-  const item = getCase(caseId);
+  const [item, setItem] = useState<CaseDetail | null>(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    setItem(null); setError('');
+    caseApi.get(caseId)
+      .then((result) => { if (active) setItem(result); })
+      .catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : 'Case를 불러오지 못했습니다.'); });
+    return () => { active = false; };
+  }, [caseId]);
+
+  if (error) return <AppLayout><div className="mx-auto max-w-6xl py-8 lg:ml-64"><Link to="/" className="mb-6 inline-flex items-center gap-1 text-sm font-bold text-slate-500"><ArrowLeft size={16}/> 진단 화면으로 돌아가기</Link><div className="rounded-2xl border border-rose-200 bg-rose-50 p-5 text-sm font-bold text-rose-700">{error}</div></div></AppLayout>;
+  if (!item) return <AppLayout><div className="mx-auto max-w-6xl py-8 lg:ml-64"><div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm font-bold text-slate-500">분석된 Case를 불러오는 중...</div></div></AppLayout>;
   const cards = [
     ['은행 화면', '담당자용 AI Workspace, 진행 흐름, 원본 Evidence를 확인합니다.', `/cases/${item.id}/bank`, WalletCards],
     ['소비자 화면', '현재 행동과 Customer Agent를 확인합니다.', `/cases/${item.id}/customer`, UserRound],
