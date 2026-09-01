@@ -1,19 +1,7 @@
 import React from 'react';
 import { UserRound } from 'lucide-react';
 import { Badge } from '../../../components/ui/Badge';
-
-const assignees = [
-  {
-    role: '사건 담당자',
-    name: '김OO',
-    workStatus: '사건 조사 중',
-  },
-  {
-    role: '고객 상담 담당자',
-    name: '이OO',
-    workStatus: '고객 확인 지원',
-  },
-] as const;
+import { managerRoomAssigneesMock } from '../data/managerRoomMock';
 
 export const ManagerAssigneeOverview: React.FC = () => {
   return (
@@ -33,7 +21,7 @@ export const ManagerAssigneeOverview: React.FC = () => {
         </div>
 
         <div className="grid gap-2 sm:grid-cols-2 sm:gap-0 sm:divide-x sm:divide-slate-200">
-          {assignees.map((assignee) => (
+          {managerRoomAssigneesMock.map((assignee) => (
             <div
               key={assignee.role}
               className="flex min-w-0 items-center gap-3 rounded-lg bg-white px-3 py-2 sm:rounded-none sm:bg-transparent sm:first:pl-0 sm:last:pr-0 sm:last:pl-4"

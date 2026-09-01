@@ -1,6 +1,5 @@
 import React, { FormEvent, useEffect, useRef } from 'react';
 import {
-  Mic,
   PhoneCall,
   PhoneOff,
   Send,
@@ -8,7 +7,6 @@ import {
   UserRound,
 } from 'lucide-react';
 import { Badge } from '../../../../components/ui/Badge';
-import { Button } from '../../../../components/ui/Button';
 import { Card } from '../../../../components/ui/Card';
 import { cn } from '../../../../utils/helpers';
 import { ManagerRoomCustomerMessage } from '../../types';
@@ -16,21 +14,15 @@ import { ManagerRoomCustomerMessage } from '../../types';
 interface CustomerConsultationProps {
   messages: ManagerRoomCustomerMessage[];
   input: string;
-  voiceCallActive: boolean;
   onInputChange: (value: string) => void;
   onSubmit: () => void;
-  onStartVoiceCall: () => void;
-  onEndVoiceCall: () => void;
 }
 
 export const CustomerConsultation: React.FC<CustomerConsultationProps> = ({
   messages,
   input,
-  voiceCallActive,
   onInputChange,
   onSubmit,
-  onStartVoiceCall,
-  onEndVoiceCall,
 }) => {
   const messageListRef = useRef<HTMLDivElement>(null);
 
@@ -69,45 +61,6 @@ export const CustomerConsultation: React.FC<CustomerConsultationProps> = ({
             </p>
           </div>
 
-          {voiceCallActive ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <span
-                role="status"
-                className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm"
-              >
-                <PhoneCall size={15} />
-                고객 통화 중
-              </span>
-              <button
-                type="button"
-                disabled
-                title="녹음 기능은 추후 연결 예정입니다."
-                aria-label="녹음 기능은 추후 연결 예정입니다."
-                className="grid h-9 w-9 cursor-not-allowed place-items-center rounded-xl border border-slate-200 bg-slate-100 text-slate-400 opacity-70"
-              >
-                <Mic size={16} />
-              </button>
-              <button
-                type="button"
-                onClick={onEndVoiceCall}
-                className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-red-600 bg-red-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
-              >
-                <PhoneOff size={15} />
-                통화 종료
-              </button>
-            </div>
-          ) : (
-            <Button
-              type="button"
-              variant="success"
-              size="sm"
-              onClick={onStartVoiceCall}
-              className="inline-flex shrink-0 items-center justify-center gap-1.5"
-            >
-              <PhoneCall size={15} />
-              고객 통화하기
-            </Button>
-          )}
         </div>
 
         <div

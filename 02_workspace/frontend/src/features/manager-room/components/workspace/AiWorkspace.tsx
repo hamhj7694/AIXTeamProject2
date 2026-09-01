@@ -1,12 +1,9 @@
 import React, { useState } from 'react';
-import {
-  createManagerRoomMockResponse,
-  managerRoomCustomerMessagesMock,
-  managerRoomWorkspaceMock,
-} from '../../data/managerRoomMock';
+import { createManagerRoomMockResponse } from '../../data/managerRoomMock';
 import {
   ManagerRoomCustomerMessage,
   ManagerRoomMessage,
+  ManagerRoomWorkspaceMock,
 } from '../../types';
 import { CaseOverview } from './CaseOverview';
 import { CustomerConsultation } from './CustomerConsultation';
@@ -15,18 +12,26 @@ import { WorkspaceChat } from './WorkspaceChat';
 
 type ConversationView = 'ai' | 'customer';
 
-export const AiWorkspace: React.FC = () => {
+interface AiWorkspaceProps {
+  workspace: ManagerRoomWorkspaceMock;
+  customerMessages: ManagerRoomCustomerMessage[];
+  onCustomerMessagesChange: React.Dispatch<
+    React.SetStateAction<ManagerRoomCustomerMessage[]>
+  >;
+}
+
+export const AiWorkspace: React.FC<AiWorkspaceProps> = ({
+  workspace,
+  customerMessages,
+  onCustomerMessagesChange,
+}) => {
   const [messages, setMessages] = useState<ManagerRoomMessage[]>(
-    managerRoomWorkspaceMock.initialMessages
+    workspace.initialMessages
   );
   const [input, setInput] = useState('');
   const [conversationView, setConversationView] =
     useState<ConversationView>('ai');
-  const [customerMessages, setCustomerMessages] = useState<
-    ManagerRoomCustomerMessage[]
-  >(managerRoomCustomerMessagesMock);
   const [customerInput, setCustomerInput] = useState('');
-  const [voiceCallActive, setVoiceCallActive] = useState(false);
 
   const sendMockRequest = (request: string) => {
     const trimmedRequest = request.trim();
@@ -54,7 +59,7 @@ export const AiWorkspace: React.FC = () => {
     const trimmedInput = customerInput.trim();
     if (!trimmedInput) return;
 
-    setCustomerMessages((currentMessages) => [
+    onCustomerMessagesChange((currentMessages) => [
       ...currentMessages,
       {
         id: `customer-consultation-manager-${Date.now()}`,
@@ -66,7 +71,7 @@ export const AiWorkspace: React.FC = () => {
   };
 
   const useRecommendedQuestion = () => {
-    const recommendedQuestion = managerRoomWorkspaceMock.recommendedQuestion;
+    const recommendedQuestion = workspace.recommendedQuestion;
 
     // 작성 중인 Draft를 지우지 않고 다음 문단에 추천 질문을 추가한다.
     setCustomerInput((currentInput) =>
@@ -75,35 +80,6 @@ export const AiWorkspace: React.FC = () => {
         : recommendedQuestion
     );
     setConversationView('customer');
-  };
-
-  const startVoiceCall = () => {
-    if (voiceCallActive) return;
-
-    // 실제 전화 연결 없이 통화 상태와 상담 기록만 관리하는 MVP 동작이다.
-    setVoiceCallActive(true);
-    setCustomerMessages((currentMessages) => [
-      ...currentMessages,
-      {
-        id: `customer-consultation-call-start-${Date.now()}`,
-        role: 'system',
-        content: '담당자가 고객과 음성 통화를 시작했습니다.',
-      },
-    ]);
-  };
-
-  const endVoiceCall = () => {
-    if (!voiceCallActive) return;
-
-    setVoiceCallActive(false);
-    setCustomerMessages((currentMessages) => [
-      ...currentMessages,
-      {
-        id: `customer-consultation-call-end-${Date.now()}`,
-        role: 'system',
-        content: '음성 통화가 종료되었습니다.',
-      },
-    ]);
   };
 
   return (
@@ -121,9 +97,9 @@ export const AiWorkspace: React.FC = () => {
           </h2>
         </div>
 
-        <CaseOverview workspace={managerRoomWorkspaceMock} />
+        <CaseOverview workspace={workspace} />
         <RecommendedQuestion
-          question={managerRoomWorkspaceMock.recommendedQuestion}
+          question={workspace.recommendedQuestion}
           onUseInCustomerConsultation={useRecommendedQuestion}
         />
       </section>
@@ -188,11 +164,8 @@ export const AiWorkspace: React.FC = () => {
           <CustomerConsultation
             messages={customerMessages}
             input={customerInput}
-            voiceCallActive={voiceCallActive}
             onInputChange={setCustomerInput}
             onSubmit={sendCustomerMessage}
-            onStartVoiceCall={startVoiceCall}
-            onEndVoiceCall={endVoiceCall}
           />
         )}
       </section>
