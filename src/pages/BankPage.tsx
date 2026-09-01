@@ -3,6 +3,7 @@ import { ArrowLeft, Clock3, Phone, UserRound } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { AppLayout } from '../components/layout/AppLayout';
 import { getCase, timeline } from '../data/mock/caseData';
+import { requestVoiceCall } from '../components/voice/voiceCallState';
 import { VoiceCallPopup } from '../components/voice/VoiceCallPopup';
 
 const CustomerResponseCard: React.FC = () => {
@@ -16,15 +17,17 @@ type CustomerResponse = { question: string; answer: string; at: string };
 export const BankPage: React.FC = () => {
   const { caseId = 'VP-014' } = useParams(); const item = getCase(caseId);
   const [takeover, setTakeover] = useState(() => window.localStorage.getItem('human-takeover') === 'true');
-  const [callOpen, setCallOpen] = useState(false);
   const [liveTimeline, setLiveTimeline] = useState<Array<[string, string, string]>>(timeline.map(([time, event, actor]) => [time, event, actor]));
   const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
+  const callOpen = false;
+  const setCallOpen = (open: boolean) => { if (open) requestVoiceCall('bank'); };
   const [currentTime, setCurrentTime] = useState(() => new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }));
   useEffect(() => { const timer = window.setInterval(() => setCurrentTime(new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })), 1000); return () => window.clearInterval(timer); }, []);
   useEffect(() => { window.localStorage.setItem('fds-risk', 'HIGH · 신규 수취인'); window.dispatchEvent(new Event('fds-risk-change')); }, []);
   const toggleTakeover = () => { const next = !takeover; setTakeover(next); window.localStorage.setItem('human-takeover', String(next)); window.dispatchEvent(new Event('human-takeover-change')); setLiveTimeline((current) => [[currentTime, next ? '담당자가 Case에 참여' : '담당자 참여가 종료됨', 'human'], ...current]); };
   const handleCallStarted = () => setLiveTimeline((current) => [[currentTime, '음성 통화 연결', 'voice'], ...current]);
   const handleRecordingReady = (url: string) => { setRecordingUrl(url); setLiveTimeline((current) => [[currentTime, '음성 통화 녹음 저장', 'voice'], ...current]); };
+  useEffect(() => { const started = () => handleCallStarted(); const recorded = (event: Event) => handleRecordingReady((event as CustomEvent<{ url: string }>).detail.url); window.addEventListener('voice-call-started', started); window.addEventListener('voice-call-recording-ready', recorded); return () => { window.removeEventListener('voice-call-started', started); window.removeEventListener('voice-call-recording-ready', recorded); }; }, []);
 
   return <AppLayout><div className="mx-auto max-w-6xl py-8 lg:ml-64">
     {takeover && <div className="mb-4 flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800"><span>담당자가 Case에 참여 중입니다.</span><span className="text-xs">소비자 화면에도 실시간 반영</span></div>}
