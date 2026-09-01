@@ -22,6 +22,10 @@ const placeholderContent: Record<
     title: '근거 확인',
     description: 'FDS 및 통화·STT 근거를 읽기 전용으로 확인하는 영역입니다.',
   },
+  report: {
+    title: '최종 리포트',
+    description: '사건 종료 후 담당자의 처리 결과를 확인하는 영역입니다.',
+  },
 };
 
 export const ManagerRoomViewPlaceholder: React.FC<

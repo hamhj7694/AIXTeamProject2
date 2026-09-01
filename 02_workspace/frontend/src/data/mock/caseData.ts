@@ -28,6 +28,17 @@ export interface CaseDetail extends CaseRecord {
 }
 
 export const CASE_DETAILS: Record<string, CaseDetail> = {
+  'VP-099': {
+    id: 'VP-099', type: 'UI 스크롤 테스트 사건', risk: 'HIGH', status: '확인중', transferred: false,
+    summary: '긴 근거 목록과 조사 체크리스트의 독립 스크롤 동작을 확인하기 위한 테스트 Case입니다.', createdAt: '오늘 10:00', updatedAt: '10:05', victimStatus: '확인 중',
+    aiInitialBrief: '수사기관 사칭과 긴급 송금 요구 정황을 기준으로 UI 스크롤 동작을 점검하는 테스트 Case입니다.', bankInfo: '담당자 ROOM의 근거 분석과 조사 체크리스트 UI 검증을 위한 Mock 데이터입니다.', consumerInfo: '실제 고객 정보가 아닌 UI 테스트용 Mock Case입니다.',
+    verificationBrief: '스크롤 테스트용 Case의 최소 검증 정보입니다.',
+    verificationQuestions: [
+      { id: 1, question: '현재 송금 여부를 확인했습니까?' },
+      { id: 2, question: '상대방이 주장한 기관을 별도로 확인했습니까?' },
+      { id: 3, question: '개인정보 제공 범위를 확인했습니까?' },
+    ],
+  },
   'VP-014': {
     id: 'VP-014', type: '검찰 사칭', risk: 'HIGH', status: '확인중', amount: '5,000,000원', transferred: false,
     summary: '검찰을 사칭하며 안전계좌 명목의 송금을 요구했습니다.', createdAt: '오늘 09:34', updatedAt: '09:42', victimStatus: '송금 전',

@@ -1,31 +1,31 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Badge } from '../../../../components/ui/Badge';
 import { Card } from '../../../../components/ui/Card';
 import { cn } from '../../../../utils/helpers';
 import { ManagerRoomChecklistItem } from '../../types';
 
 interface InvestigationChecklistProps {
-  initialItems: ManagerRoomChecklistItem[];
+  items: ManagerRoomChecklistItem[];
+  onItemsChange: React.Dispatch<React.SetStateAction<ManagerRoomChecklistItem[]>>;
+  embedded?: boolean;
 }
 
 export const InvestigationChecklist: React.FC<
   InvestigationChecklistProps
-> = ({ initialItems }) => {
-  const [items, setItems] = useState(initialItems);
+> = ({ items, onItemsChange, embedded = false }) => {
   const completedCount = items.filter((item) => item.completed).length;
 
   const toggleItem = (itemId: string) => {
     // 체크 여부는 담당자가 직접 바꾸며 Backend에는 저장하지 않는다.
-    setItems((currentItems) =>
+    onItemsChange((currentItems) =>
       currentItems.map((item) =>
         item.id === itemId ? { ...item, completed: !item.completed } : item
       )
     );
   };
 
-  return (
-    <Card className="rounded-xl border-slate-200 p-4 shadow-sm">
-      <section aria-labelledby="investigation-checklist-title">
+  const content = (
+    <section aria-labelledby="investigation-checklist-title">
         <div className="flex items-center justify-between gap-3">
           <h2 id="investigation-checklist-title" className="text-base font-extrabold text-slate-950">
             조사 체크리스트
@@ -38,7 +38,10 @@ export const InvestigationChecklist: React.FC<
           담당자가 직접 확인한 상태입니다.
         </p>
 
-        <div className="mt-3 space-y-1.5">
+        <div
+          aria-label="조사 체크 항목"
+          className="mt-3 max-h-[240px] space-y-1.5 overflow-x-hidden overflow-y-auto overscroll-contain pr-1 [scrollbar-width:thin]"
+        >
           {items.map((item) => (
             <label
               key={item.id}
@@ -75,7 +78,14 @@ export const InvestigationChecklist: React.FC<
         <p className="mt-2 text-[11px] leading-5 text-slate-400">
           현재 브라우저 화면에서만 유지되는 Local state입니다.
         </p>
-      </section>
+    </section>
+  );
+
+  return embedded ? (
+    content
+  ) : (
+    <Card className="rounded-xl border-slate-200 p-4 shadow-sm">
+      {content}
     </Card>
   );
 };

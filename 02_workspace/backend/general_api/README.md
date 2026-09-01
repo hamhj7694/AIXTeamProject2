@@ -10,6 +10,7 @@ app/
 tests/            # 단위·통합 테스트
 ```
 
+
 ## 현재 실행
 
 AI API를 8001 포트에서 먼저 실행한 뒤 별도 터미널에서 다음을 실행한다.
@@ -24,4 +25,3 @@ Frontend는 `VITE_API_BASE_URL=http://127.0.0.1:8000`을 사용한다. 현재 Ca
 fixture E2E용 메모리 구현이며 서버를 재시작하면 초기화된다. MySQL 영구 저장용 첫 스키마는
 `migrations/001_core_case_diagnosis.sql`에 분리되어 있고, DB 연결 방식 확정 후 Repository
 adapter만 교체한다.
-

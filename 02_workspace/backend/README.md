@@ -49,4 +49,3 @@ python -m unittest discover -s general_api/tests -v
 로컬에서 OpenAI 호출 없이 흐름만 확인할 때는 두 서버를 시작하기 전에
 `DIAGNOSIS_EXTRACTOR_MODE=fixture`를 설정한다. 실제 분석에서는 `openai`와
 `OPENAI_API_KEY`를 사용한다. 비밀키는 저장소에 커밋하지 않는다.
-
