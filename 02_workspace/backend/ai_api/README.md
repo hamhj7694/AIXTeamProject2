@@ -10,3 +10,17 @@ app/
 tests/            # 모델 adapter·API 계약 테스트
 ```
 
+## 현재 Diagnosis 실행
+
+작업 디렉터리는 반드시 `02_workspace/backend`로 둔다.
+
+```powershell
+python -m pip install -r requirements.txt
+$env:DIAGNOSIS_EXTRACTOR_MODE = "fixture"  # API key 없는 로컬 검증 전용
+python -m uvicorn ai_api.app.main:app --port 8001 --reload
+```
+
+실제 이벤트 추출은 `.env` 또는 터미널 환경변수에 `OPENAI_API_KEY`를 설정하고
+`DIAGNOSIS_EXTRACTOR_MODE=openai`로 실행한다. LLM은 이벤트와 원문 근거만 추출하며,
+위험 점수와 판정은 승인된 Window Logistic artifact가 담당한다.
+
