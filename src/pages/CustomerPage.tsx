@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { AlertTriangle, ArrowLeft, Check, Clock3 } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Check, Clock3, Phone } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { AppLayout } from '../components/layout/AppLayout';
 import { CompactSafetyChat, QuestionKey } from '../features/consultation/components/CompactSafetyChat';
 import { getCase } from '../data/mock/caseData';
+import { requestVoiceCall } from '../components/voice/voiceCallState';
 
 type LiveStatus = {
   transfer: string;
@@ -90,7 +91,7 @@ export const CustomerPage: React.FC = () => {
           <Link to={`/cases/${caseId}`} className="inline-flex items-center gap-1 text-sm font-bold text-slate-500">
             <ArrowLeft size={16} /> Case로 돌아가기
           </Link>
-          <span className="text-xs font-bold text-slate-400">CUSTOMER SAFETY ROOM</span>
+          <div className="flex flex-col items-end gap-2"><span className="text-xs font-bold text-slate-400">CUSTOMER SAFETY ROOM</span><button type="button" onClick={() => requestVoiceCall('customer')} className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-emerald-700"><Phone size={14} /> 음성 통화 요청</button></div>
         </div>
 
         <div className="mb-5 flex items-center justify-between rounded-2xl border border-rose-200 bg-rose-50 p-4">
