@@ -1,4 +1,4 @@
-import { CASE_DETAILS, CaseDetail, CaseRecord, MOCK_CASES } from '../data/mock/caseData';
+import { CaseDetail, CaseRecord } from '../data/mock/caseData';
 
 export type AnalyzeDisposition = 'CASE_CREATED' | 'NO_CASE' | 'FAILED';
 
@@ -20,7 +20,7 @@ interface StoredCaseResponse {
   mode: string;
   status: string;
   initial_brief: string;
-  initial_report: { report_id: string; case_id: string; report_version: number };
+  initial_report: { report_id: string; case_id: string; report_version: number } | null;
   diagnosis: {
     context: { summary: string; incident_type: string; claims: string[] };
     evidence: Array<{ text: string }>;
@@ -30,7 +30,9 @@ interface StoredCaseResponse {
   updated_at: string;
 }
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000').replace(/\/$/, '');
+// 개발환경은 Vite의 same-origin /api proxy를 사용한다.
+// 배포환경에서 별도 API origin이 필요할 때만 VITE_API_BASE_URL을 지정한다.
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 
 const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
   const response = await fetch(`${API_BASE_URL}${path}`, {
@@ -46,9 +48,14 @@ const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
   return payload as T;
 };
 
-const formatDateTime = (value: string) => new Date(value).toLocaleString('ko-KR', {
-  month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
-});
+const formatDateTime = (value: string) => {
+  const date = new Date(value);
+  const today = new Date();
+  const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+  const dayLabel = dateOnly === todayOnly ? '오늘' : dateOnly === todayOnly - 86400000 ? '어제' : date.toLocaleDateString('ko-KR');
+  return `${dayLabel} ${date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}`;
+};
 
 const toCaseDetail = (record: StoredCaseResponse): CaseDetail => {
   const amount = record.diagnosis.features.requested_amount_max || 0;
@@ -73,11 +80,9 @@ const toCaseDetail = (record: StoredCaseResponse): CaseDetail => {
 };
 
 export const caseApi = {
-  list: async (): Promise<CaseRecord[]> => Promise.resolve(MOCK_CASES),
-  get: async (caseId: string): Promise<CaseDetail> => {
-    if (CASE_DETAILS[caseId]) return CASE_DETAILS[caseId];
-    return toCaseDetail(await request<StoredCaseResponse>(`/api/cases/${encodeURIComponent(caseId)}`));
-  },
+  list: async (): Promise<CaseRecord[]> => (await request<StoredCaseResponse[]>('/api/cases')).map(toCaseDetail),
+  get: async (caseId: string): Promise<CaseDetail> =>
+    toCaseDetail(await request<StoredCaseResponse>(`/api/cases/${encodeURIComponent(caseId)}`)),
   analyze: async (text: string): Promise<AnalyzeResponse> => request('/api/cases/analyze', {
     method: 'POST',
     body: JSON.stringify({ text, client_request_id: crypto.randomUUID() }),

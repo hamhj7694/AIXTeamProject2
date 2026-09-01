@@ -1,4 +1,4 @@
-CREATE TABLE cases (
+CREATE TABLE IF NOT EXISTS cases (
     case_id VARCHAR(32) PRIMARY KEY,
     client_request_id VARCHAR(100) NULL UNIQUE,
     risk_level ENUM('NORMAL', 'LOW', 'HIGH') NOT NULL,
@@ -11,7 +11,7 @@ CREATE TABLE cases (
     updated_at DATETIME(6) NOT NULL
 );
 
-CREATE TABLE case_inputs (
+CREATE TABLE IF NOT EXISTS case_inputs (
     input_id BIGINT AUTO_INCREMENT PRIMARY KEY,
     case_id VARCHAR(32) NOT NULL,
     input_type ENUM('TEXT', 'VOICE_TRANSCRIPT') NOT NULL DEFAULT 'TEXT',
@@ -20,7 +20,7 @@ CREATE TABLE case_inputs (
     CONSTRAINT fk_case_inputs_case FOREIGN KEY (case_id) REFERENCES cases(case_id)
 );
 
-CREATE TABLE analysis_segments (
+CREATE TABLE IF NOT EXISTS analysis_segments (
     segment_id VARCHAR(64) PRIMARY KEY,
     case_id VARCHAR(32) NOT NULL,
     start_turn INT NOT NULL,
@@ -33,7 +33,7 @@ CREATE TABLE analysis_segments (
     CONSTRAINT fk_segments_case FOREIGN KEY (case_id) REFERENCES cases(case_id)
 );
 
-CREATE TABLE context_features (
+CREATE TABLE IF NOT EXISTS context_features (
     feature_id BIGINT AUTO_INCREMENT PRIMARY KEY,
     case_id VARCHAR(32) NOT NULL,
     segment_id VARCHAR(64) NULL,
@@ -46,7 +46,7 @@ CREATE TABLE context_features (
     CONSTRAINT fk_features_segment FOREIGN KEY (segment_id) REFERENCES analysis_segments(segment_id)
 );
 
-CREATE TABLE case_events (
+CREATE TABLE IF NOT EXISTS case_events (
     event_id BIGINT AUTO_INCREMENT PRIMARY KEY,
     case_id VARCHAR(32) NOT NULL,
     event_type VARCHAR(64) NOT NULL,
