@@ -67,6 +67,23 @@
 
 ## 작업 로그
 
+### 2026-09-01 — DB-01, BE-01/02/03, INT-01/02 검증 완료
+
+- [x] DB-01 Core Case Schema·MySQL Repository·Migration
+  - `001_core_case_diagnosis.sql`, `002_initial_live_report.sql`, `003_expand_risk_score_precision.sql` 적용 확인
+  - `cases.risk_score` 정밀도 `DECIMAL(9, 6)` 확인
+- [x] BE-01 실제 LLM 분석 → Case 생성 → MySQL 저장
+  - 실제 고위험 입력으로 `VP-00F24E1B`를 생성하고 `CASE_CREATED / HIGH / TRIAGE` 확인
+- [x] BE-02 Case 목록 API
+  - `GET /api/cases`에서 MySQL 저장 Case 2건 조회 확인
+- [x] BE-03 Case 상세·LIVE Report API
+  - `GET /api/cases/VP-00F24E1B`, LIVE Report 7개 section 조회 확인
+- [x] INT-01/02 실제 API·프론트 프록시 E2E
+  - 새 General API 프로세스(8002)에서도 동일 Case 목록·상세 재조회 확인
+  - Vite `/api` 프록시(5173)에서 목록·상세 조회 확인
+- 테스트: Python unittest 6개 통과, `npm run build` 통과(1460 modules)
+- 비고: Voice, Realtime, RAG, Conversation/Question API, LIVE/FINAL Report 갱신은 아직 미완료이며 완료 처리하지 않음.
+
 ### YYYY-MM-DD — TASK-ID
 
 - 완료:
