@@ -5,7 +5,7 @@ vite.config.js
 vite.config.d.ts
 쓰레기/
 .env
-.env.*
+.env.*3
 !.env.example
 __pycache__/
 *.py[cod]
