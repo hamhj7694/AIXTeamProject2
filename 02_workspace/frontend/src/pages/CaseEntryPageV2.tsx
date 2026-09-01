@@ -11,7 +11,7 @@ export const CaseEntryPageV2: React.FC = () => {
   const { caseId = 'VP-014' } = useParams();
   const item = getCase(caseId);
   const cards = [
-    ['은행 화면', '거래·FDS·검증 결과와 질문 Queue를 확인합니다.', `/cases/${item.id}/bank`, WalletCards],
+    ['은행 화면', '담당자용 AI Workspace, 진행 흐름, 원본 Evidence를 확인합니다.', `/cases/${item.id}/bank`, WalletCards],
     ['소비자 화면', '현재 행동과 Customer Agent를 확인합니다.', `/cases/${item.id}/customer`, UserRound],
     ['기타 / 검증', '이 Case의 사실 확인 질문을 진행합니다.', `/cases/${item.id}/verify`, ShieldCheck],
   ] as const;

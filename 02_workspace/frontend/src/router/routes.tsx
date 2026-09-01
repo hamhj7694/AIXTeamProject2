@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import { DiagnosisPage } from '../pages/CasePages';
 import { BankPage } from '../pages/BankPage';
+import { ManagerRoomPage } from '../features/manager-room/ManagerRoomPage';
 import { CustomerPage } from '../pages/CustomerPage';
 import { CaseEntryPageV2 } from '../pages/CaseEntryPageV2';
 import { CaseVerificationPage } from '../pages/CaseVerificationPage';
@@ -12,6 +13,7 @@ export const AppRoutes: React.FC = () => <Router><Routes>
   <Route path="/cases" element={<CasesTablePage />} />
   <Route path="/cases/:caseId" element={<CaseEntryPageV2 />} />
   <Route path="/cases/:caseId/customer" element={<CustomerPage />} />
-  <Route path="/cases/:caseId/bank" element={<BankPage />} />
+  <Route path="/cases/:caseId/bank" element={<ManagerRoomPage />} />
+  <Route path="/cases/:caseId/bank-v1" element={<BankPage />} />
   <Route path="/cases/:caseId/verify" element={<CaseVerificationPage />} />
 </Routes></Router>;
