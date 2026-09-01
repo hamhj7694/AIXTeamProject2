@@ -3,30 +3,16 @@
 ## 현재 상태
 
 ```text
-WAITING — 다른 작업 완료 후 합류
+PAUSED — 현재 eom·lee 작업 범위에서 제외
 ```
 
-합류 전에는 Backend 공통 파일을 선행 수정하지 않는다. 합류 시 `main` 최신 상태와 eom/lee의 Contract를 먼저 확인한다.
+ham에게 현재 배정된 Task나 코드 소유 영역은 없다. eom과 lee가 진행하는 동안 공통 Backend, AI API, Frontend, Contract 문서를 선행 수정하지 않는다.
 
-## 합류 후 배정 후보
+## 합류 시 재배정 원칙
 
-| Task ID | 독립 작업 후보 | 선행 작업 | 충돌 방지 경계 |
-|---|---|---|---|
-| BE-02/03 | Case List·Detail·Bundle | INT-01 | analyze 수정 최소화 |
-| BE-04 | Conversation·Question·Progress | AI-06/08 | 별도 conversation 모듈 |
-| BE-05 | Verification·외부 Token | AI-07/12 | 별도 verification 모듈 |
-| BE-06 | Report 저장·Section Version | AI-05/16 | 별도 report 모듈 |
-| BE-07/08 | Action·Recovery·Official Data | Core DB | 별도 action/official 모듈 |
-| BE-09 | Voice Session | Voice 결정 | 별도 voice 모듈 |
-| RT-01 | SSE/WebSocket·Cursor | Event Schema | 별도 realtime 모듈 |
+1. `main` 최신 상태와 미완료 Task를 다시 확인한다.
+2. eom의 `ai_api`와 lee의 `frontend/general_api` 소유권을 침범하지 않는 경계를 선택한다.
+3. `00_task_catalog.md`에 담당 Task, 폴더, Reviewer를 먼저 기록한다.
+4. 독립 Branch와 Contract를 만든 뒤 구현한다.
 
-실제 담당 Task는 합류 시점에 완료되지 않은 항목 중 하나 이상을 선택해 `00_task_catalog.md`에서 확정한다.
-
-## 권장 브랜치 예시
-
-```text
-ham/be-verification
-ham/be-report-version
-ham/rt-case-stream
-ham/be-voice-session
-```
+과거의 Realtime·Voice·Verification 후보는 예약된 소유권이 아니다. 합류 시점에 완료되지 않은 작업을 기준으로 다시 결정한다.

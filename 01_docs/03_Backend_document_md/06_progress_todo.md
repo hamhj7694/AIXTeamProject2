@@ -5,6 +5,8 @@
 
 > 이 문서는 전체 범위의 기준 TODO다. 브랜치별 실제 진행상황과 작업 로그는 충돌 방지를 위해 `team_work/{ham|eom|lee}/todo.md`에만 기록한다.
 
+> 현재 진행 책임은 eom=`AI API·모델`, lee=`Frontend·General API·DB·통합`, ham=`PAUSED`다. 완료 체크는 담당자 개인 TODO와 테스트 기록을 기준으로 갱신한다.
+
 ---
 
 ## 0. 상태 정의

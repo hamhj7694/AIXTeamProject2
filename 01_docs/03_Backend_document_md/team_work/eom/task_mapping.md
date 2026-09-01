@@ -2,48 +2,60 @@
 
 ## 역할
 
-`/` 텍스트 입력부터 WindowAI·Diagnosis LLM 병렬 분석, Backend Case 생성, Frontend 상세 이동까지 최초 진단 Vertical Slice 전체를 소유한다.
+eom은 **AI 모델·AI API 제공자**다. WindowAI, LLM, RAG, STT 등 AI 기능을 모델 Adapter부터 내부 API의 구조화된 응답까지 책임진다.
 
 ## 소유 영역
 
 ```text
-Frontend 최초 진단·Case API Client
-일반 Backend analyze/core
-AI Backend diagnosis/WindowAI
-Diagnosis Contract와 Fusion
+02_workspace/backend/ai_api/**
+02_workspace/backend/contracts/ai_internal/**
+02_workspace/backend/ai_api/models/**
+AI Fixture·Prompt·평가 데이터·Contract Test
 ```
+
+## 핵심 책임
+
+- AI 내부 Request/Response Schema와 Example의 최종 편집
+- WindowAI·Full Context LLM·Feature Extractor·Risk Fusion
+- Report·Case Support·Knowledge RAG·Voice AI의 단계적 구현
+- Model version, artifact hash, source/evidence, confidence 반환
+- Timeout·부분 실패·Fallback을 포함한 AI API 오류 정책
+- lee가 실제 AI 없이도 통합할 수 있는 결정론적 Fixture 제공
+- AI API 단위 테스트·품질 평가·소비자 Contract Test 지원
 
 ## 담당 Task
 
-| Task ID | 작업 | 산출물 | 선행 | Reviewer |
-|---|---|---|---|---|
-| CT-01 | Public Analyze Contract | `/api/cases/analyze` Schema | 없음 | lee |
-| CT-02 | Diagnosis AI Contract | ML/LLM Request·Response | 없음 | lee |
-| BE-00 | Backend Skeleton | Server, Error, AI Client Interface | CT-01/02 | lee |
-| DB-01 | Core Case Schema | case/input/segment/feature Migration | CT-01 | lee |
-| FE-01 | Root API 연결 | API Client, Loading/Error, Navigate | CT-01 | lee |
-| AI-01 | Diagnosis LLM | 전체 맥락 구조화 | CT-02 | lee |
-| AI-02 | WindowAI | Segment 위험 분석 | CT-02 | lee |
-| AI-03/04 | Feature·Risk Fusion | 표준 Feature, Risk 규칙 | AI-01/02 | lee |
-| AAPI-10 | Diagnosis AI API | analyze text/windows/features/risk | AI-01~04 | lee |
-| BE-01 | Case Analyze API | 병렬 호출·Fusion·저장 | BE-00, AAPI-10 | lee |
-| INT-01 | 최초 진단 E2E | `/` → Case → 상세 이동 | FE-01, BE-01 | lee |
+| Task ID | 작업 | 산출물 | Reviewer |
+|---|---|---|---|
+| CT-02 | Diagnosis AI Contract | 내부 Schema·Example·오류 정책 | lee |
+| AI-01~04 | 최초 진단 AI | LLM·WindowAI·Feature·Risk/Fusion | lee |
+| AAPI-10 | Diagnosis AI API | 내부 Endpoint·Fixture·Contract Test | lee |
+| AI-05/16 | Case Report AI | Initialize·Section Patch·FINAL | lee |
+| AI-06~08 | Case Support AI | 질문·검증 계획·비정형 답변 구조화 | lee |
+| AI-09~11 | Voice Intelligence | STT·Delta·Summary | lee |
+| AI-12~15 | Knowledge AI | Verification·Response·Recovery·Institution RAG | lee |
+| AAPI-20/21/30 | 후속 AI API | Report·Case Support·Knowledge Endpoint | lee |
 
 ## 수정하지 않을 영역
 
-- `ai_backend/report/**`
-- `ai_backend/case_support/**`
-- `ai_backend/knowledge/**`
-- lee의 작업 문서
-- ham 합류 후 소유가 확정된 Realtime/Voice/Verification 모듈
+- `02_workspace/frontend/**`
+- `02_workspace/backend/general_api/**`
+- `02_workspace/backend/contracts/public_api/**`
+- `02_workspace/backend/migrations/**`
+- lee·ham의 개인 작업 문서
+
+AI 결과 저장 방식이나 공개 화면 변경이 필요하면 lee에게 Contract 변경을 요청한다. 긴급 수정이라도 소유 영역을 넘어 직접 구현하지 않는다.
+
+## 기존 작업 인계
+
+eom이 기존 Vertical Slice에서 작성한 Frontend, General API, Migration 코드는 삭제하거나 되돌리지 않는다. 해당 코드는 `HANDOFF-01`을 통해 lee에게 소유권만 인계하며, 이후 수정은 lee가 담당한다.
 
 ## 권장 브랜치
 
 ```text
-eom/contract-case-analyze
-eom/be-case-analyze
 eom/ai-diagnosis
-eom/fe-case-analyze
+eom/ai-report
+eom/ai-case-support
+eom/ai-knowledge-rag
+eom/ai-voice
 ```
-
-Contract PR을 먼저 병합하고 구현 Task는 작은 PR로 분리한다.

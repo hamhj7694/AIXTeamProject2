@@ -1,63 +1,60 @@
-# lee TODO — 후속 AI 시스템
+# lee TODO — Frontend·General API 통합
 
-## 지금 해야 할 일
+## 현재 우선순위
 
-### 1. eom 초기 흐름 지원
+### 1. 기존 Vertical Slice 인계
 
-- [ ] eom의 Public/Diagnosis Contract Review
-- [ ] Case Header·Feature·Evidence 입력 확인
-- [ ] Report Initialize Request·Response Schema 작성
-- [ ] 고정 Fixture로 초기 Report Sections 반환
-- [ ] eom이 Backend에서 호출할 수 있는 Contract Test 제공
+- [ ] eom이 작성한 `frontend`, `general_api`, `migrations` 변경 구조 확인
+- [ ] Backend·AI API 로컬 실행
+- [ ] 기존 Python Unit Test 실행
+- [ ] Frontend production build 실행
+- [ ] `/` 위험·정상 입력 HTTP E2E 재현
+- [ ] Public Contract v1의 최종 편집자 인계 기록
+- [ ] General API·Frontend·Migration 소유권 인계 완료 표시
 
-### 2. Case Report AI
+### 2. 공개 Contract와 General API 정리
 
-- [ ] Section Key와 content Schema 확정
-- [ ] `/ai/reports/initialize` 구현
-- [ ] 규칙 기반 Event→Section Impact 표 작성
-- [ ] `/ai/reports/update` Section Patch 구현
-- [ ] 변경되지 않은 Section 재생성 방지 테스트
-- [ ] Source ID 연결
-- [ ] `/ai/reports/finalize` Revision 구현
+- [ ] `POST /api/cases/analyze` 요청·응답 Example 검토
+- [ ] `CASE_CREATED`, `NO_CASE`, `FAILED` 공개 응답 확정
+- [ ] 공개 DTO와 AI 내부 DTO 분리
+- [ ] AI Fixture Client와 실제 HTTP Client 교체 지점 확인
+- [ ] AI Timeout·부분 실패를 공개 오류로 변환하는 규칙 구현
+- [ ] 중복 `client_request_id`와 Idempotency 검증
+- [ ] Request ID·구조화 로그·민감정보 제거 점검
 
-### 3. Customer·Bank 지원 AI
+### 3. DB·Frontend 실제 연동
 
-- [ ] P0 표준질문 Registry Contract 확인
-- [ ] P1/P2 Question Planner 구현
-- [ ] 질문과 Options 분리
-- [ ] 고객 비정형 답변 Case Structurer 구현
-- [ ] 기존 확정값 Conflict 반환
-- [ ] Bank Copilot 근거 기반 응답 정책 정의
-- [ ] 민감 인증정보 질문 차단 테스트
+- [ ] MySQL 로컬 실행 방법 확정
+- [ ] In-memory Repository와 MySQL Repository 전환 설정
+- [ ] DB 저장 실패·Transaction Rollback 자동화 테스트
+- [ ] `/` Loading·Validation·Error·NO_CASE UI 회귀 테스트
+- [ ] Case 생성 후 실제 `/cases/:caseId` 조회 연결
+- [ ] Mock과 API 데이터 경계 문서화
 
-### 4. Knowledge·Verification RAG
+### 4. 후속 통합
 
-- [ ] Knowledge Source Metadata Schema 확정
-- [ ] Chunk·Embedding·Retriever Fixture
-- [ ] Verification RAG
-- [ ] Response Guide RAG
-- [ ] Recovery Guide RAG
-- [ ] Institution RAG
-- [ ] 근거 없음·오래된 Source 처리 테스트
-- [ ] 공식 연락처·URL 생성 금지 테스트
+- [ ] Case List·Detail·Bundle API와 화면 연결
+- [ ] Customer Room Conversation·Question API 연결
+- [ ] Bank Workspace v2 Report·Action·Verification 연결
+- [ ] SSE/WebSocket Delta 적용
+- [ ] Voice Session·STT 연결 Workflow
+- [ ] FINAL Report·Recovery E2E
 
-## 우선순위
+## eom과의 계약 체크
 
-```text
-Report Initialize Contract
-→ Report Initialize Fixture
-→ LIVE Section Update
-→ Question/Case Structurer
-→ Verification RAG
-→ FINAL Report
-```
+- [ ] `ai_internal` Example을 소비자 Contract Test로 고정
+- [ ] AI API Base URL·Timeout·Retry 설정 합의
+- [ ] AI가 아직 없는 기능은 동일 Schema의 Fixture로 먼저 구현
+- [ ] 실제 AI 전환 후 Fixture E2E와 실제 AI E2E를 모두 유지
+- [ ] AI 내부 Contract 변경 없이 `ai_api/**` 직접 수정 금지
 
 ## Blocked / 결정 필요
 
-- [ ] Report content JSON 최종 Schema
-- [ ] LLM Provider·Model
-- [ ] Embedding Model·Vector DB
-- [ ] 공식문서 Corpus 범위
+- [ ] 인증·권한 방식
+- [ ] MySQL 로컬·테스트 실행 방식
+- [ ] SSE vs WebSocket
+- [ ] 공개 API Versioning 정책
+- [ ] 배포 환경의 AI API 주소·Secret 주입 방식
 
 ## 작업 로그
 
