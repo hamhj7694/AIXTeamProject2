@@ -1,0 +1,12 @@
+import React, { useEffect, useRef } from 'react';
+import { Activity, MessageSquare } from 'lucide-react';
+import type { MvpEvent } from '../../services/mvpChatApi';
+
+const eventLabel: Record<string, string> = { CASE_CREATED: 'Case 생성', MESSAGE_ADDED: 'CaseCopilot 응답 생성', VERIFICATION_CREATED: '기관 검증 요청', VERIFICATION_UPDATED: '기관 검증 상태 변경', BANK_ACTION_ADDED: '은행 조치 기록', CASE_REPORT_FINALIZED: '보고서 작성' };
+
+export const CaseLiveLog: React.FC<{ events: MvpEvent[]; heightClassName?: string; onMessageEvent?: (messageId: string, channel?: string) => void }> = ({ events, heightClassName = 'min-h-[620px]', onMessageEvent }) => {
+  const filtered = events.filter((event) => event.event_type in eventLabel);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { const node = scrollRef.current; if (node) node.scrollTop = node.scrollHeight; }, [filtered.length]);
+  return <aside data-case-live-log className={`flex ${heightClassName} min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm`}><header className="flex items-center gap-2 border-b border-slate-100 px-4 py-4"><Activity size={17} className="text-blue-600"/><h2 className="text-sm font-black">Case Live Log</h2></header><div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto p-4">{filtered.length === 0 && <p className="rounded-xl bg-slate-50 p-4 text-xs leading-5 text-slate-500">기록할 주요 Case 이벤트가 아직 없습니다.</p>}{filtered.map((event) => { const messageId = typeof event.payload.message_id === 'string' ? event.payload.message_id : null; const channel = typeof event.payload.channel === 'string' ? event.payload.channel : undefined; return <article key={event.event_id} className="border-l-2 border-blue-200 pl-3"><div className="flex items-center justify-between gap-2"><p className="text-xs font-extrabold text-slate-800">{eventLabel[event.event_type]}</p><time className="shrink-0 text-[10px] text-slate-400">{new Date(event.occurred_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}</time></div>{messageId ? <button onClick={() => onMessageEvent?.(messageId, channel)} className="mt-2 inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:underline"><MessageSquare size={13}/> 관련 대화로 이동</button> : <p className="mt-1 text-[11px] leading-5 text-slate-500">{event.event_type === 'CASE_CREATED' ? '분석 결과를 바탕으로 Case가 생성되었습니다.' : 'Case 데이터가 갱신되었습니다.'}</p>}</article>; })}</div></aside>;
+};

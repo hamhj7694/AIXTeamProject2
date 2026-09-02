@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Any
 from uuid import uuid4
 
 from contracts.diagnosis import AnalyzeCaseResponse, AnalyzeTextRequest, RiskLevel
@@ -61,3 +62,35 @@ class AnalyzeCaseService:
             diagnosis=diagnosis,
             initial_report=record["initial_report"],
         )
+
+
+STATUS_TRANSITIONS = {
+    "NEW": {"NEW", "TRIAGE"},
+    "TRIAGE": {"TRIAGE", "VERIFYING", "IN_PROGRESS", "CLOSED"},
+    "VERIFYING": {"VERIFYING", "IN_PROGRESS", "CLOSED"},
+    "IN_PROGRESS": {"IN_PROGRESS", "CLOSED"},
+    "CLOSED": {"CLOSED"},
+}
+MODE_TRANSITIONS = {
+    "PREVENT": {"PREVENT", "RECOVERY", "CLOSED"},
+    "RECOVERY": {"RECOVERY", "CLOSED"},
+    "CLOSED": {"CLOSED"},
+}
+
+
+class InvalidCaseTransitionError(ValueError):
+    pass
+
+
+async def transition_case(repository: CaseRepository, case_id: str, expected_version: int, *, status: str | None, mode: str | None) -> dict[str, Any]:
+    current = await repository.get(case_id)
+    if current is None:
+        raise KeyError(case_id)
+    changes = {key: value for key, value in (("status", status), ("mode", mode)) if value is not None}
+    if not changes:
+        return current
+    if status is not None and status not in STATUS_TRANSITIONS.get(current["status"], set()):
+        raise InvalidCaseTransitionError(f"Invalid status transition: {current['status']} -> {status}")
+    if mode is not None and mode not in MODE_TRANSITIONS.get(current["mode"], set()):
+        raise InvalidCaseTransitionError(f"Invalid mode transition: {current['mode']} -> {mode}")
+    return await repository.update_case(case_id, expected_version, changes)
