@@ -164,3 +164,14 @@ button:active {
     font-size: 14px;
   }
 }
+
+/* Bank Case workspace: the event/risk sidebar belongs to the left of chat. */
+@media (min-width: 1280px) {
+  div.grid:has([data-case-live-log]) {
+    grid-template-columns: 280px minmax(0, 1fr) !important;
+  }
+
+  div.grid:has([data-case-live-log]) > aside {
+    order: -1;
+  }
+}

@@ -1,12 +1,12 @@
 ALTER TABLE messages
     ADD COLUMN channel VARCHAR(32) NOT NULL DEFAULT 'CUSTOMER' AFTER content,
     ADD COLUMN audience VARCHAR(32) NOT NULL DEFAULT 'CUSTOMER' AFTER channel,
-    ADD COLUMN mentions_json TEXT NOT NULL AFTER audience,
+    ADD COLUMN mentions_json TEXT NULL AFTER audience,
     ADD COLUMN reply_to_message_id VARCHAR(64) NULL AFTER mentions_json;
 
 UPDATE messages
 SET mentions_json = '[]'
-WHERE mentions_json = '';
+WHERE mentions_json IS NULL OR mentions_json = '';
 
 CREATE TABLE IF NOT EXISTS case_members (
     case_id VARCHAR(32) NOT NULL,

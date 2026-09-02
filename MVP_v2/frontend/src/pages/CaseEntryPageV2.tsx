@@ -1,34 +1,23 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, ChevronRight, ShieldCheck, UserRound, WalletCards } from 'lucide-react';
+import { ArrowLeft, Building2, ChevronRight, ShieldCheck, UserRound } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { AppLayout } from '../components/layout/AppLayout';
-import { CaseDetail } from '../data/mock/caseData';
-import { caseApi } from '../services/caseApi';
-
-const badgeClass = (risk: string) => risk === 'HIGH' ? 'bg-rose-50 text-rose-700' : risk === 'LOW' ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700';
-const statusClass = (status: string) => status === '확인중' ? 'bg-blue-50 text-blue-700' : status === '후속조치' ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700';
+import { caseApi, type CaseDetail } from '../services/caseApi';
 
 export const CaseEntryPageV2: React.FC = () => {
-  const { caseId = 'VP-014' } = useParams();
+  const { caseId = '' } = useParams();
   const [item, setItem] = useState<CaseDetail | null>(null);
   const [error, setError] = useState('');
-
-  useEffect(() => {
-    let active = true;
-    setItem(null); setError('');
-    caseApi.get(caseId)
-      .then((result) => { if (active) setItem(result); })
-      .catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : 'Case를 불러오지 못했습니다.'); });
-    return () => { active = false; };
-  }, [caseId]);
-
-  if (error) return <AppLayout><div className="mx-auto max-w-6xl py-8 lg:ml-64"><Link to="/" className="mb-6 inline-flex items-center gap-1 text-sm font-bold text-slate-500"><ArrowLeft size={16}/> 진단 화면으로 돌아가기</Link><div className="rounded-2xl border border-rose-200 bg-rose-50 p-5 text-sm font-bold text-rose-700">{error}</div></div></AppLayout>;
-  if (!item) return <AppLayout><div className="mx-auto max-w-6xl py-8 lg:ml-64"><div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm font-bold text-slate-500">분석된 Case를 불러오는 중...</div></div></AppLayout>;
-  const cards = [
-    ['은행 화면', '담당자용 AI Workspace, 진행 흐름, 원본 Evidence를 확인합니다.', `/cases/${item.id}/bank`, WalletCards],
-    ['소비자 화면', '현재 행동과 Customer Agent를 확인합니다.', `/cases/${item.id}/customer`, UserRound],
-    ['기타 / 검증', '이 Case의 사실 확인 질문을 진행합니다.', `/cases/${item.id}/verify`, ShieldCheck],
+  useEffect(() => { caseApi.get(caseId).then(setItem).catch((reason) => setError(reason instanceof Error ? reason.message : 'Case를 불러오지 못했습니다.')); }, [caseId]);
+  if (error) return <AppLayout><div className="mx-auto max-w-5xl py-8 lg:ml-64"><p className="rounded-xl bg-rose-50 p-4 text-rose-700">{error}</p></div></AppLayout>;
+  if (!item) return <AppLayout><div className="mx-auto max-w-5xl py-8 lg:ml-64"><p className="rounded-xl bg-white p-8 text-center text-slate-500">Case를 불러오는 중입니다.</p></div></AppLayout>;
+  const links = [
+    ['은행 협업 화면', '담당자·채널·Case Live Log를 확인합니다.', `/cases/${item.id}/bank`, Building2],
+    ['고객 상담 화면', '고객 안전 안내 및 상담 메시지를 확인합니다.', `/cases/${item.id}/customer`, UserRound],
+    ['기관 검증', '사칭 기관에 대한 사실 확인 요청을 기록합니다.', `/cases/${item.id}/verify`, ShieldCheck],
   ] as const;
-
-  return <AppLayout><div className="mx-auto max-w-6xl py-8 lg:ml-64"><Link to="/cases" className="mb-6 inline-flex items-center gap-1 text-sm font-bold text-slate-500"><ArrowLeft size={16}/> Case 목록</Link><div className="mb-6"><div className="mb-2 flex flex-wrap items-center gap-2"><span className="text-xs font-bold text-slate-400">CASE #{item.id}</span><span className={`rounded-full px-2.5 py-1 text-[11px] font-extrabold ${badgeClass(item.risk)}`}>{item.risk}</span><span className={`rounded-full px-2.5 py-1 text-[11px] font-extrabold ${statusClass(item.status)}`}>{item.status}</span></div><h1 className="text-2xl font-black">{item.type} 의심 Case</h1><p className="mt-2 text-sm text-slate-500">생성 {item.createdAt} · 최근 업데이트 {item.updatedAt}</p></div><section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><h2 className="text-sm font-extrabold">AI Initial Brief</h2><p className="mt-4 text-sm leading-7 text-slate-600">{item.aiInitialBrief}</p></section><div className="mt-5 grid gap-4 md:grid-cols-3">{cards.map(([title, description, path, Icon]) => <Link key={title} to={path} className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300"><Icon size={22} className="text-blue-600"/><h2 className="mt-5 font-extrabold">{title}</h2><p className="mt-2 min-h-10 text-sm text-slate-500">{description}</p><span className="mt-5 inline-flex items-center gap-1 text-xs font-bold text-blue-600">들어가기 <ChevronRight size={14}/></span></Link>)}</div><section className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-2"><span className="text-sm font-black">#{item.id.replace(/^VP-/, '')}</span><span className={`rounded-md px-2 py-1 text-[11px] font-bold ${statusClass(item.status)}`}>{item.status === '확인중' ? 'PREVENT' : item.status === '해결 완료' ? 'CLOSED' : 'FOLLOW-UP'}</span></div><span className="text-xs text-slate-400">{item.createdAt}</span></div><p className="mt-4 text-sm font-bold">{item.type} · {item.transferred ? '송금 Y' : '송금 N'} · {item.amount || '-'}</p><p className="mt-2 text-sm leading-6 text-slate-600">{item.summary}</p><p className="mt-4 text-right text-xs text-slate-400">최근 업데이트 {item.updatedAt}</p></section></div></AppLayout>;
+  return <AppLayout><div className="mx-auto max-w-5xl py-8 lg:ml-64"><Link to="/cases" className="mb-5 inline-flex items-center gap-1 text-sm font-bold text-slate-500"><ArrowLeft size={16}/> 보이스피싱 Case 목록</Link>
+    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-bold text-blue-600">CASE {item.id.replace(/^VP-/, '#')}</p><h1 className="mt-2 text-2xl font-black">{item.type}</h1></div><div className="flex gap-2"><span className={`rounded-full px-3 py-1.5 text-xs font-bold ${item.risk === 'HIGH' ? 'bg-rose-50 text-rose-700' : 'bg-slate-100 text-slate-700'}`}>{item.risk}</span><span className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700">{item.status}</span></div></div><p className="mt-5 text-sm leading-7 text-slate-700">{item.aiInitialBrief}</p><div className="mt-5 border-t border-slate-100 pt-4 text-xs text-slate-500">생성 {item.createdAt} · 최근 업데이트 {item.updatedAt} · 담당자 {item.assignee || '미배정'}</div></section>
+    <div className="mt-5 grid gap-4 md:grid-cols-3">{links.map(([title, description, path, Icon]) => <Link key={title} to={path} className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300"><Icon size={21} className="text-blue-600"/><h2 className="mt-4 font-extrabold">{title}</h2><p className="mt-2 min-h-10 text-sm text-slate-500">{description}</p><span className="mt-4 inline-flex items-center gap-1 text-xs font-bold text-blue-600">열기 <ChevronRight size={14}/></span></Link>)}</div>
+  </div></AppLayout>;
 };

@@ -4,7 +4,7 @@ import { Link, useParams } from 'react-router-dom';
 import { AppLayout } from '../components/layout/AppLayout';
 import type { QuestionKey } from '../features/consultation/components/CompactSafetyChat';
 import { caseApi } from '../services/caseApi';
-import type { CaseDetail } from '../data/mock/caseData';
+import type { CaseDetail } from '../services/caseApi';
 import { caseWorkflowApi, WorkflowMessage } from '../services/caseWorkflowApi';
 import { VoiceCallPopup } from '../components/voice/VoiceCallPopup';
 import { clearVoiceCallSnapshot, getVoiceCallSnapshot, updateVoiceCallSnapshot } from '../components/voice/voiceCallPersistence';

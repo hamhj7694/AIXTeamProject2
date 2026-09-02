@@ -1,60 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { CalendarDays, Search } from 'lucide-react';
+import { ArrowDownUp, Search } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { AppLayout } from '../components/layout/AppLayout';
-import { CaseRecord } from '../data/mock/caseData';
-import { caseApi } from '../services/caseApi';
-
-const displayId = (id: string) => id.replace(/^VP-/, '');
-const victimNames: Record<string, string> = { 'VP-099': '테스트', 'VP-014': '엄정희', 'VP-013': '김민수', 'VP-012': '이서윤' };
-const maskName = (name: string) => name.length >= 3 ? `${name[0]}${'*'.repeat(name.length - 2)}${name[name.length - 1]}` : name;
-const normalizeSearch = (value: string) => value.toLowerCase().replace(/[\s,._-]/g, '');
-const searchText = (item: CaseRecord) => normalizeSearch([item.id, displayId(item.id), victimNames[item.id], maskName(victimNames[item.id] ?? ''), item.type, item.risk, item.status, item.transferred ? '송금 Y 피해 Y' : '송금 N 피해 N', item.amount || '-', item.summary, item.createdAt, item.updatedAt].join(' '));
-const matchesDate = (createdAt: string, date: string) => {
-  if (!date) return true;
-  const selected = new Date(`${date}T00:00:00`);
-  const today = new Date();
-  const difference = Math.round((new Date(today.toDateString()).getTime() - selected.getTime()) / 86400000);
-  return difference === 0 ? createdAt.includes('오늘') : difference === 1 ? createdAt.includes('어제') : false;
-};
-
-const TableStatus: React.FC<{ status: CaseRecord['status'] }> = ({ status }) => (
-  <span className="inline-flex rounded-md bg-blue-50 px-2 py-1 text-[11px] font-bold text-blue-700">{status}</span>
-);
-
-export const CasesTablePage: React.FC = () => {
-  const navigate = useNavigate();
-  const [query, setQuery] = useState('');
-  const [transferFilter, setTransferFilter] = useState('전체');
-  const [statusFilter, setStatusFilter] = useState('전체');
-  const [date, setDate] = useState('');
-  const [cases, setCases] = useState<CaseRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const statusOptions: CaseRecord['status'][] = ['확인중', '해결 완료', '후속조치'];
-  useEffect(() => {
-    let active = true;
-    setLoading(true); setError('');
-    caseApi.list()
-      .then((result) => { if (active) setCases(result); })
-      .catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : 'Case 목록을 불러오지 못했습니다.'); })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
-  }, []);
-  const rows = useMemo(() => cases.filter((item) => {
-    const transferMatch = transferFilter === '전체' || (transferFilter === '송금 Y' ? item.transferred : !item.transferred);
-    const statusMatch = statusFilter === '전체' || item.status === statusFilter;
-    return searchText(item).includes(normalizeSearch(query)) && transferMatch && statusMatch && matchesDate(item.createdAt, date);
-  }), [cases, date, query, statusFilter, transferFilter]);
-
-  return <AppLayout><div className="mx-auto max-w-6xl py-8 lg:ml-64">
-    <div className="mb-5 flex items-end justify-between gap-4"><div><p className="mb-2 text-xs font-bold text-blue-600">02 / SHARED CASE</p><h1 className="text-2xl font-black">Cases</h1><p className="mt-2 text-sm text-slate-500">표에서 사건 정보를 확인하고 행을 누르면 사건 요약 페이지로 이동합니다.</p></div><button onClick={() => navigate('/')} className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white">통화 진단</button></div>
-    <div className="overflow-hidden rounded-xl border border-slate-300 bg-white shadow-sm">
-      <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex flex-wrap items-center gap-2"><span className="text-xs font-extrabold text-slate-600">피해 여부</span><select value={transferFilter} onChange={(e) => setTransferFilter(e.target.value)} className="rounded-md border border-slate-200 px-2 py-1.5 text-xs font-semibold outline-none"><option>전체</option><option>송금 Y</option><option>송금 N</option></select><span className="ml-1 text-xs font-extrabold text-slate-600">진행 상태</span><select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="rounded-md border border-slate-200 px-2 py-1.5 text-xs font-semibold outline-none"><option>전체</option>{statusOptions.map((status) => <option key={status}>{status}</option>)}</select></div><div className="flex flex-wrap gap-2"><label className="relative"><Search size={13} className="absolute left-2.5 top-2 text-slate-400"/><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="검색" className="w-32 rounded-md border border-slate-200 py-1.5 pl-7 pr-2 text-xs outline-none focus:border-blue-500"/></label><label className="relative"><CalendarDays size={13} className="absolute left-2.5 top-2 text-slate-400"/><input type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-label="날짜 검색" className="w-36 rounded-md border border-slate-200 py-1.5 pl-7 pr-1 text-xs outline-none focus:border-blue-500"/></label></div></div>
-      <div className="overflow-x-auto"><table className="min-w-[1160px] w-full table-fixed text-left text-xs"><thead className="bg-slate-50 text-[11px] font-bold text-slate-500"><tr><th className="w-[7%] px-3 py-3">ID</th><th className="w-[10%] px-3 py-3">피해자 이름</th><th className="w-[9%] px-3 py-3">피해 여부</th><th className="w-[11%] px-3 py-3">유형</th><th className="w-[10%] px-3 py-3">피해 금액</th><th className="w-[12%] px-3 py-3">업무진행상태</th><th className="w-[11%] px-3 py-3">최초 생성시간</th><th className="w-[11%] px-3 py-3">최근 업데이트</th><th className="w-[19%] px-3 py-3">사건 요약</th></tr></thead><tbody>{rows.map((item) => <tr key={item.id} tabIndex={0} onClick={() => navigate(`/cases/${item.id}`)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') navigate(`/cases/${item.id}`); }} className="cursor-pointer border-t border-slate-100 transition hover:bg-blue-50/60 focus:bg-blue-50 focus:outline-none"><td className="px-3 py-3 font-bold">{displayId(item.id)}</td><td className="px-3 py-3 font-semibold text-slate-700">{maskName(victimNames[item.id] ?? '이름 없음')}</td><td className={`px-3 py-3 font-semibold ${item.transferred ? 'text-rose-600' : 'text-slate-600'}`}>{item.transferred ? '송금 Y' : '송금 N'}</td><td className="px-3 py-3 font-semibold">{item.type}</td><td className="px-3 py-3">{item.amount || '-'}</td><td className="px-3 py-3"><TableStatus status={item.status}/></td><td className="px-3 py-3 text-slate-500">{item.createdAt}</td><td className="px-3 py-3 text-slate-500">{item.updatedAt}</td><td className="max-w-xs truncate px-3 py-3 text-slate-600" title={item.summary}>{item.summary}</td></tr>)}</tbody></table></div>
-      {loading && <div className="p-10 text-center text-sm font-semibold text-slate-500">저장된 Case 목록을 불러오는 중...</div>}
-      {!loading && error && <div className="m-4 rounded-xl border border-rose-200 bg-rose-50 p-4 text-center text-sm font-semibold text-rose-700">{error}</div>}
-      {!loading && !error && rows.length === 0 && <div className="p-10 text-center text-sm text-slate-500">저장된 Case가 없습니다.</div>}
-    </div><p className="mt-3 text-xs text-slate-400">Case 행을 선택하면 해당 사건의 요약 페이지로 이동합니다.</p>
-  </div></AppLayout>;
-};
+import { caseApi, type CaseRecord } from '../services/caseApi';
+type SortKey = 'id' | 'risk' | 'status' | 'assignee' | 'createdAtRaw' | 'updatedAtRaw';
+const displayId = (id: string) => `#${id.replace(/^VP-/, '')}`; const riskWeight: Record<string, number> = { HIGH: 3, LOW: 2, NORMAL: 1 };
+export const CasesTablePage: React.FC = () => { const navigate = useNavigate(); const [cases, setCases] = useState<CaseRecord[]>([]); const [query, setQuery] = useState(''); const [sortKey, setSortKey] = useState<SortKey>('createdAtRaw'); const [descending, setDescending] = useState(true); const [loading, setLoading] = useState(true); const [error, setError] = useState('');
+  const load = () => { setLoading(true); setError(''); caseApi.list().then(setCases).catch((reason) => setError(reason instanceof Error ? reason.message : 'Case 목록을 불러오지 못했습니다.')).finally(() => setLoading(false)); }; useEffect(load, []);
+  const toggleSort = (key: SortKey) => { if (sortKey === key) setDescending((current) => !current); else { setSortKey(key); setDescending(key === 'createdAtRaw'); } };
+  const rows = useMemo(() => cases.filter((item) => [item.id, item.type, item.risk, item.status, item.assignee ?? '', item.summary].join(' ').toLowerCase().includes(query.toLowerCase().trim())).sort((a, b) => { const value = (item: CaseRecord) => sortKey === 'risk' ? riskWeight[item.risk] : sortKey === 'id' ? Number(item.id.replace(/^VP-/, '')) : String(item[sortKey] ?? ''); const left = value(a); const right = value(b); const order = typeof left === 'number' && typeof right === 'number' ? left - right : String(left).localeCompare(String(right), 'ko'); return descending ? -order : order; }), [cases, descending, query, sortKey]);
+  const header = (label: string, key: SortKey) => <th className="px-4 py-3"><button onClick={() => toggleSort(key)} className="inline-flex items-center gap-1 font-bold hover:text-slate-900">{label}<ArrowDownUp size={12} className={sortKey === key ? 'text-blue-600' : ''}/></button></th>;
+  return <AppLayout><div className="mx-auto max-w-6xl py-8 lg:ml-64"><div className="mb-5 flex flex-wrap items-end justify-between gap-3"><div><p className="mb-2 text-xs font-bold text-blue-600">02 / SHARED CASE</p><h1 className="text-2xl font-black">보이스피싱 Case 목록</h1><p className="mt-2 text-sm text-slate-500">로컬 DB에 실제로 생성된 보이스피싱 Case만 표시합니다.</p></div><button onClick={() => navigate('/')} className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white">통화 진단</button></div><div className="overflow-hidden rounded-xl border border-slate-300 bg-white shadow-sm"><div className="flex justify-end border-b border-slate-200 p-3"><label className="relative"><Search size={14} className="absolute left-2.5 top-2 text-slate-400"/><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="ID, 담당자, 상태 검색" className="w-48 rounded-md border border-slate-200 py-1.5 pl-7 pr-2 text-xs outline-none focus:border-blue-500"/></label></div><div className="overflow-x-auto"><table className="min-w-[900px] w-full text-left text-xs"><thead className="bg-slate-50 text-[11px] text-slate-500"><tr>{header('Case ID', 'id')}{header('위험도', 'risk')}{header('진행 상태', 'status')}{header('담당자', 'assignee')}{header('생성 시간', 'createdAtRaw')}{header('최근 업데이트', 'updatedAtRaw')}<th className="px-4 py-3 font-bold">사건 요약</th></tr></thead><tbody>{rows.map((item) => <tr key={item.id} onClick={() => navigate(`/cases/${item.id}`)} className="cursor-pointer border-t border-slate-100 transition hover:bg-blue-50/60"><td className="px-4 py-3 font-black text-slate-900">{displayId(item.id)}</td><td className="px-4 py-3"><span className={`rounded-md px-2 py-1 font-bold ${item.risk === 'HIGH' ? 'bg-rose-50 text-rose-700' : 'bg-slate-100 text-slate-700'}`}>{item.risk}</span></td><td className="px-4 py-3 font-semibold">{item.status}</td><td className="px-4 py-3 font-semibold text-slate-700">{item.assignee ?? '미배정'}</td><td className="px-4 py-3 text-slate-500">{item.createdAt}</td><td className="px-4 py-3 text-slate-500">{item.updatedAt}</td><td className="max-w-sm truncate px-4 py-3 text-slate-600" title={item.summary}>{item.summary}</td></tr>)}</tbody></table></div>{loading && <div className="p-10 text-center text-sm text-slate-500">생성된 Case를 불러오는 중입니다.</div>}{!loading && error && <div className="p-10 text-center text-sm text-rose-600">{error}</div>}{!loading && !error && rows.length === 0 && <div className="p-10 text-center text-sm text-slate-500">생성된 보이스피싱 Case가 없습니다.</div>}</div></div></AppLayout>; };

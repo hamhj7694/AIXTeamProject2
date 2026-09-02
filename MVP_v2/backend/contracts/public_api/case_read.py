@@ -29,6 +29,7 @@ class PublicCaseReadResponse(PublicCaseReadModel):
     initial_brief: str
     diagnosis: dict[str, Any]
     initial_report: dict[str, Any] | None
+    primary_assignee: str | None = None
     created_at: str
     updated_at: str
 
@@ -47,6 +48,7 @@ def to_public_case_read_response(record: dict[str, Any]) -> PublicCaseReadRespon
         "initial_brief": record["initial_brief"],
         "diagnosis": record["diagnosis"],
         "initial_report": record.get("initial_report"),
+        "primary_assignee": record.get("primary_assignee"),
         "created_at": record["created_at"],
         "updated_at": record["updated_at"],
     })

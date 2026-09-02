@@ -8,6 +8,7 @@ from uuid import uuid4
 
 
 class CaseRepository(Protocol):
+    async def next_case_id(self) -> str: ...
     async def find_by_client_request_id(self, client_request_id: str) -> dict[str, Any] | None: ...
     async def get(self, case_id: str) -> dict[str, Any] | None: ...
     async def create(self, record: dict[str, Any]) -> dict[str, Any]: ...
@@ -17,6 +18,7 @@ class CaseRepository(Protocol):
     async def list_events(self, case_id: str, after: int | None = None) -> list[dict[str, Any]]: ...
     async def list_members(self, case_id: str) -> list[dict[str, Any]]: ...
     async def upsert_member(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]: ...
+    async def set_primary_assignee(self, case_id: str, display_name: str | None) -> str | None: ...
     async def list_presence(self, case_id: str) -> list[dict[str, Any]]: ...
     async def heartbeat_presence(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]: ...
     async def create_verification(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]: ...
@@ -58,13 +60,19 @@ class InMemoryCaseRepository:
     async def find_by_client_request_id(self, client_request_id: str) -> dict[str, Any] | None:
         return next((deepcopy(row) for row in self._records if row.get("client_request_id") == client_request_id), None)
 
+    async def next_case_id(self) -> str:
+        """Allocate human-readable, monotonically increasing local Case IDs."""
+        async with self._lock:
+            numbers = [int(str(row["case_id"]).removeprefix("VP-")) for row in self._records if str(row.get("case_id", "")).removeprefix("VP-").isdigit()]
+            return f"VP-{max(numbers, default=0) + 1}"
+
     async def get(self, case_id: str) -> dict[str, Any] | None:
         return next((deepcopy(row) for row in self._records if row.get("case_id") == case_id), None)
 
     async def create(self, record: dict[str, Any]) -> dict[str, Any]:
         async with self._lock:
             stored = deepcopy(record)
-            stored.setdefault("case_id", f"VP-{len(self._records) + 1:06d}")
+            stored.setdefault("case_id", f"VP-{len(self._records) + 1}")
             stored.setdefault("version", 1)
             self._records.append(stored)
             self._events.append({
@@ -110,11 +118,12 @@ class InMemoryCaseRepository:
                 "created_at": now,
             }
             self._messages.append(message)
-            self._events.append({
-                "event_id": len(self._events) + 1, "case_id": case_id, "event_type": "MESSAGE_ADDED",
-                "actor_type": message["actor_type"],
-                "payload": {"message_id": message["message_id"], "channel": message["channel"]}, "occurred_at": now,
-            })
+            if record.get("log_event"):
+                self._events.append({
+                    "event_id": len(self._events) + 1, "case_id": case_id, "event_type": "MESSAGE_ADDED",
+                    "actor_type": message["actor_type"],
+                    "payload": {"message_id": message["message_id"], "channel": message["channel"]}, "occurred_at": now,
+                })
             return deepcopy(message)
 
     async def list_messages(self, case_id: str, channel: str | None = None) -> list[dict[str, Any]]:
@@ -144,6 +153,26 @@ class InMemoryCaseRepository:
                 "actor_type": "SYSTEM", "payload": {"user_id": member["user_id"], "role": member["role"]}, "occurred_at": now,
             })
             return deepcopy(member)
+
+    async def set_primary_assignee(self, case_id: str, display_name: str | None) -> str | None:
+        async with self._lock:
+            if not any(item["case_id"] == case_id for item in self._records):
+                raise KeyError(case_id)
+            now = datetime.now(timezone.utc).isoformat()
+            for member in self._members:
+                if member["case_id"] == case_id and member["role"] == "CASE_OWNER":
+                    member["role"] = "VIEWER"
+                    member["updated_at"] = now
+            normalized = (display_name or "").strip()
+            if normalized:
+                member = next((item for item in self._members if item["case_id"] == case_id and item["display_name"] == normalized), None)
+                if member is None:
+                    member = {"case_id": case_id, "user_id": f"owner-{uuid4().hex}", "display_name": normalized, "role": "CASE_OWNER", "status": "ACTIVE", "assigned_at": now, "updated_at": now}
+                    self._members.append(member)
+                else:
+                    member.update({"role": "CASE_OWNER", "status": "ACTIVE", "updated_at": now})
+            self._events.append({"event_id": len(self._events) + 1, "case_id": case_id, "event_type": "CASE_ASSIGNEE_UPDATED", "actor_type": "SYSTEM", "payload": {"display_name": normalized or None}, "occurred_at": now})
+            return normalized or None
 
     async def list_presence(self, case_id: str) -> list[dict[str, Any]]:
         now = datetime.now(timezone.utc)

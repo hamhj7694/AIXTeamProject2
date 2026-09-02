@@ -79,11 +79,13 @@ export const mvpChatApi = {
   listMembers: (caseId: string): Promise<CaseMember[]> => request(`/api/cases/${encodeURIComponent(caseId)}/members`),
   upsertMember: (caseId: string, member: Pick<CaseMember, 'user_id' | 'display_name' | 'role'>): Promise<CaseMember> =>
     request(`/api/cases/${encodeURIComponent(caseId)}/members`, { method: 'POST', body: JSON.stringify(member) }),
+  setPrimaryAssignee: (caseId: string, displayName: string | null): Promise<{ case_id: string; display_name: string | null }> =>
+    request(`/api/cases/${encodeURIComponent(caseId)}/assignee`, { method: 'PUT', body: JSON.stringify({ display_name: displayName }) }),
   listPresence: (caseId: string): Promise<CasePresence[]> => request(`/api/cases/${encodeURIComponent(caseId)}/presence`),
   heartbeat: (caseId: string, input: { user_id: string; display_name: string; presence: PresenceState; channel: MessageChannel }): Promise<CasePresence> =>
     request(`/api/cases/${encodeURIComponent(caseId)}/presence/heartbeat`, { method: 'POST', body: JSON.stringify(input) }),
   invokeCopilot: (caseId: string, prompt: string, channel: 'TEAM' | 'AI_INTERNAL'): Promise<MvpMessage> =>
-    request(`/api/cases/${encodeURIComponent(caseId)}/ai/invocations`, {
+    request<{ message_id: string; content: string; created_at: string }>(`/api/cases/${encodeURIComponent(caseId)}/ai/invocations`, {
       method: 'POST', body: JSON.stringify({ prompt, channel, client_request_id: crypto.randomUUID() }),
     }).then((result: { message_id: string; content: string; created_at: string }) => ({
       message_id: result.message_id,

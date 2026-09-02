@@ -23,6 +23,15 @@ class PublicCaseMemberUpsertRequest(PublicCollaborationModel):
     role: CaseMemberRole
 
 
+class PublicPrimaryAssigneeRequest(PublicCollaborationModel):
+    display_name: str | None = Field(default=None, max_length=80)
+
+
+class PublicPrimaryAssigneeResponse(PublicCollaborationModel):
+    case_id: str
+    display_name: str | None
+
+
 class PublicCaseMemberResponse(PublicCollaborationModel):
     case_id: str
     user_id: str

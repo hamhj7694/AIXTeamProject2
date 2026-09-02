@@ -16,7 +16,7 @@ const StatusBadge: React.FC<{ status: string }> = ({ status }) => <span classNam
 
 export const DiagnosisPage: React.FC = () => {
   const [text, setText] = useState(''); const [loading, setLoading] = useState(false); const [validationMessage, setValidationMessage] = useState(''); const [feedbackKind, setFeedbackKind] = useState<'error' | 'info'>('error'); const navigate = useNavigate();
-  const samples = ['일반 통화', '정상 금융 상담', '보이스피싱 사례'];
+  const samples = ['일반 통화 샘플', '정상 금융 상담 샘플', '보이스피싱 샘플'];
   const sampleText = '검찰청이라며 계좌가 범죄에 연루되었다고 했습니다. 안전계좌로 500만원을 지금 바로 이체하라고 요구했습니다.';
   const diagnose = async () => {
     if (!text.trim()) { setFeedbackKind('error'); setValidationMessage('내용을 입력하세요.'); return; }

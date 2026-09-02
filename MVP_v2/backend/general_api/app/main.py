@@ -54,6 +54,8 @@ from contracts.public_api.collaboration import (
     PublicCaseMemberUpsertRequest,
     PublicCasePresenceResponse,
     PublicPresenceHeartbeatRequest,
+    PublicPrimaryAssigneeRequest,
+    PublicPrimaryAssigneeResponse,
 )
 
 from .clients.diagnosis_ai import AiServiceError, HttpDiagnosisAiClient
@@ -65,9 +67,14 @@ load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=False)
 
 
 def build_repository():
-    if os.getenv("CASE_REPOSITORY", "memory").lower() == "mysql":
+    repository_type = os.getenv("CASE_REPOSITORY", "sqlite").lower()
+    if repository_type == "mysql":
         from .domains.cases.mysql_repository import MySqlCaseRepository
         return MySqlCaseRepository()
+    if repository_type == "memory":
+        return InMemoryCaseRepository()
+    from .domains.cases.sqlite_repository import LocalSqliteCaseRepository
+    return LocalSqliteCaseRepository()
     return InMemoryCaseRepository()
 
 app = FastAPI(title="AI Independent Verification - General API", version="0.1.0")
@@ -158,20 +165,26 @@ async def analyze_case(request: PublicAnalyzeCaseRequest) -> PublicAnalyzeCaseRe
         return JSONResponse(status_code=503, content=failure.model_dump(mode="json"))
 
 
-@app.get("/api/cases", response_model=list[PublicCaseReadResponse])
+async def to_case_read(record: dict) -> PublicCaseReadResponse:
+    members = await repository.list_members(record["case_id"])
+    primary = next((item.get("display_name") for item in members if item.get("role") == "CASE_OWNER"), None)
+    return to_public_case_read_response({**record, "primary_assignee": primary})
+
+
+@app.get("/api/cases", response_model=list[PublicCaseReadResponse], response_model_exclude_none=True)
 async def list_cases() -> list[PublicCaseReadResponse]:
-    return [to_public_case_read_response(record) for record in await repository.list()]
+    return [await to_case_read(record) for record in await repository.list()]
 
 
-@app.get("/api/cases/{case_id}", response_model=PublicCaseReadResponse)
+@app.get("/api/cases/{case_id}", response_model=PublicCaseReadResponse, response_model_exclude_none=True)
 async def get_case(case_id: str) -> PublicCaseReadResponse:
     record = await repository.get(case_id)
     if record is None:
         raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."})
-    return to_public_case_read_response(record)
+    return await to_case_read(record)
 
 
-@app.patch("/api/cases/{case_id}", response_model=PublicCaseReadResponse)
+@app.patch("/api/cases/{case_id}", response_model=PublicCaseReadResponse, response_model_exclude_none=True)
 async def patch_case(case_id: str, request: PublicCasePatchRequest) -> PublicCaseReadResponse:
     try:
         record = await transition_case(
@@ -190,7 +203,7 @@ async def patch_case(case_id: str, request: PublicCasePatchRequest) -> PublicCas
         ) from exc
     except InvalidCaseTransitionError as exc:
         raise HTTPException(status_code=409, detail={"code": "INVALID_STATE_TRANSITION", "message": str(exc)}) from exc
-    return to_public_case_read_response(record)
+    return await to_case_read(record)
 
 
 async def require_case(case_id: str) -> None:
@@ -235,6 +248,15 @@ async def upsert_case_member(case_id: str, request: PublicCaseMemberUpsertReques
         raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."}) from exc
 
 
+@app.put("/api/cases/{case_id}/assignee", response_model=PublicPrimaryAssigneeResponse)
+async def set_case_primary_assignee(case_id: str, request: PublicPrimaryAssigneeRequest) -> PublicPrimaryAssigneeResponse:
+    try:
+        display_name = await repository.set_primary_assignee(case_id, request.display_name)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case not found."}) from exc
+    return PublicPrimaryAssigneeResponse(case_id=case_id, display_name=display_name)
+
+
 @app.get("/api/cases/{case_id}/presence", response_model=list[PublicCasePresenceResponse])
 async def list_case_presence(case_id: str) -> list[PublicCasePresenceResponse]:
     await require_case(case_id)
@@ -269,7 +291,7 @@ async def invoke_case_copilot(case_id: str, request: PublicAiInvocationRequest) 
     content = build_mvp_copilot_reply(case, await repository.list_verifications(case_id), request.prompt)
     message = await repository.append_message(case_id, {
         "actor_type": "BANK_AGENT", "content": content, "channel": "AI_INTERNAL", "audience": "BANK_INTERNAL",
-        "mentions": ["CaseCopilot"], "client_request_id": request.client_request_id,
+        "mentions": ["CaseCopilot"], "client_request_id": request.client_request_id, "log_event": True,
     })
     return PublicAiInvocationResponse(
         invocation_id=f"ai-{uuid4().hex}", message_id=message["message_id"], case_id=case_id,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import uuid
 from copy import deepcopy
 from datetime import datetime, timedelta
 from typing import Any
@@ -45,6 +46,13 @@ class MySqlCaseRepository:
             await cursor.execute("SELECT case_id FROM cases WHERE client_request_id=%s", (client_request_id,))
             row = await cursor.fetchone()
         return await self.get(row[0]) if row else None
+
+    async def next_case_id(self) -> str:
+        pool = await self._get_pool()
+        async with pool.acquire() as connection, connection.cursor() as cursor:
+            await cursor.execute("SELECT case_id FROM cases WHERE case_id REGEXP '^VP-[0-9]+$'")
+            values = [int(str(row[0]).removeprefix("VP-")) for row in await cursor.fetchall()]
+        return f"VP-{max(values, default=0) + 1}"
 
     async def get(self, case_id: str) -> dict[str, Any] | None:
         pool = await self._get_pool()
@@ -194,10 +202,11 @@ class MySqlCaseRepository:
                             record.get("client_request_id"), created_at,
                         ),
                     )
-                    await cursor.execute(
-                        "INSERT INTO case_events (case_id, event_type, actor_type, payload_json, occurred_at) VALUES (%s,'MESSAGE_ADDED',%s,%s,%s)",
-                        (case_id, record["actor_type"], json.dumps({"message_id": message_id, "channel": record.get("channel", "CUSTOMER")}), created_at),
-                    )
+                    if record.get("log_event"):
+                        await cursor.execute(
+                            "INSERT INTO case_events (case_id, event_type, actor_type, payload_json, occurred_at) VALUES (%s,'MESSAGE_ADDED',%s,%s,%s)",
+                            (case_id, record["actor_type"], json.dumps({"message_id": message_id, "channel": record.get("channel", "CUSTOMER")}), created_at),
+                        )
                     await cursor.execute("UPDATE cases SET updated_at=%s WHERE case_id=%s", (created_at, case_id))
                 await connection.commit()
             except Exception:
@@ -259,6 +268,34 @@ class MySqlCaseRepository:
                 raise
         members = await self.list_members(case_id)
         return next(item for item in members if item["user_id"] == record["user_id"])
+
+    async def set_primary_assignee(self, case_id: str, display_name: str | None) -> str | None:
+        pool = await self._get_pool()
+        normalized = (display_name or "").strip()
+        now = datetime.now()
+        async with pool.acquire() as connection:
+            try:
+                async with connection.cursor() as cursor:
+                    await cursor.execute("SELECT case_id FROM cases WHERE case_id=%s FOR UPDATE", (case_id,))
+                    if not await cursor.fetchone():
+                        raise KeyError(case_id)
+                    await cursor.execute("UPDATE case_members SET role='VIEWER', updated_at=%s WHERE case_id=%s AND role='CASE_OWNER'", (now, case_id))
+                    if normalized:
+                        user_id = f"owner-{uuid.uuid4().hex}"
+                        await cursor.execute(
+                            "INSERT INTO case_members (case_id,user_id,display_name,role,status,assigned_at,updated_at) VALUES (%s,%s,%s,'CASE_OWNER','ACTIVE',%s,%s)",
+                            (case_id, user_id, normalized, now, now),
+                        )
+                    await cursor.execute(
+                        "INSERT INTO case_events (case_id,event_type,actor_type,payload_json,occurred_at) VALUES (%s,'CASE_ASSIGNEE_UPDATED','SYSTEM',%s,%s)",
+                        (case_id, json.dumps({"display_name": normalized or None}, ensure_ascii=False), now),
+                    )
+                    await cursor.execute("UPDATE cases SET updated_at=%s WHERE case_id=%s", (now, case_id))
+                await connection.commit()
+            except Exception:
+                await connection.rollback()
+                raise
+        return normalized or None
 
     async def list_presence(self, case_id: str) -> list[dict[str, Any]]:
         pool = await self._get_pool()

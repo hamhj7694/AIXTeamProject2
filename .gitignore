@@ -9,3 +9,5 @@ vite.config.d.ts
 !.env.example
 __pycache__/
 *.py[cod]
+MVP_v2/backend/data/*.sqlite3
+MVP_v2/**/*.log

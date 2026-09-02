@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any
-from uuid import uuid4
 
 from contracts.diagnosis import AnalyzeCaseResponse, AnalyzeTextRequest, RiskLevel
 from general_api.app.clients.diagnosis_ai import DiagnosisAiClient
@@ -35,7 +34,7 @@ class AnalyzeCaseService:
             )
 
         now = datetime.now(timezone.utc).isoformat()
-        case_id = f"VP-{uuid4().hex[:8].upper()}"
+        case_id = await self.repository.next_case_id()
         diagnosis = diagnosis.model_copy(update={"case_id": case_id})
         initial_report = self.report_builder.build(case_id, diagnosis)
         stored = await self.repository.create({

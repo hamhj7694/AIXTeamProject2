@@ -53,6 +53,18 @@ def _validate_event(raw: dict[str, Any], turn_id: int, target: str) -> Extracted
 def _fixture_events(turns: list[str]) -> list[ExtractedEvent]:
     """API key가 없는 로컬/테스트용 결정론적 extractor. 운영 기본값은 openai다."""
     events: list[ExtractedEvent] = []
+    # Korean demo inputs must remain usable even when the legacy fixture
+    # patterns were authored under a different terminal encoding.
+    for turn_id, target in enumerate(turns, start=1):
+        has_agency = any(token in target for token in ("검찰", "경찰", "금융감독", "은행 직원"))
+        has_transfer = any(token in target for token in ("안전계좌", "이체", "송금", "입금"))
+        has_urgency = any(token in target for token in ("지금", "즉시", "바로", "긴급"))
+        if has_agency:
+            events.append(ExtractedEvent(event_family="IMPERSONATION", subtype="PROSECUTION", impersonation_group="PUBLIC_AGENCY", evidence_turn_id=turn_id, evidence_text=target, detected_at_turn=turn_id))
+        if has_transfer:
+            events.append(ExtractedEvent(event_family="MONEY_MOVEMENT", subtype="TRANSFER", impersonation_group=None, evidence_turn_id=turn_id, evidence_text=target, detected_at_turn=turn_id))
+        if has_urgency:
+            events.append(ExtractedEvent(event_family="PSY_STRATEGY", subtype="URGENCY", impersonation_group=None, evidence_turn_id=turn_id, evidence_text=target, detected_at_turn=turn_id))
     rules = [
         ("IMPERSONATION", "PROSECUTION", "PUBLIC_AGENCY", r"검찰(?:청|관|입니다)?"),
         ("IMPERSONATION", "POLICE", "PUBLIC_AGENCY", r"경찰(?:청|관|입니다)?"),
