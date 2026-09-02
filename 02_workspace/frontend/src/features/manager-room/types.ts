@@ -12,7 +12,7 @@ export interface ManagerRoomCase {
   title: string;
   risk: 'HIGH' | 'MEDIUM' | 'LOW';
   status: string;
-  dataSource: 'MVP Mock';
+  dataSource: 'General API' | 'MVP Mock';
 }
 
 export interface ManagerRoomAssignee {

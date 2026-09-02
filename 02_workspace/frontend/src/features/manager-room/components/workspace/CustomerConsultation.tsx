@@ -54,7 +54,7 @@ export const CustomerConsultation: React.FC<CustomerConsultationProps> = ({
               >
                 고객 상담
               </h3>
-              <Badge variant="default">MVP Mock</Badge>
+              <Badge variant="default">Case Message API</Badge>
             </div>
             <p className="mt-1 text-xs text-slate-500">
               현재 Case에서 확인이 필요한 내용을 고객과 직접 확인합니다.
@@ -149,7 +149,7 @@ export const CustomerConsultation: React.FC<CustomerConsultationProps> = ({
             </button>
           </div>
           <p className="mt-2 text-xs text-slate-500">
-            실제 고객 화면과 연결되지 않은 담당자용 MVP Mock 상담입니다.
+            입력 내용은 이 Case의 BANK_STAFF 메시지로 저장됩니다.
           </p>
         </form>
       </section>

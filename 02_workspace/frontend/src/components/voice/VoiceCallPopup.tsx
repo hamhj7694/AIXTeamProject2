@@ -9,6 +9,7 @@ interface VoiceCallPopupProps {
   role: VoiceCallRole;
   onClose: () => void;
   onCallStarted?: () => void;
+  onCallEnded?: () => void;
   onRecordingReady?: (url: string) => void;
 }
 
@@ -17,7 +18,7 @@ const roleCopy = {
   bank: { title: '고객과 통화', subtitle: 'Case 담당자 연결 중', person: '고객' },
 };
 
-export const VoiceCallPopup: React.FC<VoiceCallPopupProps> = ({ open, role, onClose, onCallStarted, onRecordingReady }) => {
+export const VoiceCallPopup: React.FC<VoiceCallPopupProps> = ({ open, role, onClose, onCallStarted, onCallEnded, onRecordingReady }) => {
   const initialSnapshot = getVoiceCallSnapshot(role);
   const [calling, setCalling] = useState(initialSnapshot.calling);
   const [startedAt, setStartedAt] = useState<number | null>(initialSnapshot.startedAt);
@@ -90,6 +91,7 @@ export const VoiceCallPopup: React.FC<VoiceCallPopupProps> = ({ open, role, onCl
   };
 
   const finishCall = () => {
+    onCallEnded?.();
     const recorder = recorderRef.current;
     if (!recorder) { updateVoiceCallSnapshot(role, { open: false, calling: false, startedAt: null }); onClose(); return; }
     recorder.onstop = () => {

@@ -61,6 +61,33 @@
 
 ## 작업 로그 템플릿
 
+### 2026-09-02 — C-0 Frontend Data Source Audit
+
+- Goal: map Case screens to their actual API, Mock, and browser-local sources before replacement.
+- Result: `/`, `/cases`, and `/cases/:caseId` use `/api/cases/analyze`, `/api/cases`, and `/api/cases/:caseId` through `caseApi.ts`.
+- Result: Customer uses `caseData.ts` plus localStorage/custom browser events; Bank Manager Room uses `managerRoomMock.ts`; Verification uses `caseData.ts` plus local component state.
+- Environment: Vite forwards `/api` to `http://127.0.0.1:8000`; absent `VITE_API_BASE_URL` keeps same-origin `/api` calls.
+- Mock removal rule: do not delete these sources until A-3/A-4 APIs and the C-side adapters/realtime replacement are ready; immediate deletion breaks the three case rooms.
+- Next: finish A-1 public enums/state-transition contract, then add the Case APIs required for Message, Event, Verification, and Action.
+
+### 2026-09-02 — C-1 Conversation API adapter foundation
+
+- Goal: create the single frontend service boundary for the new Case Message and Timeline Event API.
+- Changed: added `src/services/conversationApi.ts`; no existing screen was redirected yet.
+- Contract: Message create/list and Event cursor list use the General API only, with `VITE_API_BASE_URL` or the Vite `/api` proxy.
+- Test: `npm run build` passed (1460 modules).
+- Mock boundary: Customer/Bank UI remains unchanged until Bundle, Question, Verification, and Action resources are available.
+- Next: replace Customer localStorage state after the required backend commands and event application path exist.
+
+### 2026-09-02 — C-2 Event-based Case Screen Synchronization
+
+- [x] Customer message input persists through `POST /api/cases/:caseId/messages`.
+- [x] Bank Manager Room sends staff input as `BANK_STAFF` and reloads the same Case Bundle.
+- [x] Customer, Bank, and Verification pages poll `GET /api/cases/:caseId/events?after=` and refresh their own Bundle after a new Case Event.
+- [x] Removed active-screen dependency on browser-local customer-response/takeover state; voice popup UI restoration remains local-only.
+- Test: `npm run build` passed (1462 modules).
+- Boundary: SSE/WebSocket, voice session commands, question generation, and final report/state patches remain incomplete pending their public contracts.
+
 ### YYYY-MM-DD — TASK-ID
 
 - 목표:

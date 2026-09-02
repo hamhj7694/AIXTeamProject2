@@ -20,7 +20,7 @@ export const RecommendedQuestion: React.FC<RecommendedQuestionProps> = ({
             <h2 id="recommended-question-title" className="text-base font-extrabold text-slate-950">
               AI 추천 확인 질문
             </h2>
-            <Badge variant="default">MVP Mock</Badge>
+            <Badge variant="default">AI Agent 연동 대기</Badge>
           </div>
           <p className="mt-2.5 text-sm font-bold leading-6 text-slate-800">
             “{question}”

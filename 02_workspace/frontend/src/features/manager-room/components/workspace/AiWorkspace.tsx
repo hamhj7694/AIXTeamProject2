@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { createManagerRoomMockResponse } from '../../data/managerRoomMock';
 import {
   ManagerRoomCustomerMessage,
   ManagerRoomMessage,
@@ -18,12 +17,14 @@ interface AiWorkspaceProps {
   onCustomerMessagesChange: React.Dispatch<
     React.SetStateAction<ManagerRoomCustomerMessage[]>
   >;
+  onCreateBankMessage: (content: string) => Promise<void>;
 }
 
 export const AiWorkspace: React.FC<AiWorkspaceProps> = ({
   workspace,
   customerMessages,
   onCustomerMessagesChange,
+  onCreateBankMessage,
 }) => {
   const [messages, setMessages] = useState<ManagerRoomMessage[]>(
     workspace.initialMessages
@@ -33,40 +34,28 @@ export const AiWorkspace: React.FC<AiWorkspaceProps> = ({
     useState<ConversationView>('ai');
   const [customerInput, setCustomerInput] = useState('');
 
-  const sendMockRequest = (request: string) => {
+  const sendRequest = async (request: string) => {
     const trimmedRequest = request.trim();
     if (!trimmedRequest) return;
 
-    const messageId = Date.now();
-    const nextMessages: ManagerRoomMessage[] = [
-      {
-        id: `manager-${messageId}`,
-        role: 'manager',
-        content: trimmedRequest,
-      },
-      {
-        id: `assistant-${messageId}`,
-        role: 'assistant',
-        content: createManagerRoomMockResponse(trimmedRequest),
-      },
-    ];
-
-    setMessages((currentMessages) => [...currentMessages, ...nextMessages]);
+    await onCreateBankMessage(trimmedRequest);
+    setMessages((currentMessages) => [
+      ...currentMessages,
+      { id: `manager-${Date.now()}`, role: 'manager', content: trimmedRequest },
+    ]);
     setInput('');
   };
 
-  const sendCustomerMessage = () => {
+  const sendCustomerMessage = async () => {
     const trimmedInput = customerInput.trim();
     if (!trimmedInput) return;
 
-    onCustomerMessagesChange((currentMessages) => [
-      ...currentMessages,
-      {
-        id: `customer-consultation-manager-${Date.now()}`,
-        role: 'manager',
-        content: trimmedInput,
-      },
-    ]);
+    await onCreateBankMessage(trimmedInput);
+    onCustomerMessagesChange((currentMessages) => [...currentMessages, {
+      id: `customer-consultation-manager-${Date.now()}`,
+      role: 'manager',
+      content: trimmedInput,
+    }]);
     setCustomerInput('');
   };
 
@@ -157,8 +146,8 @@ export const AiWorkspace: React.FC<AiWorkspaceProps> = ({
             messages={messages}
             input={input}
             onInputChange={setInput}
-            onSubmit={() => sendMockRequest(input)}
-            onQuickRequest={sendMockRequest}
+            onSubmit={() => sendRequest(input)}
+            onQuickRequest={sendRequest}
           />
         ) : (
           <CustomerConsultation

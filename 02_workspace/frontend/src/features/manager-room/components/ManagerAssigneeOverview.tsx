@@ -1,9 +1,12 @@
 import React from 'react';
 import { UserRound } from 'lucide-react';
 import { Badge } from '../../../components/ui/Badge';
-import { managerRoomAssigneesMock } from '../data/managerRoomMock';
+interface ManagerAssigneeOverviewProps {
+  actorTypes: string[];
+}
 
-export const ManagerAssigneeOverview: React.FC = () => {
+export const ManagerAssigneeOverview: React.FC<ManagerAssigneeOverviewProps> = ({ actorTypes }) => {
+  const assignees = actorTypes.length ? actorTypes : ['SYSTEM'];
   return (
     <section
       aria-labelledby="manager-assignee-title"
@@ -17,13 +20,13 @@ export const ManagerAssigneeOverview: React.FC = () => {
           >
             담당자 현황
           </h2>
-          <Badge variant="default">MVP Mock</Badge>
+          <Badge variant="default">General API</Badge>
         </div>
 
         <div className="grid gap-2 sm:grid-cols-2 sm:gap-0 sm:divide-x sm:divide-slate-200">
-          {managerRoomAssigneesMock.map((assignee) => (
+          {assignees.map((actorType) => (
             <div
-              key={assignee.role}
+              key={actorType}
               className="flex min-w-0 items-center gap-3 rounded-lg bg-white px-3 py-2 sm:rounded-none sm:bg-transparent sm:first:pl-0 sm:last:pr-0 sm:last:pl-4"
             >
               <span
@@ -34,14 +37,14 @@ export const ManagerAssigneeOverview: React.FC = () => {
               </span>
               <div className="min-w-0">
                 <p className="text-[11px] font-semibold text-slate-500">
-                  {assignee.role}
+                  {actorType}
                 </p>
                 <div className="mt-0.5 flex flex-wrap items-center gap-2">
                   <p className="text-sm font-extrabold text-slate-900">
-                    {assignee.name}
+                    {actorType === 'SYSTEM' ? 'Case System' : actorType}
                   </p>
                   <span className="rounded-md bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
-                    {assignee.workStatus}
+                    {actorType === 'SYSTEM' ? '대기 중' : '참여 기록 있음'}
                   </span>
                 </div>
               </div>

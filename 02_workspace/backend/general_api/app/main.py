@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import os
+from uuid import uuid4
 from pathlib import Path
+from typing import Literal
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
@@ -17,10 +19,37 @@ from contracts.public_api.case_analyze import (
     PublicAnalyzeError,
     PublicInitialReportReference,
 )
+from contracts.public_api.case_read import PublicCaseReadResponse, to_public_case_read_response
+from contracts.public_api.case_transition import PublicCasePatchRequest
+from contracts.public_api.case_activity import (
+    PublicCaseEventResponse,
+    PublicCreateMessageRequest,
+    PublicMessageResponse,
+    to_public_event,
+    to_public_message,
+)
+from contracts.public_api.case_workflow import (
+    PublicActionResponse,
+    PublicCaseBundleResponse,
+    PublicCreateActionRequest,
+    PublicActionCommandRequest,
+    PublicCreateVoiceSessionRequest,
+    PublicUpdateVoiceSessionRequest,
+    PublicVoiceSessionResponse,
+    PublicCreateTranscriptRequest,
+    PublicTranscriptResponse,
+    PublicFinalizeReportRequest,
+    PublicReportResponse,
+    PublicCreateVerificationRequest,
+    PublicUpdateVerificationRequest,
+    PublicVerificationResponse,
+    to_public_action,
+    to_public_verification,
+)
 
 from .clients.diagnosis_ai import AiServiceError, HttpDiagnosisAiClient
-from .domains.cases.repository import InMemoryCaseRepository
-from .domains.cases.service import AnalyzeCaseService
+from .domains.cases.repository import CaseVersionConflictError, InMemoryCaseRepository
+from .domains.cases.service import AnalyzeCaseService, InvalidCaseTransitionError, transition_case
 
 
 load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=False)
@@ -42,6 +71,14 @@ app.add_middleware(
 )
 repository = build_repository()
 service = AnalyzeCaseService(HttpDiagnosisAiClient(), repository)
+
+
+@app.middleware("http")
+async def request_id_middleware(request: Request, call_next):
+    request_id = request.headers.get("X-Request-ID") or f"req-{uuid4().hex}"
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
+    return response
 
 
 def public_failed_response(code: str, message: str, *, retryable: bool) -> PublicAnalyzeCaseResponse:
@@ -112,17 +149,177 @@ async def analyze_case(request: PublicAnalyzeCaseRequest) -> PublicAnalyzeCaseRe
         return JSONResponse(status_code=503, content=failure.model_dump(mode="json"))
 
 
-@app.get("/api/cases")
-async def list_cases() -> list[dict]:
-    return await repository.list()
+@app.get("/api/cases", response_model=list[PublicCaseReadResponse])
+async def list_cases() -> list[PublicCaseReadResponse]:
+    return [to_public_case_read_response(record) for record in await repository.list()]
 
 
-@app.get("/api/cases/{case_id}")
-async def get_case(case_id: str) -> dict:
+@app.get("/api/cases/{case_id}", response_model=PublicCaseReadResponse)
+async def get_case(case_id: str) -> PublicCaseReadResponse:
     record = await repository.get(case_id)
     if record is None:
         raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."})
-    return record
+    return to_public_case_read_response(record)
+
+
+@app.patch("/api/cases/{case_id}", response_model=PublicCaseReadResponse)
+async def patch_case(case_id: str, request: PublicCasePatchRequest) -> PublicCaseReadResponse:
+    try:
+        record = await transition_case(
+            repository,
+            case_id,
+            request.expected_version,
+            status=request.status,
+            mode=request.mode,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case not found."}) from exc
+    except CaseVersionConflictError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "VERSION_CONFLICT", "message": "Case has changed.", "current_version": exc.current_version},
+        ) from exc
+    except InvalidCaseTransitionError as exc:
+        raise HTTPException(status_code=409, detail={"code": "INVALID_STATE_TRANSITION", "message": str(exc)}) from exc
+    return to_public_case_read_response(record)
+
+
+async def require_case(case_id: str) -> None:
+    if await repository.get(case_id) is None:
+        raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."})
+
+
+@app.get("/api/cases/{case_id}/messages", response_model=list[PublicMessageResponse])
+async def list_case_messages(case_id: str) -> list[PublicMessageResponse]:
+    await require_case(case_id)
+    return [to_public_message(record) for record in await repository.list_messages(case_id)]
+
+
+@app.post("/api/cases/{case_id}/messages", response_model=PublicMessageResponse, status_code=201)
+async def create_case_message(case_id: str, request: PublicCreateMessageRequest) -> PublicMessageResponse:
+    await require_case(case_id)
+    try:
+        record = await repository.append_message(case_id, request.model_dump())
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."}) from exc
+    return to_public_message(record)
+
+
+@app.get("/api/cases/{case_id}/events", response_model=list[PublicCaseEventResponse])
+async def list_case_events(case_id: str, after: int | None = None) -> list[PublicCaseEventResponse]:
+    await require_case(case_id)
+    return [to_public_event(record) for record in await repository.list_events(case_id, after)]
+
+
+@app.patch("/api/cases/{case_id}/verifications/{verification_task_id}", response_model=PublicVerificationResponse)
+async def update_case_verification(case_id: str, verification_task_id: str, request: PublicUpdateVerificationRequest) -> PublicVerificationResponse:
+    await require_case(case_id)
+    try:
+        return to_public_verification(await repository.update_verification(case_id, verification_task_id, request.expected_version, request.status))
+    except CaseVersionConflictError as exc:
+        raise HTTPException(status_code=409, detail={"code": "VERSION_CONFLICT", "message": "Verification task has changed.", "current_version": exc.current_version}) from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail={"code": "VERIFICATION_NOT_FOUND", "message": "Verification task not found."}) from exc
+
+
+@app.get("/api/cases/{case_id}/verifications", response_model=list[PublicVerificationResponse])
+async def list_case_verifications(case_id: str) -> list[PublicVerificationResponse]:
+    await require_case(case_id)
+    return [to_public_verification(record) for record in await repository.list_verifications(case_id)]
+
+
+@app.post("/api/cases/{case_id}/verifications", response_model=PublicVerificationResponse, status_code=201)
+async def create_case_verification(case_id: str, request: PublicCreateVerificationRequest) -> PublicVerificationResponse:
+    await require_case(case_id)
+    try:
+        return to_public_verification(await repository.create_verification(case_id, request.model_dump()))
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."}) from exc
+
+
+@app.get("/api/cases/{case_id}/actions", response_model=list[PublicActionResponse])
+async def list_case_actions(case_id: str) -> list[PublicActionResponse]:
+    await require_case(case_id)
+    return [to_public_action(record) for record in await repository.list_actions(case_id)]
+
+
+@app.post("/api/cases/{case_id}/actions", response_model=PublicActionResponse, status_code=201)
+async def create_case_action(case_id: str, request: PublicCreateActionRequest) -> PublicActionResponse:
+    await require_case(case_id)
+    try:
+        return to_public_action(await repository.create_action(case_id, request.model_dump()))
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."}) from exc
+
+
+async def create_case_control_action(case_id: str, action_type: str, request: PublicActionCommandRequest) -> PublicActionResponse:
+    await require_case(case_id)
+    try:
+        return to_public_action(await repository.create_action(case_id, {"action_type": action_type, "actor_type": "BANK_STAFF", "note": request.note}))
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case not found."}) from exc
+
+
+@app.post("/api/cases/{case_id}/takeover", response_model=PublicActionResponse, status_code=201)
+async def start_human_takeover(case_id: str, request: PublicActionCommandRequest) -> PublicActionResponse:
+    return await create_case_control_action(case_id, "HUMAN_TAKEOVER", request)
+
+
+@app.post("/api/cases/{case_id}/resume", response_model=PublicActionResponse, status_code=201)
+async def resume_ai(case_id: str, request: PublicActionCommandRequest) -> PublicActionResponse:
+    return await create_case_control_action(case_id, "RESUME_AI", request)
+
+
+@app.get("/api/cases/{case_id}/bundle", response_model=PublicCaseBundleResponse)
+async def get_case_bundle(case_id: str, view: Literal["entry", "customer", "bank"] = "entry") -> PublicCaseBundleResponse:
+    record = await repository.get(case_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."})
+    messages = [to_public_message(item).model_dump(mode="json") for item in await repository.list_messages(case_id)]
+    actions = [to_public_action(item) for item in await repository.list_actions(case_id)]
+    verifications = [to_public_verification(item) for item in await repository.list_verifications(case_id)]
+    events = [to_public_event(item).model_dump(mode="json") for item in await repository.list_events(case_id)]
+    voice = await repository.get_voice_session(case_id)
+    return PublicCaseBundleResponse(
+        case=to_public_case_read_response(record).model_dump(mode="json"),
+        live_report=record.get("initial_report"),
+        questions=[], progress_items=[], verification_tasks=verifications,
+        recent_messages=messages[-50:], recent_actions=actions[-50:], recent_events=events[-50:],
+        voice_session=PublicVoiceSessionResponse.model_validate(voice) if voice else None, cursor=str(events[-1]["event_id"]) if events else None,
+    )
+
+
+@app.post("/api/cases/{case_id}/voice-sessions", response_model=PublicVoiceSessionResponse, status_code=201)
+async def create_voice_session(case_id: str, request: PublicCreateVoiceSessionRequest) -> PublicVoiceSessionResponse:
+    await require_case(case_id)
+    try:
+        return PublicVoiceSessionResponse.model_validate(await repository.create_voice_session(case_id, request.participants))
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case not found."}) from exc
+
+
+@app.patch("/api/cases/{case_id}/voice-sessions/{session_id}", response_model=PublicVoiceSessionResponse)
+async def update_voice_session(case_id: str, session_id: str, request: PublicUpdateVoiceSessionRequest) -> PublicVoiceSessionResponse:
+    await require_case(case_id)
+    try:
+        return PublicVoiceSessionResponse.model_validate(await repository.update_voice_session(case_id, session_id, request.status))
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail={"code": "VOICE_SESSION_NOT_FOUND", "message": "Voice session not found."}) from exc
+
+
+@app.get("/api/cases/{case_id}/voice-sessions/{session_id}/transcript", response_model=list[PublicTranscriptResponse])
+async def list_voice_transcript(case_id: str, session_id: str) -> list[PublicTranscriptResponse]:
+    await require_case(case_id)
+    return [PublicTranscriptResponse.model_validate(item) for item in await repository.list_transcript(case_id, session_id)]
+
+
+@app.post("/api/cases/{case_id}/voice-sessions/{session_id}/transcript", response_model=PublicTranscriptResponse, status_code=201)
+async def append_voice_transcript(case_id: str, session_id: str, request: PublicCreateTranscriptRequest) -> PublicTranscriptResponse:
+    await require_case(case_id)
+    try:
+        return PublicTranscriptResponse.model_validate(await repository.append_transcript(case_id, session_id, request.model_dump()))
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail={"code": "VOICE_SESSION_NOT_FOUND", "message": "Voice session not found."}) from exc
 
 
 @app.get("/api/cases/{case_id}/reports/live")
@@ -131,3 +328,23 @@ async def get_live_report(case_id: str) -> dict:
     if record is None:
         raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."})
     return record["initial_report"]
+
+
+@app.post("/api/cases/{case_id}/reports/finalize", response_model=PublicReportResponse)
+async def finalize_case_report(case_id: str, request: PublicFinalizeReportRequest) -> PublicReportResponse:
+    try:
+        report = await repository.finalize_report(case_id, request.expected_version, request.note)
+    except CaseVersionConflictError as exc:
+        raise HTTPException(status_code=409, detail={"code": "VERSION_CONFLICT", "message": "Case has changed.", "current_version": exc.current_version}) from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case not found."}) from exc
+    return PublicReportResponse.model_validate(report)
+
+
+@app.get("/api/cases/{case_id}/reports/final", response_model=PublicReportResponse)
+async def get_final_case_report(case_id: str) -> PublicReportResponse:
+    await require_case(case_id)
+    report = await repository.get_final_report(case_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail={"code": "FINAL_REPORT_NOT_FOUND", "message": "Final report not found."})
+    return PublicReportResponse.model_validate(report)

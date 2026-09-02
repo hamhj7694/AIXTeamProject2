@@ -54,7 +54,7 @@ export const WorkspaceChat: React.FC<WorkspaceChatProps> = ({
               AI 업무 대화
             </h2>
             <Badge variant="default" className="!bg-slate-800 !text-slate-300">
-              Mock 응답
+              AI Agent 연동 대기
             </Badge>
           </div>
           <p className="mt-1 text-xs text-slate-400">
@@ -151,7 +151,7 @@ export const WorkspaceChat: React.FC<WorkspaceChatProps> = ({
             </button>
           </div>
           <p className="mt-2 text-xs text-slate-400">
-            실제 LLM과 연결되지 않은 규칙 기반 MVP Mock입니다.
+            담당자 요청은 Case 메시지로 저장되며, AI 응답 생성은 Agent API 연결 후 제공됩니다.
           </p>
         </form>
       </section>
