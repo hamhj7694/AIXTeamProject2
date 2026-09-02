@@ -10,6 +10,14 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .case_enums import (
+    AnalyzeDisposition,
+    CaseRisk,
+    InitialCaseMode,
+    InitialCaseStatus,
+    PublicAnalyzeErrorCode,
+)
+
 
 PUBLIC_ANALYZE_SCHEMA_VERSION = "case_analyze.v1"
 
@@ -27,7 +35,7 @@ class PublicAnalyzeCaseRequest(PublicStrictModel):
 
 
 class PublicAnalyzeError(PublicStrictModel):
-    code: str = Field(min_length=1)
+    code: PublicAnalyzeErrorCode
     message: str = Field(min_length=1)
     retryable: bool = False
 
@@ -40,11 +48,11 @@ class PublicInitialReportReference(PublicStrictModel):
 
 class PublicAnalyzeCaseResponse(PublicStrictModel):
     schema_version: Literal[PUBLIC_ANALYZE_SCHEMA_VERSION] = PUBLIC_ANALYZE_SCHEMA_VERSION
-    disposition: Literal["CASE_CREATED", "NO_CASE", "FAILED"]
+    disposition: AnalyzeDisposition
     case_id: str | None = None
-    risk: Literal["NORMAL", "LOW", "HIGH"] | None = None
-    mode: Literal["PREVENT"] | None = None
-    status: Literal["TRIAGE"] | None = None
+    risk: CaseRisk | None = None
+    mode: InitialCaseMode | None = None
+    status: InitialCaseStatus | None = None
     initial_brief: str | None = None
     initial_report: PublicInitialReportReference | None = None
     error: PublicAnalyzeError | None = None

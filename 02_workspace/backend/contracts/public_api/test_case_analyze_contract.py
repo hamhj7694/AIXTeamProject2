@@ -10,6 +10,7 @@ from contracts.public_api.case_analyze import (
     PublicAnalyzeCaseRequest,
     PublicAnalyzeCaseResponse,
 )
+from contracts.public_api.case_read import PublicCaseReadResponse
 
 
 class PublicAnalyzeContractTest(unittest.TestCase):
@@ -39,6 +40,21 @@ class PublicAnalyzeContractTest(unittest.TestCase):
         payload["error"] = {**payload["error"], "details": {"cause": "internal-only"}}
         with self.assertRaises(ValidationError):
             PublicAnalyzeCaseResponse.model_validate(payload)
+
+    def test_public_case_value_sets_reject_values_not_in_current_schema(self) -> None:
+        payload = {
+            "case_id": "VP-000001", "client_request_id": None, "input_text": "test",
+            "risk": "HIGH", "risk_score": 0.9, "mode": "PREVENT", "status": "TRIAGE",
+            "initial_brief": "brief", "diagnosis": {}, "initial_report": None,
+            "created_at": "2026-09-02T00:00:00Z", "updated_at": "2026-09-02T00:00:00Z",
+        }
+        PublicCaseReadResponse.model_validate(payload)
+        with self.assertRaises(ValidationError):
+            PublicCaseReadResponse.model_validate({**payload, "status": "UNKNOWN"})
+        failed = dict(self.example["responses"]["FAILED"])
+        failed["error"] = {"code": "UNKNOWN", "message": "test", "retryable": False}
+        with self.assertRaises(ValidationError):
+            PublicAnalyzeCaseResponse.model_validate(failed)
 
 
 if __name__ == "__main__":

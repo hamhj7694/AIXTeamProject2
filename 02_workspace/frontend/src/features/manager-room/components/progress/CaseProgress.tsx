@@ -76,7 +76,7 @@ export const CaseProgress: React.FC<CaseProgressProps> = ({
             >
               사건 진행 현황
             </h2>
-            <Badge variant="default">MVP Mock</Badge>
+            <Badge variant="default">General API</Badge>
           </div>
 
           <div className="p-4 sm:p-5">

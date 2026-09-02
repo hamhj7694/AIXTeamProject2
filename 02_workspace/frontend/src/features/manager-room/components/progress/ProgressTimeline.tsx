@@ -67,7 +67,7 @@ export const ProgressTimeline: React.FC<ProgressTimelineProps> = ({
             >
               {selectedStepTitle} Timeline
             </h2>
-            <Badge variant="default">MVP Mock</Badge>
+            <Badge variant="default">Case Event API</Badge>
           </div>
           <p className="mt-1 text-xs text-slate-500">
             {phaseStyle[selectedPhase].description}

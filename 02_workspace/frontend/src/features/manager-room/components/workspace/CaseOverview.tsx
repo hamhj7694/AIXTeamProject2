@@ -45,7 +45,7 @@ export const CaseOverview: React.FC<CaseOverviewProps> = ({ workspace }) => {
           <h3 id="case-brief-title" className="text-base font-extrabold text-slate-950">
             사건 Brief
           </h3>
-          <Badge variant="default">MVP Mock</Badge>
+          <Badge variant="default">General API</Badge>
         </div>
         <p className="max-w-5xl text-sm leading-6 text-slate-700">{workspace.brief}</p>
         <p className="mt-3 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500">
@@ -56,7 +56,7 @@ export const CaseOverview: React.FC<CaseOverviewProps> = ({ workspace }) => {
       <Card className="overflow-hidden rounded-xl border-slate-200 p-0 shadow-sm">
         <div className="flex flex-wrap items-center gap-2 px-4 py-3.5">
           <h3 className="text-base font-extrabold text-slate-950">근거 분석</h3>
-          <Badge variant="default">MVP Mock</Badge>
+          <Badge variant="default">General API</Badge>
         </div>
 
         <div className="divide-y divide-slate-200 border-t border-slate-200">
