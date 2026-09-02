@@ -25,3 +25,8 @@ General API 호출 경로에는 연결되지 않았다.
 따라서 이 Draft의 `MEDIUM` risk, feature 배열, `exposure_status` section은
 현재 Diagnosis Runtime의 `RiskLevel`, `features`, `InitialReport`와 동일한
 Contract가 아니다. Runtime validation 대상으로 해석하지 않는다.
+
+## MVP workflow skeleton
+
+`mvp_workflow.py`는 Diagnosis 이후의 B 내부 MVP Contract다. Case Brief, 담당자
+검토형 질문 추천, 고객 답변 구조화, Brief Update를 정의하며 DB·Public API·자동 전송을 포함하지 않는다.
