@@ -2,81 +2,74 @@
 
 ## 현재 역할
 
-| 작업자 | 현재 역할 | 참여 상태 |
+| 구분 | 작업자 | 역할 | 핵심 책임 |
+|---|---|---|---|
+| A | eom | Backend & Case Platform Engineer | MySQL, Case 상태, General API, Repository, Transaction, Event 저장 |
+| B | lee | AI & Multi-Agent Engineer | ML/LLM, Agent, 질문, RAG, AI Contract·평가 |
+| C | ham | Realtime & Service Integration Engineer | React 연동, Realtime, Mock Adapter, E2E, Docker·배포 |
+
+```text
+Frontend(C) → Public API(A) → General API·MySQL(A)
+                              ↓ AI Internal Contract
+                         AI API·Agent·RAG(B)
+
+Event Producer(A/B) → 저장·발행(A) → 구독·화면 반영(C)
+```
+
+## 코드 소유권
+
+| 영역 | 향후 책임 | 필수 협업 |
 |---|---|---|
-| eom | AI 모델·AI API 제공자 | ACTIVE |
-| lee | Frontend·General API·DB 통합 담당자 | ACTIVE |
-| ham | 현재 작업 범위에서 제외, 추후 재배정 | PAUSED |
+| `backend/general_api/**`, `migrations/**` | A | B의 AI 입력, C의 UI 요구 Review |
+| `contracts/public_api/**` | A 최종 편집 | C 소비자 Review, B 영향 Review |
+| `backend/ai_api/**`, `contracts/ai_internal/**` | B | A 소비자 Review |
+| `frontend/**` | C | A Public Contract, B AI 표현 Review |
+| Event Contract | A/B/C 공동 | A 저장·발행, B producer, C subscriber |
+| `docker/**`, 통합 실행환경 | C | A/B 서비스 실행 Review |
+| 공통 dependency·공유 DTO | Task별 1명 | 영향 담당자 Review |
 
-## 책임 경계
+## 기존 기여와 향후 책임
 
-```text
-Frontend                         lee
-    ↓ Public API Contract        lee 최종 편집
-General API + DB                 lee
-    ↓ AI Internal Contract       eom 최종 편집, lee 소비자 Review
-AI API + Model/LLM/RAG/STT       eom
-```
-
-- eom은 모델만 만들고 넘기는 역할이 아니다. 모델 Adapter부터 구조화된 AI API 응답, Fixture, 평가·오류 처리까지 소유한다.
-- lee는 단순 중계만 담당하지 않는다. Frontend 요청, General API Workflow, AI Client, DB 저장, 공개 응답과 E2E를 소유한다.
-- Frontend는 AI API를 직접 호출하지 않는다.
-- AI API는 서비스 DB를 직접 수정하지 않는다.
-- ham에게는 현재 Task와 코드 소유권을 배정하지 않는다.
-
-## 폴더 구조와 소유권
-
-```text
-02_workspace/
-├─ frontend/**                                      lee
-└─ backend/
-   ├─ general_api/**                               lee
-   ├─ ai_api/**                                    eom
-   ├─ contracts/
-   │  ├─ public_api/**                             lee
-   │  └─ ai_internal/**                            eom
-   ├─ migrations/**                                lee
-   ├─ docker/**                                    변경 전 담당자 지정
-   └─ requirements.txt                             변경 전 상대 Review
-```
-
-`contracts/diagnosis.py`처럼 양쪽 서비스가 함께 import하는 파일은 계약 종류에 따라 최종 편집자를 정한다. AI 내부 DTO는 eom, 공개 DTO는 lee가 최종 반영하며 상대방 Review 없이 호환성을 깨지 않는다.
+기존 Vertical Slice에는 eom의 AI·General API·MySQL·Frontend 작업, lee의 Public Contract·Schema 작업, ham의 Manager Room·통합 작업이 함께 존재한다. 이 기록은 삭제하지 않는다. 새 문서의 `담당`은 앞으로 유지·추가개발할 책임자를 의미한다.
 
 ## 충돌 방지 규칙
 
-1. 전체 배정은 조정자만 `00_task_catalog.md`에서 수정한다.
-2. 각 작업자는 자신의 `task_mapping.md`와 `todo.md`만 진행 기록용으로 수정한다.
-3. eom은 `general_api`, `frontend`, `migrations`를 직접 수정하지 않는다.
-4. lee는 `ai_api`의 모델·Prompt·RAG 구현을 직접 수정하지 않는다.
-5. 계약 변경은 Example JSON과 Contract Test를 먼저 수정한 뒤 구현한다.
-6. 공통 Root 설정·Docker·Dependency 파일은 변경 전에 담당자와 Reviewer를 정한다.
-7. 한 PR은 가능한 한 하나의 Task ID와 하나의 소유 영역만 포함한다.
+1. A는 AI Prompt·Agent 내부 구현과 Frontend 화면을 임의 수정하지 않는다.
+2. B는 DB를 직접 Query하거나 Migration·Frontend를 임의 수정하지 않는다.
+3. C는 DB Schema와 AI Prompt·Agent 내부 로직을 임의 수정하지 않는다.
+4. Contract 변경은 요구자 → 제공자 → 소비자 순서로 합의한다.
+5. 기존 기능이 동작하면 보존하고 파일 이동·개명·대규모 재작성은 피한다.
+6. 테스트하지 않은 항목은 완료 처리하지 않는다.
 
 ## 병렬 작업 방식
 
 ```text
-1. Public Contract(lee) + AI Internal Contract(eom) 합의
-                         ↓
-2A. eom: 실제 AI API 구현·평가
-2B. lee: AI Fixture/Mock Client로 Frontend↔General API↔DB 구현
-                         ↓
-3. lee가 Fixture Client를 실제 AI API Client로 교체
-                         ↓
-4. eom은 AI Contract Test, lee는 공개 API·E2E 검증
+B: AI 요구·Schema·Fixture 정의
+              ↓
+A: 저장·Service·Public API 구현
+              ↓
+C: Adapter·화면·Realtime·E2E 연결
 ```
 
-AI 모델이 완성될 때까지 통합 작업을 기다리지 않는다. lee는 eom이 제공한 Example·Fixture로 먼저 연결하고, 실제 AI API 준비 후 Client 설정만 교체한다.
+- A는 Migration/Repository/Error test를 독립 진행할 수 있다.
+- B는 ML 평가, AI Fixture, 실패 처리 test를 독립 진행할 수 있다.
+- C는 화면 Data Source 감사, Adapter 분리, E2E scaffold를 독립 진행할 수 있다.
 
-## 첫 번째 공동 완료 기준
+## 공통 완료 기준
 
-```text
-Frontend /
-  ↓ POST /api/cases/analyze
-General API (lee)
-  ↓ 병렬 내부 호출
-AI API (eom): WindowAI + Full Context LLM
-  ↓ 구조화된 결과
-General API: 검증·Fusion 결과 수용·Case 저장
-  ↓
-/cases/:caseId 이동
-```
+- 구현과 Contract가 일치한다.
+- 정상·빈 입력·오류·Timeout/재시도 중 해당 흐름을 테스트했다.
+- Mock과 실제 구현의 경계가 명확하다.
+- Secret·민감정보·로그를 점검했다.
+- 연동 소비자가 실제 또는 Fixture로 검증했다.
+- 개인 `todo.md`에 변경 파일·테스트·다음 작업을 기록했다.
+
+## Git 협업 기준
+
+| 담당자 | 작업 Branch |
+|---|---|
+| A=eom | `new_eom` |
+| B=lee | `new_lee` |
+| C=ham | `new_ham` |
+
+기능별 Branch를 계속 만들지 않는다. 각자 자기 Branch에서 기능 단위로 Commit·Push하고 `main`으로 PR한다. Merge 후 다른 담당자는 최신 `main`을 자기 Branch에 **merge**한다. 팀 숙련도를 고려해 rebase보다 merge를 기본으로 한다. 공용 Contract 변경은 PR 전에 영향 담당자 Review를 받는다.

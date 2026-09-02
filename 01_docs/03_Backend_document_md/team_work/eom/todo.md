@@ -1,93 +1,65 @@
-# eom TODO — AI 모델·AI API
+# eom TODO — A Backend & Case Platform
 
-## 현재 우선순위
+> 아래 체크리스트는 앞으로의 책임 기준이다. 과거 AI/Vertical Slice 기여는 하단 완료 이력에 보존한다.
 
-### 1. AI 내부 Contract 인계 기준 확정
+## P0 — 지금 바로
 
-- [x] WindowAI Segment v1 Schema 작성
-- [x] Diagnosis LLM 전체 맥락 v1 Schema 작성
-- [x] AI API용 공통 진단 DTO 구현
-- [ ] 공개 DTO와 AI 내부 DTO가 섞인 파일 분리 계획 작성
-- [ ] `ai_internal` Request·Response Example 최신화
-- [ ] Timeout·부분 실패·Fallback Error Schema 명시
-- [ ] lee에게 소비자 관점 Contract Review 요청
-- [ ] AI Internal v1 Contract Freeze 기록
+- [ ] 현재 MySQL Migration과 실제 사용 Table 확인
+- [ ] `CASE_REPOSITORY=memory/mysql` 전환 재검증
+- [ ] MySQL Repository Create/List/Get transaction test
+- [ ] DB 실패 시 rollback 자동화 test
+- [ ] Case List/Get 공개 응답 DTO 확정
+- [ ] Case status/mode/risk/error enum 정리
+- [ ] `PATCH /api/cases/{case_id}` 상태전이 요구 정리
+- [ ] C에게 Case 화면 필수 필드 Review 요청
 
-### 2. 최초 진단 AI Hardening
+## P1 — 핵심 MVP
 
-- [x] WindowAI Adapter 연결
-- [x] Full Context Diagnosis LLM 연결
-- [x] Window 이벤트 추출과 Full Context LLM 병렬 실행
-- [x] Feature·근거 중복 제거
-- [x] Risk/Fusion 규칙 구현
-- [x] Model artifact hash·필수 필드 검증
-- [ ] LLM Timeout 자동화 테스트
-- [ ] WindowAI 실패·Artifact 손상 자동화 테스트
-- [ ] 한쪽 AI 실패 시 부분 결과 Contract Test
-- [ ] 실제 보이스피싱·정상 상담 평가 Fixture 확장
-- [ ] Model·Prompt version 응답 필드 검증
+- [ ] Case PATCH·허용 상태전이·409 Version Conflict
+- [ ] Message migration·Repository·create/list API
+- [ ] Event/Timeline append·list·cursor API
+- [ ] Event actor·timestamp·payload·version Contract
+- [ ] Verification Task migration·API
+- [ ] 외부 Verification 응답 저장·상태 변경
+- [ ] Action/History API
+- [ ] Human Takeover/Resume 상태 저장 API
+- [ ] 저장 성공 후 Event 발행 경계 제공
 
-### 3. lee 병렬 작업 지원
+## P2 — 안정화
 
-- [ ] General API가 사용할 결정론적 AI Fixture 제공
-- [ ] AI API 실행 방법과 환경변수 문서화
-- [ ] 정상·고위험·NO_CASE·부분 실패 Example 제공
-- [ ] lee의 AI Client 소비자 Contract Test Review
-- [ ] 실제 AI 교체 시 변경되는 값과 고정되는 Schema 구분
+- [ ] 역할/권한 검증
+- [ ] Request ID·구조화 로그·민감정보 제거
+- [ ] DB 재시도·Pool 종료·장애 처리
+- [ ] 공통 Error/Validation Envelope 확대
+- [ ] Repository·Service·API 통합 test
 
-### 4. 후속 AI 구현
+## 다른 담당자에게 필요한 것
 
-- [ ] AI-05/16 Case Report Initialize·Update·Finalize
-- [ ] AI-06~08 Question·Verification·Case Structurer
-- [ ] AI-12~15 Knowledge/RAG
-- [ ] AI-09~11 Voice Intelligence
+- B=lee: 질문·자유답변·Agent output의 의미, Schema, Example
+- C=ham: 화면에 필요한 Case/Event field와 Realtime 소비 요구
 
-## 수정 금지 체크
+## 건드리지 않기
 
-- [ ] Frontend 문제를 `frontend/**`에서 직접 수정하지 않고 lee에게 전달
-- [ ] 저장 문제를 `general_api/**` 또는 `migrations/**`에서 직접 수정하지 않고 재현 자료 전달
-- [ ] 공개 API 변경이 필요하면 lee에게 Public Contract 변경 요청
+- [ ] AI Prompt·Agent 내부 로직을 직접 수정하지 않는다.
+- [ ] Frontend 화면 문제는 C에게 재현 자료와 함께 전달한다.
+- [ ] 공용 Contract는 B/C 영향 확인 없이 깨뜨리지 않는다.
 
-## Blocked / 결정 필요
+## 기존 완료 이력 — 과거 구현 기여
 
-- [ ] AI 내부 DTO와 공개 DTO의 물리적 분리 방식
-- [ ] 운영 LLM Provider·Model·비용 한도
-- [ ] Embedding Model·Vector DB
-- [ ] STT Provider·Streaming 방식
-- [ ] 공식문서 Corpus 범위
+- [x] WindowAI·Full Context LLM·Feature·Risk/Fusion 초기 구현
+- [x] FastAPI 2계층과 Diagnosis→Case 생성 흐름 초기 구현
+- [x] Core Case/Diagnosis/LIVE Report Migration과 MySQL Repository 초기 구현
+- [x] Analyze/List/Get/LIVE Report와 Frontend 프록시 연결 초기 구현
+- 기록된 과거 실행에서는 Python test·HTTP E2E·Frontend build가 통과했다.
+- 2026-09-02 감사 환경에서는 공개 Contract test 4건만 재통과했고, 일부 Python test와 Frontend build는 로컬 의존성/실행환경 제한으로 재검증하지 못했다.
 
-## 기존 완료 이력
-
-### 2026-09-01 — CT-01/02, BE-00/01, AI-01~04, AAPI-10, FE-01, INT-01
-
-- 완료: 진단 계약, FastAPI 2계층, Window Logistic Adapter, LLM/Fixture Extractor, Fusion, 공개 API, Frontend 연결
-- 변경 파일: `backend/contracts`, `backend/ai_api`, `backend/general_api`, `backend/migrations`, `frontend/src/services/caseApi.ts`, `frontend/src/pages/CasePages.tsx`
-- 테스트: Python unittest 6개, 위험/정상 HTTP E2E, Frontend production build
-- 비고: 새 분담 적용 후 `ai_api`와 AI 내부 Contract만 eom 소유로 유지한다. 나머지는 lee에게 인계한다.
-
-## 작업 로그
-
-### 2026-09-01 — DB-01, BE-01/02/03, INT-01/02 검증 완료
-
-- [x] DB-01 Core Case Schema·MySQL Repository·Migration
-  - `001_core_case_diagnosis.sql`, `002_initial_live_report.sql`, `003_expand_risk_score_precision.sql` 적용 확인
-  - `cases.risk_score` 정밀도 `DECIMAL(9, 6)` 확인
-- [x] BE-01 실제 LLM 분석 → Case 생성 → MySQL 저장
-  - 실제 고위험 입력으로 `VP-00F24E1B`를 생성하고 `CASE_CREATED / HIGH / TRIAGE` 확인
-- [x] BE-02 Case 목록 API
-  - `GET /api/cases`에서 MySQL 저장 Case 2건 조회 확인
-- [x] BE-03 Case 상세·LIVE Report API
-  - `GET /api/cases/VP-00F24E1B`, LIVE Report 7개 section 조회 확인
-- [x] INT-01/02 실제 API·프론트 프록시 E2E
-  - 새 General API 프로세스(8002)에서도 동일 Case 목록·상세 재조회 확인
-  - Vite `/api` 프록시(5173)에서 목록·상세 조회 확인
-- 테스트: Python unittest 6개 통과, `npm run build` 통과(1460 modules)
-- 비고: Voice, Realtime, RAG, Conversation/Question API, LIVE/FINAL Report 갱신은 아직 미완료이며 완료 처리하지 않음.
+## 작업 로그 템플릿
 
 ### YYYY-MM-DD — TASK-ID
 
-- 완료:
+- 목표:
 - 변경 파일:
-- 테스트:
-- Commit/PR:
+- 테스트 결과:
+- 미검증/Blocker:
+- 협업 요청:
 - 다음 작업:

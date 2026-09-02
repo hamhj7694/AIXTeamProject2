@@ -1,5 +1,7 @@
 # AI 시스템 전체 구조
 
+> 책임: B=lee. 현재 Full/Window Diagnosis·Feature·Risk만 실행 코드가 있으며 Agent·RAG·Voice·Report update는 목표 설계다.
+
 ## 1. 목표
 
 여러 자율 Agent를 많이 만드는 것이 목표가 아니다. 서로 독립적인 AI 작업을 일반 Backend가 병렬 실행해 응답시간을 줄이고, AI가 필요한 비정형 판단에만 모델 비용을 사용한다.

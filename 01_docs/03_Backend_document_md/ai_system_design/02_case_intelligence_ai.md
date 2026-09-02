@@ -1,5 +1,7 @@
 # Case Intelligence AI 설계
 
+> 현재 상태: PARTIAL. Full/Window 분석·Feature·Risk는 구현됐고 질문 정책·자유답변 구조화·Bank Copilot은 미구현이다. 향후 책임은 B=lee다.
+
 ## 1. 역할
 
 진단, 위험 맥락, 비정형 답변 구조화, 후속 질문, 은행 Copilot을 하나의 AI Service 경계로 묶는다. 내부 모델 호출은 나뉠 수 있지만 독립 자율 Agent로 분리하지 않는다.

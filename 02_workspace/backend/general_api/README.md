@@ -21,7 +21,7 @@ $env:AI_API_BASE_URL = "http://127.0.0.1:8001"
 python -m uvicorn general_api.app.main:app --port 8000 --reload
 ```
 
-Frontend는 `VITE_API_BASE_URL=http://127.0.0.1:8000`을 사용한다. 현재 Case Repository는
-fixture E2E용 메모리 구현이며 서버를 재시작하면 초기화된다. MySQL 영구 저장용 첫 스키마는
-`migrations/001_core_case_diagnosis.sql`에 분리되어 있고, DB 연결 방식 확정 후 Repository
-adapter만 교체한다.
+Frontend는 `VITE_API_BASE_URL=http://127.0.0.1:8000`을 사용한다. 기본값은 서버 재시작 시 초기화되는
+메모리 Repository다. `CASE_REPOSITORY=mysql`을 설정하면 현재 구현된 MySQL Repository를 사용한다.
+Core Case·Diagnosis·초기 LIVE Report Migration은 `migrations/001~003`에 있다. Message, Verification,
+Action, 상태 PATCH, Realtime API는 아직 구현되지 않았다.

@@ -3,6 +3,8 @@
 > 기준 문서: [개발 구현 체크리스트 | Frontend · Backend API · MySQL](https://app.notion.com/p/3cdc753ff28a81f9b261c9d157543bac?pvs=204)  
 > 목적: CSR Frontend부터 일반 Backend, AI API, MySQL, Vector DB, RAG, 음성상담, 실시간 동기화까지 전체 시스템의 개발·연동 순서를 한 문서에서 관리한다.
 
+> **현재 구현 상태:** C=ham 책임 문서다. 진단→AI 분석→Case 생성→목록·상세 조회까지 연결됐다. Customer/Manager Room/Verification의 업무 상태는 Mock/localStorage이며 Realtime, Agent, RAG, Voice, Browser E2E, Docker는 미구현이다. 아래 전체 흐름은 목표 상태를 포함한다.
+
 ---
 
 ## 1. 전체 서비스 Route
@@ -22,11 +24,11 @@ AI 통화 텍스트 진단
    ├─ /cases/:caseId/bank
    │    Fraud Case Workspace
    │
-   └─ /verify/:token
-        기관/외부 최소 검증
+   └─ /cases/:caseId/verify
+        현재 내부 Case 검증 Mock 화면
 ```
 
-> 실제 Route는 `/cases/:caseId`이며 위 흐름을 기준으로 구현한다.
+> 외부 기관용 `/verify/:token` Route는 목표 설계일 뿐 현재 Router에는 없다.
 
 ---
 

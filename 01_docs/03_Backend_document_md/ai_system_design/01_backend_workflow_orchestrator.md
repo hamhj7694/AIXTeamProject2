@@ -1,5 +1,7 @@
 # Backend Workflow Orchestrator 설계
 
+> 현재 상태: DESIGN_ONLY. B=lee가 AI 작업 선택·Agent routing을, A=eom이 저장·Transaction·Event 발행을 책임진다.
+
 ## 1. 정의
 
 중앙 오케스트레이터는 LLM Agent가 아니라 일반 Backend의 결정론적 Workflow Service다. Event 종류와 현재 Case State를 기준으로 호출할 AI, 저장 순서, 후속 Event를 결정한다.

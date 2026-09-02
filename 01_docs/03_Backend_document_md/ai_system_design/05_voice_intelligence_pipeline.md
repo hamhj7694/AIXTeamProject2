@@ -1,5 +1,7 @@
 # Voice Intelligence Pipeline 설계
 
+> 현재 상태: DESIGN_ONLY. Frontend 음성 UI/localStorage와 구분하며 실제 STT·Voice Delta·Summary는 미구현이다. AI는 B=lee, 서비스 연결·Realtime은 C=ham이 책임진다.
+
 ## 1. 역할
 
 직원과 고객의 음성상담을 STT로 변환하고 Final Segment 단위로 Case 변화를 추출한다. 범용 자율 Agent가 아니라 Streaming Pipeline이다.

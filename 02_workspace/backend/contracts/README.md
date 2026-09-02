@@ -11,9 +11,9 @@
 
 | 영역 | 최종 편집자 | 필수 Reviewer |
 |---|---|---|
-| `public_api/**` | lee | eom |
-| `ai_internal/**` | eom | lee |
-| 공개·내부 DTO가 섞인 공통 파일 | Task별 1명 지정 | 상대방 |
+| `public_api/**` | A=eom | C=ham 소비자 Review, B=lee 영향 Review |
+| `ai_internal/**` | B=lee | A=eom 소비자 Review |
+| 공개·내부 DTO가 섞인 공통 파일 | Task별 1명 지정 | 영향받는 A/B/C |
 
 `diagnosis.py`처럼 양쪽 DTO가 한 파일에 있는 기존 코드는 호환성을 유지하며 단계적으로 분리한다. 분리 전까지는 한쪽이 단독으로 Breaking Change를 반영하지 않는다.
 

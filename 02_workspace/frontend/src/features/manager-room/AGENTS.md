@@ -1,5 +1,7 @@
 # 담당자 ROOM Frontend 작업 지침
 
+> 현재 책임자: C=ham. 이 Feature는 Mock UI가 구현된 상태이며 실제 Case/Message/Event/Agent API와 Realtime 연결은 아직 완료되지 않았다. DB Schema는 A=eom, AI Prompt·Agent Output은 B=lee에게 요청한다.
+
 ## 적용 범위와 목적
 
 이 문서는 `src/features/manager-room/**`에서 수행하는 담당자 ROOM 프론트엔드 작업에만 적용한다. 프로젝트 전체를 재설계하거나 다른 팀원의 작업 방식을 변경하기 위한 문서가 아니다.
