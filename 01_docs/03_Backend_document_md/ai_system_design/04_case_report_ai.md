@@ -1,5 +1,7 @@
 # Case Report AI 설계
 
+> 현재 상태: PARTIAL. 규칙 기반 초기 LIVE Report Builder와 Draft Contract Fixture는 있으나 AI initialize/update/finalize·Impact Router는 미구현이다. 향후 책임은 B=lee다.
+
 ## 1. 역할
 
 하나의 Case에 누적된 사실·근거·조치·미확인사항을 LIVE Section으로 관리하고, 사건 종료 시 전체 이력 기반 FINAL Report를 생성한다.

@@ -31,13 +31,13 @@ general_api + ai_api -> contracts
 
 | 담당자 | 주 작업 영역 |
 |---|---|
-| eom | `ai_api/**`, `contracts/ai_internal/**`, AI 모델·Fixture·평가 |
-| lee | `general_api/**`, `contracts/public_api/**`, `migrations/**`, Frontend 연동 |
-| ham | 현재 작업 제외(`PAUSED`), 합류 시 재배정 |
+| A=eom | `general_api/**`, `contracts/public_api/**`, `migrations/**`, Case Platform |
+| B=lee | `ai_api/**`, `contracts/ai_internal/**`, AI 모델·Agent·RAG·평가 |
+| C=ham | `frontend/**`, Realtime·통합 E2E·`docker/**` |
 
-- 공개 API Contract는 lee가 최종 편집한다.
-- AI 내부 Contract는 eom이 최종 편집하고 lee가 소비자 관점에서 Review한다.
-- 기존에 eom이 구현한 General API·Frontend 코드는 유지하되 향후 소유권은 lee에게 인계한다.
+- 공개 API Contract는 A가 최종 편집하고 C가 소비자 관점에서 Review한다.
+- AI 내부 Contract는 B가 최종 편집하고 A가 소비자 관점에서 Review한다.
+- 과거 구현 기여는 유지하며 향후 소유권만 위 기준으로 전환한다.
 
 세부 작업 배정은 `01_docs/03_Backend_document_md/team_work/` 문서를 따른다.
 

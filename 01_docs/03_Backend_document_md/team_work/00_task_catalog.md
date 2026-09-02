@@ -1,106 +1,83 @@
-# 전체 작업 카탈로그 · 새 2인 배정
+# 전체 작업 카탈로그 · 3인 책임 기준
 
-> 상세 설계: 상위 `01~07`, `ai_system_design/**`
->
-> 개인 진행상황: `eom/todo.md`, `lee/todo.md`
->
-> ham 상태: 현재 작업 범위에서 제외(`PAUSED`)
+> 기준일: 2026-09-02. 실제 코드에서 확인된 남은 작업만 관리한다.
+> 과거 구현 기여는 개인 TODO의 완료 이력에 보존하고, 아래 담당은 향후 책임자다.
 
-## 1. 코드 소유권
+## 1. 현재 기준선
 
-| 영역 | 소유자 | Reviewer·소비자 |
-|---|---|---|
-| `02_workspace/backend/ai_api/**` | eom | lee |
-| `02_workspace/backend/contracts/ai_internal/**` | eom | lee |
-| `02_workspace/frontend/**` | lee | eom은 AI 연결 계약만 Review |
-| `02_workspace/backend/general_api/**` | lee | eom은 AI Client 계약만 Review |
-| `02_workspace/backend/contracts/public_api/**` | lee | eom |
-| `02_workspace/backend/migrations/**` | lee | eom은 AI 결과 저장 필드만 Review |
-| Root Dependency·Docker·공통 DTO | Task별 1명 지정 | 상대방 필수 Review |
-| ham 코드 영역 | 현재 없음 | 합류 시 재배정 |
-
-## 2. 계약 소유권
-
-| Contract | 최종 편집자 | 필수 Review | 호환성 기준 |
+| ID | 기능 | 코드 기준 상태 | 향후 책임 |
 |---|---|---|---|
-| Frontend ↔ General API 공개 Contract | lee | eom | Frontend View와 HTTP 상태 |
-| General API ↔ AI API 내부 Contract | eom | lee | Fixture·Schema·Timeout·부분 실패 |
-| DB Schema·Migration | lee | eom | AI source/evidence/version 저장 가능 여부 |
+| AI-01~04 | Full/Window 분석, Feature, Risk | DONE, 재검증 필요 | B |
+| BE-01 | `POST /api/cases/analyze` | DONE | A |
+| BE-02 | `GET /api/cases` | DONE | A |
+| BE-03 | Case 상세·초기 LIVE Report 조회 | DONE | A |
+| DB-01 | Core Case/Diagnosis/Report Migration | DONE, 실제 환경 재검증 필요 | A |
+| FE-01~03 | 진단·목록·상세 UI/API | MOSTLY_DONE | C |
+| FE-04~06 | Customer·Bank·Verification UI | MOCK/PARTIAL | C |
+| BE-04 이후 | Message·Verification·Action·상태 갱신 | TODO | A |
+| AI-05 이후 | Brief update·Agent·RAG·Voice AI | TODO | B |
+| RT/INT | Realtime·전체 E2E·Docker | TODO | C |
 
-공유 Python DTO가 하나의 파일에 섞여 있으면 공개 DTO와 내부 DTO를 분리한다. 분리 전까지는 변경 PR에 양쪽 Review가 반드시 필요하다.
+## 2. P0 — 기준선·Contract 고정
 
-## 3. 최초 진단 인계·활성 작업
+| ID | 작업 | 담당 | 선행 | 완료 기준 |
+|---|---|---|---|---|
+| A-00 | MySQL Migration·Repository 재검증 | A | 없음 | 실제 적용, CRUD, rollback test |
+| A-01 | Case List/Get/Patch Public DTO·Enum | A | C 요구 Review | Pydantic DTO와 Contract test |
+| B-00 | ML bundle·Feature·Risk 인계 검증 | B | 없음 | hash·output·fixture test |
+| B-01 | AI Internal DTO/JSON Schema 정합화 | B | A Review | 정상·부분실패 Example·test |
+| C-00 | 화면별 API/Mock/localStorage Data Source Map | C | 없음 | Route별 출처와 교체 순서 문서화 |
+| C-01 | Analyze/List/Detail Adapter 회귀 | C | A-01 | Loading/Error/NO_CASE 포함 검증 |
 
-| 순서 | ID | 작업 | 현재 담당 | Reviewer | 상태 |
-|---|---|---|---|---|---|
-| 0 | HANDOFF-01 | 기존 Vertical Slice 소유권 인계·회귀 테스트 | lee | eom | TODO |
-| 1 | CT-01 | `/api/cases/analyze` 공개 Contract 유지·확장 | lee | eom | IN_PROGRESS |
-| 1 | CT-02 | Diagnosis AI 내부 Contract 유지·확장 | eom | lee | IN_PROGRESS |
-| 2 | AI-01 | Full Context Diagnosis LLM | eom | lee | IN_PROGRESS |
-| 2 | AI-02 | WindowAI Segment Analyzer | eom | lee | IN_PROGRESS |
-| 2 | AI-03 | Feature Extractor | eom | lee | IN_PROGRESS |
-| 2 | AI-04 | Risk/Fusion 모델·규칙 | eom | lee | IN_PROGRESS |
-| 2 | AAPI-10 | Diagnosis AI API·Fixture·Contract Test | eom | lee | IN_PROGRESS |
-| 2 | BE-00 | General API 공통 Error·AI Client | lee | eom | IN_PROGRESS |
-| 2 | DB-01 | Case Core Schema·MySQL Repository | lee | eom | IN_PROGRESS |
-| 2 | FE-01 | `/` API Client·Loading·Error·Navigate | lee | eom | IN_PROGRESS |
-| 3 | BE-01 | `POST /api/cases/analyze` Workflow·저장 | lee | eom | IN_PROGRESS |
-| 4 | INT-01 | `/` → Case 생성 → 상세 이동 E2E | lee | eom | IN_PROGRESS |
+## 3. P1 — 핵심 MVP
 
-기존 구현 여부와 새 소유권은 별개다. 완료된 코드도 `HANDOFF-01`에서 새 소유자가 읽고 회귀 테스트한 뒤 인계를 완료한다.
+| ID | 작업 | 담당 | 선행 | 완료 기준 |
+|---|---|---|---|---|
+| A-10 | Case PATCH·상태전이·Version Conflict | A | A-01 | 허용 전이와 409 test |
+| A-11 | Message API·저장 | A | A-00 | create/list transaction test |
+| A-12 | Event/Timeline append·cursor | A | A-00 | actor/timestamp/payload와 cursor test |
+| A-13 | Verification/Action API | A | A-10 | 생성·응답·상태·history test |
+| B-10 | P0/P1/P2 Question Planner | B | A-01 | priority/target/execution schema와 guardrail |
+| B-11 | 고객 자유답변 구조화 | B | B-10 | Case patch output·evaluation |
+| B-12 | Customer/Bank/Verification Agent | B | B-10/11 | 근거·실패를 포함한 Contract test |
+| B-13 | Initial/LIVE Brief update | B | Event Contract | Section 단위 output test |
+| C-10 | Customer/Bank Message·상태 연결 | C | A-11/12 | 동일 Case 양 화면 반영 |
+| C-11 | Verification·FDS·ASAP Mock Adapter | C | A-13 | Mock 경계와 Scenario fixture |
+| C-12 | SSE/WebSocket·재접속 | C | A-12 | 중복·순서·재접속 E2E |
+| C-13 | Human Takeover/Resume AI | C | A-10/12 | 서버 상태 기반 양 화면 동기화 |
 
-## 4. 후속 AI 작업 — eom
+## 4. P2/P3 — 안정화·확장
 
-| ID | 작업 | 선행 | 상태 |
-|---|---|---|---|
-| AI-05 | Initial/LIVE/FINAL Case Report AI | Case Projection Contract | TODO |
-| AI-06 | P0/P1/P2 Question Planner | Question Contract | TODO |
-| AI-07 | Verification Planner | Verification Contract | TODO |
-| AI-08 | Customer Answer Case Structurer | Case Patch Contract | TODO |
-| AI-09~11 | STT·Voice Delta·Voice Summary | Voice Contract | TODO |
-| AI-12~15 | Verification·Response·Recovery·Institution RAG | Knowledge Source | TODO |
-| AI-16 | Report Impact Router | Report Section Contract | TODO |
-| AAPI-20 | Report AI API | AI-05/16 | TODO |
-| AAPI-21 | Case Support AI API | AI-06~08 | TODO |
-| AAPI-30 | Knowledge/RAG API | AI-12~15 | TODO |
+| ID | 작업 | 담당 | 선행 | 완료 기준 |
+|---|---|---|---|---|
+| A-20 | 인증·권한·공통 오류·관측 | A | P1 | 역할/오류/로그 test |
+| B-20 | Agent Orchestrator | B | B-12/13 | 결정론적 routing·부분실패 test |
+| B-21 | RAG Pipeline·Evaluation | B | Corpus 결정 | 출처·최신성·환각 평가 |
+| B-22 | Voice/STT Intelligence | B | Voice Contract | Partial/Final·중복 test |
+| C-20 | Browser Full Demo E2E | C | P1 | 핵심 Scenario 자동화 |
+| C-21 | Docker Compose·배포 | C | A/B 실행 고정 | 4개 서비스 cold start·health |
 
-## 5. 후속 통합 작업 — lee
+## 5. 의존성
 
-| ID | 작업 | 선행 | 상태 |
-|---|---|---|---|
-| BE-02/03 | Case List·Detail·Bundle API | DB-01 | TODO |
-| BE-04 | Conversation·Question·Progress API | AI-06/08 Contract | TODO |
-| BE-05 | Verification·외부 Token API | AI-07/12 Contract | TODO |
-| BE-06 | LIVE/FINAL Report 저장·Version API | AI-05/16 Contract | TODO |
-| BE-07/08 | Action·Recovery·Official Data | DB Schema | TODO |
-| BE-09 | Voice Session API | AI-09~11 Contract | TODO |
-| BE-10/12 | AI Client·결정론적 Workflow 확장 | 각 AI Contract | TODO |
-| BE-11 / RT-01 | SSE/WebSocket·Cursor Recovery | Case Event Schema | TODO |
-| FE-02~09 | Case·Customer·Bank v2·Verification·Voice UI 연결 | 해당 Public API | TODO |
-| DB-02~15 | 서비스 DB Schema·Migration·Repository | 해당 Public API | TODO |
-| INT-02~10 | 화면별 통합·E2E | 해당 기능 | TODO |
+```text
+B가 새 Case Field 필요
+→ B 요구·Schema·Example
+→ A DB/Service/API
+→ C Adapter/UI
 
-## 6. ham 상태
+C가 새 Event 필요
+→ C UI 갱신 요구
+→ A/B/C Event Contract
+→ A/B Producer
+→ A 저장·발행
+→ C 구독
+```
 
-ham은 현재 작업에서 제외한다. 기존 후보 Task도 자동 배정하지 않는다. 합류 요청이 생기면 그 시점의 `main`, 남은 Task, eom·lee 소유권을 확인하고 별도 재배정한다.
+## 6. DONE 공통 기준
 
-## 7. 마일스톤
-
-| 마일스톤 | 완료 결과 | 담당 |
-|---|---|---|
-| M0 Contract Freeze | Public v1과 AI Internal v1 Example·Error 정책 합의 | lee + eom |
-| M1 Ownership Handoff | 기존 Vertical Slice를 lee가 실행·회귀 검증 | lee |
-| M2 AI Hardening | WindowAI+LLM 품질·Timeout·부분 실패 검증 | eom |
-| M3 Persistence E2E | General API·MySQL·Frontend 실제 연결 | lee |
-| M4 Follow-up Parallel | eom은 후속 AI, lee는 Fixture 기반 공개 API·UI 병렬 구현 | eom + lee |
-| M5 Real AI Integration | Fixture를 실제 AI API로 교체하고 Contract/E2E 통과 | lee + eom |
-| M6 Ham Replan | 필요할 때만 독립 모듈 재배정 | 미정 |
-
-## DONE 공통 기준
-
-- [ ] Request/Response Schema와 Example 확정
-- [ ] 제공자 Contract Test와 소비자 Contract Test 통과
-- [ ] 정상·빈 입력·오류·Timeout·부분 실패 테스트
+- [ ] Schema와 Example 확정
+- [ ] 제공자·소비자 Contract Test
+- [ ] 정상·오류·Timeout/부분실패 중 해당 테스트
 - [ ] Secret·민감정보·로그 점검
-- [ ] Fixture E2E와 실제 AI E2E 모두 통과
-- [ ] 담당자의 `todo.md`에 테스트와 Commit/PR 기록
+- [ ] 실제 또는 Fixture 연동 E2E
+- [ ] 개인 TODO에 변경 파일·테스트·다음 작업 기록

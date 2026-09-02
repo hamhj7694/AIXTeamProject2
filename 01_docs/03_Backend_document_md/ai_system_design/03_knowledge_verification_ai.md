@@ -1,5 +1,7 @@
 # Knowledge & Verification AI 설계
 
+> 현재 상태: DESIGN_ONLY. Corpus·Source Registry·Embedding·Vector Index·RAG 실행 코드는 아직 없으며 향후 책임은 B=lee다.
+
 ## 1. 역할
 
 공식문서 검색과 주장 비교를 담당한다. 외부 검증 Token, 기관 연락, 응답 저장은 일반 Backend가 처리하며 이 서비스는 실제 외부 연락을 실행하지 않는다.

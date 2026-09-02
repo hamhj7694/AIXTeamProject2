@@ -3,6 +3,8 @@
 > 기준 문서: [개발 구현 체크리스트 | Frontend · Backend API · MySQL](https://app.notion.com/p/3cdc753ff28a81f9b261c9d157543bac?pvs=204)  
 > 목적: MySQL, Vector DB, RAG Source Registry, Case Evidence, Case Report 데이터의 저장 책임을 분리한다.
 
+> **현재 구현 상태:** A=eom 책임 문서다. 실제 Migration은 `cases`, `case_inputs`, `analysis_segments`, `context_features`, `case_events`, `case_reports`, `case_report_sections`까지 존재한다. 이 중 Event는 `CASE_CREATED` 저장만 구현됐다. 아래 messages/questions/verification/actions/voice/official_contacts/knowledge_sources/case_evidence와 Vector DB는 목표 설계다.
+
 ---
 
 ## 1. 저장소 분리 원칙
@@ -35,14 +37,16 @@ Case Report AI
 
 ## 2. MySQL 논리 테이블
 
+아래 표는 최종 목표다. `구현`으로 표시되지 않은 테이블은 설계만 존재한다.
+
 | Table | 핵심 저장내용 |
 |---|---|
-| `cases` | case_id, risk, mode, type, status, latest_summary, timestamps |
-| `case_inputs` | 최초 입력 텍스트, 샘플유형, 입력시각 |
-| `analysis_segments` | Window/segment index, 구간 텍스트, risk |
-| `context_features` | 사칭·권위·공포·긴급성·고립·송금요구·금액 등 |
-| `case_reports` | LIVE Report Root/Manifest, 선택적 Snapshot, FINAL Revision |
-| `case_report_sections` | LIVE 보고서의 section_key별 현재 내용·Version |
+| `cases` | case_id, risk, mode, type, status, latest_summary, timestamps — **구현** |
+| `case_inputs` | 최초 입력 텍스트, 샘플유형, 입력시각 — **구현** |
+| `analysis_segments` | Window/segment index, 구간 텍스트, risk — **구현** |
+| `context_features` | 사칭·권위·공포·긴급성·고립·송금요구·금액 등 — **구현** |
+| `case_reports` | LIVE Report Root/Manifest, 선택적 Snapshot, FINAL Revision — **초기 LIVE만 구현** |
+| `case_report_sections` | LIVE 보고서의 section_key별 현재 내용·Version — **초기 Section 구현** |
 | `case_report_section_sources` | 각 LIVE Section의 근거 연결 |
 | `case_report_sources` | FINAL/Snapshot Report의 근거 연결 |
 | `messages` | Customer Agent·고객·은행 담당자 메시지 |
@@ -53,7 +57,7 @@ Case Report AI
 | `actions` | 은행조치·Takeover·Recovery 등 작업기록 |
 | `voice_sessions` | case_id, session 상태, 참여자, 시작/종료 |
 | `voice_transcript_segments` | session_id, case_id, speaker, text, final 여부, 시간정보 |
-| `case_events` | Timeline Event, actor, type, payload, created_at |
+| `case_events` | Timeline Event, actor, type, payload, created_at — **Table과 CASE_CREATED만 구현** |
 | `official_contacts` | 기관명, 역할, 연락용도, 대표번호, 신고채널, 공식 URL |
 | `knowledge_sources` | RAG 원본문서 Registry |
 | `case_evidence` | Case에서 실제 사용한 RAG Chunk·주장·근거·검증상태 |

@@ -1,22 +1,36 @@
 # 작업 진행내역 · TODO
 
-> 기준 문서: [개발 구현 체크리스트 | Frontend · Backend API · MySQL](https://app.notion.com/p/3cdc753ff28a81f9b261c9d157543bac?pvs=204)  
-> 이 문서는 **노션에 표시된 체크 상태를 출발점**으로 사용한다. 노션에서 완료가 명시되지 않은 Backend/AI/DB 작업은 임의로 완료 처리하지 않는다.
+> 기준일: 2026-09-02. 이 문서는 **실제 Repository 코드와 실행 흐름**을 최우선 기준으로 사용한다. 노션·과거 체크 상태는 참고자료다.
 
 > 이 문서는 전체 범위의 기준 TODO다. 브랜치별 실제 진행상황과 작업 로그는 충돌 방지를 위해 `team_work/{ham|eom|lee}/todo.md`에만 기록한다.
 
-> 현재 진행 책임은 eom=`AI API·모델`, lee=`Frontend·General API·DB·통합`, ham=`PAUSED`다. 완료 체크는 담당자 개인 TODO와 테스트 기록을 기준으로 갱신한다.
+> 현재 책임은 A=eom `Backend·Case·MySQL`, B=lee `AI·Agent·RAG`, C=ham `Frontend·Realtime·통합`이다. 과거 구현 기여와 향후 책임을 구분한다.
 
 ---
 
 ## 0. 상태 정의
 
 ```text
-[x] DONE       = 노션에서 완료 체크됨
-[ ] TODO       = 노션에서 미완료
+[x] DONE       = 코드·Contract·테스트 근거가 확인됨
+[ ] TODO       = 실제 구현이 없음
 [-] PARTIAL    = 일부 화면/설계는 있으나 연동 미완료
-[?] UNKNOWN    = 노션만으로 진행상태 판단 불가
+[M] MOCK       = Mock/UI/localStorage만 존재
+[?] VERIFY     = 코드가 있으나 현재 환경에서 재검증 필요
 ```
+
+## 0.1 코드 감사 요약
+
+| 영역 | 현재 상태 | 향후 책임 |
+|---|---|---|
+| Analyze/List/Get·초기 LIVE Report | DONE | A |
+| MySQL Migration·Repository | DONE, 실제 환경 VERIFY | A |
+| Window ML·Context Feature·Risk | DONE, 인계 VERIFY | B |
+| Customer/Bank/Verification 업무 흐름 | MOCK/PARTIAL | B/C |
+| Message/Verification/Action API | TODO | A |
+| Agent·RAG·Brief update | TODO | B |
+| SSE/WebSocket·Browser E2E·Docker | TODO | C |
+
+> 아래 UI 완료 표시는 화면 존재를 뜻한다. Backend 연결 또는 Agent 구현 완료를 뜻하지 않는다. 새 실행 Backlog는 `team_work/00_task_catalog.md`와 개인 TODO가 우선한다.
 
 ---
 
@@ -121,9 +135,9 @@
 
 ### Core / Case
 
-- [ ] `POST /api/cases/analyze`
-- [ ] `GET /api/cases`
-- [ ] `GET /api/cases/:caseId`
+- [x] `POST /api/cases/analyze`
+- [x] `GET /api/cases`
+- [x] `GET /api/cases/:caseId`
 - [ ] `PATCH /api/cases/:caseId`
 - [ ] Shared Case State 조립
 - [ ] 역할/권한 검증
@@ -191,8 +205,8 @@
 ### Backend Orchestration
 
 - [ ] Frontend ↔ Backend
-- [ ] Backend ↔ AI API
-- [ ] Backend ↔ MySQL
+- [x] Backend ↔ AI API
+- [?] Backend ↔ MySQL — Adapter·과거 실행 기록 존재, 현재 환경 재검증 필요
 - [ ] Backend ↔ Realtime
 - [ ] Backend ↔ Voice Session
 - [ ] AI 결과 Schema Validation
@@ -205,10 +219,10 @@
 
 ### Diagnosis
 
-- [ ] `/ai/analyze/text`
-- [ ] `/ai/analyze/windows`
-- [ ] `/ai/features/extract`
-- [ ] `/ai/risk/predict`
+- [x] `/ai/analyze/text`
+- [x] `/ai/analyze/windows`
+- [x] `/ai/features/extract`
+- [x] `/ai/risk/predict`
 - [ ] Segment/Text Span evidence
 
 ### Case Report AI
@@ -266,21 +280,21 @@
 
 ### Core Tables
 
-- [ ] `cases`
-- [ ] `case_inputs`
-- [ ] `analysis_segments`
-- [ ] `context_features`
+- [x] `cases`
+- [x] `case_inputs`
+- [x] `analysis_segments`
+- [x] `context_features`
 - [ ] `messages`
 - [ ] `questions`
 - [ ] `verification_tasks`
 - [ ] `actions`
-- [ ] `case_events`
+- [-] `case_events` — Table과 `CASE_CREATED` 저장만 존재
 
 ### Reports
 
-- [ ] `case_reports`
+- [x] `case_reports`
 - [ ] `case_report_sources`
-- [ ] `case_report_sections`
+- [x] `case_report_sections`
 - [ ] `case_report_section_sources`
 - [ ] `question_options`
 - [ ] `progress_items`
@@ -329,10 +343,10 @@
 
 노션의 권장 개발 순서:
 
-- [ ] STEP 1 MySQL Schema + Migration
-- [ ] STEP 2 `/` 진단 + Analyze API
-- [ ] STEP 3 `/cases` + Case Detail API
-- [ ] STEP 4 Role Selector
+- [?] STEP 1 MySQL Schema + Migration — 구현·과거 실행 기록 존재, 현재 환경 재검증 필요
+- [x] STEP 2 `/` 진단 + Analyze API
+- [x] STEP 3 `/cases` + Case Detail API
+- [x] STEP 4 Role Selector
 - [ ] STEP 5 Customer Safety Room + messages/questions
 - [ ] STEP 6 Fraud Case Workspace + Question Queue
 - [ ] STEP 7 Verification Link

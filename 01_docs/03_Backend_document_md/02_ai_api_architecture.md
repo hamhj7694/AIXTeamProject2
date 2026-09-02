@@ -3,6 +3,8 @@
 > 기준 문서: [개발 구현 체크리스트 | Frontend · Backend API · MySQL](https://app.notion.com/p/3cdc753ff28a81f9b261c9d157543bac?pvs=204)  
 > 목적: 일반 Backend가 내부 호출하는 AI 분석 계층의 기능·입출력·연동 흐름을 정의한다.
 
+> **현재 구현 상태:** B=lee 책임 문서다. Full/Window 분석, Context Feature, ML Risk/Fusion과 초기 Context summary는 구현됐다. Case Report update/finalize, P0/P1/P2 질문, 3종 Agent, RAG, STT·Voice 기능은 목표 설계이며 아직 실행 코드가 없다. 기존 구현 기여자는 eom이며 향후 유지·추가개발 책임은 B=lee다.
+
 ---
 
 ## 1. AI API 역할

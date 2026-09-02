@@ -4,6 +4,8 @@
 > 대상 Frontend: `02_workspace/frontend`  
 > 목적: 현재 Mock 기반 CSR 화면을 일반 Backend의 Case 중심 API·MySQL·AI API·Realtime Delta 구조에 안전하게 연결하기 위한 화면/API/상태 스키마를 정의한다.
 
+> 현재 코드 기준: `caseApi.ts`의 Analyze/List/Get과 Case 목록·상세는 실제 REST를 사용한다. Customer, Manager Room, Verification, Human Takeover와 실시간 동기화는 아직 Mock/localStorage다. 향후 책임은 A=eom(Public API), B=lee(AI Output), C=ham(Frontend·Realtime)이다.
+
 ---
 
 ## 1. 적용 기준과 현재 상태
@@ -23,7 +25,7 @@
 
 - `/cases/:caseId/bank`는 **v2 Manager Room**을 기본 은행 화면으로 사용한다.
 - `bank-v1`은 비교·보존용이며 신규 Backend 연결의 우선 대상이 아니다.
-- 현재 `src/data/mock/**`, `managerRoomMock.ts`, `caseApi.ts`, `localStorage`는 모두 임시 데이터 계층이다.
+- 현재 `src/data/mock/**`, `managerRoomMock.ts`, `localStorage`는 임시 데이터 계층이다. `caseApi.ts`의 Analyze/List/Get은 실제 REST Client이며, 반환값을 기존 UI 타입으로 변환하는 Adapter 역할도 한다.
 - Backend 연결 시 화면 Component가 직접 `fetch`하지 않고, `src/services/`의 API Client와 Feature별 상태 Hook을 통해 호출한다.
 
 ### Route 정합성 결정
@@ -64,12 +66,13 @@ React CSR
 
 | 연결 구간 | 소유자 | 최종 편집 Contract |
 |---|---|---|
-| Frontend ↔ General API | lee | `contracts/public_api/**` |
-| General API Workflow·DB·Realtime | lee | 공개 응답·DB Migration·Event |
-| General API ↔ AI API | eom 제공 / lee 소비 | `contracts/ai_internal/**`는 eom 최종 편집 |
-| AI 모델·LLM·RAG·STT ↔ AI API | eom | AI Schema·Fixture·Model/Prompt version |
+| Frontend ↔ General API | C 소비 / A 제공 | `contracts/public_api/**`는 A 최종 편집 |
+| General API Workflow·DB·Event 저장 | A | 공개 응답·DB Migration·Event |
+| General API ↔ AI API | B 제공 / A 소비 | `contracts/ai_internal/**`는 B 최종 편집 |
+| AI 모델·LLM·RAG·STT ↔ AI API | B | AI Schema·Fixture·Model/Prompt version |
+| Realtime Client·화면 반영·E2E | C | Event 소비·Adapter·Browser E2E |
 
-lee는 eom이 제공한 AI Fixture로 Frontend↔General API 연결을 먼저 완성할 수 있다. 실제 AI API가 준비되면 동일 내부 Contract를 유지한 채 Client 설정만 전환한다. ham은 현재 연결 작업에서 제외한다.
+C는 A의 Public API와 B의 Fixture를 사용해 화면을 병렬 연결한다. 실제 AI API가 준비되면 동일 내부 Contract를 유지한 채 A의 Client 설정만 전환한다.
 
 ---
 
@@ -466,7 +469,7 @@ SSE와 WebSocket 중 최종 기술은 별도 결정 사항이다. Event Envelope
 
 ## 10. 구현 체크리스트
 
-- [ ] `caseApi.ts`를 Mock 반환에서 REST Client로 전환
+- [x] `caseApi.ts` Analyze/List/Get REST Client 전환
 - [ ] `CaseBundle`, `DeltaEvent`, `ApiError` TypeScript 타입 정의
 - [ ] `/api/cases/:caseId/bundle?view=` Projection API 구현
 - [ ] `/api/cases/:caseId/stream` 또는 동등 Stream 확정

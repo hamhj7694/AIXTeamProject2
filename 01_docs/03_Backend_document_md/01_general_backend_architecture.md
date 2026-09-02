@@ -3,6 +3,8 @@
 > 기준 문서: [개발 구현 체크리스트 | Frontend · Backend API · MySQL](https://app.notion.com/p/3cdc753ff28a81f9b261c9d157543bac?pvs=204)  
 > 목적: CSR Frontend, AI API, MySQL, Vector/RAG 결과, 음성상담, 실시간 이벤트를 연결하는 **일반 Backend 통합·조정 계층**의 구현 범위를 정의한다.
 
+> **현재 구현 상태:** A=eom 책임 문서다. 현재 `POST /api/cases/analyze`, Case List/Get, 초기 LIVE Report 조회, Memory/MySQL Repository와 `CASE_CREATED` 저장까지 구현됐다. 아래 Message·Question·Verification·Action·상태 PATCH·Realtime·Voice 항목은 목표 설계이며 아직 구현 완료가 아니다.
+
 ---
 
 ## 1. 핵심 역할
