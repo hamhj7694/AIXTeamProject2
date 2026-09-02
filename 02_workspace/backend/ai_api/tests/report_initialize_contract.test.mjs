@@ -26,6 +26,8 @@ const responseSchema = await readJson(path.join(contractDirectory, 'report_initi
 const requestFixture = await readJson(path.join(fixtureDirectory, 'report_initialize_request.json'));
 const responseFixture = await readJson(path.join(fixtureDirectory, 'report_initialize_response.json'));
 
+assert.equal(requestSchema['x-contract-status'], 'FUTURE_DRAFT_PENDING_CASE_DTO');
+assert.equal(responseSchema['x-contract-status'], 'FUTURE_DRAFT_PENDING_CASE_DTO');
 assert.equal(requestSchema.properties.schema_version.const, '1.0');
 assert.equal(responseSchema.properties.schema_version.const, '1.0');
 assert.equal(requestFixture.schema_version, '1.0');

@@ -23,6 +23,15 @@ class EventExtraction:
     warnings: list[str] = field(default_factory=list)
 
 
+def _openai_timeout_seconds() -> float:
+    """OpenAI 호출이 데모 흐름 전체를 대기시키지 않도록 유효한 timeout만 사용한다."""
+    try:
+        timeout = float(os.getenv("OPENAI_TIMEOUT_SECONDS", "20"))
+    except ValueError:
+        return 20.0
+    return timeout if timeout > 0 else 20.0
+
+
 def parse_turns(text: str) -> list[str]:
     turns: list[str] = []
     for line in str(text).splitlines():
@@ -89,7 +98,9 @@ async def extract_events(text: str) -> EventExtraction:
     if not os.getenv("OPENAI_API_KEY"):
         raise RuntimeError("OPENAI_API_KEY가 설정되지 않아 실제 LLM 분석을 시작할 수 없습니다.")
 
-    client = AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
+    client = AsyncOpenAI(
+        api_key=os.environ["OPENAI_API_KEY"], timeout=_openai_timeout_seconds(),
+    )
     events: list[ExtractedEvent] = []
     successful: list[int] = []
     warnings: list[str] = []
@@ -157,7 +168,9 @@ async def extract_full_context(text: str) -> ContextResult:
         return build_context_from_events(_fixture_events(parse_turns(text)))
     if not os.getenv("OPENAI_API_KEY"):
         raise RuntimeError("OPENAI_API_KEY가 없습니다.")
-    client = AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
+    client = AsyncOpenAI(
+        api_key=os.environ["OPENAI_API_KEY"], timeout=_openai_timeout_seconds(),
+    )
     response = await client.responses.create(
         model=os.getenv("OPENAI_CONTEXT_MODEL", os.getenv("OPENAI_EVENT_MODEL", "gpt-4o-mini")),
         instructions=(
