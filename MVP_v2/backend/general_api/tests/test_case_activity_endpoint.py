@@ -34,6 +34,7 @@ class CaseActivityEndpointTest(unittest.TestCase):
     def test_create_message_returns_public_message(self) -> None:
         self.repository.append_message.return_value = {
             "message_id": "msg-1", "case_id": "VP-ACTIVITY", "actor_type": "CUSTOMER",
+            "actor_user_id": "customer-1", "actor_display_name": "고객",
             "content": "송금하지 않았습니다.", "client_request_id": "web-1", "created_at": "2026-09-02T01:00:00+00:00",
         }
 
@@ -43,6 +44,8 @@ class CaseActivityEndpointTest(unittest.TestCase):
         })
 
         self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["actor_user_id"], "customer-1")
+        self.assertEqual(response.json()["actor_display_name"], "고객")
         self.assertEqual(response.json()["channel"], "CUSTOMER")
         self.assertEqual(response.json()["audience"], "CUSTOMER")
         self.assertEqual(response.json()["mentions"], [])

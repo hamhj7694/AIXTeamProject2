@@ -117,6 +117,15 @@ export interface CustomerQuestionCandidate {
   allow_free_text?: boolean;
 }
 
+export interface CaseSupportSnapshot {
+  case_id: string;
+  available: boolean;
+  case_brief: { summary: string; incident_type: string; risk_level: string; risk_score: number; next_checks: string[] } | null;
+  recommended_questions: CustomerQuestionCandidate[];
+  unresolved_items: Array<{ target_field: string; description: string; priority: 'P0' | 'P1' | 'P2' }>;
+  warnings: string[];
+}
+
 export interface CustomerQuestion extends CustomerQuestionCandidate {
   case_id: string;
   source?: 'BANK_SELECTED' | 'CUSTOMER_AGENT';
@@ -207,6 +216,8 @@ export const mvpChatApi = {
     request(`/api/cases/${encodeURIComponent(caseId)}/ai/messages/${encodeURIComponent(messageId)}/share`, { method: 'POST', body: JSON.stringify({ shared_by_user_id: sharedBy.user_id, shared_by_display_name: sharedBy.display_name }) }),
   listCustomerQuestionCandidates: (caseId: string): Promise<CustomerQuestionCandidate[]> =>
     request(`/api/cases/${encodeURIComponent(caseId)}/customer-question-candidates`),
+  getCaseSupportSnapshot: (caseId: string): Promise<CaseSupportSnapshot> =>
+    request(`/api/cases/${encodeURIComponent(caseId)}/ai/case-support`),
   listCustomerQuestions: (caseId: string, view: 'bank' | 'customer' = 'bank'): Promise<CustomerQuestion[]> =>
     request(`/api/cases/${encodeURIComponent(caseId)}/customer-questions?view=${view}`),
   queueCustomerQuestions: (caseId: string, questions: CustomerQuestionCandidate[], requestedBy: string): Promise<CustomerQuestion[]> =>

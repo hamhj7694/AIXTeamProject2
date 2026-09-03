@@ -23,6 +23,31 @@ class PublicQuestionCandidateResponse(PublicWorkflowModel):
     allow_free_text: bool = True
 
 
+class PublicCaseSupportBrief(PublicWorkflowModel):
+    """화면에 필요한 Case-support Brief만 노출하는 공개 투영이다."""
+    summary: str
+    incident_type: str
+    risk_level: str
+    risk_score: float
+    next_checks: list[str] = Field(default_factory=list)
+
+
+class PublicUnresolvedItemResponse(PublicWorkflowModel):
+    target_field: str
+    description: str
+    priority: Literal["P0", "P1", "P2"]
+
+
+class PublicCaseSupportSnapshotResponse(PublicWorkflowModel):
+    """General API가 AI 내부 snapshot을 화면 안전 형태로 변환한 결과다."""
+    case_id: str
+    available: bool
+    case_brief: PublicCaseSupportBrief | None = None
+    recommended_questions: list[PublicQuestionCandidateResponse] = Field(default_factory=list)
+    unresolved_items: list[PublicUnresolvedItemResponse] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
 class PublicQueueCustomerQuestionsRequest(PublicWorkflowModel):
     questions: list[PublicQuestionCandidateResponse] = Field(min_length=1, max_length=10)
     requested_by: str = Field(min_length=1, max_length=80)

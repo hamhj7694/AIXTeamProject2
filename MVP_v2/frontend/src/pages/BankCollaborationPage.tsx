@@ -10,7 +10,7 @@ import type { WorkCardDescriptor, WorkCardType } from '../features/mvp-chat/work
 import { useCaseSyncRefresh } from '../features/case-sync/useCaseSyncRefresh';
 import { caseWorkflowApi } from '../services/caseWorkflowApi';
 import { caseApi, type CaseDetail } from '../services/caseApi';
-import { mvpChatApi, type CaseBundleV2, type CaseMember, type CasePresence, type MessageChannel, type MvpMessage } from '../services/mvpChatApi';
+import { mvpChatApi, type CaseBundleV2, type CaseMember, type CasePresence, type CaseSupportSnapshot, type MessageChannel, type MvpMessage } from '../services/mvpChatApi';
 
 const currentUser = { user_id: 'mvp-v2-current-user', display_name: '현재 사용자', role: 'CHAT_OPERATOR' as const };
 type BankView = 'COLLABORATION' | 'CUSTOMER' | 'AI_PRIVATE';
@@ -78,10 +78,19 @@ export const BankCollaborationPage: React.FC = () => {
   const [facts, setFacts] = useState<import('../services/mvpChatApi').CaseFact[]>([]);
   const [activeCard, setActiveCard] = useState<WorkCardDescriptor | null>(null);
   const [caseDetail, setCaseDetail] = useState<CaseDetail | null>(null);
+  const [caseSupport, setCaseSupport] = useState<CaseSupportSnapshot | null>(null);
 
   const load = useCallback(async () => {
     const selectedChannel: MessageChannel | undefined = view === 'CUSTOMER' ? 'CUSTOMER' : undefined;
-    const [nextBundle, allMessages, nextMembers, nextPresence, nextFacts, nextCaseDetail] = await Promise.all([mvpChatApi.getBundle(caseId, 'bank'), mvpChatApi.listMessages(caseId, selectedChannel), mvpChatApi.listMembers(caseId), mvpChatApi.listPresence(caseId), mvpChatApi.listCaseFacts(caseId), caseApi.get(caseId)]);
+    const [nextBundle, allMessages, nextMembers, nextPresence, nextFacts, nextCaseDetail, nextCaseSupport] = await Promise.all([
+      mvpChatApi.getBundle(caseId, 'bank'),
+      mvpChatApi.listMessages(caseId, selectedChannel),
+      mvpChatApi.listMembers(caseId),
+      mvpChatApi.listPresence(caseId),
+      mvpChatApi.listCaseFacts(caseId),
+      caseApi.get(caseId),
+      mvpChatApi.getCaseSupportSnapshot(caseId).catch(() => null),
+    ]);
     const nextMessages = view === 'COLLABORATION'
       ? allMessages.filter((message) => message.channel === 'TEAM' || (message.message_kind === 'AI_RESPONSE' && message.visibility === 'BANK_INTERNAL'))
       : view === 'AI_PRIVATE'
@@ -91,7 +100,7 @@ export const BankCollaborationPage: React.FC = () => {
           || (message.message_kind === 'SYSTEM_EVENT' && message.private_owner_user_id === null)
         ))
         : allMessages;
-    setBundle(nextBundle); setMessages(nextMessages); setMembers(nextMembers); setPresence(nextPresence); setFacts(nextFacts); setCaseDetail(nextCaseDetail);
+    setBundle(nextBundle); setMessages(nextMessages); setMembers(nextMembers); setPresence(nextPresence); setFacts(nextFacts); setCaseDetail(nextCaseDetail); setCaseSupport(nextCaseSupport);
   }, [caseId, view]);
   useCaseSyncRefresh(caseId, load);
   useEffect(() => { mvpChatApi.upsertMember(caseId, currentUser).then(() => load()).catch((reason) => setError(reason instanceof Error ? reason.message : '은행 협업 화면을 불러오지 못했습니다.')); }, [caseId, load]);
@@ -100,7 +109,8 @@ export const BankCollaborationPage: React.FC = () => {
   useEffect(() => { setReports(readReports(caseId)); }, [caseId]);
 
   const currentCase: Record<string, unknown> = { ...(bundle?.case ?? {}), fraud_type: caseDetail?.type, summary: caseDetail?.summary };
-  const brief = String(currentCase.initial_brief ?? 'Case 정보를 불러오는 중입니다.');
+  const brief = caseSupport?.case_brief?.summary ?? String(currentCase.initial_brief ?? 'Case 정보를 불러오는 중입니다.');
+  const unresolvedItems = caseSupport?.unresolved_items ?? [];
   const risks = (bundle?.verification_tasks ?? []).filter((item) => item.status !== 'COMPLETED');
   const owner = members.find((member) => member.role === 'CASE_OWNER');
   const emergencyAlertMessage = [...(bundle?.recent_messages ?? [])].reverse().find((message) =>
@@ -111,6 +121,7 @@ export const BankCollaborationPage: React.FC = () => {
     !owner ? '메인 담당자를 배정해 주세요.' : null,
     currentCase.victim_transfer_status === 'UNKNOWN' ? '고객 상담에서 피해 여부와 실제 피해액을 확인해 주세요.' : null,
     currentCase.status !== 'CLOSED' && risks.length === 0 ? '기관 검증 화면에서 사칭 주장에 대한 확인 요청을 남겨 주세요.' : null,
+    ...unresolvedItems.map((item) => `AI 확인 필요 (${item.priority}): ${item.description}`),
   ].filter((value): value is string => Boolean(value));
   const onlineCount = useMemo(() => presence.filter((item) => item.presence === 'VIEWING' || item.presence === 'TYPING').length, [presence]);
   const visibleReports = reports.filter((item) => !item.deletedAt);

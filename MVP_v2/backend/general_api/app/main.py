@@ -59,6 +59,9 @@ from contracts.public_api.case_workflow import (
     PublicCustomerQuestionView,
     PublicCustomerVerificationResult,
     PublicQuestionCandidateResponse,
+    PublicCaseSupportBrief,
+    PublicCaseSupportSnapshotResponse,
+    PublicUnresolvedItemResponse,
     PublicQueueCustomerQuestionsRequest,
     PublicUpdateVerificationRequest,
     PublicVerificationResponse,
@@ -361,12 +364,65 @@ def build_customer_question_candidates(case: dict, queued: list[dict]) -> list[P
     ]
 
 
+def build_question_recommendation_context(facts: list[dict], questions: list[dict]) -> dict:
+    """답변 수신과 사실 확정을 분리한 채 AI 질문 중복만 막는다."""
+    valid_fields = {
+        "transfer_status", "transfer_purpose", "claimed_organization", "incident_claim",
+        "personal_information_exposure", "authentication_information_exposure",
+    }
+    return {
+        "confirmed_fields": [item["field"] for item in facts if item.get("status") == "CONFIRMED" and item.get("field") in valid_fields],
+        "pending_question_fields": [item["target_field"] for item in questions if item.get("status") in {"PENDING", "ASKED"} and item.get("target_field") in valid_fields],
+        "answered_question_ids": [item["question_id"] for item in questions if item.get("status") == "ANSWERED"],
+    }
+
+
+def to_public_case_support_snapshot(case_id: str, payload: dict, *, available: bool) -> PublicCaseSupportSnapshotResponse:
+    brief = payload.get("case_brief") or None
+    return PublicCaseSupportSnapshotResponse(
+        case_id=case_id, available=available,
+        case_brief=PublicCaseSupportBrief(
+            summary=brief["summary"], incident_type=brief["incident_type"],
+            risk_level=brief["risk_level"], risk_score=brief["risk_score"], next_checks=brief.get("next_checks", []),
+        ) if brief else None,
+        recommended_questions=[PublicQuestionCandidateResponse(
+            question_id=item["question_id"], target_field=item["target_field"],
+            question_text=item["question"], reason=item["reason"], priority=item["priority"], options=[],
+        ) for item in payload.get("recommended_questions", [])],
+        unresolved_items=[PublicUnresolvedItemResponse.model_validate(item) for item in payload.get("unresolved_items", [])],
+        warnings=payload.get("warnings", []),
+    )
+
+
+async def get_case_support_snapshot(case_id: str) -> PublicCaseSupportSnapshotResponse:
+    case = await repository.get(case_id)
+    if case is None:
+        raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."})
+    facts, questions = await repository.list_case_facts(case_id), await repository.list_customer_questions(case_id)
+    try:
+        payload = await service.ai_client.build_case_support_snapshot({
+            "case_id": case_id, "diagnosis": case.get("diagnosis"),
+            "question_context": build_question_recommendation_context(facts, questions),
+        })
+        return to_public_case_support_snapshot(case_id, payload, available=True)
+    except AiServiceError as exc:
+        return PublicCaseSupportSnapshotResponse(case_id=case_id, available=False, warnings=[str(exc)])
+
+
+@app.get("/api/cases/{case_id}/ai/case-support", response_model=PublicCaseSupportSnapshotResponse)
+async def read_case_support_snapshot(case_id: str) -> PublicCaseSupportSnapshotResponse:
+    return await get_case_support_snapshot(case_id)
+
+
 @app.get("/api/cases/{case_id}/customer-question-candidates", response_model=list[PublicQuestionCandidateResponse])
 async def list_customer_question_candidates(case_id: str) -> list[PublicQuestionCandidateResponse]:
     case = await repository.get(case_id)
     if case is None:
         raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."})
-    return build_customer_question_candidates(case, await repository.list_customer_questions(case_id))
+    queued = await repository.list_customer_questions(case_id)
+    snapshot = await get_case_support_snapshot(case_id)
+    # AI 장애 시에도 기존 deterministic 후보로 고객 확인 흐름을 멈추지 않는다.
+    return snapshot.recommended_questions if snapshot.available else build_customer_question_candidates(case, queued)
 
 
 @app.get("/api/cases/{case_id}/customer-questions", response_model=list[PublicCustomerQuestionResponse | PublicCustomerQuestionView])
@@ -787,6 +843,9 @@ async def get_case_bundle(case_id: str, view: Literal["entry", "customer", "bank
     verifications = [to_public_verification(item) for item in await repository.list_verifications(case_id)]
     customer_verification_results: list[PublicCustomerVerificationResult] = []
     events = [to_public_event(item).model_dump(mode="json") for item in await repository.list_events(case_id)]
+    # Customer view hides event details, but still needs the Case activity cursor
+    # to identify the latest synchronized state.
+    cursor = str(events[-1]["event_id"]) if events else None
     voice = await repository.get_voice_session(case_id)
     if view == "customer":
         customer_verification_results = [
@@ -807,7 +866,7 @@ async def get_case_bundle(case_id: str, view: Literal["entry", "customer", "bank
         questions=[], progress_items=[], verification_tasks=verifications,
         customer_verification_results=customer_verification_results,
         recent_messages=messages[-50:], recent_actions=actions[-50:], recent_events=events[-50:],
-        voice_session=PublicVoiceSessionResponse.model_validate(voice) if voice else None, cursor=str(events[-1]["event_id"]) if events else None,
+        voice_session=PublicVoiceSessionResponse.model_validate(voice) if voice else None, cursor=cursor,
     )
 
 

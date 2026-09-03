@@ -5,8 +5,10 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 
+from contracts.ai_internal.case_snapshot import CaseSnapshotAiInput, CaseSnapshotPresentationFixture
 from contracts.diagnosis import AnalyzeTextRequest, DiagnosisResult
 
+from .domains.case_support import CaseSnapshotAiAdapter
 from .domains.diagnosis import DiagnosisService
 
 
@@ -14,6 +16,7 @@ load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=False)
 
 app = FastAPI(title="AI Independent Verification - Diagnosis AI API", version="0.1.0")
 service = DiagnosisService()
+case_snapshot_adapter = CaseSnapshotAiAdapter()
 
 
 @app.get("/health")
@@ -29,6 +32,18 @@ async def analyze_text(request: AnalyzeTextRequest) -> DiagnosisResult:
         raise HTTPException(status_code=400, detail={"code": "INVALID_INPUT", "message": str(exc)}) from exc
     except Exception as exc:
         raise HTTPException(status_code=503, detail={"code": "AI_ANALYSIS_FAILED", "message": str(exc)}) from exc
+
+
+@app.post("/ai/case-support/snapshot", response_model=CaseSnapshotPresentationFixture)
+async def build_case_support_snapshot(request: CaseSnapshotAiInput) -> CaseSnapshotPresentationFixture:
+    """기존 진단 결과를 담당자 검토용 Brief·질문 후보로 변환하는 독립 내부 API."""
+    try:
+        return case_snapshot_adapter.build_presentation(request.model_dump(mode="python"))
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "AI_CASE_SUPPORT_FAILED", "message": str(exc)},
+        ) from exc
 
 
 @app.post("/ai/analyze/windows", response_model=list)

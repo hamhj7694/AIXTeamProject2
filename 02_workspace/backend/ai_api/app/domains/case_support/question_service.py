@@ -5,6 +5,7 @@ from contracts.ai_internal.mvp_workflow import (
     CaseBrief,
     QuestionCandidate,
     QuestionPriority,
+    QuestionRecommendationContext,
     TargetField,
 )
 from contracts.diagnosis import Evidence
@@ -57,22 +58,31 @@ class QuestionIntelligenceService:
 
     prompt_version = QUESTION_PROMPT_VERSION
 
-    def recommend_questions(self, brief: CaseBrief) -> list[QuestionCandidate]:
-        """unresolved_items만 사용해 중복 없는 P0/P1 후보를 만든다."""
+    def recommend_questions(
+        self,
+        brief: CaseBrief,
+        question_context: QuestionRecommendationContext | None = None,
+    ) -> list[QuestionCandidate]:
+        """확인·대기 Field와 이미 사용한 동일 질문을 제외해 후보를 만든다."""
         candidates: list[QuestionCandidate] = []
-        seen_fields: set[TargetField] = set()
+        seen_question_ids: set[str] = set()
+        context = question_context or QuestionRecommendationContext()
+        excluded_fields = context.excluded_target_fields()
 
         for item in brief.unresolved_items:
-            if item.target_field in seen_fields:
+            if item.target_field in excluded_fields:
                 continue
             spec = _QUESTION_SPECS.get(item.target_field)
             if spec is None:
                 continue
-            seen_fields.add(item.target_field)
+            question_id = f"q_{item.target_field.value}"
+            if question_id in seen_question_ids or context.has_answered_question(question_id):
+                continue
+            seen_question_ids.add(question_id)
             priority, question, default_reason, event_families = spec
             candidates.append(
                 QuestionCandidate(
-                    question_id=f"q_{item.target_field.value}",
+                    question_id=question_id,
                     priority=priority,
                     target_field=item.target_field,
                     question=question,
