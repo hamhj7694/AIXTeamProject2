@@ -27,7 +27,7 @@ class CaseSnapshotAiAdapter:
         self._workflow = workflow or MvpWorkflowService()
 
     def adapt(self, snapshot: Mapping[str, Any]) -> CaseSnapshotAiInput:
-        warnings: list[str] = []
+        warnings = self._warnings_from(snapshot.get("warnings"))
         case_id = self._non_empty_string(snapshot.get("case_id"))
         if case_id is None:
             warnings.append("Case snapshot에 case_id가 없어 AI 결과를 사건에 연결할 수 없습니다.")
@@ -82,6 +82,12 @@ class CaseSnapshotAiAdapter:
     @staticmethod
     def _non_empty_string(value: Any) -> str | None:
         return value.strip() if isinstance(value, str) and value.strip() else None
+
+    @staticmethod
+    def _warnings_from(value: Any) -> list[str]:
+        if not isinstance(value, list):
+            return []
+        return [item.strip() for item in value if isinstance(item, str) and item.strip()]
 
     @staticmethod
     def _unique(values: list[str]) -> list[str]:
