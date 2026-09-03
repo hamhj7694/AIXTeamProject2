@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import os
+import hashlib
+import mimetypes
+import re
+from datetime import datetime, timezone
 from uuid import uuid4
 from pathlib import Path
 from typing import Literal
@@ -10,7 +14,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 from contracts.diagnosis import AnalyzeTextRequest
@@ -24,9 +28,12 @@ from contracts.public_api.case_read import PublicCaseReadResponse, to_public_cas
 from contracts.public_api.case_transition import PublicCasePatchRequest
 from contracts.public_api.case_activity import (
     PublicCaseEventResponse,
+    PublicAttachmentResponse,
     PublicCreateMessageRequest,
+    PublicCustomerEmergencyRequest,
     PublicMessageResponse,
     to_public_event,
+    to_public_attachment,
     to_public_message,
 )
 from contracts.public_api.case_workflow import (
@@ -50,6 +57,7 @@ from contracts.public_api.case_workflow import (
     PublicCreateVerificationRequest,
     PublicCustomerQuestionResponse,
     PublicCustomerQuestionView,
+    PublicCustomerVerificationResult,
     PublicQuestionCandidateResponse,
     PublicCaseSupportBrief,
     PublicCaseSupportSnapshotResponse,
@@ -57,6 +65,8 @@ from contracts.public_api.case_workflow import (
     PublicQueueCustomerQuestionsRequest,
     PublicUpdateVerificationRequest,
     PublicVerificationResponse,
+    to_public_customer_question,
+    to_public_customer_question_view,
     to_public_action,
     to_public_verification,
 )
@@ -111,6 +121,55 @@ app.add_middleware(
     allow_headers=["*"],
 )
 repository = build_repository()
+
+ATTACHMENT_STORAGE_ROOT = Path(os.getenv("ATTACHMENT_STORAGE_ROOT", str(Path(__file__).resolve().parents[2] / "data" / "uploads"))).resolve()
+MAX_ATTACHMENT_BYTES = int(os.getenv("MAX_ATTACHMENT_BYTES", str(10 * 1024 * 1024)))
+ALLOWED_ATTACHMENT_TYPES = {
+    "image/jpeg": ".jpg", "image/png": ".png", "image/gif": ".gif", "image/webp": ".webp",
+    "application/pdf": ".pdf", "text/plain": ".txt", "text/csv": ".csv", "application/json": ".json",
+    "application/msword": ".doc", "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+    "application/vnd.ms-excel": ".xls", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+}
+
+
+def _clean_file_name(value: str) -> str:
+    name = Path(value).name
+    name = re.sub(r"[\x00-\x1f\x7f]", "", name).strip()
+    return name[:160] or "attachment"
+
+
+def _resolve_attachment_type(file_name: str, content_type: str | None) -> tuple[str, str]:
+    candidate = (content_type or "").split(";", 1)[0].strip().lower()
+    if candidate not in ALLOWED_ATTACHMENT_TYPES:
+        candidate = (mimetypes.guess_type(file_name)[0] or "").lower()
+    extension = ALLOWED_ATTACHMENT_TYPES.get(candidate)
+    if not extension:
+        raise HTTPException(status_code=415, detail={"code": "ATTACHMENT_TYPE_NOT_ALLOWED", "message": "지원하지 않는 파일 형식입니다."})
+    return candidate, extension
+
+
+def _has_valid_signature(mime_type: str, content: bytes) -> bool:
+    signatures = {
+        "image/jpeg": lambda value: value.startswith(b"\xff\xd8\xff"),
+        "image/png": lambda value: value.startswith(b"\x89PNG\r\n\x1a\n"),
+        "image/gif": lambda value: value.startswith((b"GIF87a", b"GIF89a")),
+        "image/webp": lambda value: len(value) >= 12 and value[:4] == b"RIFF" and value[8:12] == b"WEBP",
+        "application/pdf": lambda value: value.startswith(b"%PDF-"),
+        "application/msword": lambda value: value.startswith(b"\xd0\xcf\x11\xe0"),
+        "application/vnd.ms-excel": lambda value: value.startswith(b"\xd0\xcf\x11\xe0"),
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": lambda value: value.startswith(b"PK\x03\x04"),
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": lambda value: value.startswith(b"PK\x03\x04"),
+    }
+    validator = signatures.get(mime_type)
+    if validator:
+        return validator(content)
+    if mime_type.startswith("text/") or mime_type == "application/json":
+        try:
+            content.decode("utf-8")
+            return True
+        except UnicodeDecodeError:
+            return False
+    return True
 service = AnalyzeCaseService(HttpDiagnosisAiClient(), repository)
 
 
@@ -287,19 +346,20 @@ def build_customer_question_candidates(case: dict, queued: list[dict]) -> list[P
     """Deterministic MVP candidates. AI may replace this source, not the queue contract."""
     already_handled = {item["target_field"] for item in queued if item.get("status") in {"PENDING", "ASKED", "ANSWERED"}}
     fields = [
-        ("victim_transfer_status", "현재 송금하거나 이체한 금액이 있나요?", "피해 여부와 피해 금액을 먼저 확인해야 합니다.", "P0", ["없음", "있음", "잘 모르겠어요"]),
-        ("remote_control_app", "휴대폰에 원격 제어 또는 화면 공유 앱을 설치하라는 안내를 받으셨나요?", "추가 피해 가능성을 확인해야 합니다.", "P0", ["설치함", "설치하지 않음", "잘 모르겠어요"]),
-        ("credential_exposure", "비밀번호, 인증번호 또는 신분증 정보를 전달하셨나요?", "계정·인증정보 노출 여부를 확인해야 합니다.", "P1", ["전달함", "전달하지 않음", "잘 모르겠어요"]),
-        ("impersonated_institution", "상대방이 어느 기관이나 은행을 사칭했는지 알려주실 수 있나요?", "공식 채널 검증 대상을 정해야 합니다.", "P1", []),
+        ("victim_transfer_status", "현재 송금하거나 이체한 금액이 있나요?", "피해 여부와 피해 금액을 먼저 확인해야 합니다.", "안전을 위해 피해 발생 여부를 가장 먼저 확인합니다.", "P0", ["없음", "있음", "잘 모르겠어요"]),
+        ("remote_control_app", "휴대폰에 원격 제어 또는 화면 공유 앱을 설치하라는 안내를 받으셨나요?", "추가 피해 가능성을 확인해야 합니다.", "휴대폰 제어 가능성을 확인해 추가 피해를 막기 위한 질문입니다.", "P0", ["설치함", "설치하지 않음", "잘 모르겠어요"]),
+        ("credential_exposure", "비밀번호, 인증번호 또는 신분증 정보를 전달하셨나요?", "계정·인증정보 노출 여부를 확인해야 합니다.", "계정과 개인정보를 보호하기 위해 전달한 정보가 있는지 확인합니다.", "P1", ["전달함", "전달하지 않음", "잘 모르겠어요"]),
+        ("impersonated_institution", "상대방이 어느 기관이나 은행을 사칭했는지 알려주실 수 있나요?", "공식 채널 검증 대상을 정해야 합니다.", "상대방의 주장을 공식 채널에서 확인하기 위한 질문입니다.", "P1", []),
     ]
     if case.get("victim_transfer_status") != "UNKNOWN":
         already_handled.add("victim_transfer_status")
     return [
         PublicQuestionCandidateResponse(
             question_id=f"candidate-{target_field}", target_field=target_field,
-            question_text=text, reason=reason, priority=priority, options=options,
+            question_text=text, reason=reason, customer_explanation=customer_explanation,
+            priority=priority, options=options, answer_mode="CHOICE_OR_TEXT", allow_free_text=True,
         )
-        for target_field, text, reason, priority, options in fields
+        for target_field, text, reason, customer_explanation, priority, options in fields
         if target_field not in already_handled
     ]
 
@@ -370,8 +430,8 @@ async def list_customer_questions(case_id: str, view: Literal["bank", "customer"
     await require_case(case_id)
     items = await repository.list_customer_questions(case_id)
     if view == "customer":
-        return [PublicCustomerQuestionView.model_validate(item) for item in items]
-    return [PublicCustomerQuestionResponse.model_validate(item) for item in items]
+        return [to_public_customer_question_view(item) for item in items]
+    return [to_public_customer_question(item) for item in items]
 
 
 @app.post("/api/cases/{case_id}/customer-questions", response_model=list[PublicCustomerQuestionResponse], status_code=201)
@@ -384,7 +444,7 @@ async def queue_customer_questions(case_id: str, request: PublicQueueCustomerQue
     except KeyError as exc:
         raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."}) from exc
     await dispatch_next_customer_question_message(case_id)
-    return [PublicCustomerQuestionResponse.model_validate(item) for item in items]
+    return [to_public_customer_question(item) for item in items]
 
 
 async def dispatch_next_customer_question_message(case_id: str) -> PublicMessageResponse | None:
@@ -412,12 +472,12 @@ async def answer_customer_question(case_id: str, question_id: str, request: Publ
             "content": request.raw_answer, "channel": "CUSTOMER", "audience": "CUSTOMER",
             "visibility": "CUSTOMER", "message_kind": "CHAT", "mentions": [], "log_event": False,
         })
-        answered = await repository.answer_customer_question(case_id, question_id, message["message_id"])
+        answered = await repository.answer_customer_question(case_id, question_id, message["message_id"], request.raw_answer)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail={"code": "CUSTOMER_QUESTION_NOT_FOUND", "message": "응답 대기 중인 질문을 찾을 수 없습니다."}) from exc
     await repository.propose_case_fact(case_id, question_id, request.raw_answer, message["message_id"])
     await dispatch_next_customer_question_message(case_id)
-    return PublicCustomerQuestionResponse.model_validate(answered)
+    return to_public_customer_question(answered)
 
 
 @app.get("/api/cases/{case_id}/facts", response_model=list[PublicCaseFactResponse])
@@ -465,6 +525,92 @@ async def delete_personal_note(case_id: str, note_id: str, author_id: str) -> No
         raise HTTPException(status_code=404, detail={"code": "PERSONAL_NOTE_NOT_FOUND", "message": "개인 메모를 찾을 수 없습니다."}) from exc
 
 
+@app.post("/api/cases/{case_id}/attachments", response_model=PublicAttachmentResponse, status_code=201)
+async def upload_case_attachment(
+    case_id: str,
+    request: Request,
+    file_name: str,
+    uploaded_by: str,
+    visibility: Literal["BANK_INTERNAL", "CUSTOMER", "AI_PRIVATE"] = "CUSTOMER",
+) -> PublicAttachmentResponse:
+    await require_case(case_id)
+    if not uploaded_by.strip():
+        raise HTTPException(status_code=422, detail={"code": "UPLOADER_REQUIRED", "message": "업로드 사용자가 필요합니다."})
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            if int(content_length) > MAX_ATTACHMENT_BYTES:
+                raise HTTPException(status_code=413, detail={"code": "ATTACHMENT_TOO_LARGE", "message": f"파일은 최대 {MAX_ATTACHMENT_BYTES // (1024 * 1024)}MB까지 업로드할 수 있습니다."})
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail={"code": "INVALID_CONTENT_LENGTH", "message": "잘못된 파일 크기 정보입니다."}) from exc
+    content = await request.body()
+    if not content:
+        raise HTTPException(status_code=422, detail={"code": "ATTACHMENT_EMPTY", "message": "빈 파일은 업로드할 수 없습니다."})
+    if len(content) > MAX_ATTACHMENT_BYTES:
+        raise HTTPException(status_code=413, detail={"code": "ATTACHMENT_TOO_LARGE", "message": f"파일은 최대 {MAX_ATTACHMENT_BYTES // (1024 * 1024)}MB까지 업로드할 수 있습니다."})
+
+    original_name = _clean_file_name(file_name)
+    mime_type, extension = _resolve_attachment_type(original_name, request.headers.get("content-type"))
+    if not _has_valid_signature(mime_type, content):
+        raise HTTPException(status_code=415, detail={"code": "ATTACHMENT_SIGNATURE_MISMATCH", "message": "파일 내용과 형식이 일치하지 않습니다."})
+
+    case_directory = ATTACHMENT_STORAGE_ROOT / hashlib.sha256(case_id.encode("utf-8")).hexdigest()[:24]
+    case_directory.mkdir(parents=True, exist_ok=True)
+    stored_name = f"{uuid4().hex}{extension}"
+    stored_path = (case_directory / stored_name).resolve()
+    if not stored_path.is_relative_to(ATTACHMENT_STORAGE_ROOT):
+        raise HTTPException(status_code=400, detail={"code": "INVALID_ATTACHMENT_PATH", "message": "잘못된 파일 경로입니다."})
+    stored_path.write_bytes(content)
+    try:
+        record = await repository.create_attachment(case_id, {
+            "original_name": original_name,
+            "stored_name": stored_name,
+            "storage_path": stored_path.relative_to(ATTACHMENT_STORAGE_ROOT).as_posix(),
+            "mime_type": mime_type,
+            "size_bytes": len(content),
+            "sha256": hashlib.sha256(content).hexdigest(),
+            "uploaded_by": uploaded_by.strip()[:80],
+            "status": "UPLOADED",
+            "visibility": visibility,
+            "ai_readable": True,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+    except Exception:
+        stored_path.unlink(missing_ok=True)
+        raise
+    return to_public_attachment(record)
+
+
+@app.get("/api/cases/{case_id}/attachments", response_model=list[PublicAttachmentResponse])
+async def list_case_attachments(case_id: str, view: Literal["bank", "customer"] = "bank") -> list[PublicAttachmentResponse]:
+    await require_case(case_id)
+    records = await repository.list_attachments(case_id)
+    if view == "customer":
+        records = [item for item in records if item.get("visibility") == "CUSTOMER"]
+    return [to_public_attachment(item) for item in records]
+
+
+@app.get("/api/internal/cases/{case_id}/attachments", response_model=list[PublicAttachmentResponse])
+async def list_case_attachments_for_ai(case_id: str) -> list[PublicAttachmentResponse]:
+    """AI 서비스용 메타데이터 목록. 서비스 인증은 배포 게이트웨이에서 적용한다."""
+    await require_case(case_id)
+    return [to_public_attachment(item, download_view="bank") for item in await repository.list_attachments(case_id) if item.get("ai_readable", True)]
+
+
+@app.get("/api/cases/{case_id}/attachments/{attachment_id}/content")
+async def download_case_attachment(case_id: str, attachment_id: str, view: Literal["bank", "customer"] = "customer") -> FileResponse:
+    await require_case(case_id)
+    record = await repository.get_attachment(case_id, attachment_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail={"code": "ATTACHMENT_NOT_FOUND", "message": "첨부 파일을 찾을 수 없습니다."})
+    if view == "customer" and record.get("visibility") != "CUSTOMER":
+        raise HTTPException(status_code=403, detail={"code": "ATTACHMENT_FORBIDDEN", "message": "이 첨부 파일을 열 권한이 없습니다."})
+    stored_path = (ATTACHMENT_STORAGE_ROOT / record["storage_path"]).resolve()
+    if not stored_path.is_relative_to(ATTACHMENT_STORAGE_ROOT) or not stored_path.is_file():
+        raise HTTPException(status_code=410, detail={"code": "ATTACHMENT_CONTENT_MISSING", "message": "첨부 파일 원본을 찾을 수 없습니다."})
+    return FileResponse(stored_path, media_type=record["mime_type"], filename=None if record["mime_type"].startswith("image/") else record["original_name"])
+
+
 @app.get("/api/cases/{case_id}/messages", response_model=list[PublicMessageResponse])
 async def list_case_messages(case_id: str, channel: MessageChannel | None = None, view: Literal["bank", "customer"] = "bank") -> list[PublicMessageResponse]:
     await require_case(case_id)
@@ -475,6 +621,51 @@ async def list_case_messages(case_id: str, channel: MessageChannel | None = None
     return [to_public_message(record) for record in messages]
 
 
+@app.post("/api/cases/{case_id}/customer-emergency", response_model=PublicMessageResponse, status_code=201)
+async def start_customer_emergency(case_id: str, request: PublicCustomerEmergencyRequest) -> PublicMessageResponse:
+    """Persist one customer acknowledgement, one case-wide AI alert, and a linked Recovery event."""
+    case = await repository.get(case_id)
+    if case is None:
+        raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."})
+    all_messages = await repository.list_messages(case_id)
+    acknowledgement = next((item for item in all_messages
+                            if item.get("channel") == "CUSTOMER"
+                            and item.get("actor_user_id") == request.actor_user_id
+                            and item.get("content") == "이미 사기 피해를 입었습니다. 피해구제 안내를 확인합니다."), None)
+    if acknowledgement is None:
+        await repository.append_message(case_id, {
+            "actor_type": "CUSTOMER", "actor_user_id": request.actor_user_id,
+            "actor_display_name": request.actor_display_name, "actor_role": "CUSTOMER",
+            "content": "이미 사기 피해를 입었습니다. 피해구제 안내를 확인합니다.",
+            "channel": "CUSTOMER", "audience": "CUSTOMER", "visibility": "CUSTOMER",
+            "message_kind": "CHAT", "mentions": [], "log_event": False, "customer_emergency_ack": True,
+        })
+    alert = next((item for item in all_messages
+                  if item.get("channel") == "AI_INTERNAL"
+                  and item.get("actor_user_id") == "case-copilot"
+                  and item.get("actor_display_name") == "CaseCopilot 긴급 알림"), None)
+    if alert is None:
+        alert = await repository.append_message(case_id, {
+            "actor_type": "BANK_AGENT", "actor_user_id": "case-copilot",
+            "actor_display_name": "CaseCopilot 긴급 알림", "actor_role": "BANK_AGENT",
+            "content": "고객이 직접 사기 피해 발생을 신고했습니다. 피해 금액과 송금 정보를 확인하고 즉시 보호 조치를 검토해 주세요.",
+            "channel": "AI_INTERNAL", "audience": "BANK_INTERNAL", "visibility": "AI_PRIVATE",
+            "message_kind": "SYSTEM_EVENT", "mentions": ["CaseCopilot"],
+            "private_owner_user_id": None, "log_event": False, "customer_emergency_alert": True,
+            "customer_reported_by_user_id": request.actor_user_id,
+            "customer_reported_by_display_name": request.actor_display_name,
+        })
+    if case.get("mode") != "RECOVERY" or case.get("victim_transfer_status") != "YES":
+        latest = await repository.get(case_id) or case
+        try:
+            await repository.update_case(case_id, int(latest.get("version", 1)), {
+                "victim_transfer_status": "YES", "mode": "RECOVERY",
+            })
+        except CaseVersionConflictError as exc:
+            raise HTTPException(status_code=409, detail={"code": "VERSION_CONFLICT", "message": "Case가 변경되었습니다. 다시 시도해 주세요.", "current_version": exc.current_version}) from exc
+    return to_public_message(alert)
+
+
 @app.post("/api/cases/{case_id}/messages", response_model=PublicMessageResponse, status_code=201)
 async def create_case_message(case_id: str, request: PublicCreateMessageRequest) -> PublicMessageResponse:
     await require_case(case_id)
@@ -482,6 +673,8 @@ async def create_case_message(case_id: str, request: PublicCreateMessageRequest)
         record = await repository.append_message(case_id, request.model_dump())
     except KeyError as exc:
         raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."}) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail={"code": "ATTACHMENT_NOT_FOUND", "message": "메시지에 연결할 첨부 파일을 찾을 수 없습니다."}) from exc
     return to_public_message(record)
 
 
@@ -648,18 +841,30 @@ async def get_case_bundle(case_id: str, view: Literal["entry", "customer", "bank
     messages = [to_public_message(item).model_dump(mode="json") for item in await repository.list_messages(case_id, visible_channel)]
     actions = [to_public_action(item) for item in await repository.list_actions(case_id)]
     verifications = [to_public_verification(item) for item in await repository.list_verifications(case_id)]
+    customer_verification_results: list[PublicCustomerVerificationResult] = []
     events = [to_public_event(item).model_dump(mode="json") for item in await repository.list_events(case_id)]
     # Customer view hides event details, but still needs the Case activity cursor
     # to identify the latest synchronized state.
     cursor = str(events[-1]["event_id"]) if events else None
     voice = await repository.get_voice_session(case_id)
     if view == "customer":
+        customer_verification_results = [
+            PublicCustomerVerificationResult(
+                verification_task_id=item.verification_task_id,
+                target=item.target,
+                result_summary=item.result_summary,
+                published_at=item.updated_at,
+            )
+            for item in verifications
+            if item.status == "COMPLETED" and item.customer_visible and item.result_summary
+        ]
         messages = [item for item in messages if item.get("visibility") == "CUSTOMER"]
         actions, verifications, events, voice = [], [], [], None
     return PublicCaseBundleResponse(
         case=to_public_case_summary_response(record).model_dump(mode="json"),
         live_report=None if view == "customer" else record.get("initial_report"),
         questions=[], progress_items=[], verification_tasks=verifications,
+        customer_verification_results=customer_verification_results,
         recent_messages=messages[-50:], recent_actions=actions[-50:], recent_events=events[-50:],
         voice_session=PublicVoiceSessionResponse.model_validate(voice) if voice else None, cursor=cursor,
     )

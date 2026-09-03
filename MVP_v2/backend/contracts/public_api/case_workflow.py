@@ -18,6 +18,9 @@ class PublicQuestionCandidateResponse(PublicWorkflowModel):
     reason: str
     priority: Literal["P0", "P1", "P2"]
     options: list[str] = Field(default_factory=list, max_length=8)
+    customer_explanation: str | None = Field(default=None, max_length=500)
+    answer_mode: Literal["SINGLE_CHOICE", "TEXT", "CHOICE_OR_TEXT"] = "CHOICE_OR_TEXT"
+    allow_free_text: bool = True
 
 
 class PublicCaseSupportBrief(PublicWorkflowModel):
@@ -63,7 +66,11 @@ class PublicCustomerQuestionResponse(PublicWorkflowModel):
     requested_by: str | None = None
     asked_at: str | None = None
     answered_at: str | None = None
+    answer_text: str | None = None
     options: list[str] = Field(default_factory=list, max_length=8)
+    customer_explanation: str | None = Field(default=None, max_length=500)
+    answer_mode: Literal["SINGLE_CHOICE", "TEXT", "CHOICE_OR_TEXT"] = "CHOICE_OR_TEXT"
+    allow_free_text: bool = True
 
 
 class PublicCustomerQuestionView(PublicWorkflowModel):
@@ -74,7 +81,12 @@ class PublicCustomerQuestionView(PublicWorkflowModel):
     priority: Literal["P0", "P1", "P2"]
     status: Literal["PENDING", "ASKED", "ANSWERED", "SKIPPED"]
     sequence: int
+    answered_at: str | None = None
+    answer_text: str | None = None
     options: list[str] = Field(default_factory=list, max_length=8)
+    customer_explanation: str | None = Field(default=None, max_length=500)
+    answer_mode: Literal["SINGLE_CHOICE", "TEXT", "CHOICE_OR_TEXT"] = "CHOICE_OR_TEXT"
+    allow_free_text: bool = True
 
 
 class PublicAnswerCustomerQuestionRequest(PublicWorkflowModel):
@@ -152,6 +164,15 @@ class PublicVerificationResponse(PublicWorkflowModel):
     customer_visible: bool = False
 
 
+class PublicCustomerVerificationResult(PublicWorkflowModel):
+    """Minimal customer projection; internal evidence and reviewer details stay private."""
+
+    verification_task_id: str
+    target: str
+    result_summary: str
+    published_at: str | None = None
+
+
 class PublicCreateActionRequest(PublicWorkflowModel):
     action_type: str = Field(min_length=1, max_length=64)
     actor_type: Literal["BANK_STAFF", "SYSTEM"]
@@ -226,11 +247,40 @@ class PublicCaseBundleResponse(PublicWorkflowModel):
     questions: list[dict[str, Any]]
     progress_items: list[dict[str, Any]]
     verification_tasks: list[PublicVerificationResponse]
+    customer_verification_results: list[PublicCustomerVerificationResult] = Field(default_factory=list)
     recent_messages: list[dict[str, Any]]
     recent_actions: list[PublicActionResponse]
     recent_events: list[dict[str, Any]]
     voice_session: PublicVoiceSessionResponse | None
     cursor: str | None
+
+
+def to_public_customer_question(record: dict[str, Any]) -> PublicCustomerQuestionResponse:
+    return PublicCustomerQuestionResponse.model_validate({
+        "question_id": record["question_id"], "case_id": record["case_id"],
+        "source": record.get("source", "CUSTOMER_AGENT"), "target_field": record["target_field"],
+        "question_text": record["question_text"], "reason": record["reason"],
+        "priority": record["priority"], "status": record["status"], "sequence": record["sequence"],
+        "requested_by": record.get("requested_by"), "asked_at": record.get("asked_at"),
+        "answered_at": record.get("answered_at"), "answer_text": record.get("answer_text"),
+        "options": record.get("options", []),
+        "customer_explanation": record.get("customer_explanation"),
+        "answer_mode": record.get("answer_mode", "CHOICE_OR_TEXT"),
+        "allow_free_text": record.get("allow_free_text", True),
+    })
+
+
+def to_public_customer_question_view(record: dict[str, Any]) -> PublicCustomerQuestionView:
+    return PublicCustomerQuestionView.model_validate({
+        "question_id": record["question_id"], "case_id": record["case_id"],
+        "question_text": record["question_text"], "priority": record["priority"],
+        "status": record["status"], "sequence": record["sequence"],
+        "answered_at": record.get("answered_at"), "answer_text": record.get("answer_text"),
+        "options": record.get("options", []),
+        "customer_explanation": record.get("customer_explanation"),
+        "answer_mode": record.get("answer_mode", "CHOICE_OR_TEXT"),
+        "allow_free_text": record.get("allow_free_text", True),
+    })
 
 
 def to_public_verification(record: dict[str, Any]) -> PublicVerificationResponse:

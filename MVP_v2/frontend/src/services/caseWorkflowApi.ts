@@ -1,4 +1,4 @@
-import { CaseDetail } from '../data/mock/caseData';
+import { notifyApiMutation } from './caseSync';
 
 export interface WorkflowMessage {
   message_id: string;
@@ -96,6 +96,7 @@ const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
     const detail = payload?.detail;
     throw new Error(payload?.error?.message || detail?.message || '요청을 처리하지 못했습니다.');
   }
+  notifyApiMutation(path, init, payload);
   return payload as T;
 };
 
@@ -142,4 +143,3 @@ export const caseWorkflowApi = {
 
 export const bundleCaseId = (bundle: CaseBundle): string => String(bundle.case.case_id ?? '');
 
-export type { CaseDetail };

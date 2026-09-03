@@ -1,5 +1,6 @@
 node_modules/
 dist/
+.vite/
 *.tsbuildinfo
 vite.config.js
 vite.config.d.ts
@@ -10,4 +11,5 @@ vite.config.d.ts
 __pycache__/
 *.py[cod]
 MVP_v2/backend/data/*.sqlite3
+MVP_v2/backend/data/archive/
 MVP_v2/**/*.log

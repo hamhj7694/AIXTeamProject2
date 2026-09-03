@@ -1,20 +1,13 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowDownUp, CalendarDays, Search, Trash2, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { AppLayout } from '../components/layout/AppLayout';
 import { caseApi, type CaseRecord } from '../services/caseApi';
+import { useCaseSyncRefresh } from '../features/case-sync/useCaseSyncRefresh';
+import { actualLossLabel, caseDisplayId, workflowStatusLabel } from '../utils/casePresentation';
 
 type SortKey = 'id' | 'transferred' | 'type' | 'amount' | 'status' | 'assignee' | 'createdAtRaw' | 'updatedAtRaw';
 type VictimFilter = 'ALL' | 'UNKNOWN' | 'TRANSFERRED' | 'NOT_TRANSFERRED';
-
-const displayId = (id: string) => `#${id.replace(/^VP-/, '')}`;
-const workflowStatusLabel: Record<string, string> = {
-  TRIAGE: '진행중', OPEN: '진행중', IN_PROGRESS: '진행중',
-  PREVENT: '예방 진행중', RECOVERY: '피해 복구중',
-  CLOSED: '처리완료', RESOLVED: '처리완료',
-};
-const displayWorkflowStatus = (status: string) => workflowStatusLabel[status] ?? '확인중';
-const displayAmount = (amount?: string) => amount ?? '확인안됨';
 
 export const CasesTablePage: React.FC = () => {
   const navigate = useNavigate();
@@ -23,7 +16,7 @@ export const CasesTablePage: React.FC = () => {
   const [victimFilter, setVictimFilter] = useState<VictimFilter>('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [updatedDate, setUpdatedDate] = useState('');
-  const [sortKey, setSortKey] = useState<SortKey>('updatedAtRaw');
+  const [sortKey, setSortKey] = useState<SortKey>('id');
   const [descending, setDescending] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -34,14 +27,15 @@ export const CasesTablePage: React.FC = () => {
   const [trashOpen, setTrashOpen] = useState(false);
   const [trashedCases, setTrashedCases] = useState<CaseRecord[]>([]);
 
-  const load = () => {
+  const load = useCallback(() => {
     setLoading(true); setError('');
-    caseApi.list()
+    return caseApi.list()
       .then(setCases)
       .catch((reason) => setError(reason instanceof Error ? reason.message : 'Case 목록을 불러오지 못했습니다.'))
       .finally(() => setLoading(false));
-  };
-  useEffect(() => { load(); const timer = window.setInterval(load, 15_000); return () => window.clearInterval(timer); }, []);
+  }, []);
+  useCaseSyncRefresh(null, load);
+  useEffect(() => { load(); const timer = window.setInterval(load, 15_000); return () => window.clearInterval(timer); }, [load]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) setDescending((current) => !current);
@@ -53,7 +47,7 @@ export const CasesTablePage: React.FC = () => {
     [cases],
   );
   const rows = useMemo(() => cases.filter((item) => {
-    const matchesQuery = [item.id, item.type, item.status, displayWorkflowStatus(item.status), item.assignee ?? '', item.summary]
+    const matchesQuery = [item.id, item.type, item.status, workflowStatusLabel(item.status), item.assignee ?? '', item.summary]
       .join(' ').toLowerCase().includes(query.toLowerCase().trim());
     const matchesVictim = victimFilter === 'ALL'
       || (victimFilter === 'TRANSFERRED' && item.transferred === true)
@@ -121,7 +115,7 @@ export const CasesTablePage: React.FC = () => {
                 업무 진행 상태
                 <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium outline-none focus:border-blue-500">
                   <option value="ALL">전체</option>
-                  {availableStatuses.map((status) => <option key={status} value={status}>{displayWorkflowStatus(status)}</option>)}
+                  {availableStatuses.map((status) => <option key={status} value={status}>{workflowStatusLabel(status)}</option>)}
                 </select>
               </label>
             </div>
@@ -131,7 +125,7 @@ export const CasesTablePage: React.FC = () => {
               <label className="relative"><CalendarDays size={14} className="pointer-events-none absolute left-2.5 top-2 text-slate-400" /><input type="date" value={updatedDate} onChange={(event) => setUpdatedDate(event.target.value)} aria-label="최근 업데이트 날짜" className="w-40 rounded-md border border-slate-200 py-1.5 pl-7 pr-2 text-xs outline-none focus:border-blue-500" /></label>
             </div>
           </div>
-          <div className="border-b border-slate-100 px-4 py-2 text-xs font-semibold text-slate-500">검색 결과 {rows.length}건 · 15초마다 자동 갱신</div>
+          <div className="border-b border-slate-100 px-4 py-2 text-xs font-semibold text-slate-500">검색 결과 {rows.length}건 · 변경 즉시 동기화 · 15초 안전 갱신</div>
 
           <div className="overflow-x-auto">
             <table className="min-w-[1000px] w-full table-fixed text-left text-xs">
@@ -164,16 +158,16 @@ export const CasesTablePage: React.FC = () => {
               <tbody>
                 {rows.map((item) => (
                   <tr key={item.id} onClick={() => navigate(`/cases/${item.id}`)} className="cursor-pointer border-t border-slate-100 transition hover:bg-blue-50/60">
-                    <td className="px-2 py-2.5 font-black text-slate-900">{displayId(item.id)}</td>
+                    <td className="px-2 py-2.5 font-black text-slate-900">{caseDisplayId(item.id)}</td>
                     <td className="truncate px-2 py-2.5 font-semibold text-slate-700" title={item.assignee ?? '미배정'}>{item.assignee ?? '미배정'}</td>
                     <td className="px-2 py-2.5 font-semibold">{item.transferred === true ? '피해 발생' : item.transferred === false ? '피해 없음' : '확인안됨'}</td>
-                    <td className="px-2 py-2.5 font-semibold text-slate-700">{displayAmount(item.amount)}</td>
+                    <td className="px-2 py-2.5 font-semibold text-slate-700">{actualLossLabel(item.amount)}</td>
                     <td className="truncate px-2 py-2.5 font-semibold text-slate-700" title={item.type || '확인안됨'}>{item.type || '확인안됨'}</td>
-                    <td className="px-2 py-2.5"><span className="rounded-md bg-blue-50 px-1.5 py-0.5 font-bold text-blue-700">{displayWorkflowStatus(item.status)}</span></td>
+                    <td className="px-2 py-2.5"><span className="rounded-md bg-blue-50 px-1.5 py-0.5 font-bold text-blue-700">{workflowStatusLabel(item.status)}</span></td>
                     <td className="px-2 py-2.5 text-slate-500">{item.createdAt}</td>
                     <td className="px-2 py-2.5 text-slate-500">{item.updatedAt}</td>
                     <td className="truncate px-2 py-2.5 text-slate-600" title={item.summary}>{item.summary}</td>
-                    <td className="px-1.5 py-2.5"><button aria-label={`${displayId(item.id)} 삭제`} onClick={(event) => { event.stopPropagation(); setDeleteTarget(item); setDeletePassword(''); setDeleteError(''); setDeleteConfirmed(false); }} className="rounded-lg p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-700"><Trash2 size={15}/></button></td>
+                    <td className="px-1.5 py-2.5"><button aria-label={`${caseDisplayId(item.id)} 삭제`} onClick={(event) => { event.stopPropagation(); setDeleteTarget(item); setDeletePassword(''); setDeleteError(''); setDeleteConfirmed(false); }} className="rounded-lg p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-700"><Trash2 size={15}/></button></td>
                   </tr>
                 ))}
               </tbody>
@@ -184,8 +178,8 @@ export const CasesTablePage: React.FC = () => {
           {!loading && !error && rows.length === 0 && <div className="p-10 text-center text-sm text-slate-500">조건에 맞는 보이스피싱 Case가 없습니다.</div>}
         </div>
       </div>
-      {deleteTarget && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/35 p-4"><section className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl"><div className="flex items-center justify-between"><h2 className="font-black">총괄관리자 Case 삭제</h2><button onClick={() => setDeleteTarget(null)}><X size={18}/></button></div>{deleteConfirmed ? <><p className="mt-3 text-sm leading-6 text-rose-700">정말 {displayId(deleteTarget.id)} Case를 휴지통으로 이동하겠습니까?</p>{deleteError && <p className="mt-3 rounded-lg bg-rose-50 p-2.5 text-xs font-semibold text-rose-700">{deleteError}</p>}<div className="mt-5 flex justify-end gap-2"><button onClick={() => setDeleteConfirmed(false)} className="rounded-xl border px-4 py-2 text-sm font-bold">취소</button><button onClick={confirmDelete} className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-bold text-white">삭제</button></div></> : <><p className="mt-3 text-sm text-slate-600">총괄관리자 비밀번호를 입력하면 다음 확인 단계로 이동합니다.</p><input type="password" autoFocus value={deletePassword} onChange={(event) => { setDeletePassword(event.target.value); setDeleteError(''); }} placeholder="관리자 비밀번호" className="mt-4 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"/>{deleteError && <p className="mt-3 rounded-lg bg-rose-50 p-2.5 text-xs font-semibold text-rose-700">{deleteError}</p>}<div className="mt-5 flex justify-end gap-2"><button onClick={() => setDeleteTarget(null)} className="rounded-xl border px-4 py-2 text-sm font-bold">취소</button><button disabled={!deletePassword} onClick={confirmDelete} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white disabled:opacity-40">삭제</button></div></>}</section></div>}
-      {trashOpen && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/35 p-4"><section className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl"><div className="flex items-center justify-between"><h2 className="font-black">🗑️ Case 휴지통</h2><button onClick={() => setTrashOpen(false)}><X size={18}/></button></div><p className="mt-2 text-xs text-slate-500">휴지통의 Case는 복구할 수 있습니다.</p><div className="mt-4 max-h-80 space-y-2 overflow-y-auto">{trashedCases.length ? trashedCases.map((item) => <div key={item.id} className="flex items-center gap-3 rounded-xl border p-3"><div className="min-w-0 flex-1"><p className="font-bold">{displayId(item.id)} · {item.type}</p><p className="mt-1 truncate text-xs text-slate-500">{item.summary}</p></div><button onClick={() => restoreCase(item.id)} className="rounded-lg border px-3 py-2 text-xs font-bold">복구</button></div>) : <p className="rounded-xl bg-slate-50 p-8 text-center text-sm text-slate-500">휴지통이 비어 있습니다.</p>}</div></section></div>}
+      {deleteTarget && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/35 p-4"><section className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl"><div className="flex items-center justify-between"><h2 className="font-black">총괄관리자 Case 삭제</h2><button onClick={() => setDeleteTarget(null)}><X size={18}/></button></div>{deleteConfirmed ? <><p className="mt-3 text-sm leading-6 text-rose-700">정말 {caseDisplayId(deleteTarget.id)} Case를 휴지통으로 이동하겠습니까?</p>{deleteError && <p className="mt-3 rounded-lg bg-rose-50 p-2.5 text-xs font-semibold text-rose-700">{deleteError}</p>}<div className="mt-5 flex justify-end gap-2"><button onClick={() => setDeleteConfirmed(false)} className="rounded-xl border px-4 py-2 text-sm font-bold">취소</button><button onClick={confirmDelete} className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-bold text-white">삭제</button></div></> : <><p className="mt-3 text-sm text-slate-600">총괄관리자 비밀번호를 입력하면 다음 확인 단계로 이동합니다.</p><input type="password" autoFocus value={deletePassword} onChange={(event) => { setDeletePassword(event.target.value); setDeleteError(''); }} placeholder="관리자 비밀번호" className="mt-4 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"/>{deleteError && <p className="mt-3 rounded-lg bg-rose-50 p-2.5 text-xs font-semibold text-rose-700">{deleteError}</p>}<div className="mt-5 flex justify-end gap-2"><button onClick={() => setDeleteTarget(null)} className="rounded-xl border px-4 py-2 text-sm font-bold">취소</button><button disabled={!deletePassword} onClick={confirmDelete} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white disabled:opacity-40">삭제</button></div></>}</section></div>}
+      {trashOpen && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/35 p-4"><section className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl"><div className="flex items-center justify-between"><h2 className="font-black">🗑️ Case 휴지통</h2><button onClick={() => setTrashOpen(false)}><X size={18}/></button></div><p className="mt-2 text-xs text-slate-500">휴지통의 Case는 복구할 수 있습니다.</p><div className="mt-4 max-h-80 space-y-2 overflow-y-auto">{trashedCases.length ? trashedCases.map((item) => <div key={item.id} className="flex items-center gap-3 rounded-xl border p-3"><div className="min-w-0 flex-1"><p className="font-bold">{caseDisplayId(item.id)} · {item.type}</p><p className="mt-1 truncate text-xs text-slate-500">{item.summary}</p></div><button onClick={() => restoreCase(item.id)} className="rounded-lg border px-3 py-2 text-xs font-bold">복구</button></div>) : <p className="rounded-xl bg-slate-50 p-8 text-center text-sm text-slate-500">휴지통이 비어 있습니다.</p>}</div></section></div>}
     </AppLayout>
   );
 };

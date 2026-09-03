@@ -185,12 +185,23 @@ class MySqlCaseRepository:
         pool = await self._get_pool()
         message_id = f"msg-{__import__('uuid').uuid4().hex}"
         created_at = datetime.now()
+        attachment_ids = list(dict.fromkeys(record.get("attachment_ids", [])))
         async with pool.acquire() as connection:
             try:
                 async with connection.cursor() as cursor:
                     await cursor.execute("SELECT case_id FROM cases WHERE case_id=%s FOR UPDATE", (case_id,))
                     if not await cursor.fetchone():
                         raise KeyError(case_id)
+                    if attachment_ids:
+                        placeholders = ",".join(["%s"] * len(attachment_ids))
+                        await cursor.execute(
+                            f"SELECT attachment_id, status, visibility FROM case_attachments WHERE case_id=%s AND attachment_id IN ({placeholders}) FOR UPDATE",
+                            (case_id, *attachment_ids),
+                        )
+                        attachment_rows = await cursor.fetchall()
+                        expected_visibility = record.get("visibility", record.get("audience", "CUSTOMER"))
+                        if len(attachment_rows) != len(attachment_ids) or any(row[1] != "UPLOADED" or row[2] != expected_visibility for row in attachment_rows):
+                            raise ValueError("ATTACHMENT_NOT_FOUND")
                     await cursor.execute(
                         """INSERT INTO messages
                            (message_id, case_id, actor_type, content, channel, audience, mentions_json, reply_to_message_id, client_request_id, created_at)
@@ -202,6 +213,15 @@ class MySqlCaseRepository:
                             record.get("client_request_id"), created_at,
                         ),
                     )
+                    if attachment_ids:
+                        await cursor.executemany(
+                            "INSERT INTO message_attachments (message_id, attachment_id, attached_at) VALUES (%s,%s,%s)",
+                            [(message_id, attachment_id, created_at) for attachment_id in attachment_ids],
+                        )
+                        await cursor.execute(
+                            f"UPDATE case_attachments SET status='LINKED' WHERE case_id=%s AND attachment_id IN ({','.join(['%s'] * len(attachment_ids))})",
+                            (case_id, *attachment_ids),
+                        )
                     if record.get("log_event"):
                         await cursor.execute(
                             "INSERT INTO case_events (case_id, event_type, actor_type, payload_json, occurred_at) VALUES (%s,'MESSAGE_ADDED',%s,%s,%s)",
@@ -212,10 +232,12 @@ class MySqlCaseRepository:
             except Exception:
                 await connection.rollback()
                 raise
+        attachments = [item for item in [await self.get_attachment(case_id, attachment_id) for attachment_id in attachment_ids] if item]
         return {
             "message_id": message_id, "case_id": case_id, **record,
             "channel": record.get("channel", "CUSTOMER"), "audience": record.get("audience", "CUSTOMER"),
             "mentions": record.get("mentions", []), "reply_to_message_id": record.get("reply_to_message_id"),
+            "attachment_ids": attachment_ids, "attachments": attachments,
             "created_at": created_at.isoformat(),
         }
 
@@ -229,8 +251,61 @@ class MySqlCaseRepository:
         query += " ORDER BY created_at, message_id"
         async with pool.acquire() as connection, connection.cursor(aiomysql.DictCursor) as cursor:
             await cursor.execute(query, values)
-            return [
+            messages = [
                 {**row, "mentions": self._json(row["mentions_json"]) or [], "created_at": row["created_at"].isoformat()}
+                for row in await cursor.fetchall()
+            ]
+            for message in messages:
+                await cursor.execute(
+                    """SELECT a.* FROM case_attachments a
+                       INNER JOIN message_attachments ma ON ma.attachment_id=a.attachment_id
+                       WHERE ma.message_id=%s ORDER BY ma.attached_at, a.attachment_id""",
+                    (message["message_id"],),
+                )
+                message["attachments"] = [
+                    {**row, "size_bytes": int(row["size_bytes"]), "ai_readable": bool(row["ai_readable"]), "created_at": row["created_at"].isoformat()}
+                    for row in await cursor.fetchall()
+                ]
+                message["attachment_ids"] = [item["attachment_id"] for item in message["attachments"]]
+            return messages
+
+    async def create_attachment(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]:
+        pool = await self._get_pool()
+        attachment_id = f"att-{uuid.uuid4().hex}"
+        created_at = datetime.fromisoformat(record["created_at"]).replace(tzinfo=None)
+        async with pool.acquire() as connection:
+            try:
+                async with connection.cursor() as cursor:
+                    await cursor.execute("SELECT case_id FROM cases WHERE case_id=%s", (case_id,))
+                    if not await cursor.fetchone():
+                        raise KeyError(case_id)
+                    await cursor.execute(
+                        """INSERT INTO case_attachments
+                           (attachment_id, case_id, original_name, stored_name, storage_path, mime_type, size_bytes, sha256, uploaded_by, status, visibility, ai_readable, created_at)
+                           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                        (attachment_id, case_id, record["original_name"], record["stored_name"], record["storage_path"], record["mime_type"],
+                         record["size_bytes"], record["sha256"], record["uploaded_by"], record.get("status", "UPLOADED"),
+                         record.get("visibility", "CUSTOMER"), bool(record.get("ai_readable", True)), created_at),
+                    )
+                await connection.commit()
+            except Exception:
+                await connection.rollback()
+                raise
+        return {"attachment_id": attachment_id, "case_id": case_id, **record}
+
+    async def get_attachment(self, case_id: str, attachment_id: str) -> dict[str, Any] | None:
+        pool = await self._get_pool()
+        async with pool.acquire() as connection, connection.cursor(aiomysql.DictCursor) as cursor:
+            await cursor.execute("SELECT * FROM case_attachments WHERE case_id=%s AND attachment_id=%s", (case_id, attachment_id))
+            row = await cursor.fetchone()
+        return {**row, "size_bytes": int(row["size_bytes"]), "ai_readable": bool(row["ai_readable"]), "created_at": row["created_at"].isoformat()} if row else None
+
+    async def list_attachments(self, case_id: str) -> list[dict[str, Any]]:
+        pool = await self._get_pool()
+        async with pool.acquire() as connection, connection.cursor(aiomysql.DictCursor) as cursor:
+            await cursor.execute("SELECT * FROM case_attachments WHERE case_id=%s ORDER BY created_at, attachment_id", (case_id,))
+            return [
+                {**row, "size_bytes": int(row["size_bytes"]), "ai_readable": bool(row["ai_readable"]), "created_at": row["created_at"].isoformat()}
                 for row in await cursor.fetchall()
             ]
 

@@ -1,13 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, CircleDot, Download, FilePlus2, FileText, MessageSquare, Pencil, RotateCcw, Trash2, UsersRound, X } from 'lucide-react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { AppLayout } from '../components/layout/AppLayout';
 import { CaseLiveLog } from '../features/mvp-chat/CaseLiveLog';
 import { ChatWorkspace } from '../features/mvp-chat/ChatWorkspace';
-import { QuestionRecommendationCard } from '../features/mvp-chat/cards/QuestionRecommendationCard';
-import { UnconfirmedFactsCard } from '../features/mvp-chat/cards/UnconfirmedFactsCard';
-import { VerificationRequestCard } from '../features/mvp-chat/cards/VerificationRequestCard';
+import { createDraftWorkCard, getBankWorkCardActions } from '../features/mvp-chat/work-cards/catalog';
+import { WorkCardRenderer } from '../features/mvp-chat/work-cards/WorkCardRenderer';
+import type { WorkCardDescriptor, WorkCardType } from '../features/mvp-chat/work-cards/types';
+import { useCaseSyncRefresh } from '../features/case-sync/useCaseSyncRefresh';
 import { caseWorkflowApi } from '../services/caseWorkflowApi';
+import { caseApi, type CaseDetail } from '../services/caseApi';
 import { mvpChatApi, type CaseBundleV2, type CaseMember, type CasePresence, type CaseSupportSnapshot, type MessageChannel, type MvpMessage } from '../services/mvpChatApi';
 
 const currentUser = { user_id: 'mvp-v2-current-user', display_name: '현재 사용자', role: 'CHAT_OPERATOR' as const };
@@ -58,6 +60,7 @@ const buildStructuredReportHtml = (input: {
 
 export const BankCollaborationPage: React.FC = () => {
   const { caseId = '' } = useParams();
+  const navigate = useNavigate();
   const [view, setView] = useState<BankView>('COLLABORATION');
   const [bundle, setBundle] = useState<CaseBundleV2 | null>(null);
   const [messages, setMessages] = useState<MvpMessage[]>([]);
@@ -73,29 +76,47 @@ export const BankCollaborationPage: React.FC = () => {
   const [selectedReport, setSelectedReport] = useState<ArchiveReport | null>(null);
   const [sharingMessageId, setSharingMessageId] = useState<string | null>(null);
   const [facts, setFacts] = useState<import('../services/mvpChatApi').CaseFact[]>([]);
+  const [activeCard, setActiveCard] = useState<WorkCardDescriptor | null>(null);
+  const [caseDetail, setCaseDetail] = useState<CaseDetail | null>(null);
   const [caseSupport, setCaseSupport] = useState<CaseSupportSnapshot | null>(null);
-  const [activeTool, setActiveTool] = useState<'QUESTIONS' | 'UNCONFIRMED' | 'VERIFY' | null>(null);
 
   const load = useCallback(async () => {
     const selectedChannel: MessageChannel | undefined = view === 'CUSTOMER' ? 'CUSTOMER' : undefined;
-    const [nextBundle, allMessages, nextMembers, nextPresence, nextFacts, nextCaseSupport] = await Promise.all([mvpChatApi.getBundle(caseId, 'bank'), mvpChatApi.listMessages(caseId, selectedChannel), mvpChatApi.listMembers(caseId), mvpChatApi.listPresence(caseId), mvpChatApi.listCaseFacts(caseId), mvpChatApi.getCaseSupportSnapshot(caseId).catch(() => null)]);
+    const [nextBundle, allMessages, nextMembers, nextPresence, nextFacts, nextCaseDetail, nextCaseSupport] = await Promise.all([
+      mvpChatApi.getBundle(caseId, 'bank'),
+      mvpChatApi.listMessages(caseId, selectedChannel),
+      mvpChatApi.listMembers(caseId),
+      mvpChatApi.listPresence(caseId),
+      mvpChatApi.listCaseFacts(caseId),
+      caseApi.get(caseId),
+      mvpChatApi.getCaseSupportSnapshot(caseId).catch(() => null),
+    ]);
     const nextMessages = view === 'COLLABORATION'
       ? allMessages.filter((message) => message.channel === 'TEAM' || (message.message_kind === 'AI_RESPONSE' && message.visibility === 'BANK_INTERNAL'))
       : view === 'AI_PRIVATE'
-        ? allMessages.filter((message) => message.channel === 'AI_INTERNAL' && (message.actor_user_id === currentUser.user_id || message.private_owner_user_id === currentUser.user_id))
+        ? allMessages.filter((message) => message.channel === 'AI_INTERNAL' && (
+          message.actor_user_id === currentUser.user_id
+          || message.private_owner_user_id === currentUser.user_id
+          || (message.message_kind === 'SYSTEM_EVENT' && message.private_owner_user_id === null)
+        ))
         : allMessages;
-    setBundle(nextBundle); setMessages(nextMessages); setMembers(nextMembers); setPresence(nextPresence); setFacts(nextFacts); setCaseSupport(nextCaseSupport);
+    setBundle(nextBundle); setMessages(nextMessages); setMembers(nextMembers); setPresence(nextPresence); setFacts(nextFacts); setCaseDetail(nextCaseDetail); setCaseSupport(nextCaseSupport);
   }, [caseId, view]);
+  useCaseSyncRefresh(caseId, load);
   useEffect(() => { mvpChatApi.upsertMember(caseId, currentUser).then(() => load()).catch((reason) => setError(reason instanceof Error ? reason.message : '은행 협업 화면을 불러오지 못했습니다.')); }, [caseId, load]);
   useEffect(() => { load().catch(() => undefined); }, [view, load]);
   useEffect(() => { const beat = () => mvpChatApi.heartbeat(caseId, { ...currentUser, presence: 'VIEWING', channel: meta[view].presenceChannel }).then(() => load()).catch(() => undefined); void beat(); const timer = window.setInterval(beat, 10_000); return () => window.clearInterval(timer); }, [caseId, view, load]);
   useEffect(() => { setReports(readReports(caseId)); }, [caseId]);
 
-  const currentCase = bundle?.case ?? {};
+  const currentCase: Record<string, unknown> = { ...(bundle?.case ?? {}), fraud_type: caseDetail?.type, summary: caseDetail?.summary };
   const brief = caseSupport?.case_brief?.summary ?? String(currentCase.initial_brief ?? 'Case 정보를 불러오는 중입니다.');
-  const risks = (bundle?.verification_tasks ?? []).filter((item) => item.status !== 'COMPLETED');
   const unresolvedItems = caseSupport?.unresolved_items ?? [];
+  const risks = (bundle?.verification_tasks ?? []).filter((item) => item.status !== 'COMPLETED');
   const owner = members.find((member) => member.role === 'CASE_OWNER');
+  const emergencyAlertMessage = [...(bundle?.recent_messages ?? [])].reverse().find((message) =>
+    message.channel === 'AI_INTERNAL'
+    && message.message_kind === 'SYSTEM_EVENT'
+    && message.actor_display_name === 'CaseCopilot 긴급 알림');
   const nextTasks = [
     !owner ? '메인 담당자를 배정해 주세요.' : null,
     currentCase.victim_transfer_status === 'UNKNOWN' ? '고객 상담에서 피해 여부와 실제 피해액을 확인해 주세요.' : null,
@@ -133,9 +154,31 @@ export const BankCollaborationPage: React.FC = () => {
   const downloadWord = () => { if (!selectedReport) return; const blob = new Blob([selectedReport.html], { type: 'application/msword;charset=utf-8' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `Case-${caseId}-report.doc`; link.click(); URL.revokeObjectURL(link.href); };
   const printPdf = () => { if (!selectedReport) return; const popup = window.open('', '_blank'); if (!popup) return; popup.document.write(selectedReport.html); popup.document.close(); popup.focus(); popup.print(); };
   const closeCase = async () => { try { await caseWorkflowApi.finalizeReport(caseId, Number(currentCase.version ?? 1), '사건 종료 시 최종 보고서 생성'); await load(); await createReport('최종'); setModal(null); } catch (reason) { setError(reason instanceof Error ? reason.message : '사건을 종료하지 못했습니다.'); } };
-  const send = async (content: string) => { setSending(true); try { if (view === 'AI_PRIVATE') { const request = await mvpChatApi.createMessage(caseId, { actor_type: 'BANK_STAFF', actor_user_id: currentUser.user_id, actor_display_name: currentUser.display_name, actor_role: currentUser.role, content, channel: 'AI_INTERNAL', audience: 'BANK_INTERNAL', visibility: 'AI_PRIVATE', message_kind: 'AI_REQUEST' }); const reply = await mvpChatApi.invokeCopilot(caseId, content, 'AI_INTERNAL', currentUser); setMessages((items) => [...items, request, reply]); return; } const channel: MessageChannel = view === 'CUSTOMER' ? 'CUSTOMER' : 'TEAM'; const customerVisible = channel === 'CUSTOMER'; const created = await mvpChatApi.createMessage(caseId, { actor_type: 'BANK_STAFF', actor_user_id: currentUser.user_id, actor_display_name: currentUser.display_name, actor_role: currentUser.role, content, channel, audience: customerVisible ? 'CUSTOMER' : 'BANK_INTERNAL', visibility: customerVisible ? 'CUSTOMER' : 'BANK_INTERNAL', message_kind: 'CHAT', mentions: channel === 'TEAM' && /@CaseCopilot\b/i.test(content) ? ['CaseCopilot'] : [] }); if (channel === 'TEAM' && /@CaseCopilot\b/i.test(content)) { const reply = await mvpChatApi.invokeCopilot(caseId, content, 'TEAM', currentUser); setMessages((items) => [...items, created, reply]); return; } setMessages((items) => [...items, created]); } finally { setSending(false); } };
+  const uploadFile = (file: File) => mvpChatApi.uploadAttachment(caseId, file, currentUser.display_name, view === 'CUSTOMER' ? 'CUSTOMER' : view === 'AI_PRIVATE' ? 'AI_PRIVATE' : 'BANK_INTERNAL');
+  const send = async (content: string, attachmentIds: string[] = []) => {
+    setSending(true);
+    try {
+      if (view === 'AI_PRIVATE') {
+        const request = await mvpChatApi.createMessage(caseId, { actor_type: 'BANK_STAFF', actor_user_id: currentUser.user_id, actor_display_name: currentUser.display_name, actor_role: currentUser.role, content, channel: 'AI_INTERNAL', audience: 'BANK_INTERNAL', visibility: 'AI_PRIVATE', message_kind: 'AI_REQUEST', attachment_ids: attachmentIds });
+        if (!content) { setMessages((items) => [...items, request]); return; }
+        const reply = await mvpChatApi.invokeCopilot(caseId, content, 'AI_INTERNAL', currentUser);
+        setMessages((items) => [...items, request, reply]);
+        return;
+      }
+      const channel: MessageChannel = view === 'CUSTOMER' ? 'CUSTOMER' : 'TEAM';
+      const customerVisible = channel === 'CUSTOMER';
+      const created = await mvpChatApi.createMessage(caseId, { actor_type: 'BANK_STAFF', actor_user_id: currentUser.user_id, actor_display_name: currentUser.display_name, actor_role: currentUser.role, content, channel, audience: customerVisible ? 'CUSTOMER' : 'BANK_INTERNAL', visibility: customerVisible ? 'CUSTOMER' : 'BANK_INTERNAL', message_kind: 'CHAT', mentions: channel === 'TEAM' && /@CaseCopilot\b/i.test(content) ? ['CaseCopilot'] : [], attachment_ids: attachmentIds });
+      if (channel === 'TEAM' && /@CaseCopilot\b/i.test(content)) {
+        const reply = await mvpChatApi.invokeCopilot(caseId, content, 'TEAM', currentUser);
+        setMessages((items) => [...items, created, reply]);
+        return;
+      }
+      setMessages((items) => [...items, created]);
+    } finally { setSending(false); }
+  };
   const shareAiMessage = async (message: MvpMessage) => { setSharingMessageId(message.message_id); try { await mvpChatApi.shareAiMessage(caseId, message.message_id, currentUser); await load(); } catch (reason) { setError(reason instanceof Error ? reason.message : 'AI 답변을 팀에 공유하지 못했습니다.'); } finally { setSharingMessageId(null); } };
-  const handleQuickAction = (actionId: string) => setActiveTool(actionId === 'QUESTIONS' ? 'QUESTIONS' : actionId === 'UNCONFIRMED' ? 'UNCONFIRMED' : 'VERIFY');
+  const openWorkCard = (cardType: WorkCardType) => setActiveCard(createDraftWorkCard(cardType));
+  const handleQuickAction = (actionId: string) => openWorkCard(actionId as WorkCardType);
   const goToMessage = (messageId: string, sourceChannel?: string) => { if (sourceChannel) setView(sourceChannel === 'CUSTOMER' ? 'CUSTOMER' : sourceChannel === 'AI_INTERNAL' ? 'AI_PRIVATE' : 'COLLABORATION'); setFocusMessageId(messageId); window.setTimeout(() => setFocusMessageId(null), 1500); };
   useEffect(() => {
     const openBookmark = (event: Event) => {
@@ -152,6 +195,42 @@ export const BankCollaborationPage: React.FC = () => {
   {screen === 'reports' && <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center gap-2"><h2 className="mr-auto text-lg font-black">보고서 목록</h2><button onClick={() => setScreen('trash')} className="rounded-xl border px-3 py-2 text-xs font-bold">휴지통 {trashedReports.length}</button><button onClick={() => void createReport()} className="inline-flex items-center gap-1 rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-white"><FilePlus2 size={14}/>새 보고서 만들기</button></div><div className="mt-4 space-y-2">{visibleReports.length ? visibleReports.map((item) => <div key={item.id} className="flex items-center gap-3 rounded-xl border p-3"><button onClick={() => { setSelectedReport(item); setScreen('document'); }} className="min-w-0 flex-1 text-left"><p className="font-bold">{item.title}</p><p className="mt-1 text-xs text-slate-500">{item.type} · {new Date(item.createdAt).toLocaleString('ko-KR')}</p></button><button aria-label="보고서 휴지통으로 이동" onClick={() => moveReportToTrash(item.id)} className="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-700"><Trash2 size={16}/></button></div>) : <p className="rounded-xl bg-slate-50 p-8 text-center text-sm text-slate-500">보고서가 없습니다.</p>}</div></section>}
   {screen === 'trash' && <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center gap-2"><h2 className="mr-auto text-lg font-black">보고서 휴지통</h2><button onClick={() => setScreen('reports')} className="rounded-xl border px-3 py-2 text-xs font-bold">보고서 목록</button></div><p className="mt-2 text-xs text-slate-500">삭제한 보고서는 30일 동안 보관됩니다.</p><div className="mt-4 space-y-2">{trashedReports.length ? trashedReports.map((item) => <div key={item.id} className="flex items-center gap-2 rounded-xl border p-3"><div className="min-w-0 flex-1"><p className="font-bold">{item.title}</p><p className="text-xs text-slate-500">삭제일 {new Date(item.deletedAt ?? '').toLocaleString('ko-KR')}</p></div><button onClick={() => restoreReport(item.id)} className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-bold"><RotateCcw size={14}/>복구</button><button onClick={() => removeReportPermanently(item.id)} className="rounded-lg bg-rose-600 px-3 py-2 text-xs font-bold text-white">삭제</button></div>) : <p className="rounded-xl bg-slate-50 p-8 text-center text-sm text-slate-500">휴지통이 비어 있습니다.</p>}</div></section>}
   {screen === 'document' && selectedReport && <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex flex-wrap items-center gap-2"><h2 className="mr-auto text-lg font-black">{selectedReport.title}</h2><button onClick={downloadWord} className="inline-flex items-center gap-1 rounded-xl border px-3 py-2 text-xs font-bold"><Download size={14}/>Word 다운로드</button><button onClick={printPdf} className="inline-flex items-center gap-1 rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-white"><Download size={14}/>PDF 저장</button></div><p className="mt-2 text-xs text-slate-500">PDF 저장은 브라우저 인쇄 창에서 ‘PDF로 저장’을 선택하세요.</p><iframe title={selectedReport.title} srcDoc={selectedReport.html} className="mt-4 h-[620px] w-full rounded-xl border bg-white" /></section>}
-  {screen === 'work' && <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_280px]"><section className="min-w-0"><div className="mb-3 flex flex-wrap items-center gap-3"><div className="flex rounded-xl bg-slate-950 p-1 shadow-sm"><span className="px-2 py-2 text-[10px] font-black tracking-wide text-slate-400">내부</span>{(['AI_PRIVATE', 'COLLABORATION'] as BankView[]).map((key) => <button key={key} onClick={() => setView(key)} className={`rounded-lg px-3 py-2 text-xs font-bold transition ${view === key ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-300 hover:bg-white/10 hover:text-white'}`}>{meta[key].label}</button>)}</div><div className="flex rounded-xl border border-slate-300 bg-white p-1 shadow-sm"><span className="px-2 py-2 text-[10px] font-black tracking-wide text-slate-400">외부</span><button onClick={() => setView('CUSTOMER')} className={`rounded-lg px-3 py-2 text-xs font-bold transition ${view === 'CUSTOMER' ? 'bg-slate-950 text-white shadow-sm' : 'text-slate-700 hover:bg-slate-100'}`}>{meta.CUSTOMER.label}</button></div></div><ChatWorkspace title={meta[view].label} description={meta[view].description} channelLabel={view === 'CUSTOMER' ? '외부 고객 채널' : '은행 내부 채널'} messages={messages} placeholder={view === 'AI_PRIVATE' ? 'CaseCopilot에게 분석 또는 질문 초안을 요청하세요.' : '메시지를 입력하세요.'} currentUserId={currentUser.user_id} theme={view === 'CUSTOMER' ? 'light' : 'dark'} sending={sending} onSend={send} quickActions={view === 'AI_PRIVATE' ? [{ id: 'UNCONFIRMED', label: '미확인 정보' }, { id: 'QUESTIONS', label: '질문 추천 받기' }, { id: 'VERIFY', label: '기관 확인 요청' }] : []} onQuickAction={handleQuickAction} toolCards={view === 'AI_PRIVATE' && activeTool === 'QUESTIONS' ? <QuestionRecommendationCard caseId={caseId} requestedBy={currentUser.display_name} onQueued={load} onClose={() => setActiveTool(null)}/> : view === 'AI_PRIVATE' && activeTool === 'VERIFY' ? <VerificationRequestCard caseId={caseId} onCreated={load} onClose={() => setActiveTool(null)}/> : view === 'AI_PRIVATE' && activeTool === 'UNCONFIRMED' ? <UnconfirmedFactsCard caseId={caseId} facts={facts} confirmedBy={currentUser.display_name} onChanged={load} onOpenQuestions={() => setActiveTool('QUESTIONS')} onClose={() => setActiveTool(null)}/> : null} onShareMessage={view === 'AI_PRIVATE' ? shareAiMessage : undefined} sharingMessageId={sharingMessageId} draftStorageKey={`mvp-v2:draft:${caseId}:${view}`} heightClassName="h-[636px]" focusMessageId={focusMessageId}/></section><aside className="grid h-[680px] min-h-0 grid-rows-2 gap-4"><CaseLiveLog events={bundle?.recent_events ?? []} heightClassName="h-full" onMessageEvent={goToMessage}/><section className="min-h-0 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><h2 className="text-sm font-black">우선 조치 및 위험요소</h2><div className="mt-3 space-y-2">{nextTasks.length ? <><p className="text-[11px] font-bold text-slate-500">지금 해야 할 일</p>{nextTasks.map((task, index) => <p key={task} className="rounded-xl bg-blue-50 p-3 text-xs leading-5 text-blue-900"><span className="mr-1 font-black">{index + 1}.</span>{task}</p>)}</> : <p className="rounded-xl bg-emerald-50 p-3 text-xs text-emerald-800">현재 확인이 필요한 우선 업무가 없습니다.</p>}<p className="pt-2 text-[11px] font-bold text-slate-500">확인된 위험요소</p>{risks.length ? risks.map((item) => <div key={item.verification_task_id} className="rounded-xl bg-amber-50 p-3 text-xs leading-5 text-amber-900">{item.claim}</div>) : <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-500">확정된 위험요소가 없습니다.</p>}<p className="pt-2 text-[11px] font-bold text-slate-500">Case 확인 정보</p>{facts.length ? facts.map((fact) => <div key={fact.fact_id} className={`rounded-xl p-3 text-xs leading-5 ${fact.status === 'CONFIRMED' ? 'bg-emerald-50 text-emerald-900' : 'bg-amber-50 text-amber-900'}`}><p className="font-black">{fact.field}</p><p>{fact.value}</p><span className="mt-1 inline-block text-[10px] font-bold">{fact.status === 'CONFIRMED' ? '담당자 확정' : '확인 필요'}</span></div>) : <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-500">등록된 확인 정보가 없습니다.</p>}</div></section></aside></div>}
+  {screen === 'work' && <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
+    <section className="min-w-0">
+      <ChatWorkspace
+        key={view}
+        title={meta[view].label}
+        description={meta[view].description}
+        headerActions={<div className="flex max-w-full shrink-0 items-center gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1">
+          <span className="px-1.5 text-[10px] font-black text-slate-400">내부</span>
+          <button type="button" onClick={() => setView('COLLABORATION')} className={`rounded-lg px-2.5 py-1.5 text-[11px] font-bold transition ${view === 'COLLABORATION' ? 'bg-slate-950 text-white shadow-sm' : 'text-slate-600 hover:bg-white'}`}>은행 협업</button>
+          <button type="button" onClick={() => setView('AI_PRIVATE')} className={`rounded-lg px-2.5 py-1.5 text-[11px] font-bold transition ${view === 'AI_PRIVATE' ? 'bg-slate-950 text-white shadow-sm' : 'text-slate-600 hover:bg-white'}`}>AI 개인 작업 공간</button>
+          <span className="mx-0.5 h-5 w-px bg-slate-300" aria-hidden="true" />
+          <span className="px-1 text-[10px] font-black text-slate-400">외부</span>
+          <button type="button" onClick={() => setView('CUSTOMER')} className={`rounded-lg px-2.5 py-1.5 text-[11px] font-bold transition ${view === 'CUSTOMER' ? 'bg-blue-600 text-white shadow-sm' : 'text-blue-700 hover:bg-white'}`}>고객 대화</button>
+        </div>}
+        messages={messages}
+        placeholder={view === 'AI_PRIVATE' ? 'CaseCopilot에게 분석 또는 질문 초안을 요청하세요.' : '메시지를 입력하세요.'}
+        currentUserId={currentUser.user_id}
+        theme={view === 'CUSTOMER' ? 'light' : 'dark'}
+        sending={sending}
+        onSend={send}
+        onUploadFile={uploadFile}
+        attachmentView="bank"
+        quickActions={view === 'AI_PRIVATE' ? getBankWorkCardActions() : []}
+        onQuickAction={handleQuickAction}
+        toolCards={view === 'AI_PRIVATE' ? <WorkCardRenderer card={activeCard} context={{ caseId, requestedBy: currentUser.display_name, currentCase, facts, onRefresh: load, onClose: () => setActiveCard(null), onOpenCard: openWorkCard }}/> : null}
+        onShareMessage={view === 'AI_PRIVATE' ? shareAiMessage : undefined}
+        sharingMessageId={sharingMessageId}
+        draftStorageKey={`mvp-v2:draft:${caseId}:${view}`}
+        heightClassName="h-[636px]"
+        focusMessageId={focusMessageId}
+      />
+    </section>
+    <aside className="grid h-[680px] min-h-0 grid-rows-[minmax(0,2fr)_minmax(0,3fr)] gap-4">
+      <CaseLiveLog events={bundle?.recent_events ?? []} heightClassName="h-full" onMessageEvent={goToMessage} onWorkflowEvent={(event) => { if (event.event_type.startsWith('VERIFICATION_')) navigate(`/cases/${caseId}/verify`); }} emergencyMessageId={emergencyAlertMessage?.message_id}/>
+      <section className="min-h-0 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><h2 className="text-sm font-black">우선 조치 및 위험요소</h2><div className="mt-3 space-y-2">{nextTasks.length ? <><p className="text-[11px] font-bold text-slate-500">지금 해야 할 일</p>{nextTasks.map((task, index) => <p key={task} className="rounded-xl bg-blue-50 p-3 text-xs leading-5 text-blue-900"><span className="mr-1 font-black">{index + 1}.</span>{task}</p>)}</> : <p className="rounded-xl bg-emerald-50 p-3 text-xs text-emerald-800">현재 확인이 필요한 우선 업무가 없습니다.</p>}<p className="pt-2 text-[11px] font-bold text-slate-500">확인된 위험요소</p>{risks.length ? risks.map((item) => <div key={item.verification_task_id} className="rounded-xl bg-amber-50 p-3 text-xs leading-5 text-amber-900">{item.claim}</div>) : <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-500">확정된 위험요소가 없습니다.</p>}</div></section>
+    </aside>
+  </div>}
   {modal && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/35 p-4"><section className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl"><div className="flex items-center justify-between"><h2 className="font-black">{modal === 'participants' ? 'Case 참여자' : modal === 'assignee' ? '메인 담당자 관리' : '사건 종료 확인'}</h2><button onClick={() => setModal(null)}><X size={18}/></button></div>{modal === 'participants' ? <div className="mt-4 space-y-2">{members.map((member) => { const state = presence.find((item) => item.user_id === member.user_id)?.presence; return <div key={member.user_id} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 text-sm"><div><p className="font-bold">{member.display_name}</p><p className="text-xs text-slate-500">{role[member.role]}</p></div><span className="rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-700">{stateLabel(state)}</span></div>; })}</div> : modal === 'assignee' ? <><div className="mt-3 flex flex-wrap gap-2">{members.map((member) => <button key={member.user_id} onClick={() => setAssigneeDraft(member.display_name)} className="rounded-full border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-800">{member.display_name} · {role[member.role]}</button>)}</div><input value={assigneeDraft} onChange={(event) => setAssigneeDraft(event.target.value)} placeholder="담당자 이름 입력" className="mt-4 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"/><div className="mt-4 flex justify-end gap-2"><button onClick={() => setModal(null)} className="rounded-xl border px-4 py-2 text-sm font-bold">취소</button><button onClick={async () => { await mvpChatApi.setPrimaryAssignee(caseId, assigneeDraft.trim() || null); await load(); setModal(null); }} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white">저장</button></div></> : <><p className="mt-3 text-sm leading-6 text-slate-600">정말 사건을 종료하겠습니까? 최종 리포트를 작성한 뒤 보고서 목록으로 이동합니다.</p><div className="mt-5 flex justify-end gap-2"><button onClick={() => setModal(null)} className="rounded-xl border px-4 py-2 text-sm font-bold">아니요</button><button onClick={closeCase} className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-bold text-white">네, 종결합니다</button></div></>}</section></div>}</main></AppLayout>;
 };
