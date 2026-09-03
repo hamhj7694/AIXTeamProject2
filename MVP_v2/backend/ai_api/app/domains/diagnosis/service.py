@@ -5,6 +5,7 @@ import asyncio
 from contracts.diagnosis import ContextResult, DiagnosisResult, WindowAnalysisResult
 
 from .extractor import build_context_from_events
+from .budget import diagnosis_budget_scope
 from .full_context_llm import FullContextDiagnosisHandler
 from .risk_fusion import DiagnosisFusion
 from .window_ai import WindowAiAdapter
@@ -23,10 +24,11 @@ class DiagnosisService:
 
     async def analyze(self, text: str, case_id: str | None = None) -> DiagnosisResult:
         # 서로 독립적인 WindowAI pipeline과 전체 맥락 LLM을 동시에 시작한다.
-        window_raw, context_raw = await asyncio.gather(
-            self.window_ai.analyze(text), self.full_context_llm.analyze(text),
-            return_exceptions=True,
-        )
+        with diagnosis_budget_scope():
+            window_raw, context_raw = await asyncio.gather(
+                self.window_ai.analyze(text), self.full_context_llm.analyze(text),
+                return_exceptions=True,
+            )
         if isinstance(window_raw, BaseException):
             raise window_raw
         window_result: WindowAnalysisResult = window_raw

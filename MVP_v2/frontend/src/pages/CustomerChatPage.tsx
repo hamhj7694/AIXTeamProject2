@@ -19,7 +19,7 @@ export const CustomerChatPage: React.FC = () => {
   const [customerQuestions, setCustomerQuestions] = useState<CustomerQuestion[]>([]);
   const [recoveryActive, setRecoveryActive] = useState(() => localStorage.getItem(`mvp-v2:recovery:${caseId}`) === 'true');
   const [selectedRecoveryStep, setSelectedRecoveryStep] = useState<string | null>(() => localStorage.getItem(`mvp-v2:recovery-step:${caseId}`));
-  const [answerReceipt, setAnswerReceipt] = useState<{ question: CustomerQuestion; answer: string } | null>(null);
+  const [answerReceipt, setAnswerReceipt] = useState<{ question: CustomerQuestion; answer: string; createdAt: string } | null>(null);
   const [error, setError] = useState('');
   const [sending, setSending] = useState(false);
 
@@ -80,7 +80,7 @@ export const CustomerChatPage: React.FC = () => {
     setError('');
     try {
       await mvpChatApi.answerCustomerQuestion(caseId, activeQuestion.question_id, answer, customer);
-      setAnswerReceipt({ question: activeQuestion, answer });
+      setAnswerReceipt({ question: activeQuestion, answer, createdAt: new Date().toISOString() });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '답변을 저장하지 못했습니다.');
       setSending(false);
@@ -129,18 +129,24 @@ export const CustomerChatPage: React.FC = () => {
     const answeredQuestions = customerQuestions.filter((question) => question.status === 'ANSWERED' && question.answer_text);
     for (const question of answeredQuestions) cards.push({
       card_id: `receipt-${question.question_id}`, card_type: 'ANSWER_RECEIPT',
+      created_at: question.answered_at ?? question.asked_at ?? new Date(0).toISOString(),
       payload: { question, answer: question.answer_text! },
     });
     if (answerReceipt && !answeredQuestions.some((question) => question.question_id === answerReceipt.question.question_id)) {
-      cards.push({ card_id: `receipt-${answerReceipt.question.question_id}`, card_type: 'ANSWER_RECEIPT', payload: answerReceipt });
+      cards.push({ card_id: `receipt-${answerReceipt.question.question_id}`, card_type: 'ANSWER_RECEIPT', created_at: answerReceipt.createdAt, payload: answerReceipt });
     }
-    if (activeQuestion) cards.push({ card_id: `question-${activeQuestion.question_id}`, card_type: 'QUESTION', payload: { question: activeQuestion } });
-    if (recoveryActive && selectedRecoveryStep) cards.push({ card_id: `recovery-${selectedRecoveryStep}`, card_type: 'RECOVERY_STEP', payload: { stepId: selectedRecoveryStep } });
+    if (activeQuestion) cards.push({ card_id: `question-${activeQuestion.question_id}`, card_type: 'QUESTION', created_at: activeQuestion.asked_at ?? new Date().toISOString(), payload: { question: activeQuestion } });
+    if (recoveryActive && selectedRecoveryStep) cards.push({ card_id: `recovery-${selectedRecoveryStep}`, card_type: 'RECOVERY_STEP', created_at: String(currentCase.updated_at ?? new Date().toISOString()), payload: { stepId: selectedRecoveryStep } });
     for (const result of bundle?.customer_verification_results ?? []) cards.push({
-      card_id: `verification-${result.verification_task_id}`, card_type: 'VERIFICATION_RESULT', payload: { result },
+      card_id: `verification-${result.verification_task_id}`, card_type: 'VERIFICATION_RESULT', created_at: result.published_at ?? String(currentCase.updated_at ?? new Date().toISOString()), payload: { result },
     });
     return cards;
   }, [activeQuestion, answerReceipt, bundle?.customer_verification_results, customerQuestions, recoveryActive, selectedRecoveryStep]);
+  const customerTimelineCards = useMemo(() => customerCards.map((card) => ({
+    id: card.card_id,
+    createdAt: card.created_at,
+    content: <CustomerCardRenderer cards={[card]} submitting={sending} onAnswer={answerQuestion} onRecoveryRequest={requestRecoveryHelp}/>,
+  })), [customerCards, sending]);
 
   return <AppLayout>
     <main className="min-w-0 py-6 lg:ml-64">
@@ -161,8 +167,8 @@ export const CustomerChatPage: React.FC = () => {
             onSend={send}
             onUploadFile={uploadFile}
             attachmentView="customer"
-            toolCardsActive={customerCards.length > 0}
-            toolCards={<CustomerCardRenderer cards={customerCards} submitting={sending} onAnswer={answerQuestion} onRecoveryRequest={requestRecoveryHelp}/>}
+            toolCardsActive={customerTimelineCards.length > 0}
+            timelineCards={customerTimelineCards}
             heightClassName="h-[814px]"
           />
         </div>

@@ -7,11 +7,12 @@ import unicodedata
 from dataclasses import dataclass, field
 from typing import Any
 
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, AuthenticationError, RateLimitError
 
 from contracts.diagnosis import ContextResult, ExtractedEvent
 
 from .constants import EVENT_OUTPUT_SCHEMA, SYSTEM_INSTRUCTION
+from .budget import active_diagnosis_budget
 
 
 @dataclass
@@ -21,6 +22,14 @@ class EventExtraction:
     successful_turn_ids: list[int]
     extractor_model: str
     warnings: list[str] = field(default_factory=list)
+
+
+class AiProviderQuotaError(RuntimeError):
+    """The configured provider rejected analysis because its quota is exhausted."""
+
+
+class AiProviderAuthenticationError(RuntimeError):
+    """The configured provider rejected the configured API key."""
 
 
 def _openai_timeout_seconds() -> float:
@@ -102,6 +111,8 @@ async def extract_events(text: str) -> EventExtraction:
     if not turns:
         raise ValueError("분석할 발화가 비어 있습니다.")
 
+    budget = active_diagnosis_budget()
+    budget.validate_input(text=text, turn_count=len(turns))
     mode = os.getenv("DIAGNOSIS_EXTRACTOR_MODE", "openai").lower()
     model_name = os.getenv("OPENAI_EVENT_MODEL", "gpt-4o-mini")
     if mode == "fixture":
@@ -116,20 +127,33 @@ async def extract_events(text: str) -> EventExtraction:
     events: list[ExtractedEvent] = []
     successful: list[int] = []
     warnings: list[str] = []
+    failures: list[Exception] = []
+    max_output_tokens = int(os.getenv("OPENAI_EVENT_MAX_OUTPUT_TOKENS", "350"))
     for turn_id, target in enumerate(turns, start=1):
+        reservation = budget.reserve(
+            input_text=f"{SYSTEM_INSTRUCTION}\n[TARGET][TURN {turn_id}] {target}",
+            max_output_tokens=max_output_tokens,
+        )
         try:
             response = await client.responses.create(
                 model=model_name,
                 instructions=SYSTEM_INSTRUCTION,
                 input=f"[TARGET][TURN {turn_id}][SPEAKER_UNKNOWN] {target}",
+                max_output_tokens=max_output_tokens,
                 text={"format": {"type": "json_schema", "name": "voice_phishing_events_v2_2", "schema": EVENT_OUTPUT_SCHEMA, "strict": True}},
             )
+            budget.settle(reservation, response)
             payload = json.loads(response.output_text)
             events.extend(_validate_event(raw, turn_id, target) for raw in payload["events"])
             successful.append(turn_id)
         except Exception as exc:
+            failures.append(exc)
             warnings.append(f"Turn {turn_id} 이벤트 추출 실패: {type(exc).__name__}")
     if not successful:
+        if any(isinstance(error, RateLimitError) for error in failures):
+            raise AiProviderQuotaError("OpenAI API 크레딧 또는 호출 한도가 부족합니다. 결제·사용 한도를 확인한 뒤 다시 시도해 주세요.")
+        if any(isinstance(error, AuthenticationError) for error in failures):
+            raise AiProviderAuthenticationError("OpenAI API 키를 확인해 주세요.")
         raise RuntimeError("모든 문장의 이벤트 추출에 실패했습니다.")
     return EventExtraction(turns, events, successful, model_name, warnings)
 
@@ -180,6 +204,10 @@ async def extract_full_context(text: str) -> ContextResult:
         return build_context_from_events(_fixture_events(parse_turns(text)))
     if not os.getenv("OPENAI_API_KEY"):
         raise RuntimeError("OPENAI_API_KEY가 없습니다.")
+    budget = active_diagnosis_budget()
+    budget.validate_input(text=text, turn_count=len(parse_turns(text)))
+    max_output_tokens = int(os.getenv("OPENAI_CONTEXT_MAX_OUTPUT_TOKENS", "500"))
+    reservation = budget.reserve(input_text=text, max_output_tokens=max_output_tokens)
     client = AsyncOpenAI(
         api_key=os.environ["OPENAI_API_KEY"], timeout=_openai_timeout_seconds(),
     )
@@ -190,6 +218,8 @@ async def extract_full_context(text: str) -> ContextResult:
             "보이스피싱 여부나 금융조치를 최종 확정하지 않는다. 입력에 없는 사실을 추가하지 않는다."
         ),
         input=text,
+        max_output_tokens=max_output_tokens,
         text={"format": {"type": "json_schema", "name": "diagnosis_context_v1", "schema": CONTEXT_OUTPUT_SCHEMA, "strict": True}},
     )
+    budget.settle(reservation, response)
     return ContextResult.model_validate_json(response.output_text)

@@ -16,6 +16,14 @@ class AiServiceError(RuntimeError):
     pass
 
 
+class AiServiceQuotaError(AiServiceError):
+    pass
+
+
+class AiServiceAuthenticationError(AiServiceError):
+    pass
+
+
 class HttpDiagnosisAiClient:
     def __init__(self, base_url: str | None = None, timeout_seconds: float | None = None) -> None:
         self.base_url = (base_url or os.getenv("AI_API_BASE_URL", "http://127.0.0.1:8001")).rstrip("/")
@@ -29,6 +37,10 @@ class HttpDiagnosisAiClient:
                     payload = response.json()
                     detail = payload.get("detail", {})
                     message = detail.get("message", "AI 분석 서버가 요청을 처리하지 못했습니다.")
+                    if response.status_code == 429:
+                        raise AiServiceQuotaError(message)
+                    if response.status_code == 401:
+                        raise AiServiceAuthenticationError(message)
                     raise AiServiceError(message)
                 return DiagnosisResult.model_validate(response.json())
         except httpx.TimeoutException as exc:

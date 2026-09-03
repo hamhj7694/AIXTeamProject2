@@ -38,6 +38,13 @@ const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title
   </section>
 );
 
+const MAX_DIAGNOSIS_CHARS = 6000;
+const MAX_DIAGNOSIS_TURNS = 30;
+const countDiagnosisTurns = (value: string) => value
+  .split(/(?:[.!?]|\n)+/)
+  .map((part) => part.trim())
+  .filter(Boolean).length;
+
 export const DiagnosisPage: React.FC = () => {
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
@@ -49,6 +56,12 @@ export const DiagnosisPage: React.FC = () => {
     if (!text.trim()) {
       setFeedbackKind('error');
       setValidationMessage('내용을 입력하세요.');
+      return;
+    }
+    const turnCount = countDiagnosisTurns(text);
+    if (text.length > MAX_DIAGNOSIS_CHARS || turnCount > MAX_DIAGNOSIS_TURNS) {
+      setFeedbackKind('error');
+      setValidationMessage(`AI 비용 보호를 위해 한 번에 ${MAX_DIAGNOSIS_TURNS}문장·${MAX_DIAGNOSIS_CHARS.toLocaleString()}자까지만 분석합니다. 텍스트를 나누어 실행해 주세요.`);
       return;
     }
     setValidationMessage('');
