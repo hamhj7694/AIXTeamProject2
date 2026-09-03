@@ -109,3 +109,21 @@ class BriefUpdateResult(StrictModel):
     risk_evidence: list[Evidence] = Field(default_factory=list)
     counter_evidence: list[Evidence] = Field(default_factory=list)
     next_checks: list[str] = Field(default_factory=list)
+
+
+class CustomerAnswerBriefUpdateResult(StrictModel):
+    """Selected customer question through safe brief-update orchestration output.
+
+    This remains an AI-internal result: it deliberately has no queue, database,
+    or public-API state.  ``warnings`` and ``unresolved_items`` are repeated at
+    the top level so a later adapter can preserve uncertainty without having to
+    infer it from a UI-oriented response shape.
+    """
+
+    schema_version: str = "customer_answer_brief_update.v1"
+    selected_question: QuestionCandidate
+    structured_answer: CustomerAnswerResult
+    brief_update: BriefUpdateResult
+    unresolved_items: list[UnresolvedItem] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    source_reference: str | None = None

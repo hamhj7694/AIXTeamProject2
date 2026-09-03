@@ -4,6 +4,7 @@ from __future__ import annotations
 from contracts.ai_internal.mvp_workflow import (
     BriefUpdateResult,
     CaseBrief,
+    CustomerAnswerBriefUpdateResult,
     CustomerAnswerResult,
     QuestionCandidate,
     QuestionRecommendationContext,
@@ -49,3 +50,46 @@ class MvpWorkflowService:
         self, brief: CaseBrief, answer: CustomerAnswerResult,
     ) -> BriefUpdateResult:
         return self._brief_update_service.update(brief, answer)
+
+    def process_customer_answer(
+        self,
+        brief: CaseBrief,
+        selected_question: QuestionCandidate,
+        answer_text: str,
+        *,
+        source_reference: str | None = None,
+    ) -> CustomerAnswerBriefUpdateResult:
+        """Structure one selected-question answer and safely apply its update.
+
+        The existing services remain the sole source of answer interpretation
+        and brief mutation.  In particular, receiving an answer never by
+        itself confirms a fact: ``BriefUpdateService`` only resolves a target
+        that is still unresolved and whose answer is explicit.
+        """
+        structured_answer = self.structure_answer(
+            selected_question.target_field,
+            answer_text,
+        )
+        brief_update = self.update_brief(brief, structured_answer)
+        warnings = list(structured_answer.warnings)
+
+        if (
+            not structured_answer.unresolved
+            and not brief_update.resolved_items
+            and "Selected question target is not unresolved in the current brief."
+            not in warnings
+        ):
+            # Do not silently promote an explicit answer when the supplied
+            # question no longer belongs to the current case snapshot.
+            warnings.append(
+                "Selected question target is not unresolved in the current brief."
+            )
+
+        return CustomerAnswerBriefUpdateResult(
+            selected_question=selected_question,
+            structured_answer=structured_answer,
+            brief_update=brief_update,
+            unresolved_items=list(brief_update.unresolved_items),
+            warnings=warnings,
+            source_reference=source_reference,
+        )

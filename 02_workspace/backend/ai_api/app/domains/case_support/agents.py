@@ -8,6 +8,7 @@ from __future__ import annotations
 from contracts.ai_internal.mvp_workflow import (
     BriefUpdateResult,
     CaseBrief,
+    CustomerAnswerBriefUpdateResult,
     CustomerAnswerResult,
     QuestionCandidate,
     QuestionRecommendationContext,
@@ -46,6 +47,22 @@ class CustomerVerificationAgent:
         self, target_field: TargetField, raw_answer: str,
     ) -> CustomerAnswerResult:
         return self._workflow.structure_answer(target_field, raw_answer)
+
+    def process_answer_and_update_brief(
+        self,
+        brief: CaseBrief,
+        selected_question: QuestionCandidate,
+        answer_text: str,
+        *,
+        source_reference: str | None = None,
+    ) -> CustomerAnswerBriefUpdateResult:
+        """Expose the existing workflow as one customer-answer invocation."""
+        return self._workflow.process_customer_answer(
+            brief,
+            selected_question,
+            answer_text,
+            source_reference=source_reference,
+        )
 
 
 class CaseUpdateAgent:
