@@ -30,6 +30,23 @@ class PublicCaseReadResponse(PublicCaseReadModel):
     diagnosis: dict[str, Any]
     initial_report: dict[str, Any] | None
     primary_assignee: str | None = None
+    victim_transfer_status: str = "UNKNOWN"
+    actual_loss_amount_krw: float | None = None
+    created_at: str
+    updated_at: str
+
+
+class PublicCaseSummaryResponse(PublicCaseReadModel):
+    """Screen-safe Case context shared by customer, bank, and verification views."""
+    case_id: str
+    version: int = 1
+    risk: CaseRisk
+    mode: CaseMode
+    status: CaseStatus
+    initial_brief: str
+    primary_assignee: str | None = None
+    victim_transfer_status: str = "UNKNOWN"
+    actual_loss_amount_krw: float | None = None
     created_at: str
     updated_at: str
 
@@ -49,6 +66,20 @@ def to_public_case_read_response(record: dict[str, Any]) -> PublicCaseReadRespon
         "diagnosis": record["diagnosis"],
         "initial_report": record.get("initial_report"),
         "primary_assignee": record.get("primary_assignee"),
+        "victim_transfer_status": record.get("victim_transfer_status", "UNKNOWN"),
+        "actual_loss_amount_krw": record.get("actual_loss_amount_krw"),
         "created_at": record["created_at"],
         "updated_at": record["updated_at"],
+    })
+
+
+def to_public_case_summary_response(record: dict[str, Any]) -> PublicCaseSummaryResponse:
+    """Do not include original call text, diagnosis payload, or internal report in chat bundles."""
+    return PublicCaseSummaryResponse.model_validate({
+        "case_id": record["case_id"], "version": record.get("version", 1),
+        "risk": record["risk"], "mode": record["mode"], "status": record["status"],
+        "initial_brief": record["initial_brief"], "primary_assignee": record.get("primary_assignee"),
+        "victim_transfer_status": record.get("victim_transfer_status", "UNKNOWN"),
+        "actual_loss_amount_krw": record.get("actual_loss_amount_krw"),
+        "created_at": record["created_at"], "updated_at": record["updated_at"],
     })
