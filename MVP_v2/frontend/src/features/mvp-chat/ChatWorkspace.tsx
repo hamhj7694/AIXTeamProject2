@@ -1,4 +1,4 @@
-import React, { FormEvent, useEffect, useRef, useState } from 'react';
+import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Bookmark, Bot, Loader2, Paperclip, Send, Share2, ShieldCheck, UserRound } from 'lucide-react';
 import type { MessageAttachment, MvpMessage } from '../../services/mvpChatApi';
 import { AttachmentQueue, type QueuedFile } from './attachments/AttachmentQueue';
@@ -21,6 +21,7 @@ interface Props {
   quickActions?: Array<{ id: string; label: string }>;
   onQuickAction?: (id: string) => void;
   toolCards?: React.ReactNode;
+  timelineCards?: Array<{ id: string; createdAt: string; content: React.ReactNode }>;
   toolCardsActive?: boolean;
   onShareMessage?: (message: MvpMessage) => Promise<void>;
   sharingMessageId?: string | null;
@@ -65,7 +66,7 @@ const MAX_FILE_BYTES = 10 * 1024 * 1024;
 export const ChatWorkspace: React.FC<Props> = ({
   title, description, channelLabel, headerActions, messages, placeholder, currentUserId, theme = 'light', sending = false,
   onSend, onUploadFile, attachmentView = 'customer', quickActions = [], onQuickAction, toolCards, toolCardsActive = Boolean(toolCards),
-  onShareMessage, sharingMessageId, draftStorageKey, heightClassName = 'min-h-[620px]', focusMessageId,
+  onShareMessage, sharingMessageId, draftStorageKey, heightClassName = 'min-h-[620px]', focusMessageId, timelineCards = [],
 }) => {
   const [draft, setDraft] = useState(() => draftStorageKey ? localStorage.getItem(draftStorageKey) ?? '' : '');
   const [bookmarked, setBookmarked] = useState<string[]>([]);
@@ -81,6 +82,13 @@ export const ChatWorkspace: React.FC<Props> = ({
   const caseId = messages[0]?.case_id;
   const bookmarkEnabled = currentUserId === 'mvp-v2-current-user' || currentUserId === 'mvp-v2-customer';
   const busy = sending || uploading;
+  const timeline = useMemo(() => [
+    ...messages.map((message) => ({ id: `message-${message.message_id}`, createdAt: message.created_at, kind: 'message' as const, message })),
+    ...timelineCards.map((card) => ({ id: `card-${card.id}`, createdAt: card.createdAt, kind: 'card' as const, card })),
+  ].sort((left, right) => {
+    const timeDelta = new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
+    return timeDelta || left.id.localeCompare(right.id);
+  }), [messages, timelineCards]);
 
   useEffect(() => { if (draftStorageKey) localStorage.setItem(draftStorageKey, draft); }, [draft, draftStorageKey]);
   useEffect(() => {
@@ -88,7 +96,7 @@ export const ChatWorkspace: React.FC<Props> = ({
     if (!node) return;
     if (!initializedScrollRef.current || followLatestRef.current) node.scrollTop = node.scrollHeight;
     initializedScrollRef.current = true;
-  }, [messages.length]);
+  }, [timeline.length]);
   useEffect(() => { if (focusMessageId) document.getElementById(`message-${focusMessageId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, [focusMessageId, messages]);
   useEffect(() => { if (caseId) setBookmarked(bookmarkStore.list(caseId, currentUserId).map((item) => item.target_id)); }, [caseId, currentUserId, messages.length]);
   useEffect(() => { queuedFilesRef.current = queuedFiles; }, [queuedFiles]);
@@ -148,7 +156,9 @@ export const ChatWorkspace: React.FC<Props> = ({
     <header className={`border-b px-5 py-4 ${dark ? 'border-slate-800 bg-slate-950' : 'border-slate-100'}`}><div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center"><div className="min-w-0"><h1 className={`text-base font-black ${dark ? 'text-white' : 'text-slate-900'}`}>{title}</h1><p className={`mt-1 text-xs ${dark ? 'text-slate-400' : 'text-slate-500'}`}>{description}</p></div>{headerActions ?? (channelLabel ? <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${dark ? 'bg-slate-800 text-slate-200' : 'bg-slate-100 text-slate-600'}`}>{channelLabel}</span> : null)}</div></header>
     <div ref={scrollRef} onScroll={(event) => { const node = event.currentTarget; followLatestRef.current = node.scrollHeight - node.scrollTop - node.clientHeight < 72; }} className={`flex-1 space-y-4 overflow-y-auto p-4 sm:p-5 ${dark ? 'bg-slate-900' : 'bg-slate-50/70'}`} aria-live="polite">
       {messages.length === 0 && !toolCardsActive && <div className={`rounded-2xl border border-dashed p-6 text-center text-sm ${dark ? 'border-slate-700 bg-slate-800 text-slate-400' : 'border-slate-200 bg-white text-slate-500'}`}>아직 대화가 없습니다.</div>}
-      {messages.map((message) => {
+      {timeline.map((entry) => {
+        if (entry.kind === 'card') return <article key={entry.id} className="space-y-1"><time className={`block px-1 text-[10px] ${dark ? 'text-slate-500' : 'text-slate-400'}`}>{new Date(entry.createdAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}</time>{entry.card.content}</article>;
+        const message = entry.message;
         const mine = message.actor_user_id === currentUserId;
         const agent = message.actor_type === 'CUSTOMER_AGENT' || message.actor_type === 'BANK_AGENT';
         const canShare = Boolean(onShareMessage && message.actor_type === 'BANK_AGENT' && message.message_kind === 'AI_RESPONSE' && message.visibility === 'AI_PRIVATE' && message.private_owner_user_id === currentUserId);

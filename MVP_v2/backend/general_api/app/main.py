@@ -83,7 +83,7 @@ from contracts.public_api.collaboration import (
     PublicPrimaryAssigneeResponse,
 )
 
-from .clients.diagnosis_ai import AiServiceError, HttpDiagnosisAiClient
+from .clients.diagnosis_ai import AiServiceAuthenticationError, AiServiceError, AiServiceQuotaError, HttpDiagnosisAiClient
 from .domains.cases.repository import CaseVersionConflictError, InMemoryCaseRepository
 from .domains.cases.service import AnalyzeCaseService, InvalidCaseTransitionError, transition_case
 
@@ -241,6 +241,12 @@ async def analyze_case(request: PublicAnalyzeCaseRequest) -> PublicAnalyzeCaseRe
     except ValueError as exc:
         failure = public_failed_response("INVALID_INPUT", str(exc), retryable=False)
         return JSONResponse(status_code=400, content=failure.model_dump(mode="json"))
+    except AiServiceQuotaError as exc:
+        failure = public_failed_response("OPENAI_QUOTA_EXHAUSTED", str(exc), retryable=False)
+        return JSONResponse(status_code=429, content=failure.model_dump(mode="json"))
+    except AiServiceAuthenticationError as exc:
+        failure = public_failed_response("OPENAI_AUTHENTICATION_FAILED", str(exc), retryable=False)
+        return JSONResponse(status_code=401, content=failure.model_dump(mode="json"))
     except AiServiceError as exc:
         failure = public_failed_response("AI_ANALYSIS_FAILED", str(exc), retryable=True)
         return JSONResponse(status_code=503, content=failure.model_dump(mode="json"))

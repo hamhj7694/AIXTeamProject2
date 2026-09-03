@@ -10,6 +10,8 @@ from contracts.diagnosis import AnalyzeTextRequest, DiagnosisResult
 
 from .domains.case_support import CaseSnapshotAiAdapter
 from .domains.diagnosis import DiagnosisService
+from .domains.diagnosis.budget import DiagnosisBudgetExceededError
+from .domains.diagnosis.extractor import AiProviderAuthenticationError, AiProviderQuotaError
 
 
 load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=False)
@@ -30,6 +32,12 @@ async def analyze_text(request: AnalyzeTextRequest) -> DiagnosisResult:
         return await service.analyze(request.text.strip())
     except ValueError as exc:
         raise HTTPException(status_code=400, detail={"code": "INVALID_INPUT", "message": str(exc)}) from exc
+    except DiagnosisBudgetExceededError as exc:
+        raise HTTPException(status_code=429, detail={"code": "AI_BUDGET_LIMIT_REACHED", "message": str(exc)}) from exc
+    except AiProviderQuotaError as exc:
+        raise HTTPException(status_code=429, detail={"code": "OPENAI_QUOTA_EXHAUSTED", "message": str(exc)}) from exc
+    except AiProviderAuthenticationError as exc:
+        raise HTTPException(status_code=401, detail={"code": "OPENAI_AUTHENTICATION_FAILED", "message": str(exc)}) from exc
     except Exception as exc:
         raise HTTPException(status_code=503, detail={"code": "AI_ANALYSIS_FAILED", "message": str(exc)}) from exc
 

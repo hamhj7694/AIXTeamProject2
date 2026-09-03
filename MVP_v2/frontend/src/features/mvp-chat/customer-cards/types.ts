@@ -8,7 +8,7 @@ export interface CustomerVerificationResult {
 }
 
 export type CustomerCardDescriptor =
-  | { card_id: string; card_type: 'QUESTION'; payload: { question: CustomerQuestion } }
-  | { card_id: string; card_type: 'ANSWER_RECEIPT'; payload: { question: CustomerQuestion; answer: string } }
-  | { card_id: string; card_type: 'VERIFICATION_RESULT'; payload: { result: CustomerVerificationResult } }
-  | { card_id: string; card_type: 'RECOVERY_STEP'; payload: { stepId: string } };
+  | { card_id: string; created_at: string; card_type: 'QUESTION'; payload: { question: CustomerQuestion } }
+  | { card_id: string; created_at: string; card_type: 'ANSWER_RECEIPT'; payload: { question: CustomerQuestion; answer: string } }
+  | { card_id: string; created_at: string; card_type: 'VERIFICATION_RESULT'; payload: { result: CustomerVerificationResult } }
+  | { card_id: string; created_at: string; card_type: 'RECOVERY_STEP'; payload: { stepId: string } };
