@@ -593,6 +593,9 @@ async def get_case_bundle(case_id: str, view: Literal["entry", "customer", "bank
     actions = [to_public_action(item) for item in await repository.list_actions(case_id)]
     verifications = [to_public_verification(item) for item in await repository.list_verifications(case_id)]
     events = [to_public_event(item).model_dump(mode="json") for item in await repository.list_events(case_id)]
+    # Customer view hides event details, but still needs the Case activity cursor
+    # to identify the latest synchronized state.
+    cursor = str(events[-1]["event_id"]) if events else None
     voice = await repository.get_voice_session(case_id)
     if view == "customer":
         messages = [item for item in messages if item.get("visibility") == "CUSTOMER"]
@@ -602,7 +605,7 @@ async def get_case_bundle(case_id: str, view: Literal["entry", "customer", "bank
         live_report=None if view == "customer" else record.get("initial_report"),
         questions=[], progress_items=[], verification_tasks=verifications,
         recent_messages=messages[-50:], recent_actions=actions[-50:], recent_events=events[-50:],
-        voice_session=PublicVoiceSessionResponse.model_validate(voice) if voice else None, cursor=str(events[-1]["event_id"]) if events else None,
+        voice_session=PublicVoiceSessionResponse.model_validate(voice) if voice else None, cursor=cursor,
     )
 
 
