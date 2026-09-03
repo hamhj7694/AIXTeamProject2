@@ -1,94 +1,73 @@
-# MVP v2 — Chat-first Case Workspace
+# CONTEXT-FIRST CASE MVP_v2
 
-> 문서 기준일: 2026-09-02  
-> 상태: 프론트엔드 전환 방향 확정, 구현 전
+보이스피싱 의심 상황을 하나의 Case로 연결하고, 고객 상담·은행 협업·기관 검증·보고서를 같은 데이터에서 운영하는 Chat-first MVP입니다.
 
-## 1. 목표
-
-기존의 여러 화면과 많은 고정 정보를 하나의 복잡한 대시보드에 배치하는 방식에서 벗어나, **하나의 Case를 중심으로 대화·질문·검증·조치·보고 결과를 주고받는 Chat-first UI**로 전환한다.
-
-고객과 은행은 동일한 `case_id`와 Case 상태를 공유하지만, 서로 다른 목적·권한·정보 밀도를 가진 별도 화면을 사용한다.
-
-- 고객 화면: 추가 피해 방지, 상황 설명, 질문 응답, 진행상태 확인
-- 은행 화면: 여러 관계자의 협업, 고객 확인, 기관 검증, 조치 기록, Case 종료
-- 공통: 메시지 입력창은 채팅 영역 하단에 고정
-- 은행: 화면 밖의 실시간 보고서 패널 대신 **Append-only Case Live Log** 사용
-- 고객: 기술적인 로그 대신 현재 단계와 다음 행동만 간단히 제공
-
-## 2. 최종 핵심 결정
-
-1. 채팅이 두 화면의 주요 작업 공간이다.
-2. 화면 밖에는 대화 중에도 놓치면 안 되는 극소수 상태만 표시한다.
-3. 고객 화면과 은행 화면의 데이터 접근 권한을 분리한다.
-4. 은행의 내부 AI 업무 대화와 고객에게 보내는 대화를 명확히 구분한다.
-5. 채팅 안의 카드가 DB 원본 데이터가 되지 않는다.
-6. Message·Verification·Action·Report·Event 등 Backend에 저장된 Entity를 채팅 Block과 Log Row로 투영한다.
-7. Case 변경은 덮어쓰는 화면 메모가 아니라 Version이 있는 현재 상태와 Append-only Event Log로 추적한다.
-8. 현재 Event Polling을 MVP 시작점으로 재활용하고, 이후 SSE 또는 WebSocket으로 교체한다.
-9. 루트 페이지와 Case 리스트 페이지는 기존 스타일·Route·API Client를 우선 재활용한다.
-10. 은행 내부 팀 채팅은 사람 간 대화가 기본이며, AI는 `@CaseCopilot`으로 명시 호출됐을 때만 응답한다.
-11. 은행 참여자의 영구 역할과 현재 접속 상태는 분리한다.
-
-## 3. 문서 구성
-
-| 문서 | 내용 |
-|---|---|
-| `01_frontend_final_direction.md` | 고객·은행 화면의 최종 구조와 구성요소 |
-| `02_chat_and_case_log_contract.md` | 채팅 Block, 입력창, 은행 Case Log 규격 |
-| `03_reuse_and_implementation_todo.md` | 기존 코드 재활용 범위와 구현 순서 |
-| `04_bank_collaboration_and_ai_invocation.md` | 참여자 상태, 채널 분리, `@CaseCopilot` 호출 규칙 |
-| `05_existing_project_reuse_catalog.md` | 기존 Frontend·Backend 파일별 재활용 판단 |
-
-## 4. MVP 완료 범위
-
-### 고객
-
-- Case 진입 및 현재 상태 확인
-- Customer Agent와 텍스트 대화
-- 질문 카드 응답
-- 고객 답변의 Backend 저장
-- 긴급 안전 행동 확인
-- 은행 담당자 연결 상태 확인
-- 기관 검증 진행상태 확인
-
-### 은행
-
-- Case 진입 및 핵심 상태 확인
-- Bank Copilot과 내부 업무 대화
-- 고객 대화 조회 및 메시지 전송
-- 고객 질문 검토·전송
-- 기관 검증 요청·상태 확인
-- 은행 조치 기록
-- Case Live Log 실시간 갱신
-- 담당자 Takeover·AI Resume
-- Case 종료와 FINAL 결과 확인
-
-## 5. MVP에서 제외하거나 후순위로 두는 항목
-
-- 실제 음성통화 Provider와 Streaming STT
-- Voice Intelligence AI
-- 운영용 FDS 외부 연동
-- Vector DB와 전체 RAG Pipeline
-- 복잡한 분석 Dashboard
-- 고객에게 ML 점수·FDS 상세·내부 메모 노출
-- 은행 화면의 상시 전체 보고서 패널
-- 자동 지급정지·자동 신고 등 승인 없는 외부 조치
-- 복수 담당자 협업·고급 권한관리
-
-## 6. 데이터 원칙
+## 정본 구조
 
 ```text
-사용자 입력
-  → 일반 Backend Command
-  → 필요 시 AI 분석·구조화
-  → Backend 검증·Version·Transaction
-  → MySQL Entity 저장
-  → case_events Append
-  → 고객/은행 화면의 Chat Block 또는 Log Row 갱신
+MVP_v2/
+├─ frontend/   React + TypeScript + Vite
+├─ backend/    General API + AI API + 계약 테스트
+├─ docs/       기준 PRD와 실행 문서
+└─ agents/     역할별 작업 지침
 ```
 
-- MySQL이 Case 상태의 Single Source of Truth다.
-- AI는 DB를 직접 수정하지 않는다.
-- Frontend는 AI API를 직접 호출하지 않고 General API를 호출한다.
-- AI 결과는 Backend 검증과 저장이 끝난 후 화면에 표시한다.
-- 고객과 은행에는 같은 원본 데이터의 서로 다른 Projection을 제공한다.
+프론트엔드의 실제 화면 진입점은 `frontend/src/router/routes.tsx` 하나입니다.
+
+| 경로 | 정본 화면 |
+|---|---|
+| `/` | 텍스트 진단 |
+| `/cases` | 보이스피싱 Case 목록 |
+| `/cases/:caseId` | Case 개요 |
+| `/cases/:caseId/bank` | 은행 대응·협업 |
+| `/cases/:caseId/customer` | 고객 안전 상담 |
+| `/cases/:caseId/verify` | 기관 검증 |
+
+은행·고객 Chat-first UI의 정본 컴포넌트는 `frontend/src/features/mvp-chat/`입니다. 같은 목적의 두 번째 화면이나 목데이터 전용 페이지를 새로 만들지 않습니다.
+
+## 문서 기준
+
+- 최상위 제품 기준: `docs/CONTEXT_FIRST_CASE_MVP_v2_PRD_2026-09-03.md`
+- 작업 문서 색인: `docs/new_md/README.md`
+- 실시간 세부 백로그: `docs/new_md/06_LIVE_DETAILED_IMPLEMENTATION_TODO.md`
+- 데이터 계약: `docs/new_md/05_DATA_SCHEMA_AND_FLOW.md`
+
+구현과 문서가 다르면 실제 검증된 코드 상태를 확인한 뒤, 상위 PRD의 의도에 맞춰 같은 작업에서 문서를 갱신합니다.
+
+## 로컬 실행
+
+### Backend
+
+```powershell
+cd MVP_v2/backend
+python -m uvicorn general_api.app.main:app --host 127.0.0.1 --port 8100
+python -m uvicorn ai_api.app.main:app --host 127.0.0.1 --port 8101
+```
+
+### Frontend
+
+```powershell
+cd MVP_v2/frontend
+npm.cmd install
+npm.cmd run dev
+```
+
+Frontend 개발 서버는 `http://127.0.0.1:5175`를 사용하며 `strictPort`로 중복 실행을 막습니다.
+
+로컬 개발에서는 `dist`를 사용하지 않습니다. Vite가 `src`를 직접 제공하고, 같은 Origin의 `/api/*` 요청을 `http://127.0.0.1:8100`으로 전달합니다. `VITE_API_BASE_URL`은 비워둡니다. AI API는 Frontend가 직접 호출하지 않고 General API를 통해 사용합니다.
+
+## 검증
+
+```powershell
+cd MVP_v2/frontend
+npm.cmd run build
+
+cd ../backend
+python -m pytest
+```
+
+`npm.cmd run build`는 배포 가능 여부를 확인하는 검증 명령이라 실행 시 `dist`가 임시 생성됩니다. 로컬 개발 서버와 Backend 연결에는 필요하지 않으며 Git에도 포함하지 않습니다.
+
+## 현재 제외 범위
+
+음성 통화·녹음·실시간 STT·화자 분리·음성 분석은 후속 PRD 승인 전까지 구현 범위에서 제외합니다. 실제 API 키와 개인정보는 저장소에 커밋하지 않습니다.

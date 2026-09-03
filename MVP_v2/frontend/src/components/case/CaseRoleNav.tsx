@@ -6,9 +6,9 @@ interface CaseRoleNavProps { caseId: string; compact?: boolean; }
 
 const items = [
   { key: '', label: 'Case 개요', icon: ClipboardList },
-  { key: 'bank', label: '은행 화면', icon: Building2 },
-  { key: 'customer', label: '소비자 화면', icon: UserRound },
-  { key: 'verify', label: '기타 / 검증', icon: BadgeCheck },
+  { key: 'bank', label: '은행 대응', icon: Building2 },
+  { key: 'customer', label: '고객 상담', icon: UserRound },
+  { key: 'verify', label: '기관 검증', icon: BadgeCheck },
 ];
 
 export const CaseRoleNav: React.FC<CaseRoleNavProps> = ({ caseId, compact = false }) => {

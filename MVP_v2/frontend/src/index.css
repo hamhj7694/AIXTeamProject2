@@ -2,6 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
+#bank-utility-dock > button {
+  position: static;
+  flex: none;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -167,15 +172,15 @@ button:active {
 
 /* Bank Case workspace: the event/risk sidebar belongs to the left of chat. */
 @media (min-width: 1024px) {
-  div.grid:has(aside h2) {
+  div.grid:has(> section.min-w-0 + aside) {
     grid-template-columns: 280px minmax(0, 1fr) !important;
   }
 
-  div.grid:has(aside h2) > aside {
+  div.grid:has(> section.min-w-0 + aside) > aside {
     order: -1;
   }
 
-  div.grid:has(aside h2) > section:first-child {
+  div.grid:has(> section.min-w-0 + aside) > section:first-child {
     height: 690px !important;
   }
 

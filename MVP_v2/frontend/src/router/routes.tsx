@@ -1,6 +1,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
-import { DiagnosisPage } from '../pages/CasePages';
+import { DiagnosisPage } from '../pages/DiagnosisPage';
 import { BankCollaborationPage } from '../pages/BankCollaborationPage';
 import { CustomerChatPage } from '../pages/CustomerChatPage';
 import { CaseEntryPageV2 } from '../pages/CaseEntryPageV2';
