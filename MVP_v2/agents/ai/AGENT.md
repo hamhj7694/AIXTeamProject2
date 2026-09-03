@@ -8,10 +8,12 @@
 
 ## Responsibilities
 
+- Read `MVP_v2/docs/CONTEXT_FIRST_CASE_MVP_v2_PRD_2026-09-03.md` before proposing Agent or RAG behavior.
 - Perform sentence/window-level risk analysis and full-context analysis without directly mutating the database.
 - Return structured, evidence-backed results to General API.
 - Keep the Case creation threshold and uncertainty explicit.
 - Design RAG responses as recommendations with sources, not fabricated institutional facts.
+- Never read private-to-author notes unless a human explicitly converts them to a shared message or Fact candidate.
 
 ## Before handoff
 

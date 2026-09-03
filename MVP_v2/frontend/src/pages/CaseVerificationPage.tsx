@@ -1,71 +1,28 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Send, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Plus, Save, ShieldCheck } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { AppLayout } from '../components/layout/AppLayout';
-import { caseApi } from '../services/caseApi';
-import { caseWorkflowApi, VerificationTask } from '../services/caseWorkflowApi';
-import { useCaseEventRefresh } from '../features/case-state/useCaseEventRefresh';
+import { CaseContextBar } from '../components/case/CaseContextBar';
+import { caseApi, type CaseDetail } from '../services/caseApi';
+import { caseWorkflowApi, type VerificationTask } from '../services/caseWorkflowApi';
 
-type Answer = '사실임' | '사실 아님' | '확인 불가';
-type CaseView = { id: string; type: string; risk: string; status: string; verificationBrief: string; verificationQuestions: Array<{ id: number; question: string }> };
+type Draft = { status: VerificationTask['status']; result_summary: string; evidence_url: string; verified_by: string; rag_source: string; customer_visible: boolean };
+const statusLabel: Record<VerificationTask['status'], string> = { PENDING: '대기', IN_PROGRESS: '확인 중', COMPLETED: '확인 완료', ON_HOLD: '보류', FAILED: '확인 불가' };
+const makeDraft = (task: VerificationTask): Draft => ({ status: task.status as VerificationTask['status'], result_summary: task.result_summary ?? '', evidence_url: task.evidence_url ?? '', verified_by: task.verified_by ?? '', rag_source: task.rag_source ?? '', customer_visible: Boolean(task.customer_visible) });
+
+const VerificationTaskCard: React.FC<{ task: VerificationTask; onSaved: () => Promise<void> }> = ({ task, onSaved }) => {
+  const [draft, setDraft] = useState<Draft>(() => makeDraft(task)); const [editing, setEditing] = useState(false); const [saving, setSaving] = useState(false); const [error, setError] = useState('');
+  useEffect(() => setDraft(makeDraft(task)), [task]);
+  const save = async () => { setSaving(true); setError(''); try { await caseWorkflowApi.updateVerification(task.case_id, task.verification_task_id, task.version, draft.status, draft); setEditing(false); await onSaved(); } catch (reason) { setError(reason instanceof Error ? reason.message : '검증 결과를 저장하지 못했습니다.'); } finally { setSaving(false); } };
+  return <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><div className="flex flex-wrap items-start justify-between gap-2"><div><p className="text-[11px] font-bold text-slate-400">확인 대상</p><h3 className="mt-1 text-sm font-black text-slate-900">{task.target}</h3></div><span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${draft.status === 'COMPLETED' ? 'bg-emerald-50 text-emerald-700' : draft.status === 'FAILED' ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-700'}`}>{statusLabel[draft.status]}</span></div><p className="mt-3 rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-700">{task.claim}</p>{!editing ? <><dl className="mt-3 grid gap-2 text-xs sm:grid-cols-2"><div><dt className="text-slate-400">결과 요약</dt><dd className="mt-1 font-semibold text-slate-700">{task.result_summary || '아직 기록되지 않았습니다.'}</dd></div><div><dt className="text-slate-400">확인자</dt><dd className="mt-1 font-semibold text-slate-700">{task.verified_by || '미지정'}</dd></div><div><dt className="text-slate-400">RAG 출처</dt><dd className="mt-1 font-semibold text-slate-700">{task.rag_source || '확인안됨'}</dd></div><div><dt className="text-slate-400">고객 공개</dt><dd className="mt-1 font-semibold text-slate-700">{task.customer_visible ? '공개 가능' : '내부 전용'}</dd></div></dl>{task.evidence_url && <a href={task.evidence_url} target="_blank" rel="noreferrer" className="mt-3 inline-block text-xs font-bold text-blue-700 underline">근거 URL 열기</a>}<button type="button" onClick={() => setEditing(true)} className="mt-4 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700">결과 기록·수정</button></> : <div className="mt-4 space-y-3"><div className="grid gap-3 sm:grid-cols-2"><label className="text-xs font-bold text-slate-600">상태<select value={draft.status} onChange={(event) => setDraft((value) => ({ ...value, status: event.target.value as Draft['status'] }))} className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">{Object.entries(statusLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="text-xs font-bold text-slate-600">확인자<input value={draft.verified_by} onChange={(event) => setDraft((value) => ({ ...value, verified_by: event.target.value }))} placeholder="확인 담당자" className="mt-1.5 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"/></label></div><label className="block text-xs font-bold text-slate-600">결과 요약<textarea value={draft.result_summary} onChange={(event) => setDraft((value) => ({ ...value, result_summary: event.target.value }))} placeholder="공식 채널 확인 결과와 판단 근거를 요약하세요." className="mt-1.5 min-h-24 w-full rounded-xl border border-slate-200 p-3 text-sm"/></label><div className="grid gap-3 sm:grid-cols-2"><label className="text-xs font-bold text-slate-600">근거 URL<input value={draft.evidence_url} onChange={(event) => setDraft((value) => ({ ...value, evidence_url: event.target.value }))} placeholder="https://..." className="mt-1.5 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"/></label><label className="text-xs font-bold text-slate-600">RAG 출처<input value={draft.rag_source} onChange={(event) => setDraft((value) => ({ ...value, rag_source: event.target.value }))} placeholder="공식 안내 문서명" className="mt-1.5 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"/></label></div><label className="flex items-center gap-2 rounded-xl bg-blue-50 p-3 text-xs font-bold text-blue-800"><input type="checkbox" checked={draft.customer_visible} onChange={(event) => setDraft((value) => ({ ...value, customer_visible: event.target.checked }))} className="h-4 w-4 accent-blue-600"/>담당자 확인 후 고객에게 공개 가능한 결과입니다.</label>{error && <p className="rounded-xl bg-rose-50 p-3 text-xs font-bold text-rose-700">{error}</p>}<div className="flex justify-end gap-2"><button type="button" onClick={() => { setDraft(makeDraft(task)); setEditing(false); }} className="rounded-xl border px-3 py-2 text-xs font-bold">취소</button><button type="button" disabled={saving} onClick={() => void save()} className="inline-flex items-center gap-1 rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"><Save size={14}/>{saving ? '저장 중' : '결과 저장'}</button></div></div>}</article>;
+};
 
 export const CaseVerificationPage: React.FC = () => {
-  const { caseId = '' } = useParams();
-  const [item, setItem] = useState<CaseView | null>(null);
-  const [tasks, setTasks] = useState<VerificationTask[]>([]);
-  const [answers, setAnswers] = useState<Record<number, Answer | undefined>>({});
-  const [opinion, setOpinion] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
-  const [eventCursor, setEventCursor] = useState<string | null>(null);
-  const [refreshNonce, setRefreshNonce] = useState(0);
-
-  const load = async () => {
-    const [caseDetail, bundle] = await Promise.all([caseApi.get(caseId), caseWorkflowApi.getBundle(caseId, 'entry')]);
-    setItem(caseDetail);
-    setTasks(bundle.verification_tasks);
-    setEventCursor(bundle.cursor);
-  };
-
-  useEffect(() => {
-    let active = true;
-    setError(''); setItem(null);
-    load().catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : 'Case 데이터를 불러오지 못했습니다.'); });
-    return () => { active = false; };
-  }, [caseId, refreshNonce]);
-
-  useCaseEventRefresh({
-    caseId,
-    cursor: eventCursor,
-    onEvents: (events) => {
-      setEventCursor(String(events[events.length - 1].event_id));
-      setRefreshNonce((current) => current + 1);
-    },
-  });
-
-  const questions = useMemo(() => item?.verificationQuestions ?? [], [item]);
-  const choose = (id: number, answer: Answer) => setAnswers((current) => ({ ...current, [id]: current[id] === answer ? undefined : answer }));
-  const submit = async () => {
-    if (!item || (!Object.keys(answers).length && !opinion.trim())) return;
-    const claim = questions.filter((question) => answers[question.id]).map((question) => `${question.question}: ${answers[question.id]}`).join('\n') || opinion.trim();
-    setSubmitting(true); setError('');
-    try {
-      await caseWorkflowApi.createVerification(item.id, claim, item.type || '기관 확인');
-      setAnswers({}); setOpinion(''); await load();
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : '검증 요청을 저장하지 못했습니다.');
-    } finally { setSubmitting(false); }
-  };
-
-  if (error) return <AppLayout><div className="mx-auto max-w-4xl py-8 lg:ml-64"><div className="rounded-2xl border border-rose-200 bg-rose-50 p-5 text-sm font-bold text-rose-700">{error}</div></div></AppLayout>;
-  if (!item) return <AppLayout><div className="mx-auto max-w-4xl py-8 lg:ml-64"><div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm font-bold text-slate-500">Case 데이터를 불러오는 중입니다.</div></div></AppLayout>;
-
-  return <AppLayout><div className="mx-auto max-w-4xl py-8 lg:ml-64">
-    <Link to={`/cases/${item.id}`} className="mb-5 inline-flex items-center gap-1 text-sm font-bold text-slate-500"><ArrowLeft size={16}/> Case 상세</Link>
-    <div className="mb-6"><p className="text-xs font-bold text-blue-600">CASE VERIFICATION</p><h1 className="mt-2 text-2xl font-black">사실 확인 요청</h1><div className="mt-3 flex flex-wrap items-center gap-2 text-sm"><span className="font-bold">CASE #{item.id}</span><span className="rounded-full bg-rose-50 px-2.5 py-1 text-xs font-bold text-rose-700">{item.risk}</span><span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700">{item.status}</span></div></div>
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center gap-2"><ShieldCheck size={19} className="text-blue-600"/><h2 className="text-sm font-extrabold">Case 진단 근거</h2></div><p className="mt-4 rounded-xl border border-slate-100 p-4 text-sm leading-6 text-slate-700">{item.verificationBrief || '추가 사실 확인이 필요합니다.'}</p></section>
-    <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><h2 className="text-sm font-extrabold">실제 분석 근거 기반 확인 항목</h2><div className="mt-4 space-y-4">{questions.length ? questions.map((question) => <div key={question.id} className="rounded-xl border border-slate-100 p-4"><p className="text-sm font-bold"><span className="mr-2 text-blue-600">확인 항목 {String(question.id).padStart(2, '0')}</span>{question.question}</p><div className="mt-3 grid gap-2 sm:grid-cols-3">{(['사실임', '사실 아님', '확인 불가'] as Answer[]).map((option) => <label key={option} className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold ${answers[question.id] === option ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-600 hover:border-blue-300'}`}><input type="checkbox" checked={answers[question.id] === option} onChange={() => choose(question.id, option)} className="h-4 w-4 accent-blue-600"/>{option}</label>)}</div></div>) : <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">현재 분석 결과에 추가 확인 항목이 없습니다.</p>}</div></section>
-    <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><h2 className="text-sm font-extrabold">기관 추가 의견</h2><textarea value={opinion} onChange={(event) => setOpinion(event.target.value)} disabled={submitting} placeholder="확인 내용을 입력해주세요" className="mt-3 min-h-32 w-full resize-y rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm outline-none focus:border-blue-500"/><button onClick={submit} disabled={submitting || (!Object.keys(answers).length && !opinion.trim())} className="mt-3 inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-bold text-white disabled:opacity-40"><Send size={15}/> {submitting ? '저장 중' : '검증 요청 저장'}</button></section>
-    <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><h2 className="text-sm font-extrabold">저장된 검증 요청</h2><div className="mt-3 space-y-2">{tasks.length ? tasks.map((task) => <div key={task.verification_task_id} className="rounded-xl border border-slate-100 p-3"><div className="flex justify-between gap-3 text-xs"><span className="font-bold">{task.target}</span><span className="text-blue-600">{task.status}</span></div><p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">{task.claim}</p></div>) : <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">저장된 검증 요청이 없습니다.</p>}</div></section>
-  </div></AppLayout>;
+  const { caseId = '' } = useParams(); const [item, setItem] = useState<CaseDetail | null>(null); const [tasks, setTasks] = useState<VerificationTask[]>([]); const [claim, setClaim] = useState(''); const [target, setTarget] = useState(''); const [creating, setCreating] = useState(false); const [error, setError] = useState('');
+  const load = async () => { const [detail, bundle] = await Promise.all([caseApi.get(caseId), caseWorkflowApi.getBundle(caseId, 'entry')]); setItem(detail); setTasks(bundle.verification_tasks); };
+  useEffect(() => { void load().catch((reason) => setError(reason instanceof Error ? reason.message : 'Case 데이터를 불러오지 못했습니다.')); }, [caseId]);
+  const create = async () => { if (!claim.trim() || !target.trim()) return; setCreating(true); setError(''); try { await caseWorkflowApi.createVerification(caseId, claim.trim(), target.trim()); setClaim(''); setTarget(''); await load(); } catch (reason) { setError(reason instanceof Error ? reason.message : '검증 요청을 저장하지 못했습니다.'); } finally { setCreating(false); } };
+  const brief = useMemo(() => item?.verificationBrief || '사칭 주장과 공식 절차를 비교해 결과와 근거를 남겨주세요.', [item]);
+  if (!item) return <AppLayout><main className="mx-auto max-w-5xl py-8 lg:ml-64"><p className="rounded-2xl bg-white p-6 text-sm text-slate-500">Case 데이터를 불러오는 중입니다.</p></main></AppLayout>;
+  return <AppLayout><main className="mx-auto max-w-5xl py-8 lg:ml-64"><Link to={`/cases/${caseId}`} className="mb-5 inline-flex items-center gap-1 text-sm font-bold text-slate-500"><ArrowLeft size={16}/> Case 개요</Link><div className="mb-4"><p className="text-xs font-bold text-blue-600">CASE VERIFICATION</p><h1 className="mt-2 text-2xl font-black">기관 검증</h1><p className="mt-2 text-sm text-slate-500">외부 기관에 자동 요청하지 않습니다. 공식 채널 확인 업무와 결과 근거를 Case에 기록합니다.</p></div><CaseContextBar item={item} compact/>{error && <p className="mt-4 rounded-xl bg-rose-50 p-3 text-sm font-bold text-rose-700">{error}</p>}<section className="mt-4 rounded-2xl border border-blue-100 bg-blue-50 p-5"><div className="flex items-center gap-2"><ShieldCheck size={18} className="text-blue-600"/><h2 className="text-sm font-black">검증 기준</h2></div><p className="mt-3 text-sm leading-6 text-blue-900">{brief}</p></section><section className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><h2 className="text-sm font-black">새 기관 확인 업무</h2><div className="mt-3 grid gap-3 sm:grid-cols-2"><input value={claim} onChange={(event) => setClaim(event.target.value)} placeholder="사칭 주장 또는 확인할 내용" className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm"/><input value={target} onChange={(event) => setTarget(event.target.value)} placeholder="기관명·전화번호·계좌번호 등 확인 대상" className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm"/></div><button type="button" disabled={!claim.trim() || !target.trim() || creating} onClick={() => void create()} className="mt-3 inline-flex items-center gap-1 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-bold text-white disabled:opacity-50"><Plus size={15}/>{creating ? '등록 중' : '검증 업무 등록'}</button></section><section className="mt-4"><div className="mb-3 flex items-center justify-between"><h2 className="text-base font-black">검증 업무와 결과</h2><span className="text-xs font-bold text-slate-400">{tasks.length}건</span></div><div className="space-y-3">{tasks.length ? tasks.map((task) => <VerificationTaskCard key={task.verification_task_id} task={task} onSaved={load}/>) : <p className="rounded-2xl border border-dashed border-slate-200 bg-white p-8 text-center text-sm text-slate-500">등록된 검증 업무가 없습니다.</p>}</div></section><p className="mt-5 flex items-center gap-1 text-xs text-slate-400"><CheckCircle2 size={14}/>고객 공개는 담당자가 선택한 결과만 허용됩니다.</p></main></AppLayout>;
 };

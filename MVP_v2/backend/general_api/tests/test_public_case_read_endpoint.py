@@ -54,6 +54,7 @@ class PublicCaseReadEndpointTest(unittest.TestCase):
         self.assertEqual(set(item), {
             "case_id", "version", "client_request_id", "input_text", "risk", "risk_score", "mode", "status",
             "initial_brief", "diagnosis", "initial_report", "created_at", "updated_at",
+            "victim_transfer_status",
         })
 
     def test_detail_returns_same_public_shape(self) -> None:

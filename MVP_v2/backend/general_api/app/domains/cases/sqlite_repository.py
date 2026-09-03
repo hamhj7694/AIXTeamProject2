@@ -19,8 +19,8 @@ from .repository import InMemoryCaseRepository
 
 class LocalSqliteCaseRepository(InMemoryCaseRepository):
     _STATE_FIELDS = (
-        "_records", "_messages", "_events", "_verifications", "_actions",
-        "_voice_sessions", "_transcripts", "_members", "_presence",
+        "_records", "_messages", "_attachments", "_events", "_verifications", "_actions",
+        "_voice_sessions", "_transcripts", "_members", "_presence", "_customer_questions", "_case_facts", "_personal_notes",
     )
 
     def __init__(self, database_path: str | None = None) -> None:
@@ -57,11 +57,26 @@ class LocalSqliteCaseRepository(InMemoryCaseRepository):
     async def create(self, record: dict[str, Any]) -> dict[str, Any]:
         result = await super().create(record); self._persist(); return result
 
+    async def list(self) -> list[dict[str, Any]]:
+        result = await super().list(); self._persist(); return result
+
+    async def list_trashed_cases(self) -> list[dict[str, Any]]:
+        result = await super().list_trashed_cases(); self._persist(); return result
+
+    async def delete_case(self, case_id: str) -> None:
+        await super().delete_case(case_id); self._persist()
+
+    async def restore_case(self, case_id: str) -> None:
+        await super().restore_case(case_id); self._persist()
+
     async def update_case(self, case_id: str, expected_version: int, changes: dict[str, Any]) -> dict[str, Any]:
         result = await super().update_case(case_id, expected_version, changes); self._persist(); return result
 
     async def append_message(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]:
         result = await super().append_message(case_id, record); self._persist(); return result
+
+    async def create_attachment(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]:
+        result = await super().create_attachment(case_id, record); self._persist(); return result
 
     async def upsert_member(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]:
         result = await super().upsert_member(case_id, record); self._persist(); return result
@@ -75,8 +90,8 @@ class LocalSqliteCaseRepository(InMemoryCaseRepository):
     async def create_verification(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]:
         result = await super().create_verification(case_id, record); self._persist(); return result
 
-    async def update_verification(self, case_id: str, verification_task_id: str, expected_version: int, status: str) -> dict[str, Any]:
-        result = await super().update_verification(case_id, verification_task_id, expected_version, status); self._persist(); return result
+    async def update_verification(self, case_id: str, verification_task_id: str, expected_version: int, status: str, details: dict[str, Any] | None = None) -> dict[str, Any]:
+        result = await super().update_verification(case_id, verification_task_id, expected_version, status, details); self._persist(); return result
 
     async def create_action(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]:
         result = await super().create_action(case_id, record); self._persist(); return result
@@ -92,3 +107,12 @@ class LocalSqliteCaseRepository(InMemoryCaseRepository):
 
     async def finalize_report(self, case_id: str, expected_version: int, note: str) -> dict[str, Any]:
         result = await super().finalize_report(case_id, expected_version, note); self._persist(); return result
+
+    async def create_personal_note(self, case_id: str, author_id: str, content: str) -> dict[str, Any]:
+        result = await super().create_personal_note(case_id, author_id, content); self._persist(); return result
+
+    async def update_personal_note(self, case_id: str, note_id: str, author_id: str, content: str) -> dict[str, Any]:
+        result = await super().update_personal_note(case_id, note_id, author_id, content); self._persist(); return result
+
+    async def delete_personal_note(self, case_id: str, note_id: str, author_id: str) -> None:
+        await super().delete_personal_note(case_id, note_id, author_id); self._persist()

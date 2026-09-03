@@ -46,13 +46,13 @@ class CollaborationEndpointTest(unittest.TestCase):
             "user_id": "staff-1", "display_name": "Operator", "channel": "TEAM",
         })
         copilot = self.client.post("/api/cases/CASE-1/ai/invocations", json={
-            "prompt": "@CaseCopilot summarize", "channel": "TEAM",
+            "prompt": "@CaseCopilot summarize", "channel": "TEAM", "requester_user_id": "staff-1", "requester_display_name": "Operator",
         })
 
         self.assertEqual([member.status_code, presence.status_code, copilot.status_code], [201, 200, 201])
         self.assertEqual(member.json()["role"], "CHAT_OPERATOR")
         self.assertEqual(presence.json()["channel"], "TEAM")
-        self.assertEqual(copilot.json()["channel"], "AI_INTERNAL")
+        self.assertEqual(copilot.json()["channel"], "TEAM")
         self.assertEqual(copilot.json()["model_mode"], "MVP_DETERMINISTIC")
 
 
