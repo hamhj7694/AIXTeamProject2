@@ -9,6 +9,7 @@ from .answer_prompt import ANSWER_PROMPT_VERSION
 
 
 _AMBIGUOUS_MARKERS = ("모르", "같", "아마", "듯", "추측", "기억안")
+_REQUEST_ONLY_MARKERS = ("하라고", "요청", "요구", "권유", "시키", "해야", "하라")
 
 
 class CustomerAnswerStructuringService:
@@ -48,7 +49,7 @@ class CustomerAnswerStructuringService:
         if target_field is TargetField.TRANSFER_STATUS:
             return self._yes_no_value(
                 text,
-                negative=("송금안", "송금하지않", "이체안", "이체하지않", "안보냈", "보내지않", "입금안"),
+                negative=("송금안", "송금하지않", "송금한적없", "이체안", "이체하지않", "안보냈", "보내지않", "입금안"),
                 positive=("송금했", "송금완료", "이체했", "이체완료", "보냈", "입금했"),
                 no_value="NOT_TRANSFERRED",
                 yes_value="TRANSFERRED",
@@ -82,6 +83,10 @@ class CustomerAnswerStructuringService:
     ) -> str | None:
         if any(pattern in text for pattern in negative):
             return no_value
+        # 요청을 받았다는 사실은 실제 제공·송금 사실이 아니다.
+        # 명시적 부정 응답은 위에서 먼저 처리해 보존한다.
+        if any(marker in text for marker in _REQUEST_ONLY_MARKERS):
+            return None
         if any(pattern in text for pattern in positive):
             return yes_value
         return None

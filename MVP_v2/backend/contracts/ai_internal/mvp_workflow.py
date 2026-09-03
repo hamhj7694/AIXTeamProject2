@@ -30,6 +30,21 @@ class ExecutionMode(str, Enum):
     HUMAN_REVIEW_REQUIRED = "HUMAN_REVIEW_REQUIRED"
 
 
+class QuestionRecommendationContext(StrictModel):
+    """질문 추천 중복을 막기 위해 AI가 알아야 하는 최소 의미 상태."""
+
+    confirmed_fields: list[TargetField] = Field(default_factory=list)
+    pending_question_fields: list[TargetField] = Field(default_factory=list)
+    answered_question_ids: list[str] = Field(default_factory=list)
+
+    def excluded_target_fields(self) -> set[TargetField]:
+        """사실 확인 또는 답변 대기 중인 항목만 다음 추천에서 제외한다."""
+        return {*self.confirmed_fields, *self.pending_question_fields}
+
+    def has_answered_question(self, question_id: str) -> bool:
+        return question_id in self.answered_question_ids
+
+
 class UnresolvedItem(StrictModel):
     target_field: TargetField
     description: str
@@ -86,3 +101,15 @@ class BriefUpdateResult(StrictModel):
     risk_evidence: list[Evidence] = Field(default_factory=list)
     counter_evidence: list[Evidence] = Field(default_factory=list)
     next_checks: list[str] = Field(default_factory=list)
+
+
+class CustomerAnswerBriefUpdateResult(StrictModel):
+    """선택한 질문의 고객 답변을 구조화하고 Brief 갱신 결과를 보존하는 내부 결과."""
+
+    schema_version: str = "customer_answer_brief_update.v1"
+    selected_question: QuestionCandidate
+    structured_answer: CustomerAnswerResult
+    brief_update: BriefUpdateResult
+    unresolved_items: list[UnresolvedItem] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    source_reference: str | None = None

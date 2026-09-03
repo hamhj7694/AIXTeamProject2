@@ -8,8 +8,10 @@ from __future__ import annotations
 from contracts.ai_internal.mvp_workflow import (
     BriefUpdateResult,
     CaseBrief,
+    CustomerAnswerBriefUpdateResult,
     CustomerAnswerResult,
     QuestionCandidate,
+    QuestionRecommendationContext,
     TargetField,
 )
 from contracts.diagnosis import DiagnosisResult
@@ -33,14 +35,34 @@ class CustomerVerificationAgent:
     def __init__(self, workflow: MvpWorkflowService | None = None) -> None:
         self._workflow = workflow or MvpWorkflowService()
 
-    def recommend_questions(self, brief: CaseBrief) -> list[QuestionCandidate]:
+    def recommend_questions(
+        self,
+        brief: CaseBrief,
+        question_context: QuestionRecommendationContext | None = None,
+    ) -> list[QuestionCandidate]:
         # QuestionCandidate keeps HUMAN_REVIEW_REQUIRED from the existing contract.
-        return self._workflow.recommend_questions(brief)
+        return self._workflow.recommend_questions(brief, question_context)
 
     def structure_answer(
         self, target_field: TargetField, raw_answer: str,
     ) -> CustomerAnswerResult:
         return self._workflow.structure_answer(target_field, raw_answer)
+
+    def process_answer_and_update_brief(
+        self,
+        brief: CaseBrief,
+        selected_question: QuestionCandidate,
+        answer_text: str,
+        *,
+        source_reference: str | None = None,
+    ) -> CustomerAnswerBriefUpdateResult:
+        """Expose the existing workflow as one customer-answer invocation."""
+        return self._workflow.process_customer_answer(
+            brief,
+            selected_question,
+            answer_text,
+            source_reference=source_reference,
+        )
 
 
 class CaseUpdateAgent:

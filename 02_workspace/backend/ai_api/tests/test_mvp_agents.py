@@ -55,3 +55,22 @@ class MvpAgentsTest(unittest.TestCase):
         self.assertTrue(result.unresolved)
         self.assertIsNone(result.structured_value)
         self.assertTrue(result.warnings)
+
+    def test_customer_verification_agent_can_process_answer_and_update_brief(self) -> None:
+        workflow = MvpWorkflowService()
+        verification = CustomerVerificationAgent(workflow)
+        brief = CaseSupportAgent(workflow).build_brief(self._diagnosis())
+        question = next(
+            item
+            for item in verification.recommend_questions(brief)
+            if item.target_field is TargetField.TRANSFER_STATUS
+        )
+
+        result = verification.process_answer_and_update_brief(
+            brief,
+            question,
+            "\uc1a1\uae08\ud588\uc5b4\uc694.",
+        )
+
+        self.assertEqual(result.structured_answer.structured_value, "TRANSFERRED")
+        self.assertEqual(result.brief_update.resolved_items[0].target_field, TargetField.TRANSFER_STATUS)
