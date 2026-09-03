@@ -20,10 +20,12 @@ This folder is the operating guide for the MVP_v2 delivery team. Each agent owns
 
 Before starting any MVP_v2 task, every agent must read these current shared documents in order:
 
-1. `new_md/01_PRD.md`
-2. `new_md/02_TODO.md`
-3. `new_md/03_WORK_MAPPING.md`
-4. `new_md/04_WORK_RULES.md`
+1. `docs/CONTEXT_FIRST_CASE_MVP_v2_PRD_2026-09-03.md` (상위 제품 기준)
+2. `docs/new_md/01_PRD.md`
+3. `docs/new_md/02_TODO.md`
+4. `docs/new_md/03_WORK_MAPPING.md`
+5. `docs/new_md/04_WORK_RULES.md`
+6. `docs/new_md/05_DATA_SCHEMA_AND_FLOW.md`
 
 1. `Case` data in the backend repository is the single source of truth. Browser mocks cannot become a data source.
 2. Public API changes require backend ownership and frontend review; AI-internal changes require AI ownership and backend review.

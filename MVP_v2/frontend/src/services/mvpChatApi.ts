@@ -50,11 +50,24 @@ export interface CasePresence {
   expires_at: string;
 }
 
+export interface VerificationTaskSummary {
+  verification_task_id: string;
+  claim: string;
+  target: string;
+  status: string;
+  result_summary?: string | null;
+  evidence_url?: string | null;
+  verified_by?: string | null;
+  rag_source?: string | null;
+  customer_visible?: boolean;
+  updated_at?: string;
+}
+
 export interface CaseBundleV2 {
   case: Record<string, unknown>;
   recent_messages: MvpMessage[];
   recent_events: MvpEvent[];
-  verification_tasks: Array<{ verification_task_id: string; claim: string; target: string; status: string }>;
+  verification_tasks: VerificationTaskSummary[];
   /** AI가 현재 Case에 맞춰 생성한 질문 카드. 아직 생성되지 않았으면 빈 배열이다. */
   questions?: Array<{
     question_id?: string;
@@ -66,6 +79,28 @@ export interface CaseBundleV2 {
     mode?: 'PREVENT' | 'RECOVERY' | 'ALL' | string;
   }>;
 }
+
+export interface CustomerQuestionCandidate {
+  question_id: string;
+  target_field: string;
+  question_text: string;
+  reason: string;
+  priority: 'P0' | 'P1' | 'P2';
+  options?: string[];
+}
+
+export interface CustomerQuestion extends CustomerQuestionCandidate {
+  case_id: string;
+  source: 'BANK_SELECTED' | 'CUSTOMER_AGENT';
+  status: 'PENDING' | 'ASKED' | 'ANSWERED' | 'SKIPPED';
+  sequence: number;
+  requested_by: string | null;
+  asked_at: string | null;
+  answered_at: string | null;
+  options?: string[];
+}
+export interface CaseFact { fact_id: string; case_id: string; field: string; value: string; source: 'AI_EXTRACTED' | 'HUMAN_CONFIRMED' | 'VERIFIED' | 'UNRESOLVED'; status: 'PROPOSED' | 'CONFIRMED' | 'UNRESOLVED'; confidence: number; evidence_message_id: string | null; confirmed_by: string | null; confirmed_at: string | null; created_at: string; }
+export interface PersonalNote { note_id: string; case_id: string; author_id: string; content: string; visibility: 'PRIVATE_TO_AUTHOR'; created_at: string; updated_at: string; }
 
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 
@@ -123,4 +158,18 @@ export const mvpChatApi = {
     })),
   shareAiMessage: (caseId: string, messageId: string, sharedBy = { user_id: 'mvp-v2-current-user', display_name: '현재 사용자' }): Promise<MvpMessage> =>
     request(`/api/cases/${encodeURIComponent(caseId)}/ai/messages/${encodeURIComponent(messageId)}/share`, { method: 'POST', body: JSON.stringify({ shared_by_user_id: sharedBy.user_id, shared_by_display_name: sharedBy.display_name }) }),
+  listCustomerQuestionCandidates: (caseId: string): Promise<CustomerQuestionCandidate[]> =>
+    request(`/api/cases/${encodeURIComponent(caseId)}/customer-question-candidates`),
+  listCustomerQuestions: (caseId: string, view: 'bank' | 'customer' = 'bank'): Promise<CustomerQuestion[]> =>
+    request(`/api/cases/${encodeURIComponent(caseId)}/customer-questions?view=${view}`),
+  queueCustomerQuestions: (caseId: string, questions: CustomerQuestionCandidate[], requestedBy: string): Promise<CustomerQuestion[]> =>
+    request(`/api/cases/${encodeURIComponent(caseId)}/customer-questions`, { method: 'POST', body: JSON.stringify({ questions, requested_by: requestedBy }) }),
+  answerCustomerQuestion: (caseId: string, questionId: string, rawAnswer: string, actor = { user_id: 'mvp-v2-customer', display_name: '고객' }): Promise<CustomerQuestion> =>
+    request(`/api/cases/${encodeURIComponent(caseId)}/customer-questions/${encodeURIComponent(questionId)}/answer`, { method: 'POST', body: JSON.stringify({ raw_answer: rawAnswer, actor_user_id: actor.user_id, actor_display_name: actor.display_name }) }),
+  listCaseFacts: (caseId: string): Promise<CaseFact[]> => request(`/api/cases/${encodeURIComponent(caseId)}/facts`),
+  confirmCaseFact: (caseId: string, factId: string, confirmedBy: string): Promise<CaseFact> => request(`/api/cases/${encodeURIComponent(caseId)}/facts/${encodeURIComponent(factId)}/confirm`, { method: 'POST', body: JSON.stringify({ confirmed_by: confirmedBy }) }),
+  listPersonalNotes: (caseId: string, authorId: string): Promise<PersonalNote[]> => request(`/api/cases/${encodeURIComponent(caseId)}/personal-notes?author_id=${encodeURIComponent(authorId)}`),
+  createPersonalNote: (caseId: string, authorId: string, content: string): Promise<PersonalNote> => request(`/api/cases/${encodeURIComponent(caseId)}/personal-notes`, { method: 'POST', body: JSON.stringify({ author_id: authorId, content }) }),
+  updatePersonalNote: (caseId: string, noteId: string, authorId: string, content: string): Promise<PersonalNote> => request(`/api/cases/${encodeURIComponent(caseId)}/personal-notes/${encodeURIComponent(noteId)}`, { method: 'PATCH', body: JSON.stringify({ author_id: authorId, content }) }),
+  deletePersonalNote: (caseId: string, noteId: string, authorId: string): Promise<void> => request(`/api/cases/${encodeURIComponent(caseId)}/personal-notes/${encodeURIComponent(noteId)}?author_id=${encodeURIComponent(authorId)}`, { method: 'DELETE' }),
 };

@@ -31,6 +31,12 @@ from contracts.public_api.case_activity import (
 )
 from contracts.public_api.case_workflow import (
     PublicActionResponse,
+    PublicAnswerCustomerQuestionRequest,
+    PublicCaseFactResponse,
+    PublicConfirmCaseFactRequest,
+    PublicPersonalNoteCreateRequest,
+    PublicPersonalNoteUpdateRequest,
+    PublicPersonalNoteResponse,
     PublicCaseBundleResponse,
     PublicCreateActionRequest,
     PublicActionCommandRequest,
@@ -42,6 +48,10 @@ from contracts.public_api.case_workflow import (
     PublicFinalizeReportRequest,
     PublicReportResponse,
     PublicCreateVerificationRequest,
+    PublicCustomerQuestionResponse,
+    PublicCustomerQuestionView,
+    PublicQuestionCandidateResponse,
+    PublicQueueCustomerQuestionsRequest,
     PublicUpdateVerificationRequest,
     PublicVerificationResponse,
     to_public_action,
@@ -270,6 +280,135 @@ async def require_case(case_id: str) -> None:
         raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."})
 
 
+def build_customer_question_candidates(case: dict, queued: list[dict]) -> list[PublicQuestionCandidateResponse]:
+    """Deterministic MVP candidates. AI may replace this source, not the queue contract."""
+    already_handled = {item["target_field"] for item in queued if item.get("status") in {"PENDING", "ASKED", "ANSWERED"}}
+    fields = [
+        ("victim_transfer_status", "현재 송금하거나 이체한 금액이 있나요?", "피해 여부와 피해 금액을 먼저 확인해야 합니다.", "P0", ["없음", "있음", "잘 모르겠어요"]),
+        ("remote_control_app", "휴대폰에 원격 제어 또는 화면 공유 앱을 설치하라는 안내를 받으셨나요?", "추가 피해 가능성을 확인해야 합니다.", "P0", ["설치함", "설치하지 않음", "잘 모르겠어요"]),
+        ("credential_exposure", "비밀번호, 인증번호 또는 신분증 정보를 전달하셨나요?", "계정·인증정보 노출 여부를 확인해야 합니다.", "P1", ["전달함", "전달하지 않음", "잘 모르겠어요"]),
+        ("impersonated_institution", "상대방이 어느 기관이나 은행을 사칭했는지 알려주실 수 있나요?", "공식 채널 검증 대상을 정해야 합니다.", "P1", []),
+    ]
+    if case.get("victim_transfer_status") != "UNKNOWN":
+        already_handled.add("victim_transfer_status")
+    return [
+        PublicQuestionCandidateResponse(
+            question_id=f"candidate-{target_field}", target_field=target_field,
+            question_text=text, reason=reason, priority=priority, options=options,
+        )
+        for target_field, text, reason, priority, options in fields
+        if target_field not in already_handled
+    ]
+
+
+@app.get("/api/cases/{case_id}/customer-question-candidates", response_model=list[PublicQuestionCandidateResponse])
+async def list_customer_question_candidates(case_id: str) -> list[PublicQuestionCandidateResponse]:
+    case = await repository.get(case_id)
+    if case is None:
+        raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."})
+    return build_customer_question_candidates(case, await repository.list_customer_questions(case_id))
+
+
+@app.get("/api/cases/{case_id}/customer-questions", response_model=list[PublicCustomerQuestionResponse | PublicCustomerQuestionView])
+async def list_customer_questions(case_id: str, view: Literal["bank", "customer"] = "bank") -> list[PublicCustomerQuestionResponse | PublicCustomerQuestionView]:
+    await require_case(case_id)
+    items = await repository.list_customer_questions(case_id)
+    if view == "customer":
+        return [PublicCustomerQuestionView.model_validate(item) for item in items]
+    return [PublicCustomerQuestionResponse.model_validate(item) for item in items]
+
+
+@app.post("/api/cases/{case_id}/customer-questions", response_model=list[PublicCustomerQuestionResponse], status_code=201)
+async def queue_customer_questions(case_id: str, request: PublicQueueCustomerQuestionsRequest) -> list[PublicCustomerQuestionResponse]:
+    await require_case(case_id)
+    try:
+        items = await repository.queue_customer_questions(
+            case_id, [item.model_dump() for item in request.questions], request.requested_by
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."}) from exc
+    await dispatch_next_customer_question_message(case_id)
+    return [PublicCustomerQuestionResponse.model_validate(item) for item in items]
+
+
+async def dispatch_next_customer_question_message(case_id: str) -> PublicMessageResponse | None:
+    """A confirmed queue is delivered one at a time through the public chat."""
+    question = await repository.dispatch_next_customer_question(case_id)
+    if question is None:
+        return None
+    message = await repository.append_message(case_id, {
+        "actor_type": "CUSTOMER_AGENT", "actor_user_id": "customer-agent",
+        "actor_display_name": "안전 상담 AI", "actor_role": "CUSTOMER_AGENT",
+        "content": question["question_text"], "channel": "CUSTOMER", "audience": "CUSTOMER",
+        "visibility": "CUSTOMER", "message_kind": "CHAT", "mentions": [], "log_event": False,
+    })
+    question["question_message_id"] = message["message_id"]
+    return to_public_message(message)
+
+
+@app.post("/api/cases/{case_id}/customer-questions/{question_id}/answer", response_model=PublicCustomerQuestionResponse)
+async def answer_customer_question(case_id: str, question_id: str, request: PublicAnswerCustomerQuestionRequest) -> PublicCustomerQuestionResponse:
+    await require_case(case_id)
+    try:
+        message = await repository.append_message(case_id, {
+            "actor_type": "CUSTOMER", "actor_user_id": request.actor_user_id,
+            "actor_display_name": request.actor_display_name, "actor_role": "CUSTOMER",
+            "content": request.raw_answer, "channel": "CUSTOMER", "audience": "CUSTOMER",
+            "visibility": "CUSTOMER", "message_kind": "CHAT", "mentions": [], "log_event": False,
+        })
+        answered = await repository.answer_customer_question(case_id, question_id, message["message_id"])
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail={"code": "CUSTOMER_QUESTION_NOT_FOUND", "message": "응답 대기 중인 질문을 찾을 수 없습니다."}) from exc
+    await repository.propose_case_fact(case_id, question_id, request.raw_answer, message["message_id"])
+    await dispatch_next_customer_question_message(case_id)
+    return PublicCustomerQuestionResponse.model_validate(answered)
+
+
+@app.get("/api/cases/{case_id}/facts", response_model=list[PublicCaseFactResponse])
+async def list_case_facts(case_id: str) -> list[PublicCaseFactResponse]:
+    await require_case(case_id)
+    return [PublicCaseFactResponse.model_validate(item) for item in await repository.list_case_facts(case_id)]
+
+
+@app.post("/api/cases/{case_id}/facts/{fact_id}/confirm", response_model=PublicCaseFactResponse)
+async def confirm_case_fact(case_id: str, fact_id: str, request: PublicConfirmCaseFactRequest) -> PublicCaseFactResponse:
+    await require_case(case_id)
+    try:
+        return PublicCaseFactResponse.model_validate(await repository.confirm_case_fact(case_id, fact_id, request.confirmed_by))
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail={"code": "CASE_FACT_NOT_FOUND", "message": "확정할 CaseFact를 찾을 수 없습니다."}) from exc
+
+
+@app.get("/api/cases/{case_id}/personal-notes", response_model=list[PublicPersonalNoteResponse])
+async def list_personal_notes(case_id: str, author_id: str) -> list[PublicPersonalNoteResponse]:
+    await require_case(case_id)
+    return [PublicPersonalNoteResponse.model_validate(item) for item in await repository.list_personal_notes(case_id, author_id)]
+
+
+@app.post("/api/cases/{case_id}/personal-notes", response_model=PublicPersonalNoteResponse, status_code=201)
+async def create_personal_note(case_id: str, request: PublicPersonalNoteCreateRequest) -> PublicPersonalNoteResponse:
+    await require_case(case_id)
+    return PublicPersonalNoteResponse.model_validate(await repository.create_personal_note(case_id, request.author_id, request.content))
+
+
+@app.patch("/api/cases/{case_id}/personal-notes/{note_id}", response_model=PublicPersonalNoteResponse)
+async def update_personal_note(case_id: str, note_id: str, request: PublicPersonalNoteUpdateRequest) -> PublicPersonalNoteResponse:
+    await require_case(case_id)
+    try:
+        return PublicPersonalNoteResponse.model_validate(await repository.update_personal_note(case_id, note_id, request.author_id, request.content))
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail={"code": "PERSONAL_NOTE_NOT_FOUND", "message": "개인 메모를 찾을 수 없습니다."}) from exc
+
+
+@app.delete("/api/cases/{case_id}/personal-notes/{note_id}", status_code=204)
+async def delete_personal_note(case_id: str, note_id: str, author_id: str) -> None:
+    await require_case(case_id)
+    try:
+        await repository.delete_personal_note(case_id, note_id, author_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail={"code": "PERSONAL_NOTE_NOT_FOUND", "message": "개인 메모를 찾을 수 없습니다."}) from exc
+
+
 @app.get("/api/cases/{case_id}/messages", response_model=list[PublicMessageResponse])
 async def list_case_messages(case_id: str, channel: MessageChannel | None = None, view: Literal["bank", "customer"] = "bank") -> list[PublicMessageResponse]:
     await require_case(case_id)
@@ -387,7 +526,7 @@ async def share_ai_message_to_team(case_id: str, message_id: str, request: Publi
 async def update_case_verification(case_id: str, verification_task_id: str, request: PublicUpdateVerificationRequest) -> PublicVerificationResponse:
     await require_case(case_id)
     try:
-        return to_public_verification(await repository.update_verification(case_id, verification_task_id, request.expected_version, request.status))
+        return to_public_verification(await repository.update_verification(case_id, verification_task_id, request.expected_version, request.status, request.model_dump(exclude={"expected_version", "status"}, exclude_none=True)))
     except CaseVersionConflictError as exc:
         raise HTTPException(status_code=409, detail={"code": "VERSION_CONFLICT", "message": "Verification task has changed.", "current_version": exc.current_version}) from exc
     except KeyError as exc:

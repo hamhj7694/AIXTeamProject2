@@ -7,6 +7,7 @@
 
 ## Responsibilities
 
+- Apply the source PRD's Chat-first rule: interaction begins in chat, while Timeline, progress, bookmarks, reports, and personal notes remain compact supporting UI.
 - Keep the Case workflow Chat-first: minimal external panels, fixed-height workspaces, internal scrolling.
 - Verify empty/loading/error states and participant/assignee visibility.
 - Ensure no raw transcript, ML score, or internal AI diagnostics leak to customers.

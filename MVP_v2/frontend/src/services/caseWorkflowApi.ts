@@ -26,6 +26,11 @@ export interface VerificationTask {
   version: number;
   created_at: string;
   updated_at: string;
+  result_summary?: string | null;
+  evidence_url?: string | null;
+  verified_by?: string | null;
+  rag_source?: string | null;
+  customer_visible?: boolean;
 }
 
 export interface CaseAction {
@@ -117,9 +122,9 @@ export const caseWorkflowApi = {
     request(`/api/cases/${encodeURIComponent(caseId)}`, {
       method: 'PATCH', body: JSON.stringify({ expected_version: expectedVersion, ...changes }),
     }),
-  updateVerification: (caseId: string, taskId: string, expectedVersion: number, status: VerificationTask['status']): Promise<VerificationTask> =>
+  updateVerification: (caseId: string, taskId: string, expectedVersion: number, status: VerificationTask['status'], details: Pick<VerificationTask, 'result_summary' | 'evidence_url' | 'verified_by' | 'rag_source' | 'customer_visible'> = {}): Promise<VerificationTask> =>
     request(`/api/cases/${encodeURIComponent(caseId)}/verifications/${encodeURIComponent(taskId)}`, {
-      method: 'PATCH', body: JSON.stringify({ expected_version: expectedVersion, status }),
+      method: 'PATCH', body: JSON.stringify({ expected_version: expectedVersion, status, ...details }),
     }),
   startTakeover: (caseId: string, note: string): Promise<CaseAction> =>
     request(`/api/cases/${encodeURIComponent(caseId)}/takeover`, { method: 'POST', body: JSON.stringify({ note }) }),
