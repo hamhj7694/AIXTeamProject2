@@ -48,6 +48,16 @@ export interface CaseBundleV2 {
   case: Record<string, unknown>;
   recent_events: MvpEvent[];
   verification_tasks: Array<{ verification_task_id: string; claim: string; target: string; status: string }>;
+  /** AI가 현재 Case에 맞춰 생성한 질문 카드. 아직 생성되지 않았으면 빈 배열이다. */
+  questions?: Array<{
+    question_id?: string;
+    id?: string;
+    prompt?: string;
+    question?: string;
+    options?: string[];
+    choices?: string[];
+    mode?: 'PREVENT' | 'RECOVERY' | 'ALL' | string;
+  }>;
 }
 
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
