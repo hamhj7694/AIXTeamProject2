@@ -10,6 +10,7 @@ from contracts.ai_internal.case_snapshot import (
     CaseSnapshotAiInput,
     CaseSnapshotPresentationFixture,
 )
+from contracts.ai_internal.mvp_workflow import QuestionRecommendationContext
 from contracts.diagnosis import DiagnosisResult
 
 from .workflow import MvpWorkflowService
@@ -18,9 +19,9 @@ from .workflow import MvpWorkflowService
 class CaseSnapshotAiAdapter:
     """Case record의 최소 AI 입력만 추려 기존 workflow 결과로 투영한다.
 
-    이 클래스만 General Backend snapshot의 ``case_id``와 ``diagnosis`` 키를 안다.
-    메시지, UI 상태, DB 식별자, report/verification 구조는 AI 판단에 필요하지 않아
-    의도적으로 읽거나 전달하지 않는다.
+    이 클래스만 General Backend snapshot의 ``case_id``, ``diagnosis``와 의미 기반
+    ``question_context`` 키를 안다. 메시지, UI 상태, DB 식별자, report/verification
+    구조는 AI 판단에 필요하지 않아 의도적으로 읽거나 전달하지 않는다.
     """
 
     def __init__(self, workflow: MvpWorkflowService | None = None) -> None:
@@ -46,6 +47,7 @@ class CaseSnapshotAiAdapter:
         return CaseSnapshotAiInput(
             case_id=case_id,
             diagnosis=diagnosis,
+            question_context=self._question_context_from(snapshot.get("question_context")),
             warnings=self._unique(warnings),
         )
 
@@ -59,7 +61,7 @@ class CaseSnapshotAiAdapter:
             )
 
         brief = self._workflow.build_brief(ai_input.diagnosis)
-        questions = self._workflow.recommend_questions(brief)
+        questions = self._workflow.recommend_questions(brief, ai_input.question_context)
         return CaseSnapshotPresentationFixture(
             case_id=ai_input.case_id,
             case_brief=brief,
@@ -88,6 +90,16 @@ class CaseSnapshotAiAdapter:
         if not isinstance(value, list):
             return []
         return [item.strip() for item in value if isinstance(item, str) and item.strip()]
+
+    @staticmethod
+    def _question_context_from(value: Any) -> QuestionRecommendationContext:
+        if value is None:
+            return QuestionRecommendationContext()
+        return (
+            value
+            if isinstance(value, QuestionRecommendationContext)
+            else QuestionRecommendationContext.model_validate(value)
+        )
 
     @staticmethod
     def _unique(values: list[str]) -> list[str]:

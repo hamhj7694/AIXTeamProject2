@@ -30,6 +30,29 @@ class ExecutionMode(str, Enum):
     HUMAN_REVIEW_REQUIRED = "HUMAN_REVIEW_REQUIRED"
 
 
+class QuestionRecommendationContext(StrictModel):
+    """질문 추천 중복을 막기 위해 AI가 알아야 하는 최소 상태.
+
+    DB verification row나 화면 상태가 아닌, 질문 대상 항목의 의미 상태만 보존한다.
+    ``confirmed_fields``와 ``pending_question_fields``만 추천 대상 Field를
+    제외한다. 답변 도착은 사실 확인이 아니므로, ``answered_question_ids``는
+    같은 문장을 반복하지 않기 위한 AI 질문 후보 ID 목록으로만 사용한다.
+    """
+
+    confirmed_fields: list[TargetField] = Field(default_factory=list)
+    pending_question_fields: list[TargetField] = Field(default_factory=list)
+    answered_question_ids: list[str] = Field(default_factory=list)
+
+    def excluded_target_fields(self) -> set[TargetField]:
+        return {
+            *self.confirmed_fields,
+            *self.pending_question_fields,
+        }
+
+    def has_answered_question(self, question_id: str) -> bool:
+        return question_id in self.answered_question_ids
+
+
 class UnresolvedItem(StrictModel):
     target_field: TargetField
     description: str

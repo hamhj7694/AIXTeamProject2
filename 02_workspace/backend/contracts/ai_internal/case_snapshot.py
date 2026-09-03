@@ -3,7 +3,12 @@ from __future__ import annotations
 
 from pydantic import Field
 
-from contracts.ai_internal.mvp_workflow import CaseBrief, QuestionCandidate, UnresolvedItem
+from contracts.ai_internal.mvp_workflow import (
+    CaseBrief,
+    QuestionCandidate,
+    QuestionRecommendationContext,
+    UnresolvedItem,
+)
 from contracts.diagnosis import DiagnosisResult, StrictModel
 
 
@@ -16,6 +21,7 @@ class CaseSnapshotAiInput(StrictModel):
 
     case_id: str | None = None
     diagnosis: DiagnosisResult | None = None
+    question_context: QuestionRecommendationContext = Field(default_factory=QuestionRecommendationContext)
     warnings: list[str] = Field(default_factory=list)
 
 

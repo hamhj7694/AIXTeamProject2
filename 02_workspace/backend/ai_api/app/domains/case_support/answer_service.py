@@ -8,7 +8,7 @@ from contracts.ai_internal.mvp_workflow import CustomerAnswerResult, TargetField
 from .answer_prompt import ANSWER_PROMPT_VERSION
 
 
-_AMBIGUOUS_MARKERS = ("모르", "같", "아마", "듯", "추측", "기억안")
+_AMBIGUOUS_MARKERS = ("모르", "같", "아마", "듯", "추측", "기억안", "기억이안")
 
 
 class CustomerAnswerStructuringService:

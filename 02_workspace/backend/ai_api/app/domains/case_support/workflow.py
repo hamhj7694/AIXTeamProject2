@@ -6,6 +6,7 @@ from contracts.ai_internal.mvp_workflow import (
     CaseBrief,
     CustomerAnswerResult,
     QuestionCandidate,
+    QuestionRecommendationContext,
     TargetField,
 )
 from contracts.diagnosis import DiagnosisResult
@@ -32,8 +33,12 @@ class MvpWorkflowService:
     def build_brief(self, diagnosis: DiagnosisResult) -> CaseBrief:
         return self._brief_service.build_brief(diagnosis)
 
-    def recommend_questions(self, brief: CaseBrief) -> list[QuestionCandidate]:
-        return self._question_service.recommend_questions(brief)
+    def recommend_questions(
+        self,
+        brief: CaseBrief,
+        question_context: QuestionRecommendationContext | None = None,
+    ) -> list[QuestionCandidate]:
+        return self._question_service.recommend_questions(brief, question_context)
 
     def structure_answer(
         self, target_field: TargetField, raw_answer: str,

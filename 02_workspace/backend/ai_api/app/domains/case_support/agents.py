@@ -10,6 +10,7 @@ from contracts.ai_internal.mvp_workflow import (
     CaseBrief,
     CustomerAnswerResult,
     QuestionCandidate,
+    QuestionRecommendationContext,
     TargetField,
 )
 from contracts.diagnosis import DiagnosisResult
@@ -33,9 +34,13 @@ class CustomerVerificationAgent:
     def __init__(self, workflow: MvpWorkflowService | None = None) -> None:
         self._workflow = workflow or MvpWorkflowService()
 
-    def recommend_questions(self, brief: CaseBrief) -> list[QuestionCandidate]:
+    def recommend_questions(
+        self,
+        brief: CaseBrief,
+        question_context: QuestionRecommendationContext | None = None,
+    ) -> list[QuestionCandidate]:
         # QuestionCandidate keeps HUMAN_REVIEW_REQUIRED from the existing contract.
-        return self._workflow.recommend_questions(brief)
+        return self._workflow.recommend_questions(brief, question_context)
 
     def structure_answer(
         self, target_field: TargetField, raw_answer: str,

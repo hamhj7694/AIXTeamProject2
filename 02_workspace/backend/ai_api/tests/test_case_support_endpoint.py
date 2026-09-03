@@ -55,6 +55,9 @@ class CaseSupportEndpointTest(unittest.TestCase):
         self.assertEqual(payload["case_id"], "VP-HTTP-001")
         self.assertTrue(payload["case_brief"]["summary"])
         self.assertTrue(payload["recommended_questions"])
+        self.assertTrue({"question", "target_field", "priority"}.issubset(
+            payload["recommended_questions"][0],
+        ))
         self.assertTrue(payload["unresolved_items"])
         self.assertIn("호출자가 전달한 경고", payload["warnings"])
         self.assertIn("분석 원본의 경고", payload["warnings"])
@@ -68,6 +71,25 @@ class CaseSupportEndpointTest(unittest.TestCase):
         self.assertIsNone(payload["case_brief"])
         self.assertEqual(payload["recommended_questions"], [])
         self.assertTrue(any("diagnosis" in warning for warning in payload["warnings"]))
+
+    def test_snapshot_context_removes_pending_question_without_sending_message(self) -> None:
+        response = self.client.post("/ai/case-support/snapshot", json={
+            "case_id": "VP-HTTP-PENDING",
+            "diagnosis": self._diagnosis_payload(),
+            "question_context": {
+                "pending_question_fields": ["transfer_status"],
+            },
+        })
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertFalse(any(
+            item["target_field"] == "transfer_status"
+            for item in payload["recommended_questions"]
+        ))
+        # 이 endpoint는 추천 데이터만 반환하며 Message/Queue 식별자를 만들지 않는다.
+        self.assertNotIn("message_id", payload)
+        self.assertNotIn("queue_id", payload)
 
     def test_invalid_diagnosis_uses_fastapi_validation_error(self) -> None:
         response = self.client.post("/ai/case-support/snapshot", json={

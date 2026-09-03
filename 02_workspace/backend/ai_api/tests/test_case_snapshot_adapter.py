@@ -7,6 +7,7 @@ from unittest.mock import Mock
 
 from ai_api.app.domains.case_support.case_snapshot_adapter import CaseSnapshotAiAdapter
 from ai_api.app.domains.case_support.workflow import MvpWorkflowService
+from contracts.ai_internal.mvp_workflow import QuestionRecommendationContext, TargetField
 from contracts.diagnosis import DiagnosisResult
 
 
@@ -44,7 +45,10 @@ class CaseSnapshotAiAdapterTest(unittest.TestCase):
         result = CaseSnapshotAiAdapter(workflow).build_presentation(snapshot)
 
         workflow.build_brief.assert_called_once()
-        workflow.recommend_questions.assert_called_once_with(result.case_brief)
+        workflow.recommend_questions.assert_called_once_with(
+            result.case_brief,
+            QuestionRecommendationContext(),
+        )
         self.assertEqual(result.case_id, "VP-ADAPTER-001")
         self.assertIsNotNone(result.case_brief)
         self.assertTrue(result.recommended_questions)
@@ -80,6 +84,20 @@ class CaseSnapshotAiAdapterTest(unittest.TestCase):
         ))
         self.assertIn("Case snapshot과 diagnosis의 case_id가 달라 snapshot 값을 사용했습니다.", result.warnings)
         self.assertNotIn("TRANSFER_COMPLETED", json.dumps(result.model_dump(mode="json")))
+
+    def test_question_context_excludes_pending_question_from_presentation(self) -> None:
+        result = CaseSnapshotAiAdapter().build_presentation({
+            "case_id": "VP-PENDING-QUESTION",
+            "diagnosis": self._diagnosis().model_dump(mode="json"),
+            "question_context": {
+                "pending_question_fields": [TargetField.TRANSFER_STATUS.value],
+            },
+        })
+
+        self.assertFalse(any(
+            item.target_field is TargetField.TRANSFER_STATUS
+            for item in result.recommended_questions
+        ))
 
 
 if __name__ == "__main__":
