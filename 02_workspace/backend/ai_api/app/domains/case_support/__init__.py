@@ -1,5 +1,6 @@
 from .agent_router import AgentRouter
 from .agents import CaseSupportAgent, CaseUpdateAgent, CustomerVerificationAgent
+from .case_snapshot_adapter import CaseSnapshotAiAdapter
 from .workflow import MvpWorkflowService
 
 __all__ = [
@@ -7,5 +8,6 @@ __all__ = [
     "CaseSupportAgent",
     "CaseUpdateAgent",
     "CustomerVerificationAgent",
+    "CaseSnapshotAiAdapter",
     "MvpWorkflowService",
 ]

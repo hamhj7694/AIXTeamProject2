@@ -43,7 +43,7 @@ class CaseRepository(Protocol):
     async def list_customer_questions(self, case_id: str) -> list[dict[str, Any]]: ...
     async def queue_customer_questions(self, case_id: str, questions: list[dict[str, Any]], requested_by: str) -> list[dict[str, Any]]: ...
     async def dispatch_next_customer_question(self, case_id: str) -> dict[str, Any] | None: ...
-    async def answer_customer_question(self, case_id: str, question_id: str, message_id: str) -> dict[str, Any]: ...
+    async def answer_customer_question(self, case_id: str, question_id: str, message_id: str, answer_text: str) -> dict[str, Any]: ...
     async def list_case_facts(self, case_id: str) -> list[dict[str, Any]]: ...
     async def propose_case_fact(self, case_id: str, question_id: str, value: str, evidence_message_id: str | None) -> dict[str, Any]: ...
     async def confirm_case_fact(self, case_id: str, fact_id: str, confirmed_by: str) -> dict[str, Any]: ...
@@ -179,6 +179,8 @@ class InMemoryCaseRepository:
             attachments = [item for item in self._attachments if item["case_id"] == case_id and item["attachment_id"] in attachment_ids]
             if len(attachments) != len(attachment_ids):
                 raise ValueError("ATTACHMENT_NOT_FOUND")
+            if any(item.get("status") != "UPLOADED" or item.get("visibility") != record.get("visibility", record.get("audience", "CUSTOMER")) for item in attachments):
+                raise ValueError("ATTACHMENT_NOT_LINKABLE")
             now = datetime.now(timezone.utc).isoformat()
             message = {
                 "message_id": f"msg-{uuid4().hex}", "case_id": case_id, **record,
@@ -189,12 +191,12 @@ class InMemoryCaseRepository:
                 "mentions": record.get("mentions", []),
                 "reply_to_message_id": record.get("reply_to_message_id"),
                 "attachment_ids": attachment_ids,
-                "attachments": [deepcopy(item) for item in attachments],
                 "created_at": now,
             }
             for attachment in attachments:
                 attachment["status"] = "LINKED"
                 attachment["message_id"] = message["message_id"]
+            message["attachments"] = [deepcopy(item) for item in attachments]
             self._messages.append(message)
             self._touch_case(case_id, now)
             if record.get("log_event"):
@@ -429,8 +431,12 @@ class InMemoryCaseRepository:
                     "question_id": f"cq-{uuid4().hex}", "case_id": case_id,
                     "source": "BANK_SELECTED", "target_field": question["target_field"],
                     "question_text": question["question_text"], "reason": question["reason"],
-                    "priority": question["priority"], "options": question.get("options", []), "status": "PENDING", "sequence": sequence,
-                    "requested_by": requested_by, "asked_at": None, "answered_at": None,
+                    "priority": question["priority"], "options": question.get("options", []),
+                    "customer_explanation": question.get("customer_explanation"),
+                    "answer_mode": question.get("answer_mode", "CHOICE_OR_TEXT"),
+                    "allow_free_text": question.get("allow_free_text", True),
+                    "status": "PENDING", "sequence": sequence,
+                    "requested_by": requested_by, "asked_at": None, "answered_at": None, "answer_text": None,
                     "created_at": now,
                 }
                 self._customer_questions.append(item)
@@ -463,7 +469,7 @@ class InMemoryCaseRepository:
             self._touch_case(case_id, now)
             return deepcopy(item)
 
-    async def answer_customer_question(self, case_id: str, question_id: str, message_id: str) -> dict[str, Any]:
+    async def answer_customer_question(self, case_id: str, question_id: str, message_id: str, answer_text: str) -> dict[str, Any]:
         async with self._lock:
             item = next((row for row in self._customer_questions if row["case_id"] == case_id and row["question_id"] == question_id), None)
             if item is None or item["status"] != "ASKED":
@@ -472,6 +478,7 @@ class InMemoryCaseRepository:
             item["status"] = "ANSWERED"
             item["answered_at"] = now
             item["answer_message_id"] = message_id
+            item["answer_text"] = answer_text
             self._events.append({
                 "event_id": len(self._events) + 1, "case_id": case_id,
                 "event_type": "CUSTOMER_QUESTION_ANSWERED", "actor_type": "CUSTOMER",

@@ -1,7 +1,24 @@
+import { notifyApiMutation } from './caseSync';
+
 export type MessageChannel = 'TEAM' | 'CUSTOMER' | 'AI_INTERNAL';
 export type MessageAudience = 'BANK_INTERNAL' | 'CUSTOMER';
 export type MemberRole = 'CASE_OWNER' | 'CHAT_OPERATOR' | 'REVIEWER' | 'VIEWER';
 export type PresenceState = 'VIEWING' | 'TYPING' | 'AWAY' | 'OFFLINE';
+
+export interface MessageAttachment {
+  attachment_id: string;
+  case_id: string;
+  original_name: string;
+  mime_type: string;
+  size_bytes: number;
+  sha256: string;
+  uploaded_by: string;
+  status: 'UPLOADED' | 'LINKED';
+  visibility: 'BANK_INTERNAL' | 'CUSTOMER' | 'AI_PRIVATE';
+  ai_readable: boolean;
+  download_url: string;
+  created_at: string;
+}
 
 export interface MvpMessage {
   message_id: string;
@@ -18,6 +35,7 @@ export interface MvpMessage {
   private_owner_user_id: string | null;
   mentions: string[];
   reply_to_message_id: string | null;
+  attachments: MessageAttachment[];
   created_at: string;
 }
 
@@ -68,6 +86,13 @@ export interface CaseBundleV2 {
   recent_messages: MvpMessage[];
   recent_events: MvpEvent[];
   verification_tasks: VerificationTaskSummary[];
+  /** Backend가 고객 공개를 최종 승인한 최소 정보만 담는다. 내부 근거/RAG/확인자 정보는 포함하지 않는다. */
+  customer_verification_results?: Array<{
+    verification_task_id: string;
+    target: string;
+    result_summary: string;
+    published_at?: string | null;
+  }>;
   /** AI가 현재 Case에 맞춰 생성한 질문 카드. 아직 생성되지 않았으면 빈 배열이다. */
   questions?: Array<{
     question_id?: string;
@@ -87,16 +112,29 @@ export interface CustomerQuestionCandidate {
   reason: string;
   priority: 'P0' | 'P1' | 'P2';
   options?: string[];
+  customer_explanation?: string;
+  answer_mode?: 'SINGLE_CHOICE' | 'TEXT' | 'CHOICE_OR_TEXT';
+  allow_free_text?: boolean;
+}
+
+export interface CaseSupportSnapshot {
+  case_id: string;
+  available: boolean;
+  case_brief: { summary: string; incident_type: string; risk_level: string; risk_score: number; next_checks: string[] } | null;
+  recommended_questions: CustomerQuestionCandidate[];
+  unresolved_items: Array<{ target_field: string; description: string; priority: 'P0' | 'P1' | 'P2' }>;
+  warnings: string[];
 }
 
 export interface CustomerQuestion extends CustomerQuestionCandidate {
   case_id: string;
-  source: 'BANK_SELECTED' | 'CUSTOMER_AGENT';
+  source?: 'BANK_SELECTED' | 'CUSTOMER_AGENT';
   status: 'PENDING' | 'ASKED' | 'ANSWERED' | 'SKIPPED';
   sequence: number;
   requested_by: string | null;
   asked_at: string | null;
   answered_at: string | null;
+  answer_text?: string | null;
   options?: string[];
 }
 export interface CaseFact { fact_id: string; case_id: string; field: string; value: string; source: 'AI_EXTRACTED' | 'HUMAN_CONFIRMED' | 'VERIFIED' | 'UNRESOLVED'; status: 'PROPOSED' | 'CONFIRMED' | 'UNRESOLVED'; confidence: number; evidence_message_id: string | null; confirmed_by: string | null; confirmed_at: string | null; created_at: string; }
@@ -113,6 +151,7 @@ const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
   if (!response.ok) {
     throw new Error(payload?.error?.message || payload?.detail?.message || '요청을 처리하지 못했습니다.');
   }
+  notifyApiMutation(path, init, payload);
   return payload as T;
 };
 
@@ -121,11 +160,27 @@ export const mvpChatApi = {
     request(`/api/cases/${encodeURIComponent(caseId)}/bundle?view=${view}`),
   listMessages: (caseId: string, channel?: MessageChannel, view: 'bank' | 'customer' = 'bank'): Promise<MvpMessage[]> =>
     request(`/api/cases/${encodeURIComponent(caseId)}/messages?${channel ? `channel=${channel}&` : ''}view=${view}`),
-  createMessage: (caseId: string, input: Pick<MvpMessage, 'actor_type' | 'actor_user_id' | 'actor_display_name' | 'actor_role' | 'content' | 'channel' | 'audience' | 'visibility' | 'message_kind'> & { mentions?: string[] }): Promise<MvpMessage> =>
+  createMessage: (caseId: string, input: Pick<MvpMessage, 'actor_type' | 'actor_user_id' | 'actor_display_name' | 'actor_role' | 'content' | 'channel' | 'audience' | 'visibility' | 'message_kind'> & { mentions?: string[]; attachment_ids?: string[] }): Promise<MvpMessage> =>
     request(`/api/cases/${encodeURIComponent(caseId)}/messages`, {
       method: 'POST',
       body: JSON.stringify({ ...input, mentions: input.mentions ?? [], client_request_id: crypto.randomUUID() }),
     }),
+  startCustomerEmergency: (caseId: string, actor = { user_id: 'mvp-v2-customer', display_name: '고객' }): Promise<MvpMessage> =>
+    request(`/api/cases/${encodeURIComponent(caseId)}/customer-emergency`, {
+      method: 'POST', body: JSON.stringify({ actor_user_id: actor.user_id, actor_display_name: actor.display_name }),
+    }),
+  uploadAttachment: async (caseId: string, file: File, uploadedBy: string, visibility: MessageAttachment['visibility']): Promise<MessageAttachment> => {
+    const path = `/api/cases/${encodeURIComponent(caseId)}/attachments?file_name=${encodeURIComponent(file.name)}&uploaded_by=${encodeURIComponent(uploadedBy)}&visibility=${encodeURIComponent(visibility)}`;
+    const response = await fetch(`${apiBaseUrl}${path}`, { method: 'POST', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(payload?.detail?.message || '파일을 업로드하지 못했습니다.');
+    notifyApiMutation(path, { method: 'POST' }, payload);
+    return payload as MessageAttachment;
+  },
+  attachmentContentUrl: (attachment: MessageAttachment, view: 'bank' | 'customer'): string => {
+    const path = attachment.download_url.replace(/\?view=(bank|customer)$/, `?view=${view}`);
+    return `${apiBaseUrl}${path}`;
+  },
   listEvents: (caseId: string, after?: number): Promise<MvpEvent[]> =>
     request(`/api/cases/${encodeURIComponent(caseId)}/events${after === undefined ? '' : `?after=${after}`}`),
   listMembers: (caseId: string): Promise<CaseMember[]> => request(`/api/cases/${encodeURIComponent(caseId)}/members`),
@@ -154,12 +209,15 @@ export const mvpChatApi = {
       private_owner_user_id: result.channel === 'TEAM' ? null : requester.user_id,
       mentions: ['CaseCopilot'],
       reply_to_message_id: null,
+      attachments: [],
       created_at: result.created_at,
     })),
   shareAiMessage: (caseId: string, messageId: string, sharedBy = { user_id: 'mvp-v2-current-user', display_name: '현재 사용자' }): Promise<MvpMessage> =>
     request(`/api/cases/${encodeURIComponent(caseId)}/ai/messages/${encodeURIComponent(messageId)}/share`, { method: 'POST', body: JSON.stringify({ shared_by_user_id: sharedBy.user_id, shared_by_display_name: sharedBy.display_name }) }),
   listCustomerQuestionCandidates: (caseId: string): Promise<CustomerQuestionCandidate[]> =>
     request(`/api/cases/${encodeURIComponent(caseId)}/customer-question-candidates`),
+  getCaseSupportSnapshot: (caseId: string): Promise<CaseSupportSnapshot> =>
+    request(`/api/cases/${encodeURIComponent(caseId)}/ai/case-support`),
   listCustomerQuestions: (caseId: string, view: 'bank' | 'customer' = 'bank'): Promise<CustomerQuestion[]> =>
     request(`/api/cases/${encodeURIComponent(caseId)}/customer-questions?view=${view}`),
   queueCustomerQuestions: (caseId: string, questions: CustomerQuestionCandidate[], requestedBy: string): Promise<CustomerQuestion[]> =>

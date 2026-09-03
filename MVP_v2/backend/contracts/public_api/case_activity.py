@@ -27,6 +27,7 @@ class PublicAttachmentResponse(PublicActivityModel):
     sha256: str
     uploaded_by: str
     status: Literal["UPLOADED", "LINKED"]
+    visibility: MessageVisibility
     ai_readable: bool = True
     download_url: str
     created_at: str
@@ -54,6 +55,11 @@ class PublicCreateMessageRequest(PublicActivityModel):
         return self
 
 
+class PublicCustomerEmergencyRequest(PublicActivityModel):
+    actor_user_id: str = Field(min_length=1, max_length=64)
+    actor_display_name: str = Field(min_length=1, max_length=80)
+
+
 class PublicMessageResponse(PublicActivityModel):
     message_id: str
     case_id: str
@@ -73,7 +79,7 @@ class PublicMessageResponse(PublicActivityModel):
     created_at: str
 
 
-def to_public_attachment(record: dict[str, Any]) -> PublicAttachmentResponse:
+def to_public_attachment(record: dict[str, Any], *, download_view: Literal["bank", "customer"] = "customer") -> PublicAttachmentResponse:
     case_id = record["case_id"]
     attachment_id = record["attachment_id"]
     return PublicAttachmentResponse.model_validate({
@@ -85,8 +91,9 @@ def to_public_attachment(record: dict[str, Any]) -> PublicAttachmentResponse:
         "sha256": record["sha256"],
         "uploaded_by": record["uploaded_by"],
         "status": record.get("status", "UPLOADED"),
+        "visibility": record.get("visibility", "CUSTOMER"),
         "ai_readable": record.get("ai_readable", True),
-        "download_url": f"/api/cases/{case_id}/attachments/{attachment_id}/content",
+        "download_url": f"/api/cases/{case_id}/attachments/{attachment_id}/content?view={download_view}",
         "created_at": record["created_at"],
     })
 
