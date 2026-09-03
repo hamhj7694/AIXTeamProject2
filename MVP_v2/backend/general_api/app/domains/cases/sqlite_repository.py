@@ -57,6 +57,18 @@ class LocalSqliteCaseRepository(InMemoryCaseRepository):
     async def create(self, record: dict[str, Any]) -> dict[str, Any]:
         result = await super().create(record); self._persist(); return result
 
+    async def list(self) -> list[dict[str, Any]]:
+        result = await super().list(); self._persist(); return result
+
+    async def list_trashed_cases(self) -> list[dict[str, Any]]:
+        result = await super().list_trashed_cases(); self._persist(); return result
+
+    async def delete_case(self, case_id: str) -> None:
+        await super().delete_case(case_id); self._persist()
+
+    async def restore_case(self, case_id: str) -> None:
+        await super().restore_case(case_id); self._persist()
+
     async def update_case(self, case_id: str, expected_version: int, changes: dict[str, Any]) -> dict[str, Any]:
         result = await super().update_case(case_id, expected_version, changes); self._persist(); return result
 

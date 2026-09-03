@@ -47,6 +47,8 @@ class AnalyzeCaseService:
             "initial_brief": diagnosis.context.summary,
             "diagnosis": diagnosis.model_dump(mode="json"),
             "initial_report": initial_report.model_dump(mode="json"),
+            "victim_transfer_status": "UNKNOWN",
+            "actual_loss_amount_krw": None,
             "created_at": now, "updated_at": now,
         })
         return self._created_response(stored)

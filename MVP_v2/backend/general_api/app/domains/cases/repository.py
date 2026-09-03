@@ -13,6 +13,9 @@ class CaseRepository(Protocol):
     async def get(self, case_id: str) -> dict[str, Any] | None: ...
     async def create(self, record: dict[str, Any]) -> dict[str, Any]: ...
     async def list(self) -> list[dict[str, Any]]: ...
+    async def delete_case(self, case_id: str) -> None: ...
+    async def list_trashed_cases(self) -> list[dict[str, Any]]: ...
+    async def restore_case(self, case_id: str) -> None: ...
     async def append_message(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]: ...
     async def list_messages(self, case_id: str, channel: str | None = None) -> list[dict[str, Any]]: ...
     async def list_events(self, case_id: str, after: int | None = None) -> list[dict[str, Any]]: ...
@@ -57,6 +60,29 @@ class InMemoryCaseRepository:
         self._presence: list[dict[str, Any]] = []
         self._lock = asyncio.Lock()
 
+    def _touch_case(self, case_id: str, occurred_at: str) -> None:
+        case = next((item for item in self._records if item["case_id"] == case_id and not item.get("deleted_at")), None)
+        if case is None:
+            raise KeyError(case_id)
+        case["updated_at"] = occurred_at
+
+    def _remove_case_records(self, case_id: str) -> None:
+        self._records = [item for item in self._records if item.get("case_id") != case_id]
+        self._messages = [item for item in self._messages if item.get("case_id") != case_id]
+        self._events = [item for item in self._events if item.get("case_id") != case_id]
+        self._verifications = [item for item in self._verifications if item.get("case_id") != case_id]
+        self._actions = [item for item in self._actions if item.get("case_id") != case_id]
+        self._voice_sessions = [item for item in self._voice_sessions if item.get("case_id") != case_id]
+        self._transcripts = [item for item in self._transcripts if item.get("case_id") != case_id]
+        self._members = [item for item in self._members if item.get("case_id") != case_id]
+        self._presence = [item for item in self._presence if item.get("case_id") != case_id]
+
+    def _purge_expired_trash(self) -> None:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+        expired = [item["case_id"] for item in self._records if item.get("deleted_at") and datetime.fromisoformat(item["deleted_at"]) <= cutoff]
+        for case_id in expired:
+            self._remove_case_records(case_id)
+
     async def find_by_client_request_id(self, client_request_id: str) -> dict[str, Any] | None:
         return next((deepcopy(row) for row in self._records if row.get("client_request_id") == client_request_id), None)
 
@@ -67,7 +93,7 @@ class InMemoryCaseRepository:
             return f"VP-{max(numbers, default=0) + 1}"
 
     async def get(self, case_id: str) -> dict[str, Any] | None:
-        return next((deepcopy(row) for row in self._records if row.get("case_id") == case_id), None)
+        return next((deepcopy(row) for row in self._records if row.get("case_id") == case_id and not row.get("deleted_at")), None)
 
     async def create(self, record: dict[str, Any]) -> dict[str, Any]:
         async with self._lock:
@@ -102,7 +128,26 @@ class InMemoryCaseRepository:
             raise KeyError(case_id)
 
     async def list(self) -> list[dict[str, Any]]:
-        return deepcopy(self._records)
+        self._purge_expired_trash()
+        return [deepcopy(item) for item in self._records if not item.get("deleted_at")]
+
+    async def list_trashed_cases(self) -> list[dict[str, Any]]:
+        self._purge_expired_trash()
+        return [deepcopy(item) for item in self._records if item.get("deleted_at")]
+
+    async def delete_case(self, case_id: str) -> None:
+        """Move one Case to the local recycle bin without discarding its records."""
+        async with self._lock:
+            item = next((row for row in self._records if row.get("case_id") == case_id and not row.get("deleted_at")), None)
+            if item is None: raise KeyError(case_id)
+            item["deleted_at"] = datetime.now(timezone.utc).isoformat()
+
+    async def restore_case(self, case_id: str) -> None:
+        async with self._lock:
+            item = next((row for row in self._records if row.get("case_id") == case_id and row.get("deleted_at")), None)
+            if item is None: raise KeyError(case_id)
+            item.pop("deleted_at", None)
+            item["updated_at"] = datetime.now(timezone.utc).isoformat()
 
     async def append_message(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]:
         async with self._lock:
@@ -113,11 +158,14 @@ class InMemoryCaseRepository:
                 "message_id": f"msg-{uuid4().hex}", "case_id": case_id, **record,
                 "channel": record.get("channel", "CUSTOMER"),
                 "audience": record.get("audience", "CUSTOMER"),
+                "visibility": record.get("visibility", record.get("audience", "CUSTOMER")),
+                "message_kind": record.get("message_kind", "CHAT"),
                 "mentions": record.get("mentions", []),
                 "reply_to_message_id": record.get("reply_to_message_id"),
                 "created_at": now,
             }
             self._messages.append(message)
+            self._touch_case(case_id, now)
             if record.get("log_event"):
                 self._events.append({
                     "event_id": len(self._events) + 1, "case_id": case_id, "event_type": "MESSAGE_ADDED",
@@ -152,6 +200,7 @@ class InMemoryCaseRepository:
                 "event_id": len(self._events) + 1, "case_id": case_id, "event_type": "CASE_MEMBER_UPDATED",
                 "actor_type": "SYSTEM", "payload": {"user_id": member["user_id"], "role": member["role"]}, "occurred_at": now,
             })
+            self._touch_case(case_id, now)
             return deepcopy(member)
 
     async def set_primary_assignee(self, case_id: str, display_name: str | None) -> str | None:
@@ -172,6 +221,7 @@ class InMemoryCaseRepository:
                 else:
                     member.update({"role": "CASE_OWNER", "status": "ACTIVE", "updated_at": now})
             self._events.append({"event_id": len(self._events) + 1, "case_id": case_id, "event_type": "CASE_ASSIGNEE_UPDATED", "actor_type": "SYSTEM", "payload": {"display_name": normalized or None}, "occurred_at": now})
+            self._touch_case(case_id, now)
             return normalized or None
 
     async def list_presence(self, case_id: str) -> list[dict[str, Any]]:
@@ -204,6 +254,7 @@ class InMemoryCaseRepository:
             item = {"verification_task_id": f"ver-{uuid4().hex}", "case_id": case_id, **record, "status": "PENDING", "version": 1, "created_at": now, "updated_at": now}
             self._verifications.append(item)
             self._events.append({"event_id": len(self._events) + 1, "case_id": case_id, "event_type": "VERIFICATION_CREATED", "actor_type": "BANK_STAFF", "payload": {"verification_task_id": item["verification_task_id"]}, "occurred_at": now})
+            self._touch_case(case_id, now)
             return deepcopy(item)
 
     async def list_verifications(self, case_id: str) -> list[dict[str, Any]]:
@@ -221,6 +272,7 @@ class InMemoryCaseRepository:
                 item["version"] += 1
                 item["updated_at"] = now
                 self._events.append({"event_id": len(self._events) + 1, "case_id": case_id, "event_type": "VERIFICATION_UPDATED", "actor_type": "SYSTEM", "payload": {"verification_task_id": verification_task_id, "status": status, "version": item["version"]}, "occurred_at": now})
+                self._touch_case(case_id, now)
                 return deepcopy(item)
             raise KeyError(verification_task_id)
 
@@ -232,6 +284,7 @@ class InMemoryCaseRepository:
             item = {"action_id": f"act-{uuid4().hex}", "case_id": case_id, **record, "status": "REQUESTED", "created_at": now}
             self._actions.append(item)
             self._events.append({"event_id": len(self._events) + 1, "case_id": case_id, "event_type": "BANK_ACTION_ADDED", "actor_type": item["actor_type"], "payload": {"action_id": item["action_id"]}, "occurred_at": now})
+            self._touch_case(case_id, now)
             return deepcopy(item)
 
     async def list_actions(self, case_id: str) -> list[dict[str, Any]]:
