@@ -18,6 +18,9 @@ class CaseRepository(Protocol):
     async def restore_case(self, case_id: str) -> None: ...
     async def append_message(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]: ...
     async def list_messages(self, case_id: str, channel: str | None = None) -> list[dict[str, Any]]: ...
+    async def create_attachment(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]: ...
+    async def get_attachment(self, case_id: str, attachment_id: str) -> dict[str, Any] | None: ...
+    async def list_attachments(self, case_id: str) -> list[dict[str, Any]]: ...
     async def list_events(self, case_id: str, after: int | None = None) -> list[dict[str, Any]]: ...
     async def list_members(self, case_id: str) -> list[dict[str, Any]]: ...
     async def upsert_member(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]: ...
@@ -26,7 +29,7 @@ class CaseRepository(Protocol):
     async def heartbeat_presence(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]: ...
     async def create_verification(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]: ...
     async def list_verifications(self, case_id: str) -> list[dict[str, Any]]: ...
-    async def update_verification(self, case_id: str, verification_task_id: str, expected_version: int, status: str) -> dict[str, Any]: ...
+    async def update_verification(self, case_id: str, verification_task_id: str, expected_version: int, status: str, details: dict[str, Any] | None = None) -> dict[str, Any]: ...
     async def create_action(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]: ...
     async def list_actions(self, case_id: str) -> list[dict[str, Any]]: ...
     async def update_case(self, case_id: str, expected_version: int, changes: dict[str, Any]) -> dict[str, Any]: ...
@@ -37,6 +40,17 @@ class CaseRepository(Protocol):
     async def list_transcript(self, case_id: str, session_id: str) -> list[dict[str, Any]]: ...
     async def finalize_report(self, case_id: str, expected_version: int, note: str) -> dict[str, Any]: ...
     async def get_final_report(self, case_id: str) -> dict[str, Any] | None: ...
+    async def list_customer_questions(self, case_id: str) -> list[dict[str, Any]]: ...
+    async def queue_customer_questions(self, case_id: str, questions: list[dict[str, Any]], requested_by: str) -> list[dict[str, Any]]: ...
+    async def dispatch_next_customer_question(self, case_id: str) -> dict[str, Any] | None: ...
+    async def answer_customer_question(self, case_id: str, question_id: str, message_id: str) -> dict[str, Any]: ...
+    async def list_case_facts(self, case_id: str) -> list[dict[str, Any]]: ...
+    async def propose_case_fact(self, case_id: str, question_id: str, value: str, evidence_message_id: str | None) -> dict[str, Any]: ...
+    async def confirm_case_fact(self, case_id: str, fact_id: str, confirmed_by: str) -> dict[str, Any]: ...
+    async def list_personal_notes(self, case_id: str, author_id: str) -> list[dict[str, Any]]: ...
+    async def create_personal_note(self, case_id: str, author_id: str, content: str) -> dict[str, Any]: ...
+    async def update_personal_note(self, case_id: str, note_id: str, author_id: str, content: str) -> dict[str, Any]: ...
+    async def delete_personal_note(self, case_id: str, note_id: str, author_id: str) -> None: ...
 
 
 class CaseVersionConflictError(Exception):
@@ -51,6 +65,7 @@ class InMemoryCaseRepository:
     def __init__(self) -> None:
         self._records: list[dict[str, Any]] = []
         self._messages: list[dict[str, Any]] = []
+        self._attachments: list[dict[str, Any]] = []
         self._events: list[dict[str, Any]] = []
         self._verifications: list[dict[str, Any]] = []
         self._actions: list[dict[str, Any]] = []
@@ -58,6 +73,9 @@ class InMemoryCaseRepository:
         self._transcripts: list[dict[str, Any]] = []
         self._members: list[dict[str, Any]] = []
         self._presence: list[dict[str, Any]] = []
+        self._customer_questions: list[dict[str, Any]] = []
+        self._case_facts: list[dict[str, Any]] = []
+        self._personal_notes: list[dict[str, Any]] = []
         self._lock = asyncio.Lock()
 
     def _touch_case(self, case_id: str, occurred_at: str) -> None:
@@ -69,6 +87,7 @@ class InMemoryCaseRepository:
     def _remove_case_records(self, case_id: str) -> None:
         self._records = [item for item in self._records if item.get("case_id") != case_id]
         self._messages = [item for item in self._messages if item.get("case_id") != case_id]
+        self._attachments = [item for item in self._attachments if item.get("case_id") != case_id]
         self._events = [item for item in self._events if item.get("case_id") != case_id]
         self._verifications = [item for item in self._verifications if item.get("case_id") != case_id]
         self._actions = [item for item in self._actions if item.get("case_id") != case_id]
@@ -76,6 +95,9 @@ class InMemoryCaseRepository:
         self._transcripts = [item for item in self._transcripts if item.get("case_id") != case_id]
         self._members = [item for item in self._members if item.get("case_id") != case_id]
         self._presence = [item for item in self._presence if item.get("case_id") != case_id]
+        self._customer_questions = [item for item in self._customer_questions if item.get("case_id") != case_id]
+        self._case_facts = [item for item in self._case_facts if item.get("case_id") != case_id]
+        self._personal_notes = [item for item in self._personal_notes if item.get("case_id") != case_id]
 
     def _purge_expired_trash(self) -> None:
         cutoff = datetime.now(timezone.utc) - timedelta(days=30)
@@ -153,6 +175,10 @@ class InMemoryCaseRepository:
         async with self._lock:
             if not any(item["case_id"] == case_id for item in self._records):
                 raise KeyError(case_id)
+            attachment_ids = list(dict.fromkeys(record.get("attachment_ids", [])))
+            attachments = [item for item in self._attachments if item["case_id"] == case_id and item["attachment_id"] in attachment_ids]
+            if len(attachments) != len(attachment_ids):
+                raise ValueError("ATTACHMENT_NOT_FOUND")
             now = datetime.now(timezone.utc).isoformat()
             message = {
                 "message_id": f"msg-{uuid4().hex}", "case_id": case_id, **record,
@@ -162,8 +188,13 @@ class InMemoryCaseRepository:
                 "message_kind": record.get("message_kind", "CHAT"),
                 "mentions": record.get("mentions", []),
                 "reply_to_message_id": record.get("reply_to_message_id"),
+                "attachment_ids": attachment_ids,
+                "attachments": [deepcopy(item) for item in attachments],
                 "created_at": now,
             }
+            for attachment in attachments:
+                attachment["status"] = "LINKED"
+                attachment["message_id"] = message["message_id"]
             self._messages.append(message)
             self._touch_case(case_id, now)
             if record.get("log_event"):
@@ -173,6 +204,20 @@ class InMemoryCaseRepository:
                     "payload": {"message_id": message["message_id"], "channel": message["channel"]}, "occurred_at": now,
                 })
             return deepcopy(message)
+
+    async def create_attachment(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]:
+        async with self._lock:
+            if not any(item["case_id"] == case_id for item in self._records):
+                raise KeyError(case_id)
+            attachment = {"attachment_id": f"att-{uuid4().hex}", "case_id": case_id, **record}
+            self._attachments.append(attachment)
+            return deepcopy(attachment)
+
+    async def get_attachment(self, case_id: str, attachment_id: str) -> dict[str, Any] | None:
+        return next((deepcopy(item) for item in self._attachments if item["case_id"] == case_id and item["attachment_id"] == attachment_id), None)
+
+    async def list_attachments(self, case_id: str) -> list[dict[str, Any]]:
+        return [deepcopy(item) for item in self._attachments if item["case_id"] == case_id]
 
     async def list_messages(self, case_id: str, channel: str | None = None) -> list[dict[str, Any]]:
         return [deepcopy(item) for item in self._messages if item["case_id"] == case_id and (channel is None or item.get("channel") == channel)]
@@ -260,7 +305,7 @@ class InMemoryCaseRepository:
     async def list_verifications(self, case_id: str) -> list[dict[str, Any]]:
         return [deepcopy(item) for item in self._verifications if item["case_id"] == case_id]
 
-    async def update_verification(self, case_id: str, verification_task_id: str, expected_version: int, status: str) -> dict[str, Any]:
+    async def update_verification(self, case_id: str, verification_task_id: str, expected_version: int, status: str, details: dict[str, Any] | None = None) -> dict[str, Any]:
         async with self._lock:
             for item in self._verifications:
                 if item["case_id"] != case_id or item["verification_task_id"] != verification_task_id:
@@ -269,6 +314,10 @@ class InMemoryCaseRepository:
                     raise CaseVersionConflictError(item["version"])
                 now = datetime.now(timezone.utc).isoformat()
                 item["status"] = status
+                if details:
+                    for key in ("result_summary", "evidence_url", "verified_by", "rag_source", "customer_visible"):
+                        if key in details:
+                            item[key] = details[key]
                 item["version"] += 1
                 item["updated_at"] = now
                 self._events.append({"event_id": len(self._events) + 1, "case_id": case_id, "event_type": "VERIFICATION_UPDATED", "actor_type": "SYSTEM", "payload": {"verification_task_id": verification_task_id, "status": status, "version": item["version"]}, "occurred_at": now})
@@ -346,3 +395,148 @@ class InMemoryCaseRepository:
     async def get_final_report(self, case_id: str) -> dict[str, Any] | None:
         case = await self.get(case_id)
         return deepcopy(case.get("final_report")) if case else None
+
+    async def list_customer_questions(self, case_id: str) -> list[dict[str, Any]]:
+        """Return the durable customer-question queue in delivery order."""
+        return sorted(
+            [deepcopy(item) for item in self._customer_questions if item["case_id"] == case_id],
+            key=lambda item: (item["sequence"], item["question_id"]),
+        )
+
+    async def queue_customer_questions(
+        self, case_id: str, questions: list[dict[str, Any]], requested_by: str
+    ) -> list[dict[str, Any]]:
+        """Queue bank-approved questions; never send them to the customer implicitly."""
+        async with self._lock:
+            if not any(item["case_id"] == case_id and not item.get("deleted_at") for item in self._records):
+                raise KeyError(case_id)
+            active_fields = {
+                item["target_field"]
+                for item in self._customer_questions
+                if item["case_id"] == case_id and item["status"] in {"PENDING", "ASKED"}
+            }
+            sequence = max(
+                (int(item["sequence"]) for item in self._customer_questions if item["case_id"] == case_id),
+                default=0,
+            )
+            now = datetime.now(timezone.utc).isoformat()
+            created: list[dict[str, Any]] = []
+            for question in questions:
+                if question["target_field"] in active_fields:
+                    continue
+                sequence += 1
+                item = {
+                    "question_id": f"cq-{uuid4().hex}", "case_id": case_id,
+                    "source": "BANK_SELECTED", "target_field": question["target_field"],
+                    "question_text": question["question_text"], "reason": question["reason"],
+                    "priority": question["priority"], "options": question.get("options", []), "status": "PENDING", "sequence": sequence,
+                    "requested_by": requested_by, "asked_at": None, "answered_at": None,
+                    "created_at": now,
+                }
+                self._customer_questions.append(item)
+                created.append(deepcopy(item))
+                active_fields.add(question["target_field"])
+            if created:
+                self._events.append({
+                    "event_id": len(self._events) + 1, "case_id": case_id,
+                    "event_type": "CUSTOMER_QUESTIONS_QUEUED", "actor_type": "BANK_STAFF",
+                    "payload": {"question_ids": [item["question_id"] for item in created]}, "occurred_at": now,
+                })
+                self._touch_case(case_id, now)
+            return created
+
+    async def dispatch_next_customer_question(self, case_id: str) -> dict[str, Any] | None:
+        """Mark exactly one queued question as customer-visible."""
+        async with self._lock:
+            item = next((row for row in sorted(self._customer_questions, key=lambda row: row["sequence"])
+                         if row["case_id"] == case_id and row["status"] == "PENDING"), None)
+            if item is None:
+                return None
+            now = datetime.now(timezone.utc).isoformat()
+            item["status"] = "ASKED"
+            item["asked_at"] = now
+            self._events.append({
+                "event_id": len(self._events) + 1, "case_id": case_id,
+                "event_type": "CUSTOMER_QUESTION_DISPATCHED", "actor_type": "CUSTOMER_AGENT",
+                "payload": {"question_id": item["question_id"]}, "occurred_at": now,
+            })
+            self._touch_case(case_id, now)
+            return deepcopy(item)
+
+    async def answer_customer_question(self, case_id: str, question_id: str, message_id: str) -> dict[str, Any]:
+        async with self._lock:
+            item = next((row for row in self._customer_questions if row["case_id"] == case_id and row["question_id"] == question_id), None)
+            if item is None or item["status"] != "ASKED":
+                raise KeyError(question_id)
+            now = datetime.now(timezone.utc).isoformat()
+            item["status"] = "ANSWERED"
+            item["answered_at"] = now
+            item["answer_message_id"] = message_id
+            self._events.append({
+                "event_id": len(self._events) + 1, "case_id": case_id,
+                "event_type": "CUSTOMER_QUESTION_ANSWERED", "actor_type": "CUSTOMER",
+                "payload": {"question_id": question_id, "message_id": message_id}, "occurred_at": now,
+            })
+            self._touch_case(case_id, now)
+            return deepcopy(item)
+
+    async def list_case_facts(self, case_id: str) -> list[dict[str, Any]]:
+        return [deepcopy(item) for item in self._case_facts if item["case_id"] == case_id]
+
+    async def propose_case_fact(self, case_id: str, question_id: str, value: str, evidence_message_id: str | None) -> dict[str, Any]:
+        async with self._lock:
+            if not any(row["case_id"] == case_id and not row.get("deleted_at") for row in self._records):
+                raise KeyError(case_id)
+            question = next((row for row in self._customer_questions if row["case_id"] == case_id and row["question_id"] == question_id), None)
+            if question is None:
+                raise KeyError(question_id)
+            existing = next((row for row in self._case_facts if row["case_id"] == case_id and row["field"] == question["target_field"] and row["status"] == "PROPOSED"), None)
+            if existing is not None:
+                existing["value"] = value
+                existing["evidence_message_id"] = evidence_message_id
+                return deepcopy(existing)
+            now = datetime.now(timezone.utc).isoformat()
+            fact = {"fact_id": f"fact-{uuid4().hex}", "case_id": case_id, "field": question["target_field"], "value": value, "source": "AI_EXTRACTED", "status": "PROPOSED", "confidence": 0.7, "evidence_message_id": evidence_message_id, "confirmed_by": None, "confirmed_at": None, "created_at": now}
+            self._case_facts.append(fact)
+            self._events.append({"event_id": len(self._events) + 1, "case_id": case_id, "event_type": "CASE_FACT_PROPOSED", "actor_type": "CUSTOMER_AGENT", "payload": {"fact_id": fact["fact_id"], "field": fact["field"]}, "occurred_at": now})
+            self._touch_case(case_id, now)
+            return deepcopy(fact)
+
+    async def confirm_case_fact(self, case_id: str, fact_id: str, confirmed_by: str) -> dict[str, Any]:
+        async with self._lock:
+            fact = next((row for row in self._case_facts if row["case_id"] == case_id and row["fact_id"] == fact_id), None)
+            if fact is None:
+                raise KeyError(fact_id)
+            now = datetime.now(timezone.utc).isoformat()
+            fact["status"] = "CONFIRMED"; fact["source"] = "HUMAN_CONFIRMED"; fact["confirmed_by"] = confirmed_by; fact["confirmed_at"] = now
+            self._events.append({"event_id": len(self._events) + 1, "case_id": case_id, "event_type": "CASE_FACT_CONFIRMED", "actor_type": "BANK_STAFF", "payload": {"fact_id": fact_id, "field": fact["field"]}, "occurred_at": now})
+            self._touch_case(case_id, now)
+            return deepcopy(fact)
+
+    async def list_personal_notes(self, case_id: str, author_id: str) -> list[dict[str, Any]]:
+        return [deepcopy(item) for item in self._personal_notes if item["case_id"] == case_id and item["author_id"] == author_id]
+
+    async def create_personal_note(self, case_id: str, author_id: str, content: str) -> dict[str, Any]:
+        async with self._lock:
+            if not any(row["case_id"] == case_id and not row.get("deleted_at") for row in self._records):
+                raise KeyError(case_id)
+            now = datetime.now(timezone.utc).isoformat()
+            note = {"note_id": f"note-{uuid4().hex}", "case_id": case_id, "author_id": author_id, "content": content, "visibility": "PRIVATE_TO_AUTHOR", "created_at": now, "updated_at": now}
+            self._personal_notes.append(note)
+            return deepcopy(note)
+
+    async def update_personal_note(self, case_id: str, note_id: str, author_id: str, content: str) -> dict[str, Any]:
+        async with self._lock:
+            note = next((row for row in self._personal_notes if row["case_id"] == case_id and row["note_id"] == note_id and row["author_id"] == author_id), None)
+            if note is None:
+                raise KeyError(note_id)
+            note["content"] = content
+            note["updated_at"] = datetime.now(timezone.utc).isoformat()
+            return deepcopy(note)
+
+    async def delete_personal_note(self, case_id: str, note_id: str, author_id: str) -> None:
+        async with self._lock:
+            original = len(self._personal_notes)
+            self._personal_notes = [row for row in self._personal_notes if not (row["case_id"] == case_id and row["note_id"] == note_id and row["author_id"] == author_id)]
+            if len(self._personal_notes) == original:
+                raise KeyError(note_id)

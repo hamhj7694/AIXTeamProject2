@@ -77,7 +77,7 @@ export const CasesTablePage: React.FC = () => {
   }), [cases, descending, query, sortKey, statusFilter, updatedDate, victimFilter]);
 
   const header = (label: string, key: SortKey, width = '') => (
-    <th className={`whitespace-nowrap px-4 py-3 ${width}`}>
+    <th className={`whitespace-nowrap px-2 py-2.5 ${width}`}>
       <button onClick={() => toggleSort(key)} className="inline-flex items-center gap-1 font-bold hover:text-slate-900">
         {label}<ArrowDownUp size={12} className={sortKey === key ? 'text-blue-600' : ''} />
       </button>
@@ -134,22 +134,22 @@ export const CasesTablePage: React.FC = () => {
           <div className="border-b border-slate-100 px-4 py-2 text-xs font-semibold text-slate-500">검색 결과 {rows.length}건 · 15초마다 자동 갱신</div>
 
           <div className="overflow-x-auto">
-            <table className="min-w-[1280px] w-full table-fixed text-left text-xs">
+            <table className="min-w-[1000px] w-full table-fixed text-left text-xs">
               <colgroup>
-                <col className="w-[4%]" />
+                <col className="w-[5%]" />
                 <col className="w-[8%]" />
                 <col className="w-[9%]" />
                 <col className="w-[10%]" />
-                <col className="w-[13%]" />
+                <col className="w-[12%]" />
                 <col className="w-[12%]" />
                 <col className="w-[11%]" />
-                <col className="w-[14%]" />
-                <col className="w-[15%]" />
-                <col className="w-[4%]" />
+                <col className="w-[13%]" />
+                <col className="w-[17%]" />
+                <col className="w-[3%]" />
               </colgroup>
               <thead className="bg-slate-50 text-[11px] text-slate-500">
                 <tr>
-                  {header('ID', 'id', 'w-12')}
+                  {header('ID', 'id', 'w-10')}
                   {header('담당자', 'assignee', 'w-24')}
                   {header('피해 여부', 'transferred', 'w-28')}
                   {header('피해 금액', 'amount', 'w-32')}
@@ -157,23 +157,23 @@ export const CasesTablePage: React.FC = () => {
                   {header('업무 진행 상태', 'status', 'w-36')}
                   {header('최초 생성일', 'createdAtRaw', 'w-32')}
                   {header('최근 업데이트', 'updatedAtRaw', 'w-40')}
-                  <th className="w-44 px-4 py-3 font-bold">사건 요약</th>
-                  <th className="px-3 py-3"><span className="sr-only">삭제</span></th>
+                  <th className="px-2 py-2.5 font-bold">사건 요약</th>
+                  <th className="px-2 py-2.5"><span className="sr-only">삭제</span></th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((item) => (
                   <tr key={item.id} onClick={() => navigate(`/cases/${item.id}`)} className="cursor-pointer border-t border-slate-100 transition hover:bg-blue-50/60">
-                    <td className="px-4 py-3 font-black text-slate-900">{displayId(item.id)}</td>
-                    <td className="truncate px-3 py-3 font-semibold text-slate-700" title={item.assignee ?? '미배정'}>{item.assignee ?? '미배정'}</td>
-                    <td className="px-4 py-3 font-semibold">{item.transferred === true ? '피해 발생' : item.transferred === false ? '피해 없음' : '확인안됨'}</td>
-                    <td className="px-4 py-3 font-semibold text-slate-700">{displayAmount(item.amount)}</td>
-                    <td className="truncate px-4 py-3 font-semibold text-slate-700" title={item.type || '확인안됨'}>{item.type || '확인안됨'}</td>
-                    <td className="px-4 py-3"><span className="rounded-md bg-blue-50 px-2 py-1 font-bold text-blue-700">{displayWorkflowStatus(item.status)}</span></td>
-                    <td className="px-4 py-3 text-slate-500">{item.createdAt}</td>
-                    <td className="px-4 py-3 text-slate-500">{item.updatedAt}</td>
-                    <td className="max-w-44 truncate px-4 py-3 text-slate-600" title={item.summary}>{item.summary}</td>
-                    <td className="px-3 py-3"><button aria-label={`${displayId(item.id)} 삭제`} onClick={(event) => { event.stopPropagation(); setDeleteTarget(item); setDeletePassword(''); setDeleteError(''); setDeleteConfirmed(false); }} className="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-700"><Trash2 size={16}/></button></td>
+                    <td className="px-2 py-2.5 font-black text-slate-900">{displayId(item.id)}</td>
+                    <td className="truncate px-2 py-2.5 font-semibold text-slate-700" title={item.assignee ?? '미배정'}>{item.assignee ?? '미배정'}</td>
+                    <td className="px-2 py-2.5 font-semibold">{item.transferred === true ? '피해 발생' : item.transferred === false ? '피해 없음' : '확인안됨'}</td>
+                    <td className="px-2 py-2.5 font-semibold text-slate-700">{displayAmount(item.amount)}</td>
+                    <td className="truncate px-2 py-2.5 font-semibold text-slate-700" title={item.type || '확인안됨'}>{item.type || '확인안됨'}</td>
+                    <td className="px-2 py-2.5"><span className="rounded-md bg-blue-50 px-1.5 py-0.5 font-bold text-blue-700">{displayWorkflowStatus(item.status)}</span></td>
+                    <td className="px-2 py-2.5 text-slate-500">{item.createdAt}</td>
+                    <td className="px-2 py-2.5 text-slate-500">{item.updatedAt}</td>
+                    <td className="truncate px-2 py-2.5 text-slate-600" title={item.summary}>{item.summary}</td>
+                    <td className="px-1.5 py-2.5"><button aria-label={`${displayId(item.id)} 삭제`} onClick={(event) => { event.stopPropagation(); setDeleteTarget(item); setDeletePassword(''); setDeleteError(''); setDeleteConfirmed(false); }} className="rounded-lg p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-700"><Trash2 size={15}/></button></td>
                   </tr>
                 ))}
               </tbody>

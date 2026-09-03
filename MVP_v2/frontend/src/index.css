@@ -166,12 +166,25 @@ button:active {
 }
 
 /* Bank Case workspace: the event/risk sidebar belongs to the left of chat. */
-@media (min-width: 1280px) {
-  div.grid:has([data-case-live-log]) {
+@media (min-width: 1024px) {
+  div.grid:has(aside h2) {
     grid-template-columns: 280px minmax(0, 1fr) !important;
   }
 
-  div.grid:has([data-case-live-log]) > aside {
+  div.grid:has(aside h2) > aside {
     order: -1;
+  }
+
+  div.grid:has(aside h2) > section:first-child {
+    height: 690px !important;
+  }
+
+  /* Bank workspace only: compact chat and its paired progress/information rail. */
+  .h-\[636px\] {
+    height: 690px !important;
+  }
+
+  .h-\[680px\] {
+    height: 734px !important;
   }
 }

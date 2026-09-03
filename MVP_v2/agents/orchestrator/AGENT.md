@@ -11,7 +11,7 @@ Turn a user request into small, dependency-aware tasks and coordinate the role a
 
 ## Workflow
 
-1. Read Product and UI/UX acceptance criteria.
+1. Read `MVP_v2/docs/CONTEXT_FIRST_CASE_MVP_v2_PRD_2026-09-03.md` and the synchronized `docs/new_md` documents.
 2. Identify affected contracts and assign ownership before implementation.
 3. Sequence work: Contract/data model -> backend -> AI integration -> frontend -> UI review -> E2E verification.
 4. Keep one source of truth per decision and report only verified outcomes to the User Liaison.

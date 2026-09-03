@@ -14,8 +14,9 @@
 
 작업 전 아래 문서를 순서대로 읽는다.
 
-1. `MVP_v2/new_md/01_PRD.md`
-2. `MVP_v2/new_md/02_TODO.md`
+1. `MVP_v2/docs/CONTEXT_FIRST_CASE_MVP_v2_PRD_2026-09-03.md`
+2. `MVP_v2/docs/new_md/01_PRD.md`
+3. `MVP_v2/docs/new_md/02_TODO.md`
 3. `MVP_v2/new_md/03_WORK_MAPPING.md`
 4. `MVP_v2/new_md/04_WORK_RULES.md`
 5. 해당 작업의 `MVP_v2/new_md/WorkDetails/**` 문서

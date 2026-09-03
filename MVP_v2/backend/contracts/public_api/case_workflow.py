@@ -11,6 +11,91 @@ class PublicWorkflowModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class PublicQuestionCandidateResponse(PublicWorkflowModel):
+    question_id: str
+    target_field: str
+    question_text: str
+    reason: str
+    priority: Literal["P0", "P1", "P2"]
+    options: list[str] = Field(default_factory=list, max_length=8)
+
+
+class PublicQueueCustomerQuestionsRequest(PublicWorkflowModel):
+    questions: list[PublicQuestionCandidateResponse] = Field(min_length=1, max_length=10)
+    requested_by: str = Field(min_length=1, max_length=80)
+
+
+class PublicCustomerQuestionResponse(PublicWorkflowModel):
+    question_id: str
+    case_id: str
+    source: Literal["BANK_SELECTED", "CUSTOMER_AGENT"]
+    target_field: str
+    question_text: str
+    reason: str
+    priority: Literal["P0", "P1", "P2"]
+    status: Literal["PENDING", "ASKED", "ANSWERED", "SKIPPED"]
+    sequence: int
+    requested_by: str | None = None
+    asked_at: str | None = None
+    answered_at: str | None = None
+    options: list[str] = Field(default_factory=list, max_length=8)
+
+
+class PublicCustomerQuestionView(PublicWorkflowModel):
+    """Customer-facing projection: never expose the internal requester or reason."""
+    question_id: str
+    case_id: str
+    question_text: str
+    priority: Literal["P0", "P1", "P2"]
+    status: Literal["PENDING", "ASKED", "ANSWERED", "SKIPPED"]
+    sequence: int
+    options: list[str] = Field(default_factory=list, max_length=8)
+
+
+class PublicAnswerCustomerQuestionRequest(PublicWorkflowModel):
+    raw_answer: str = Field(min_length=1, max_length=10_000)
+    actor_user_id: str = Field(min_length=1, max_length=64)
+    actor_display_name: str = Field(min_length=1, max_length=80)
+
+
+class PublicCaseFactResponse(PublicWorkflowModel):
+    fact_id: str
+    case_id: str
+    field: str
+    value: str
+    source: Literal["AI_EXTRACTED", "HUMAN_CONFIRMED", "VERIFIED", "UNRESOLVED"]
+    status: Literal["PROPOSED", "CONFIRMED", "UNRESOLVED"]
+    confidence: float = Field(ge=0, le=1)
+    evidence_message_id: str | None = None
+    confirmed_by: str | None = None
+    confirmed_at: str | None = None
+    created_at: str
+
+
+class PublicConfirmCaseFactRequest(PublicWorkflowModel):
+    confirmed_by: str = Field(min_length=1, max_length=80)
+
+
+class PublicPersonalNoteCreateRequest(PublicWorkflowModel):
+    author_id: str = Field(min_length=1, max_length=80)
+    content: str = Field(min_length=1, max_length=10_000)
+
+
+class PublicPersonalNoteUpdateRequest(PublicWorkflowModel):
+    author_id: str = Field(min_length=1, max_length=80)
+    content: str = Field(min_length=1, max_length=10_000)
+
+
+class PublicPersonalNoteResponse(PublicWorkflowModel):
+    note_id: str
+    case_id: str
+    author_id: str
+    content: str
+    visibility: Literal["PRIVATE_TO_AUTHOR"]
+    created_at: str
+    updated_at: str
+
+
 class PublicCreateVerificationRequest(PublicWorkflowModel):
     claim: str = Field(min_length=1, max_length=10_000)
     target: str = Field(min_length=1, max_length=255)
@@ -19,6 +104,11 @@ class PublicCreateVerificationRequest(PublicWorkflowModel):
 class PublicUpdateVerificationRequest(PublicWorkflowModel):
     expected_version: int = Field(ge=1)
     status: Literal["PENDING", "IN_PROGRESS", "COMPLETED", "ON_HOLD", "FAILED"]
+    result_summary: str | None = Field(default=None, max_length=10_000)
+    evidence_url: str | None = Field(default=None, max_length=2_000)
+    verified_by: str | None = Field(default=None, max_length=80)
+    rag_source: str | None = Field(default=None, max_length=255)
+    customer_visible: bool | None = None
 
 
 class PublicVerificationResponse(PublicWorkflowModel):
@@ -30,6 +120,11 @@ class PublicVerificationResponse(PublicWorkflowModel):
     version: int = Field(ge=1)
     created_at: str
     updated_at: str
+    result_summary: str | None = None
+    evidence_url: str | None = None
+    verified_by: str | None = None
+    rag_source: str | None = None
+    customer_visible: bool = False
 
 
 class PublicCreateActionRequest(PublicWorkflowModel):
