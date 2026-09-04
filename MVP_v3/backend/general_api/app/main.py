@@ -953,6 +953,10 @@ async def start_customer_emergency(case_id: str, request: PublicCustomerEmergenc
 @app.post("/api/cases/{case_id}/messages", response_model=PublicMessageResponse, status_code=201)
 async def create_case_message(case_id: str, request: PublicCreateMessageRequest) -> PublicMessageResponse:
     await require_case(case_id)
+    if request.client_request_id:
+        existing = await repository.find_message_by_client_request_id(case_id, request.client_request_id)
+        if isinstance(existing, dict):
+            return to_public_message(existing)
     try:
         record = await repository.append_message(case_id, request.model_dump())
     except KeyError as exc:

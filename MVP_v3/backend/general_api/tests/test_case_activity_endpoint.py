@@ -50,10 +50,28 @@ class CaseActivityEndpointTest(unittest.TestCase):
         self.assertEqual(response.json()["audience"], "CUSTOMER")
         self.assertEqual(response.json()["mentions"], [])
         self.assertIsNone(response.json()["reply_to_message_id"])
+        self.assertEqual(response.json()["client_request_id"], "web-1")
         self.assertEqual({key: response.json()[key] for key in ("message_id", "case_id", "actor_type", "content", "created_at")}, {
             "message_id": "msg-1", "case_id": "VP-ACTIVITY", "actor_type": "CUSTOMER",
             "content": "송금하지 않았습니다.", "created_at": "2026-09-02T01:00:00+00:00",
         })
+
+    def test_create_message_reuses_same_client_request(self) -> None:
+        existing = {
+            "message_id": "msg-existing", "case_id": "VP-ACTIVITY", "actor_type": "CUSTOMER",
+            "actor_user_id": "customer-1", "actor_display_name": "고객", "content": "중복 방지",
+            "client_request_id": "same-request", "created_at": "2026-09-02T01:00:00+00:00",
+        }
+        self.repository.find_message_by_client_request_id.return_value = existing
+
+        response = self.client.post("/api/cases/VP-ACTIVITY/messages", json={
+            "actor_type": "CUSTOMER", "actor_user_id": "customer-1", "actor_display_name": "고객",
+            "content": "중복 방지", "client_request_id": "same-request",
+        })
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["message_id"], "msg-existing")
+        self.repository.append_message.assert_not_awaited()
 
     def test_list_events_applies_cursor(self) -> None:
         self.repository.list_events.return_value = [{

@@ -10,6 +10,15 @@ import { CustomerConversation } from '../customer/CustomerConversation';
 import { CustomerProgressPanel, CustomerSafetyGuide } from '../customer/CustomerProgressPanel';
 import { RecoveryNavigator } from '../customer/RecoveryCards';
 import { RECOVERY_MESSAGE_PREFIX, recoveryStepFromMessage, type RecoveryStep, type RecoveryStepId } from '../customer/recovery';
+import { mergePendingMessages, removeMessage, upsertMessage } from '../api/messageState';
+
+type CustomerOutboxItem = {
+  message: CaseMessage;
+  content: string;
+  files: File[];
+  attachmentIds: string[];
+  requestAi: boolean;
+};
 
 export const CustomerCaseRoomPage: React.FC = () => {
   const { caseId = '' } = useParams();
@@ -25,19 +34,28 @@ export const CustomerCaseRoomPage: React.FC = () => {
   const [bookmarks, setBookmarks] = useState<CustomerBookmark[]>([]);
   const aiQueueRef = useRef<Promise<void>>(Promise.resolve());
   const aiGenerationRef = useRef(0);
+  const loadRequestRef = useRef(0);
+  const pendingMessagesRef = useRef(new Map<string, CaseMessage>());
+  const outboxRef = useRef(new Map<string, CustomerOutboxItem>());
 
   const load = useCallback(async (quiet = false) => {
     if (!caseId) return;
+    const requestId = ++loadRequestRef.current;
     if (quiet) setRefreshing(true); else setLoading(true);
-    try { setBundle(await casesApi.customerBundle(caseId)); setError(''); }
-    catch (reason) { if (!quiet) setError(reason instanceof Error ? reason.message : '안전 상담 정보를 불러오지 못했습니다.'); }
-    finally { setLoading(false); setRefreshing(false); }
+    try {
+      const nextBundle = await casesApi.customerBundle(caseId);
+      if (requestId !== loadRequestRef.current) return;
+      setBundle({ ...nextBundle, recent_messages: mergePendingMessages(nextBundle.recent_messages, pendingMessagesRef.current.values()) });
+      setError('');
+    }
+    catch (reason) { if (requestId === loadRequestRef.current && !quiet) setError(reason instanceof Error ? reason.message : '안전 상담 정보를 불러오지 못했습니다.'); }
+    finally { if (requestId === loadRequestRef.current) { setLoading(false); setRefreshing(false); } }
   }, [caseId]);
 
   const showMessage = (message: CaseMessage) => {
     setBundle((current) => current ? {
       ...current,
-      recent_messages: [...current.recent_messages.filter((item) => item.message_id !== message.message_id), message],
+      recent_messages: upsertMessage(current.recent_messages, message),
     } : current);
   };
 
@@ -50,6 +68,7 @@ export const CustomerCaseRoomPage: React.FC = () => {
         // 서버는 이 호출 시점의 고객 공개 대화와 누적 질문 답변을 다시 읽는다.
         const message = await casesApi.invokeCustomerAi(targetCaseId, prompt, replyToMessageId);
         if (aiGenerationRef.current === generation) {
+          loadRequestRef.current += 1;
           showMessage(message);
           await load(true);
         }
@@ -68,6 +87,9 @@ export const CustomerCaseRoomPage: React.FC = () => {
   useEffect(() => {
     aiGenerationRef.current += 1;
     aiQueueRef.current = Promise.resolve();
+    loadRequestRef.current += 1;
+    pendingMessagesRef.current.clear();
+    outboxRef.current.clear();
     setAiPendingCount(0);
     setBundle(null); setError(''); setNotice(''); setLoading(true); setConfirmRecovery(false);
     setBookmarks(readCustomerBookmarks(caseId));
@@ -77,7 +99,7 @@ export const CustomerCaseRoomPage: React.FC = () => {
     const timer = window.setInterval(() => void load(true), 4000);
     const presenceTimer = window.setInterval(heartbeat, 30000);
     return () => { window.clearInterval(timer); window.clearInterval(presenceTimer); };
-  }, [caseId]);
+  }, [caseId, load]);
 
   const refresh = async () => { await load(true); };
   const recovery = String(bundle?.case.mode ?? '') === 'RECOVERY' || String(bundle?.case.victim_transfer_status ?? '') === 'YES';
@@ -88,20 +110,79 @@ export const CustomerCaseRoomPage: React.FC = () => {
   }, [bundle]);
   const closed = String(bundle?.case.status ?? '') === 'CLOSED' || String(bundle?.case.mode ?? '') === 'CLOSED';
 
-  const send = async (content: string, files: File[], requestAi: boolean) => {
+  const deliverMessage = async (item: CustomerOutboxItem) => {
     setBusy(true); setError(''); setNotice('');
+    const sendingMessage = { ...item.message, delivery_state: 'SENDING' as const, delivery_error: null };
+    item.message = sendingMessage;
+    pendingMessagesRef.current.set(sendingMessage.client_request_id!, sendingMessage);
+    showMessage(sendingMessage);
     try {
-      const attachments = [];
-      for (const file of files) attachments.push(await casesApi.uploadCustomerAttachment(caseId, file));
-      const message = await casesApi.sendCustomerMessage(caseId, content, attachments.map((item) => item.attachment_id));
-      // AI 응답을 기다리지 않고 고객 메시지를 먼저 대화에 표시한다.
+      for (const file of item.files.slice(item.attachmentIds.length)) {
+        const attachment = await casesApi.uploadCustomerAttachment(caseId, file);
+        item.attachmentIds.push(attachment.attachment_id);
+      }
+      const message = await casesApi.sendCustomerMessage(caseId, item.content, item.attachmentIds, item.message.client_request_id!);
+      loadRequestRef.current += 1;
+      pendingMessagesRef.current.delete(item.message.client_request_id!);
+      outboxRef.current.delete(item.message.client_request_id!);
       showMessage(message);
-      if (requestAi && content) {
-        window.requestAnimationFrame(() => enqueueCustomerAiReply(content, message.message_id));
+      if (item.requestAi && item.content) {
+        window.requestAnimationFrame(() => enqueueCustomerAiReply(item.content, message.message_id));
       } else {
         window.requestAnimationFrame(() => { void refresh(); });
       }
+    } catch (reason) {
+      const failed = {
+        ...item.message,
+        delivery_state: 'FAILED' as const,
+        delivery_error: reason instanceof Error ? reason.message : '서버에 전송하지 못했습니다.',
+      };
+      item.message = failed;
+      pendingMessagesRef.current.set(failed.client_request_id!, failed);
+      showMessage(failed);
+      setError('메시지를 전송하지 못했습니다. 말풍선의 다시 전송을 눌러주세요.');
     } finally { setBusy(false); }
+  };
+  const send = (content: string, files: File[], requestAi: boolean): Promise<void> => {
+    const clientRequestId = crypto.randomUUID();
+    const message: CaseMessage = {
+      message_id: `pending-${clientRequestId}`,
+      client_request_id: clientRequestId,
+      case_id: caseId,
+      actor_type: 'CUSTOMER',
+      actor_user_id: CURRENT_CUSTOMER_USER.user_id,
+      actor_display_name: CURRENT_CUSTOMER_USER.display_name,
+      actor_role: CURRENT_CUSTOMER_USER.role,
+      content,
+      channel: 'CUSTOMER',
+      audience: 'CUSTOMER',
+      visibility: 'CUSTOMER',
+      message_kind: 'CHAT',
+      private_owner_user_id: null,
+      mentions: [],
+      reply_to_message_id: null,
+      attachments: [],
+      created_at: new Date().toISOString(),
+      delivery_state: 'SENDING',
+      delivery_error: null,
+    };
+    const item: CustomerOutboxItem = { message, content, files, attachmentIds: [], requestAi };
+    pendingMessagesRef.current.set(clientRequestId, message);
+    outboxRef.current.set(clientRequestId, item);
+    showMessage(message);
+    void deliverMessage(item);
+    return Promise.resolve();
+  };
+  const retryMessage = (message: CaseMessage) => {
+    if (busy || !message.client_request_id) return;
+    const item = outboxRef.current.get(message.client_request_id);
+    if (item) void deliverMessage(item);
+  };
+  const dismissMessage = (message: CaseMessage) => {
+    if (!message.client_request_id) return;
+    pendingMessagesRef.current.delete(message.client_request_id);
+    outboxRef.current.delete(message.client_request_id);
+    setBundle((current) => current ? { ...current, recent_messages: removeMessage(current.recent_messages, message) } : current);
   };
 
   const answer = async (question: CustomerQuestion, rawAnswer: string) => {
@@ -117,6 +198,7 @@ export const CustomerCaseRoomPage: React.FC = () => {
     setBusy(true); setError(''); setNotice('');
     try {
       const message = await casesApi.startCustomerEmergency(caseId);
+      loadRequestRef.current += 1;
       showMessage(message); setConfirmRecovery(false);
       window.requestAnimationFrame(() => { void refresh(); });
     }
@@ -130,6 +212,7 @@ export const CustomerCaseRoomPage: React.FC = () => {
     setBusy(true); setError('');
     try {
       const message = await casesApi.sendCustomerMessage(caseId, `${RECOVERY_MESSAGE_PREFIX} ${step.title}`);
+      loadRequestRef.current += 1;
       showMessage(message);
       window.requestAnimationFrame(() => { void refresh(); });
       window.setTimeout(() => document.getElementById(`recovery-${message.message_id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 60);
@@ -142,6 +225,7 @@ export const CustomerCaseRoomPage: React.FC = () => {
     try {
       const label = kind === 'AI_ADVICE' ? '내 상황에 맞는 AI 조언' : '은행 담당자 지원';
       const message = await casesApi.sendCustomerMessage(caseId, `${step.title} 단계에 대해 ${label}을 요청합니다.`);
+      loadRequestRef.current += 1;
       showMessage(message);
       if (kind === 'AI_ADVICE') {
         window.requestAnimationFrame(() => enqueueCustomerAiReply(`${step.title} 피해구제 단계에서 제가 지금 해야 할 일을 쉬운 순서로 알려주세요.`, message.message_id));
@@ -166,7 +250,7 @@ export const CustomerCaseRoomPage: React.FC = () => {
       {error && <div className="customer-global-message danger"><AlertCircle size={16}/><span>{error}</span><button type="button" onClick={() => setError('')} aria-label="오류 닫기"><X size={15}/></button></div>}
       {notice && <div className="customer-global-message"><AlertCircle size={16}/><span>{notice}</span><button type="button" onClick={() => setNotice('')} aria-label="안내 닫기"><X size={15}/></button></div>}
       <div className="customer-room-grid">
-        <section className="customer-chat-panel"><header><div><h1>보이스피싱 대응 AI 상담</h1><p>필요한 내용을 한 가지씩 확인하고 은행 담당자와 연결합니다.</p></div><span>고객 공개 채널</span></header><CustomerConversation bundle={bundle} busy={busy} bookmarkedIds={new Set(bookmarks.map((item) => item.entryId))} onAnswer={answer} onRecoveryRequest={requestRecoveryHelp} onToggleBookmark={toggleBookmark}/><CustomerComposer busy={busy} aiBusy={aiPendingCount > 0} disabled={closed} onSend={send}/></section>
+        <section className="customer-chat-panel"><header><div><h1>보이스피싱 대응 AI 상담</h1><p>필요한 내용을 한 가지씩 확인하고 은행 담당자와 연결합니다.</p></div><span>고객 공개 채널</span></header><CustomerConversation bundle={bundle} busy={busy} bookmarkedIds={new Set(bookmarks.map((item) => item.entryId))} onAnswer={answer} onRecoveryRequest={requestRecoveryHelp} onToggleBookmark={toggleBookmark} onRetryMessage={retryMessage} onDismissMessage={dismissMessage}/><CustomerComposer busy={busy} aiBusy={aiPendingCount > 0} disabled={closed} onSend={send}/></section>
         <aside className="customer-side-panel"><CustomerProgressPanel bundle={bundle} recovery={recovery} selectedStep={selectedStep}/>{recovery ? <RecoveryNavigator selected={selectedStep} busy={busy} onSelect={selectRecoveryStep}/> : <CustomerSafetyGuide/>}</aside>
       </div>
     </main>

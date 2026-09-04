@@ -96,7 +96,7 @@ class MySqlCaseRepositoryIntegrationTest(unittest.IsolatedAsyncioTestCase):
                     f"(SELECT report_id FROM case_reports WHERE case_id IN ({placeholders}))",
                     self.case_ids,
                 )
-                for table in ("messages", "verification_tasks", "actions", "context_features", "analysis_segments", "case_inputs", "case_events", "case_reports"):
+                for table in ("case_presence", "case_members", "messages", "verification_tasks", "actions", "context_features", "analysis_segments", "case_inputs", "case_events", "case_reports"):
                     cursor.execute(f"DELETE FROM {table} WHERE case_id IN ({placeholders})", self.case_ids)
                 cursor.execute(f"DELETE FROM cases WHERE case_id IN ({placeholders})", self.case_ids)
             connection.commit()
@@ -183,10 +183,14 @@ class MySqlCaseRepositoryIntegrationTest(unittest.IsolatedAsyncioTestCase):
         self.case_ids.append(case_id)
         await self.repository.create(await self._record(case_id=case_id, client_request_id=f"a3-{uuid4().hex}"))
 
-        message = await self.repository.append_message(case_id, {"actor_type": "CUSTOMER", "content": "송금하지 않았습니다."})
+        request_id = f"message-{uuid4().hex}"
+        message = await self.repository.append_message(case_id, {"actor_type": "CUSTOMER", "content": "송금하지 않았습니다.", "client_request_id": request_id})
+        retried = await self.repository.append_message(case_id, {"actor_type": "CUSTOMER", "content": "송금하지 않았습니다.", "client_request_id": request_id})
         messages = await self.repository.list_messages(case_id)
         events = await self.repository.list_events(case_id)
 
+        self.assertEqual(retried["message_id"], message["message_id"])
+        self.assertEqual(len(messages), 1)
         self.assertEqual(messages[0]["message_id"], message["message_id"])
         self.assertEqual(messages[0]["content"], "송금하지 않았습니다.")
         self.assertEqual(events[-1]["event_type"], "MESSAGE_ADDED")
@@ -204,6 +208,19 @@ class MySqlCaseRepositoryIntegrationTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await self.repository.list_verifications(case_id))[0]["verification_task_id"], verification["verification_task_id"])
         self.assertEqual((await self.repository.list_actions(case_id))[0]["action_id"], action["action_id"])
         self.assertEqual([event["event_type"] for event in await self.repository.list_events(case_id)][-2:], ["VERIFICATION_CREATED", "BANK_ACTION_ADDED"])
+
+    async def test_member_upsert_is_immediately_visible_across_pool_connections(self) -> None:
+        case_id = f"A5-{uuid4().hex[:12].upper()}"
+        self.case_ids.append(case_id)
+        await self.repository.create(await self._record(case_id=case_id, client_request_id=f"a5-{uuid4().hex}"))
+
+        member = await self.repository.upsert_member(case_id, {
+            "user_id": "bank-operator", "display_name": "은행 담당자", "role": "CHAT_OPERATOR",
+        })
+        members = await self.repository.list_members(case_id)
+
+        self.assertEqual(member["user_id"], "bank-operator")
+        self.assertEqual([item["user_id"] for item in members], ["bank-operator"])
 
 
 class RepositorySelectionTest(unittest.TestCase):

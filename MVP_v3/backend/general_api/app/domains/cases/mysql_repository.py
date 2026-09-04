@@ -29,6 +29,7 @@ class MySqlCaseRepository:
                 charset="utf8mb4",
                 connect_timeout=int(os.getenv("MYSQL_CONNECT_TIMEOUT_SECONDS", "10")),
                 autocommit=False,
+                init_command="SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED",
                 minsize=1,
                 maxsize=5,
             )
@@ -217,6 +218,11 @@ class MySqlCaseRepository:
             await connection.commit()
 
     async def append_message(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]:
+        client_request_id = record.get("client_request_id")
+        if client_request_id:
+            existing = await self.find_message_by_client_request_id(case_id, client_request_id)
+            if existing is not None:
+                return existing
         pool = await self._get_pool()
         message_id = f"msg-{__import__('uuid').uuid4().hex}"
         created_at = datetime.now()
@@ -258,7 +264,7 @@ class MySqlCaseRepository:
                             f"UPDATE case_attachments SET status='LINKED' WHERE case_id=%s AND attachment_id IN ({','.join(['%s'] * len(attachment_ids))})",
                             (case_id, *attachment_ids),
                         )
-                    if record.get("log_event"):
+                    if record.get("log_event", True):
                         await cursor.execute(
                             "INSERT INTO case_events (case_id, event_type, actor_type, payload_json, occurred_at) VALUES (%s,'MESSAGE_ADDED',%s,%s,%s)",
                             (case_id, record["actor_type"], json.dumps({"message_id": message_id, "channel": record.get("channel", "CUSTOMER")}), created_at),
@@ -277,9 +283,34 @@ class MySqlCaseRepository:
             "created_at": created_at.isoformat(),
         }
 
+    async def find_message_by_client_request_id(self, case_id: str, client_request_id: str) -> dict[str, Any] | None:
+        pool = await self._get_pool()
+        query = """SELECT message_id, case_id, actor_type, actor_user_id, actor_display_name, actor_role, content,
+                          channel, audience, visibility, message_kind, private_owner_user_id, mentions_json,
+                          reply_to_message_id, client_request_id, attachments_json, created_at
+                   FROM messages WHERE case_id=%s AND client_request_id=%s LIMIT 1"""
+        async with pool.acquire() as connection, connection.cursor(aiomysql.DictCursor) as cursor:
+            await cursor.execute(query, (case_id, client_request_id))
+            row = await cursor.fetchone()
+            if row is None:
+                return None
+            message = {**row, "mentions": self._json(row["mentions_json"]) or [], "created_at": row["created_at"].isoformat()}
+            await cursor.execute(
+                """SELECT a.* FROM case_attachments a
+                   INNER JOIN message_attachments ma ON ma.attachment_id=a.attachment_id
+                   WHERE ma.message_id=%s ORDER BY ma.attached_at, a.attachment_id""",
+                (message["message_id"],),
+            )
+            message["attachments"] = [
+                {**attachment, "size_bytes": int(attachment["size_bytes"]), "ai_readable": bool(attachment["ai_readable"]), "created_at": attachment["created_at"].isoformat()}
+                for attachment in await cursor.fetchall()
+            ]
+            message["attachment_ids"] = [item["attachment_id"] for item in message["attachments"]]
+            return message
+
     async def list_messages(self, case_id: str, channel: str | None = None) -> list[dict[str, Any]]:
         pool = await self._get_pool()
-        query = "SELECT message_id, case_id, actor_type, actor_user_id, actor_display_name, actor_role, content, channel, audience, visibility, message_kind, private_owner_user_id, mentions_json, reply_to_message_id, attachments_json, created_at FROM messages WHERE case_id=%s"
+        query = "SELECT message_id, case_id, actor_type, actor_user_id, actor_display_name, actor_role, content, channel, audience, visibility, message_kind, private_owner_user_id, mentions_json, reply_to_message_id, client_request_id, attachments_json, created_at FROM messages WHERE case_id=%s"
         values: tuple[Any, ...] = (case_id,)
         if channel is not None:
             query += " AND channel=%s"
@@ -357,6 +388,7 @@ class MySqlCaseRepository:
     async def upsert_member(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]:
         pool = await self._get_pool()
         now = datetime.now()
+        stored_member: dict[str, Any] | None = None
         async with pool.acquire() as connection:
             try:
                 async with connection.cursor(aiomysql.DictCursor) as cursor:
@@ -373,12 +405,22 @@ class MySqlCaseRepository:
                         "INSERT INTO case_events (case_id, event_type, actor_type, payload_json, occurred_at) VALUES (%s,'CASE_MEMBER_UPDATED','SYSTEM',%s,%s)",
                         (case_id, json.dumps({"user_id": record["user_id"], "role": record["role"]}), now),
                     )
+                    await cursor.execute(
+                        "SELECT case_id, user_id, display_name, role, status, assigned_at, updated_at FROM case_members WHERE case_id=%s AND user_id=%s",
+                        (case_id, record["user_id"]),
+                    )
+                    stored_member = await cursor.fetchone()
                 await connection.commit()
             except Exception:
                 await connection.rollback()
                 raise
-        members = await self.list_members(case_id)
-        return next(item for item in members if item["user_id"] == record["user_id"])
+        if stored_member is None:
+            raise RuntimeError("Member upsert completed without a readable row")
+        return {
+            **stored_member,
+            "assigned_at": stored_member["assigned_at"].isoformat(),
+            "updated_at": stored_member["updated_at"].isoformat(),
+        }
 
     async def set_primary_assignee(self, case_id: str, display_name: str | None) -> str | None:
         pool = await self._get_pool()

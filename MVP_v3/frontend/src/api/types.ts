@@ -120,8 +120,12 @@ export interface CaseMessage {
   private_owner_user_id: string | null;
   mentions: string[];
   reply_to_message_id: string | null;
+  client_request_id?: string | null;
   attachments: Attachment[];
   created_at: string;
+  /** Frontend-only delivery state. API responses omit this field. */
+  delivery_state?: 'SENDING' | 'FAILED';
+  delivery_error?: string | null;
 }
 
 export interface CaseEvent {

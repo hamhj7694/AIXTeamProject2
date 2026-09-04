@@ -26,6 +26,7 @@ export const ConversationComposer: React.FC<Props> = ({ busy, aiBusy, onSend, on
   const [requestAi, setRequestAi] = useState(false);
   const [error, setError] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+  const submittingRef = useRef(false);
   const mentionRequestsAi = target === 'TEAM' && hasBankAiMention(draft);
   const aiRequested = target === 'TEAM' && (requestAi || mentionRequestsAi);
   const selectTarget = (nextTarget: ComposerTarget) => {
@@ -40,9 +41,11 @@ export const ConversationComposer: React.FC<Props> = ({ busy, aiBusy, onSend, on
     if (target === 'CUSTOMER' && hasBankAiMention(value)) setTarget('TEAM');
   };
   const submit = async () => {
-    if (busy || (!draft.trim() && files.length === 0)) return;
+    if (submittingRef.current || busy || (!draft.trim() && files.length === 0)) return;
+    submittingRef.current = true;
     try { await onSend(draft.trim(), files, target, aiRequested && Boolean(draft.trim())); setDraft(''); setFiles([]); setError(''); }
     catch (reason) { setError(reason instanceof Error ? reason.message : '메시지를 전송하지 못했습니다.'); }
+    finally { submittingRef.current = false; }
   };
   const addFiles = (incoming: FileList | null) => {
     if (!incoming) return;

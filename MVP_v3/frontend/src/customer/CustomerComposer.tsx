@@ -17,14 +17,17 @@ export const CustomerComposer: React.FC<Props> = ({ busy, aiBusy, disabled = fal
   const [requestAi, setRequestAi] = useState(true);
   const [error, setError] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+  const submittingRef = useRef(false);
   const blocked = busy || disabled;
   const submit = async () => {
-    if (blocked || (!draft.trim() && files.length === 0)) return;
+    if (submittingRef.current || blocked || (!draft.trim() && files.length === 0)) return;
+    submittingRef.current = true;
     try {
       setError('');
       await onSend(draft.trim(), files, requestAi && Boolean(draft.trim()));
       setDraft(''); setFiles([]);
     } catch (reason) { setError(reason instanceof Error ? reason.message : '메시지를 보내지 못했습니다.'); }
+    finally { submittingRef.current = false; }
   };
   const addFiles = (incoming: FileList | null) => {
     if (!incoming) return;

@@ -15,6 +15,8 @@ interface Props {
   onEditVerification: (task: VerificationTask) => void;
   bookmarkedIds: Set<string>;
   onToggleBookmark: (bookmark: BankBookmark) => void;
+  onRetryMessage: (message: CaseMessage) => void;
+  onDismissMessage: (message: CaseMessage) => void;
 }
 
 const bookmarkDetails = (entry: TimelineEntry): Pick<BankBookmark, 'label' | 'summary'> => {
@@ -43,19 +45,19 @@ const EntryBookmark: React.FC<{ entry: TimelineEntry; active: boolean; onToggle:
   return <button type="button" className={`bank-entry-bookmark ${active ? 'active' : ''}`} aria-label={active ? '북마크 해제' : '북마크 추가'} aria-pressed={active} onClick={() => onToggle({ entryId: entry.id, ...details, createdAt: entry.occurredAt })}><Bookmark size={14} fill={active ? 'currentColor' : 'none'}/></button>;
 };
 
-const MessageEntry: React.FC<{ message: CaseMessage; bookmark: React.ReactNode }> = ({ message, bookmark }) => {
+const MessageEntry: React.FC<{ message: CaseMessage; bookmark: React.ReactNode; onRetry: Props['onRetryMessage']; onDismiss: Props['onDismissMessage'] }> = ({ message, bookmark, onRetry, onDismiss }) => {
   const mine = message.actor_user_id === CURRENT_BANK_USER.user_id;
   const system = message.message_kind === 'SYSTEM_EVENT';
   if (system) return <article className="timeline-system"><Bot size={15}/><div><div className="entry-meta"><b>{message.actor_display_name || 'Case 업데이트'}</b>{bookmark}<time>{formatClock(message.created_at)}</time></div><SafeMarkdown content={message.content}/></div></article>;
   const scope = message.channel === 'CUSTOMER' ? 'customer-message' : 'internal-message';
   return <article className={`message-row ${mine ? 'mine' : ''} ${scope}`}>
     <span className={`avatar ${message.actor_type.toLowerCase()}`}>{message.actor_type === 'BANK_AGENT' || message.actor_type === 'CUSTOMER_AGENT' ? <Bot size={16}/> : message.actor_type === 'CUSTOMER' ? <UserRound size={16}/> : <ShieldCheck size={16}/>}</span>
-    <div className="message-wrap"><div className="entry-meta"><b>{mine ? '나' : message.actor_display_name}</b><span>{message.channel === 'CUSTOMER' ? '고객에게' : '은행 내부'}</span>{bookmark}</div><div className="message-bubble"><SafeMarkdown content={message.content}/>{message.attachments?.length > 0 && <div className="attachment-list">{message.attachments.map((attachment) => <a key={attachment.attachment_id} href={casesApi.attachmentUrl(attachment)} target="_blank" rel="noreferrer"><FileText size={14}/><span>{attachment.original_name}</span><small>{Math.ceil(attachment.size_bytes / 1024)}KB</small></a>)}</div>}</div><time className="message-time">{formatClock(message.created_at)}</time></div>
+    <div className="message-wrap"><div className="entry-meta"><b>{mine ? '나' : message.actor_display_name}</b><span>{message.channel === 'CUSTOMER' ? '고객에게' : '은행 내부'}</span>{bookmark}</div><div className="message-bubble"><SafeMarkdown content={message.content}/>{message.attachments?.length > 0 && <div className="attachment-list">{message.attachments.map((attachment) => <a key={attachment.attachment_id} href={casesApi.attachmentUrl(attachment)} target="_blank" rel="noreferrer"><FileText size={14}/><span>{attachment.original_name}</span><small>{Math.ceil(attachment.size_bytes / 1024)}KB</small></a>)}</div>}</div>{message.delivery_state === 'FAILED' && <div className="message-delivery-error"><span>전송되지 않았습니다.</span><button type="button" onClick={() => onRetry(message)}>다시 전송</button><button type="button" onClick={() => onDismiss(message)}>지우기</button></div>}<time className={`message-time${message.delivery_state ? ` ${message.delivery_state.toLowerCase()}` : ''}`}>{message.delivery_state === 'SENDING' ? '전송 중…' : message.delivery_state === 'FAILED' ? '전송 실패' : formatClock(message.created_at)}</time></div>
   </article>;
 };
 
-const EntryCard: React.FC<{ entry: TimelineEntry; bookmark: React.ReactNode; onEditVerification: (task: VerificationTask) => void }> = ({ entry, bookmark, onEditVerification }) => {
-  if (entry.kind === 'MESSAGE') return <MessageEntry message={entry.data as CaseMessage} bookmark={bookmark}/>;
+const EntryCard: React.FC<{ entry: TimelineEntry; bookmark: React.ReactNode; onEditVerification: (task: VerificationTask) => void; onRetryMessage: Props['onRetryMessage']; onDismissMessage: Props['onDismissMessage'] }> = ({ entry, bookmark, onEditVerification, onRetryMessage, onDismissMessage }) => {
+  if (entry.kind === 'MESSAGE') return <MessageEntry message={entry.data as CaseMessage} bookmark={bookmark} onRetry={onRetryMessage} onDismiss={onDismissMessage}/>;
   if (entry.kind === 'BRIEF') {
     const item = entry.data as StoredCase;
     return <article className="timeline-brief"><div className="entry-kicker"><Bot size={15}/>AI BRIEF{bookmark}</div><p>{item.initial_brief}</p><time>{formatClock(entry.occurredAt)}</time></article>;
@@ -77,18 +79,20 @@ const EntryCard: React.FC<{ entry: TimelineEntry; bookmark: React.ReactNode; onE
   return <article className="timeline-event"><CircleDot size={13}/><span>{event.event_type.replace(/_/g, ' ')}</span>{bookmark}<time>{formatClock(event.occurred_at)}</time></article>;
 };
 
-export const SharedConversation: React.FC<Props> = ({ caseItem, bundle, view, onEditVerification, bookmarkedIds, onToggleBookmark }) => {
+export const SharedConversation: React.FC<Props> = ({ caseItem, bundle, view, onEditVerification, bookmarkedIds, onToggleBookmark, onRetryMessage, onDismissMessage }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const initialized = useRef(false);
   const followLatest = useRef(true);
   const entries = useMemo(() => buildTimeline(caseItem, bundle, view === 'timeline'), [bundle, caseItem, view]);
+  const latestEntry = entries[entries.length - 1];
+  const latestEntryKey = latestEntry ? `${latestEntry.id}:${latestEntry.occurredAt}` : 'empty';
   useEffect(() => {
     const node = scrollRef.current;
     if (!node) return;
     if (!initialized.current || followLatest.current) node.scrollTop = node.scrollHeight;
     initialized.current = true;
-  }, [entries.length]);
+  }, [latestEntryKey]);
   return <div ref={scrollRef} onScroll={(event) => { const node = event.currentTarget; followLatest.current = node.scrollHeight - node.scrollTop - node.clientHeight < 80; }} className="conversation-scroll" aria-live="polite">
-    {entries.length === 0 ? <div className="conversation-empty">아직 Case 기록이 없습니다.</div> : entries.map((entry) => <div id={entry.id} className="bank-timeline-entry" key={entry.id}><EntryCard entry={entry} bookmark={<EntryBookmark entry={entry} active={bookmarkedIds.has(entry.id)} onToggle={onToggleBookmark}/>} onEditVerification={onEditVerification}/></div>) }
+    {entries.length === 0 ? <div className="conversation-empty">아직 Case 기록이 없습니다.</div> : entries.map((entry) => <div id={entry.id} className="bank-timeline-entry" key={entry.id}><EntryCard entry={entry} bookmark={<EntryBookmark entry={entry} active={bookmarkedIds.has(entry.id)} onToggle={onToggleBookmark}/>} onEditVerification={onEditVerification} onRetryMessage={onRetryMessage} onDismissMessage={onDismissMessage}/></div>) }
   </div>;
 };

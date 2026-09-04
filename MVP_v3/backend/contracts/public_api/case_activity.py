@@ -75,6 +75,7 @@ class PublicMessageResponse(PublicActivityModel):
     private_owner_user_id: str | None = None
     mentions: list[str]
     reply_to_message_id: str | None = None
+    client_request_id: str | None = None
     attachments: list[PublicAttachmentResponse] = Field(default_factory=list)
     created_at: str
 
@@ -127,6 +128,7 @@ def to_public_message(record: dict[str, Any]) -> PublicMessageResponse:
         "private_owner_user_id": record.get("private_owner_user_id"),
         "mentions": record.get("mentions", []),
         "reply_to_message_id": record.get("reply_to_message_id"),
+        "client_request_id": record.get("client_request_id"),
         "attachments": [to_public_attachment(item).model_dump(mode="json") for item in record.get("attachments", [])],
         "created_at": record["created_at"],
     })

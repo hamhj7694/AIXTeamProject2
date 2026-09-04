@@ -46,7 +46,7 @@ export const casesApi = {
   heartbeat: (caseId: string, user: { user_id: string; display_name: string }, presence: CasePresence['presence'], channel: MessageChannel) => request<CasePresence>(`/api/cases/${encodeURIComponent(caseId)}/presence/heartbeat`, {
     method: 'POST', body: JSON.stringify({ user_id: user.user_id, display_name: user.display_name, presence, channel }),
   }),
-  sendMessage: (caseId: string, content: string, channel: Exclude<MessageChannel, 'AI_INTERNAL'>, attachmentIds: string[] = []) => {
+  sendMessage: (caseId: string, content: string, channel: Exclude<MessageChannel, 'AI_INTERNAL'>, attachmentIds: string[] = [], clientRequestId: string = crypto.randomUUID()) => {
     const customer = channel === 'CUSTOMER';
     return request<CaseMessage>(`/api/cases/${encodeURIComponent(caseId)}/messages`, {
       method: 'POST',
@@ -55,7 +55,7 @@ export const casesApi = {
         actor_display_name: CURRENT_BANK_USER.display_name, actor_role: CURRENT_BANK_USER.role,
         content, channel, audience: customer ? 'CUSTOMER' : 'BANK_INTERNAL',
         visibility: customer ? 'CUSTOMER' : 'BANK_INTERNAL', message_kind: 'CHAT',
-        mentions: [], attachment_ids: attachmentIds, client_request_id: crypto.randomUUID(),
+        mentions: [], attachment_ids: attachmentIds, client_request_id: clientRequestId,
       }),
     });
   },
@@ -100,14 +100,14 @@ export const casesApi = {
     return response.json() as Promise<Attachment>;
   },
   attachmentUrl: (attachment: Attachment) => apiUrl(attachment.download_url.replace(/\?view=(bank|customer)$/, '?view=bank')),
-  sendCustomerMessage: (caseId: string, content: string, attachmentIds: string[] = []) => request<CaseMessage>(`/api/cases/${encodeURIComponent(caseId)}/messages`, {
+  sendCustomerMessage: (caseId: string, content: string, attachmentIds: string[] = [], clientRequestId: string = crypto.randomUUID()) => request<CaseMessage>(`/api/cases/${encodeURIComponent(caseId)}/messages`, {
     method: 'POST',
     body: JSON.stringify({
       actor_type: 'CUSTOMER', actor_user_id: CURRENT_CUSTOMER_USER.user_id,
       actor_display_name: CURRENT_CUSTOMER_USER.display_name, actor_role: CURRENT_CUSTOMER_USER.role,
       content, channel: 'CUSTOMER', audience: 'CUSTOMER', visibility: 'CUSTOMER',
       message_kind: 'CHAT', mentions: [], attachment_ids: attachmentIds,
-      client_request_id: crypto.randomUUID(),
+      client_request_id: clientRequestId,
     }),
   }),
   uploadCustomerAttachment: async (caseId: string, file: File): Promise<Attachment> => {

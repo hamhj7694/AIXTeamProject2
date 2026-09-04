@@ -119,6 +119,7 @@ CREATE TABLE IF NOT EXISTS messages (
     attachments_json JSON NULL,
     client_request_id VARCHAR(100) NULL,
     created_at DATETIME(6) NOT NULL,
+    UNIQUE KEY uq_messages_case_client_request (case_id, client_request_id),
     INDEX idx_messages_case_cursor (case_id, created_at, message_id),
     CONSTRAINT fk_messages_case FOREIGN KEY (case_id) REFERENCES cases(case_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

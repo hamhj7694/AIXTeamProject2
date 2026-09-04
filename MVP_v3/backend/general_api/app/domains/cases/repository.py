@@ -31,6 +31,7 @@ class CaseRepository(Protocol):
     async def list_trashed_cases(self) -> list[dict[str, Any]]: ...
     async def restore_case(self, case_id: str) -> None: ...
     async def append_message(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]: ...
+    async def find_message_by_client_request_id(self, case_id: str, client_request_id: str) -> dict[str, Any] | None: ...
     async def list_messages(self, case_id: str, channel: str | None = None) -> list[dict[str, Any]]: ...
     async def create_attachment(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]: ...
     async def get_attachment(self, case_id: str, attachment_id: str) -> dict[str, Any] | None: ...
@@ -191,6 +192,11 @@ class InMemoryCaseRepository:
         async with self._lock:
             if not any(item["case_id"] == case_id for item in self._records):
                 raise KeyError(case_id)
+            client_request_id = record.get("client_request_id")
+            if client_request_id:
+                existing = next((item for item in self._messages if item["case_id"] == case_id and item.get("client_request_id") == client_request_id), None)
+                if existing is not None:
+                    return deepcopy(existing)
             attachment_ids = list(dict.fromkeys(record.get("attachment_ids", [])))
             attachments = [item for item in self._attachments if item["case_id"] == case_id and item["attachment_id"] in attachment_ids]
             if len(attachments) != len(attachment_ids):
@@ -215,13 +221,16 @@ class InMemoryCaseRepository:
             message["attachments"] = [deepcopy(item) for item in attachments]
             self._messages.append(message)
             self._touch_case(case_id, now)
-            if record.get("log_event"):
+            if record.get("log_event", True):
                 self._events.append({
                     "event_id": len(self._events) + 1, "case_id": case_id, "event_type": "MESSAGE_ADDED",
                     "actor_type": message["actor_type"],
                     "payload": {"message_id": message["message_id"], "channel": message["channel"]}, "occurred_at": now,
                 })
             return deepcopy(message)
+
+    async def find_message_by_client_request_id(self, case_id: str, client_request_id: str) -> dict[str, Any] | None:
+        return next((deepcopy(item) for item in self._messages if item["case_id"] == case_id and item.get("client_request_id") == client_request_id), None)
 
     async def create_attachment(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]:
         async with self._lock:
