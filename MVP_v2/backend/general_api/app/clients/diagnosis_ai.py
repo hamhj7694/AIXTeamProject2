@@ -48,6 +48,25 @@ class HttpDiagnosisAiClient:
         except httpx.RequestError as exc:
             raise AiServiceError("AI 분석 서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.") from exc
 
+    async def generate_case_copilot_reply(self, payload: dict) -> dict:
+        """One user-initiated, bounded CaseCopilot request. No silent fixture fallback."""
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+                response = await client.post(f"{self.base_url}/ai/case-copilot/replies", json=payload)
+                if not response.is_success:
+                    detail = response.json().get("detail", {})
+                    message = detail.get("message", "CaseCopilot 응답을 만들지 못했습니다.")
+                    if response.status_code == 429:
+                        raise AiServiceQuotaError(message)
+                    if response.status_code == 401:
+                        raise AiServiceAuthenticationError(message)
+                    raise AiServiceError(message)
+                return response.json()
+        except httpx.TimeoutException as exc:
+            raise AiServiceError(f"CaseCopilot 응답 시간이 {self.timeout_seconds:.0f}초를 초과했습니다.") from exc
+        except httpx.RequestError as exc:
+            raise AiServiceError("CaseCopilot 서버에 연결할 수 없습니다.") from exc
+
     async def build_case_support_snapshot(self, snapshot: dict) -> dict:
         """AI 내부 snapshot을 호출하되, Public API에는 내부 DTO를 그대로 내보내지 않는다."""
         try:
@@ -60,3 +79,21 @@ class HttpDiagnosisAiClient:
             raise AiServiceError(f"AI 사건 지원 제한시간({self.timeout_seconds:.0f}초)을 초과했습니다.") from exc
         except httpx.RequestError as exc:
             raise AiServiceError("AI 사건 지원 서버에 연결할 수 없습니다.") from exc
+
+    async def generate_work_card(self, payload: dict) -> dict:
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+                response = await client.post(f"{self.base_url}/ai/work-cards/generate", json=payload)
+                if not response.is_success:
+                    detail = response.json().get("detail", {})
+                    message = detail.get("message", "AI 업무 카드를 만들지 못했습니다.")
+                    if response.status_code == 429:
+                        raise AiServiceQuotaError(message)
+                    if response.status_code == 401:
+                        raise AiServiceAuthenticationError(message)
+                    raise AiServiceError(message)
+                return response.json()
+        except httpx.TimeoutException as exc:
+            raise AiServiceError(f"AI 업무 카드 생성 시간이 {self.timeout_seconds:.0f}초를 초과했습니다.") from exc
+        except httpx.RequestError as exc:
+            raise AiServiceError("AI 업무 카드 서버에 연결할 수 없습니다.") from exc

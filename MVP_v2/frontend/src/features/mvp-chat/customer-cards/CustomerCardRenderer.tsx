@@ -2,7 +2,6 @@ import React from 'react';
 import { CustomerQuestionCard } from '../cards/CustomerQuestionCard';
 import { CustomerAnswerReceiptCard } from './CustomerAnswerReceiptCard';
 import { CustomerVerificationResultCard } from './CustomerVerificationResultCard';
-import { RecoveryStepDetailCard } from './RecoveryStepDetailCard';
 import type { CustomerCardDescriptor } from './types';
 
 interface Props {
@@ -16,7 +15,6 @@ export const CustomerCardRenderer: React.FC<Props> = ({ cards, submitting, onAns
   {cards.map((card) => {
     if (card.card_type === 'QUESTION') return <CustomerQuestionCard key={card.card_id} question={card.payload.question} submitting={submitting} onSubmit={onAnswer}/>;
     if (card.card_type === 'ANSWER_RECEIPT') return <CustomerAnswerReceiptCard key={card.card_id} question={card.payload.question} answer={card.payload.answer}/>;
-    if (card.card_type === 'VERIFICATION_RESULT') return <CustomerVerificationResultCard key={card.card_id} result={card.payload.result}/>;
-    return <RecoveryStepDetailCard key={card.card_id} stepId={card.payload.stepId} onRequest={onRecoveryRequest}/>;
+    return <CustomerVerificationResultCard key={card.card_id} result={card.payload.result}/>;
   })}
 </>;

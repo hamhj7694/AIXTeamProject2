@@ -73,10 +73,20 @@ class PublicAiInvocationResponse(PublicCollaborationModel):
     case_id: str
     channel: Literal["TEAM", "AI_INTERNAL"]
     content: str
-    model_mode: Literal["MVP_DETERMINISTIC"]
+    # The UI displays the provider/model for traceability. It must not pretend
+    # that a real model response is the old deterministic fixture.
+    model_mode: str = Field(min_length=1, max_length=100)
     created_at: str
 
 
 class PublicAiShareRequest(PublicCollaborationModel):
     shared_by_user_id: str = Field(min_length=1, max_length=64)
     shared_by_display_name: str = Field(min_length=1, max_length=80)
+
+
+class PublicCustomerAiReplyRequest(PublicCollaborationModel):
+    prompt: str = Field(min_length=1, max_length=6_000)
+    requester_user_id: str = Field(min_length=1, max_length=64)
+    requester_display_name: str = Field(min_length=1, max_length=80)
+    reply_to_message_id: str = Field(min_length=1, max_length=64)
+    client_request_id: str | None = Field(default=None, max_length=100)

@@ -10,10 +10,10 @@ const templates = [
   { label: '피해 증빙 보존', text: '피해가 발생했다면 거래내역과 대화 화면을 보존하고 즉시 은행 담당자에게 알려 주세요.' },
 ];
 
-interface Props { caseId: string; requestedBy: string; onCompleted: () => Promise<void> | void; onClose: () => void; }
+interface Props { caseId: string; requestedBy: string; initialContent?: string; onCompleted: () => Promise<void> | void; onClose: () => void; }
 
-export const CustomerNoticeCard: React.FC<Props> = ({ caseId, requestedBy, onCompleted, onClose }) => {
-  const [content, setContent] = useState('');
+export const CustomerNoticeCard: React.FC<Props> = ({ caseId, requestedBy, initialContent = '', onCompleted, onClose }) => {
+  const [content, setContent] = useState(initialContent);
   const [stage, setStage] = useState<WorkCardStage>('DRAFT');
   const [error, setError] = useState('');
   const [noticeWarning, setNoticeWarning] = useState('');
@@ -26,6 +26,7 @@ export const CustomerNoticeCard: React.FC<Props> = ({ caseId, requestedBy, onCom
       try { await mvpChatApi.createMessage(caseId, { actor_type: 'SYSTEM', actor_user_id: 'case-system', actor_display_name: '시스템', actor_role: null, content: '은행 담당자가 고객 안전 안내를 전송했습니다.', channel: 'TEAM', audience: 'BANK_INTERNAL', visibility: 'BANK_INTERNAL', message_kind: 'SYSTEM_EVENT' }); }
       catch { setNoticeWarning('고객 안내는 전송됐지만 은행 협업 알림을 동기화하지 못했습니다. 다시 전송하지 말고 새로고침해 주세요.'); }
       try { await onCompleted(); } catch { setNoticeWarning('고객 안내는 전송됐지만 최신 화면을 불러오지 못했습니다. 다시 전송하지 말고 새로고침해 주세요.'); }
+      onClose();
     } catch (reason) { setError(reason instanceof Error ? reason.message : '고객 안내를 전송하지 못했습니다.'); setStage('FAILED'); }
   };
   return <WorkCardFrame eyebrow="AI 개인 작업 · 고객 안내" title="고객 공개 안내 작성" description="고객 화면에 그대로 전달됩니다. 내부 판단·위험 점수·검증 근거가 포함되지 않았는지 확인하세요." stage={stage} onClose={onClose}>

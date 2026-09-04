@@ -22,13 +22,13 @@ const availableTargetsFor = (status: string, mode: string): Target[] => {
   return [];
 };
 
-interface Props { caseId: string; requestedBy: string; currentCase: Record<string, unknown>; onCompleted: () => Promise<void> | void; onClose: () => void; }
+interface Props { caseId: string; requestedBy: string; currentCase: Record<string, unknown>; initialTarget?: string | null; onCompleted: () => Promise<void> | void; onClose: () => void; }
 
-export const CaseTransitionCard: React.FC<Props> = ({ caseId, requestedBy, currentCase, onCompleted, onClose }) => {
+export const CaseTransitionCard: React.FC<Props> = ({ caseId, requestedBy, currentCase, initialTarget, onCompleted, onClose }) => {
   const currentStatus = String(currentCase.status ?? 'TRIAGE');
   const currentMode = String(currentCase.mode ?? 'PREVENT');
   const availableTargets = useMemo(() => availableTargetsFor(currentStatus, currentMode), [currentMode, currentStatus]);
-  const [target, setTarget] = useState<Target>(() => availableTargets[0] ?? 'IN_PROGRESS');
+  const [target, setTarget] = useState<Target>(() => availableTargets.includes(initialTarget as Target) ? initialTarget as Target : availableTargets[0] ?? 'IN_PROGRESS');
   const [confirmed, setConfirmed] = useState(false);
   const [stage, setStage] = useState<WorkCardStage>('DRAFT');
   const [error, setError] = useState('');
@@ -55,6 +55,7 @@ export const CaseTransitionCard: React.FC<Props> = ({ caseId, requestedBy, curre
       try { await mvpChatApi.createMessage(caseId, { actor_type: 'SYSTEM', actor_user_id: 'case-system', actor_display_name: '시스템', actor_role: null, content: `${requestedBy}님이 Case 업무 단계를 ‘${labels[target].title}’(으)로 변경했습니다.`, channel: 'TEAM', audience: 'BANK_INTERNAL', visibility: 'BANK_INTERNAL', message_kind: 'SYSTEM_EVENT' }); }
       catch { setNoticeWarning('상태는 변경됐지만 은행 협업 알림을 동기화하지 못했습니다. 새로고침해 주세요.'); }
       try { await onCompleted(); } catch { setNoticeWarning('상태는 변경됐지만 최신 화면을 불러오지 못했습니다. 새로고침해 주세요.'); }
+      onClose();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Case 상태를 변경하지 못했습니다. 최신 상태를 다시 확인해 주세요.');
       setStage('FAILED');

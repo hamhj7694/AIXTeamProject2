@@ -36,8 +36,11 @@ class LocalSqliteCaseRepository(InMemoryCaseRepository):
         return connection
 
     def _load(self) -> None:
-        with self._connection() as connection:
+        connection = self._connection()
+        try:
             row = connection.execute("SELECT payload FROM local_case_state WHERE state_key='case_repository'").fetchone()
+        finally:
+            connection.close()
         if not row:
             return
         state = json.loads(row[0])
@@ -47,12 +50,16 @@ class LocalSqliteCaseRepository(InMemoryCaseRepository):
     def _persist(self) -> None:
         state = {field: getattr(self, field) for field in self._STATE_FIELDS}
         payload = json.dumps(state, ensure_ascii=False, separators=(",", ":"))
-        with self._connection() as connection:
+        connection = self._connection()
+        try:
             connection.execute(
                 "INSERT INTO local_case_state (state_key, payload) VALUES ('case_repository', ?) "
                 "ON CONFLICT(state_key) DO UPDATE SET payload=excluded.payload",
                 (payload,),
             )
+            connection.commit()
+        finally:
+            connection.close()
 
     async def create(self, record: dict[str, Any]) -> dict[str, Any]:
         result = await super().create(record); self._persist(); return result
@@ -107,6 +114,24 @@ class LocalSqliteCaseRepository(InMemoryCaseRepository):
 
     async def finalize_report(self, case_id: str, expected_version: int, note: str) -> dict[str, Any]:
         result = await super().finalize_report(case_id, expected_version, note); self._persist(); return result
+
+    async def queue_customer_questions(self, case_id: str, questions: list[dict[str, Any]], requested_by: str) -> list[dict[str, Any]]:
+        result = await super().queue_customer_questions(case_id, questions, requested_by); self._persist(); return result
+
+    async def dispatch_next_customer_question(self, case_id: str) -> dict[str, Any] | None:
+        result = await super().dispatch_next_customer_question(case_id); self._persist(); return result
+
+    async def link_customer_question_message(self, case_id: str, question_id: str, message_id: str) -> None:
+        await super().link_customer_question_message(case_id, question_id, message_id); self._persist()
+
+    async def answer_customer_question(self, case_id: str, question_id: str, message_id: str, answer_text: str) -> dict[str, Any]:
+        result = await super().answer_customer_question(case_id, question_id, message_id, answer_text); self._persist(); return result
+
+    async def propose_case_fact(self, case_id: str, question_id: str, value: str, evidence_message_id: str | None) -> dict[str, Any]:
+        result = await super().propose_case_fact(case_id, question_id, value, evidence_message_id); self._persist(); return result
+
+    async def confirm_case_fact(self, case_id: str, fact_id: str, confirmed_by: str) -> dict[str, Any]:
+        result = await super().confirm_case_fact(case_id, fact_id, confirmed_by); self._persist(); return result
 
     async def create_personal_note(self, case_id: str, author_id: str, content: str) -> dict[str, Any]:
         result = await super().create_personal_note(case_id, author_id, content); self._persist(); return result

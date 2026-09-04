@@ -57,6 +57,19 @@ class CaseSupportSnapshotEndpointTest(unittest.TestCase):
         self.assertTrue(response.json())
         self.assertEqual(response.json()[0]["question_id"], "candidate-victim_transfer_status")
 
+    def test_ai_candidate_is_filtered_when_target_field_was_already_answered(self) -> None:
+        self.repository.list_customer_questions.return_value = [{
+            "question_id": "old-custom-id", "target_field": "transfer_status",
+            "question_text": "송금하셨나요?", "status": "ANSWERED", "answer_text": "아니요",
+        }]
+
+        response = self.client.get("/api/cases/CASE-AI-1/customer-question-candidates")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), [])
+        sent_context = general_main.service.ai_client.build_case_support_snapshot.await_args.args[0]["question_context"]
+        self.assertEqual(sent_context["answered_question_fields"], ["transfer_status"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -76,19 +76,45 @@ Frontend 표준 descriptor는 `card_id, card_type, stage, title, payload, source
 
 현재 Frontend 레지스트리는 `FACT_REVIEW, QUESTION_PLAN, VERIFICATION_REQUEST, BANK_ACTION, CUSTOMER_NOTICE, CASE_TRANSITION`을 지원한다. 상세 payload와 역할별 노출은 `07_WORK_CARD_CATALOG.md`를 따른다.
 
+`CaseWorkCardInput`은 Case 요약·상태·모드·사기 유형·확정/미확인 Fact·최근 고객/팀 대화·진행 중 은행 업무·첨부 메타데이터·미완료 검증과 함께 `question_candidates`를 AI API에 전달한다. `CaseWorkCardOutput`은 모든 카드에 비어 있지 않은 `title, summary, rationale, warnings`를 제공하고 카드 종류별 실행 필드(`questions`, `suggested_claim/target`, `suggested_action_*`, `suggested_notice`, `suggested_transition`)를 채운다. OpenAI 키가 없거나 제공자 연결/출력 검증에 실패하면 동일 입력을 사용한 `RULE_BASED_FALLBACK*`을 명시해 빈 카드 대신 검토 가능한 Case 문맥 초안을 반환한다. 실행 성공 후 활성 작업 카드는 닫히고 결과는 원본 Question/Verification/Action/Message/Case 데이터에서 다시 조회한다.
+
+General API 공개 계약은 `backend/scripts/export_openapi.py`로 `frontend/openapi/general-api.json`에 내보내고 `openapi-typescript`로 `frontend/src/generated/generalApiSchema.ts`를 생성한다. 프론트의 모든 도메인 API 모듈은 `generalApiClient.ts`의 단일 URL·오류 해석·mutation 알림 전송 계층을 사용한다. 계약 변경 시 `npm.cmd run api:generate` 후 생성 파일과 소비 타입을 같은 변경에서 검증한다.
+
 ### 은행 질문 → 고객 카드 → Fact 후보
 
-`AI 질문 후보(question_text, reason, customer_explanation, options, answer_mode, allow_free_text) → 은행 직원 선택/직접 질문 추가 → Question Queue(PENDING) → 한 문항 ASKED → 고객 공개 projection(reason/requested_by 제거) → 고객 질문 카드 → 선택지 또는 직접 입력 → 고객 Message + Question ANSWERED(answer_text/answered_at 저장) → 답변 접수 카드 복원 → CaseFact PROPOSED → 다음 PENDING 질문 ASKED` 순서다.
+`AI 질문 후보(question_text, reason, customer_explanation, options, answer_mode, allow_free_text) → 은행 직원 선택/직접 질문 추가 → Question Queue(PENDING) → 한 문항 ASKED → 고객 질문 Message ID 영속 연결 → 고객 공개 projection(reason/requested_by 제거) → 고객 질문 카드 → 선택지 또는 직접 입력 → 고객 Message + Question ANSWERED(answer_text/answered_at 저장) → AI 개인 작업공간 질문·답변 접수 카드 → CaseFact PROPOSED → 다음 PENDING 질문 ASKED` 순서다.
+
+질문 중복 방지는 `confirmed_fields + PENDING/ASKED target_field + ANSWERED target_field/question_id`를 AI 추천 Context에 전달하는 1차 방어, General API가 AI 후보를 기존 필드·정규화 문구와 대조하는 2차 방어, Repository가 저장 직전 같은 필드 또는 공백/대소문자를 정규화한 동일 문구를 거부하는 3차 방어로 구성한다. 일반 질문 생성에서는 이미 답변한 항목을 다시 묻지 않는다. 실제 재확인이 필요한 경우에는 기존 질문을 우회하지 않고 사유·요청자·시점을 남기는 별도 `RECHECK` 명령으로 설계한다.
 
 질문 전달 시 생성되는 Customer Agent의 일반 질문 말풍선은 Frontend에서 동일한 `question_text`를 가진 구조화 질문 카드와 중복 표시하지 않는다. 질문 전·후 상태는 Queue가 단일 원본이며, 새로고침 후에도 `ANSWERED + answer_text`를 사용해 답변 접수 카드를 복원한다.
 
-고객은 `customer_explanation`을 보지만 은행 내부 `reason`은 보지 않는다. `options`는 AI가 생성할 수 있고, `allow_free_text=true`이면 선택지에 없는 상황을 직접 입력할 수 있다. 고객 답변 접수 카드는 답변이 최종 확정 사실이 아니라 담당자 검토 대상임을 명시한다.
+고객 공개 계약에는 `customer_explanation`이 남아 있지만 현재 질문 카드에서는 질문과 뜻이 반복되지 않도록 표시하지 않는다. 은행 내부 `reason`도 노출하지 않는다. `options`는 AI가 생성할 수 있고, `allow_free_text=true`이면 선택지에 없는 상황을 직접 입력할 수 있다. 고객 답변 접수 카드는 답변이 최종 확정 사실이 아니라 담당자 검토 대상임을 명시한다.
+
+은행 화면은 다른 브라우저/기기의 고객 답변과 긴급 신고를 놓치지 않도록 3초 복구 Polling으로 Bundle·Message·Presence·Fact·Case를 다시 읽는다. 이 Polling은 AI Case-support 생성을 호출하지 않는다. 운영 환경에서는 동일 refresh 함수가 SSE/WebSocket Case Event를 구독하도록 교체한다.
 
 은행 AI 개인 작업공간은 같은 Question Queue의 `ANSWERED + answer_text`를 3초 주기로 조회해 질문과 답변을 한 묶음의 얇은 접수 카드로 표시한다. 별도의 복제 메시지를 데이터 원본으로 사용하지 않는다. `확인 및 확인중 정보` 패널도 같은 Queue를 사용해 `PENDING/ASKED/ANSWERED/SKIPPED`와 응답 내용을 일괄 표시한다.
 
+### 채팅 Timeline 시간순 정렬 계약
+
+채팅 영역 안에 표시되는 일반 메시지, AI 응답, 시스템 알림, 고객 질문, 고객 답변 접수, 기관 검증 결과, AI 업무 카드는 모두 하나의 `TimelineEntry(id, created_at, kind, payload)` projection으로 합친 뒤 `created_at ASC`로 정렬한다. 같은 시각이면 API 배열과 카드 projection의 원래 순서를 유지한다. 카드 묶음을 정렬된 메시지 아래에 별도로 붙이는 경로는 허용하지 않는다.
+
+- 일반 채팅·AI 응답·업무 알림: `Message.created_at`
+- 고객 질문 카드: `Question.asked_at`
+- 고객 답변 카드: `Question.answered_at`
+- 고객 공개 검증 결과 카드: `VerificationResult.published_at`
+- AI 업무 초안 카드: `WorkCardDescriptor.created_at`
+
+고객 답변은 Question Queue를 원본으로 한 구조화 카드 한 개만 은행 AI 개인 작업공간에 투영한다. 동일 내용을 운반하는 `고객 답변 접수` 시스템 메시지는 화면에서 중복 렌더링하지 않는다. 임시 AI 생성 중 카드도 생성 시작 시각을 가지며, 생성 완료 뒤 서버 업무 알림 시각을 이어받은 실제 업무 카드로 교체한다. Backend가 WorkCard lifecycle을 영속화하면 로컬 descriptor 시각 대신 서버 `created_at`을 권위 값으로 사용한다.
+
+고객이 `송금/개인정보/인증정보/원격제어 앱` 질문에 위험을 의미하는 긍정 답변을 제출하면 CaseFact의 담당자 확정 대기 상태와 별개로 즉시 `고객 답변` 출처의 위험 신호를 계산해 은행 `확인된 위험요소`에 표시한다. 공식 사실 확정은 계속 담당자가 수행하지만, 긴급 보호조치가 필요한 신호를 확정 전까지 숨기지는 않는다. 부정·모름 답변은 위험 신호로 표시하지 않는다.
+
+CaseFact는 `source_question_id`와 `evidence_message_id`를 함께 저장한다. 은행 검토 카드는 이를 이용해 내부 필드명과 단답만 보여주지 않고 `고객에게 물은 질문 → 고객 답변 → 확인 항목 → 신뢰도/확정 상태` 순으로 표시한다. 과거 데이터에 `source_question_id`가 없으면 같은 canonical target field의 최신 ANSWERED Question을 찾고, 그것도 없을 때만 필드별 사람이 읽을 수 있는 기본 질문을 사용한다. `PERSONAL_INFO/personal_information_exposure`, `AUTHENTICATION_INFO/authentication_information_exposure`, `VICTIM_TRANSFER_STATUS/transfer_status` 같은 별칭은 저장·비교·화면 투영 전에 canonical field로 정규화한다.
+
+고객 일반 채팅은 `고객 Message 저장 → POST /api/cases/{case_id}/ai/customer-replies → AI API CUSTOMER_SUPPORT 모드 → CUSTOMER 공개 AI_RESPONSE 저장` 흐름을 사용한다. 고객 AI에는 고객 공개 채팅과 기존 고객 질문·답변만 전달하며 은행 내부 대화·Action·기관 검증 미완료 정보는 전달하지 않는다. 구조화 확인 질문은 Question Queue가 담당하므로 일반 고객 AI 응답이 이미 처리한 질문을 반복하거나 새 문진을 임의로 시작하지 않는다.
+
 고객 오른쪽 보조 영역은 상태 전환 전후 동일한 Grid를 유지한다. 기본 상태는 `CustomerProgressCard + 안전 상담 안내`, 피해 발생 선택 후에는 `CustomerProgressCard + RecoveryGuideCard`이며, 중복된 현재 확인/정적 피해구제 안내 카드는 렌더링하지 않는다.
 
-`RecoveryGuideCard`는 오른쪽의 작은 단계 선택 메뉴만 담당한다. 선택값 `recovery_step_id(CONTACT/EVIDENCE/REPORT/RELIEF)`는 고객 Chat Shell의 `RECOVERY_STEP` descriptor로 변환되고, `RecoveryStepDetailCard`가 실행 순서·주의사항·공식 연락처와 `AI_ADVICE/HUMAN_HANDOFF` 요청을 렌더링한다. 상세 내용은 오른쪽 메뉴 아래로 펼치지 않는다. 피해구제 모드는 서버 Case의 `mode=RECOVERY` 또는 `victim_transfer_status=YES`를 권위 값으로 복원하고 localStorage는 응답 지연·오프라인 UI 보조값으로만 사용한다. 마지막 선택 단계는 Case별 localStorage에 유지하며 Backend `RecoveryAction` 상태 API로 교체할 예정이다.
+`RecoveryGuideCard`는 오른쪽의 작은 단계 선택 메뉴만 담당한다. 선택값 `recovery_step_id(CONTACT/EVIDENCE/REPORT/RELIEF)`에 따라 `RecoveryStepDetailCard`가 메인 고객 작업영역 아래에서 실행 순서·주의사항·공식 연락처와 `AI_ADVICE/HUMAN_HANDOFF` 요청을 렌더링한다. 상세 절차 카드는 채팅 Timeline에 삽입하거나 오른쪽 메뉴 안에서 펼치지 않는다. 피해구제 모드는 서버 Case의 `mode=RECOVERY` 또는 `victim_transfer_status=YES`를 권위 값으로 복원하고 localStorage는 응답 지연·오프라인 UI 보조값으로만 사용한다. 마지막 선택 단계는 Case별 localStorage에 유지하며 Backend `RecoveryAction` 상태 API로 교체할 예정이다.
 
 피해구제 모드 최초 진입은 하나의 전용 서버 명령으로 처리한다. 동일 요청이 반복되더라도 고객 확인 메시지와 AI 긴급 알림을 중복 생성하지 않는다. `CASE_FIELD_UPDATED.payload.victim_transfer_status=YES` 이벤트는 사건 진행 현황에서 `고객 피해 발생 신고` 전용 경고로 렌더링하며, 클릭하면 Case 공용 AI 긴급 알림이 있는 `AI 개인 작업공간`으로 이동한다. 이 최초 신고는 은행 `TEAM` 메시지를 만들지 않는다. 이후 고객이 상세 절차 카드에서 `AI_ADVICE` 또는 `HUMAN_HANDOFF`를 누르는 것은 별개의 지원 요청이며, 요청 종류에 맞는 담당 채널과 Action으로 연결한다.
 
@@ -97,3 +123,13 @@ Frontend 표준 descriptor는 `card_id, card_type, stage, title, payload, source
 ### 검증 결과 고객 projection
 
 고객 Bundle의 `customer_verification_results`는 `status=COMPLETED`, `customer_visible=true`, `result_summary` 존재 조건을 모두 만족한 항목만 포함한다. 필드는 `verification_task_id, target, result_summary, published_at`만 허용하며 `claim, evidence_url, verified_by, rag_source`는 고객에게 전달하지 않는다.
+
+## 2026-09-03 runtime audit corrections
+
+- `LocalSqliteCaseRepository` persists Question Queue and CaseFact aggregates after every queue, dispatch, answer, propose, and confirm mutation. Read/write connections are explicitly closed to prevent Windows SQLite file locks.
+- `Question.answer_message_id` is exposed in bank and customer projections. The customer timeline uses it to render an answer-receipt card at the correct chronological position and suppress the duplicate raw answer bubble.
+- `POST /api/cases/{case_id}/ai/invocations` is an explicit CaseCopilot command. It sends only bounded Case summary and unresolved verification context to `POST /ai/case-copilot/replies`, then persists the returned `AI_RESPONSE` in the requested bank channel.
+- `model_mode` is now the actual provider/model label. A real response must never be labelled `MVP_DETERMINISTIC`.
+- Recovery navigation remains outside the customer message timeline: the compact guide stays in the sidebar, while selected procedure details render below the workspace without narrowing the chat shell.
+- P0 unresolved items (`transfer_status`, `personal_information_exposure`, `authentication_information_exposure`) are AI-auto-dispatch eligible. `POST /api/cases/{case_id}/ai/customer-questions/ensure` queues each field once with `source=CUSTOMER_AGENT`; only one question may be `ASKED` at a time. Answers become `CaseFact.PROPOSED`, never automatically confirmed.
+- Every bank quick-AI action calls `POST /api/cases/{case_id}/ai/work-cards`. The General API supplies bounded Case context and the AI API returns a typed card payload. The Frontend registry renders that proposal and domain commands still require the user to review and submit.

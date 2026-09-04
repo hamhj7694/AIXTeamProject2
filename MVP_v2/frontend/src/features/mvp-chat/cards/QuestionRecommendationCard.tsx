@@ -2,14 +2,22 @@ import React, { useEffect, useState } from 'react';
 import { CheckSquare, Loader2, Plus, X } from 'lucide-react';
 import { mvpChatApi, type CustomerQuestionCandidate } from '../../../services/mvpChatApi';
 
-interface Props { caseId: string; requestedBy: string; onQueued: () => Promise<void> | void; onClose: () => void; }
+interface Props { caseId: string; requestedBy: string; initialQuestions?: CustomerQuestionCandidate[]; onQueued: () => Promise<void> | void; onClose: () => void; }
 
-export const QuestionRecommendationCard: React.FC<Props> = ({ caseId, requestedBy, onQueued, onClose }) => {
+export const QuestionRecommendationCard: React.FC<Props> = ({ caseId, requestedBy, initialQuestions, onQueued, onClose }) => {
   const [items, setItems] = useState<CustomerQuestionCandidate[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
   const [customQuestion, setCustomQuestion] = useState('');
   const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false); const [error, setError] = useState(''); const [completed, setCompleted] = useState(0); const [submitted, setSubmitted] = useState(false); const [noticeWarning, setNoticeWarning] = useState('');
-  useEffect(() => { mvpChatApi.listCustomerQuestionCandidates(caseId).then((next) => { setItems(next); setSelected(next.filter((item) => item.priority === 'P0').map((item) => item.question_id)); }).catch((reason) => setError(reason instanceof Error ? reason.message : '질문 후보를 불러오지 못했습니다.')).finally(() => setLoading(false)); }, [caseId]);
+  useEffect(() => {
+    if (initialQuestions?.length) {
+      setItems(initialQuestions);
+      setSelected(initialQuestions.filter((item) => item.priority === 'P0').map((item) => item.question_id));
+      setLoading(false);
+      return;
+    }
+    mvpChatApi.listCustomerQuestionCandidates(caseId).then((next) => { setItems(next); setSelected(next.filter((item) => item.priority === 'P0').map((item) => item.question_id)); }).catch((reason) => setError(reason instanceof Error ? reason.message : '질문 후보를 불러오지 못했습니다.')).finally(() => setLoading(false));
+  }, [caseId, initialQuestions]);
   const addCustom = () => { const text = customQuestion.trim(); if (!text) return; const id = `custom-${Date.now()}`; setItems((current) => [...current, { question_id: id, target_field: id, question_text: text, reason: '은행 직원이 직접 추가한 확인 질문입니다.', customer_explanation: '현재 상황에 맞는 다음 안내를 위해 은행 담당자가 확인하는 질문입니다.', priority: 'P1', options: [], answer_mode: 'TEXT', allow_free_text: true }]); setSelected((current) => [...current, id]); setCustomQuestion(''); };
   const queue = async () => {
     const questions = items.filter((item) => selected.includes(item.question_id));
@@ -21,6 +29,7 @@ export const QuestionRecommendationCard: React.FC<Props> = ({ caseId, requestedB
       try { if (created.length > 0) await mvpChatApi.createMessage(caseId, { actor_type: 'BANK_AGENT', actor_user_id: 'case-copilot', actor_display_name: 'CaseCopilot', actor_role: null, content: `고객 확인 질문 ${created.length}개가 전달되었습니다. 고객 답변을 기다리고 있습니다.`, channel: 'TEAM', audience: 'BANK_INTERNAL', visibility: 'BANK_INTERNAL', message_kind: 'SYSTEM_EVENT' }); }
       catch { setNoticeWarning('질문은 전달됐지만 은행 협업 알림을 동기화하지 못했습니다. 다시 실행하지 말고 새로고침해 주세요.'); }
       try { await onQueued(); } catch { setNoticeWarning('질문은 전달됐지만 최신 화면을 불러오지 못했습니다. 새로고침해 주세요.'); }
+      onClose();
     } catch (reason) { setError(reason instanceof Error ? reason.message : '질문 대기열을 만들지 못했습니다.'); }
     finally { setSaving(false); }
   };

@@ -1,16 +1,19 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, CircleDot, Download, FilePlus2, FileText, MessageSquare, Pencil, RotateCcw, Trash2, UsersRound, X } from 'lucide-react';
+import { ArrowLeft, CircleDot, Download, FilePlus2, FileText, Loader2, MessageSquare, Pencil, RotateCcw, Trash2, UsersRound, X } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { AppLayout } from '../components/layout/AppLayout';
 import { CaseLiveLog } from '../features/mvp-chat/CaseLiveLog';
+import { BankPriorityPanel } from '../features/mvp-chat/BankPriorityPanel';
+import { deriveAnswerRisks } from '../features/mvp-chat/answerRisks';
 import { ChatWorkspace } from '../features/mvp-chat/ChatWorkspace';
-import { createDraftWorkCard, getBankWorkCardActions } from '../features/mvp-chat/work-cards/catalog';
+import { createAiGeneratedWorkCard, getBankWorkCardActions } from '../features/mvp-chat/work-cards/catalog';
+import { BankQuestionAnswerCard } from '../features/mvp-chat/work-cards/BankQuestionAnswerCard';
 import { WorkCardRenderer } from '../features/mvp-chat/work-cards/WorkCardRenderer';
 import type { WorkCardDescriptor, WorkCardType } from '../features/mvp-chat/work-cards/types';
 import { useCaseSyncRefresh } from '../features/case-sync/useCaseSyncRefresh';
 import { caseWorkflowApi } from '../services/caseWorkflowApi';
 import { caseApi, type CaseDetail } from '../services/caseApi';
-import { mvpChatApi, type CaseBundleV2, type CaseMember, type CasePresence, type CaseSupportSnapshot, type MessageChannel, type MvpMessage } from '../services/mvpChatApi';
+import { mvpChatApi, type CaseBundleV2, type CaseMember, type CasePresence, type CaseSupportSnapshot, type CustomerQuestion, type MessageChannel, type MvpMessage } from '../services/mvpChatApi';
 
 const currentUser = { user_id: 'mvp-v2-current-user', display_name: '현재 사용자', role: 'CHAT_OPERATOR' as const };
 type BankView = 'COLLABORATION' | 'CUSTOMER' | 'AI_PRIVATE';
@@ -27,6 +30,7 @@ const readReports = (caseId: string): ArchiveReport[] => {
   try { return (JSON.parse(localStorage.getItem(archiveKey(caseId)) ?? '[]') as ArchiveReport[]).filter((item) => !item.deletedAt || Date.now() - new Date(item.deletedAt).getTime() < 30 * 86400000); } catch { return []; }
 };
 const writeReports = (caseId: string, reports: ArchiveReport[]) => localStorage.setItem(archiveKey(caseId), JSON.stringify(reports));
+const isStructuredCustomerAnswerNotice = (message: MvpMessage) => message.message_kind === 'SYSTEM_EVENT' && message.content.startsWith('고객 답변 접수');
 
 const known = (value: unknown, fallback = '확인안됨') => {
   if (value === null || value === undefined || value === '') return fallback;
@@ -77,6 +81,8 @@ export const BankCollaborationPage: React.FC = () => {
   const [sharingMessageId, setSharingMessageId] = useState<string | null>(null);
   const [facts, setFacts] = useState<import('../services/mvpChatApi').CaseFact[]>([]);
   const [activeCard, setActiveCard] = useState<WorkCardDescriptor | null>(null);
+  const [generatingCard, setGeneratingCard] = useState(false);
+  const [generatingCardStartedAt, setGeneratingCardStartedAt] = useState<string | null>(null);
   const [caseDetail, setCaseDetail] = useState<CaseDetail | null>(null);
   const [caseSupport, setCaseSupport] = useState<CaseSupportSnapshot | null>(null);
 
@@ -98,20 +104,61 @@ export const BankCollaborationPage: React.FC = () => {
           message.actor_user_id === currentUser.user_id
           || message.private_owner_user_id === currentUser.user_id
           || (message.message_kind === 'SYSTEM_EVENT' && message.private_owner_user_id === null)
-        ))
+        ) && !isStructuredCustomerAnswerNotice(message))
         : allMessages;
     setBundle(nextBundle); setMessages(nextMessages); setMembers(nextMembers); setPresence(nextPresence); setFacts(nextFacts); setCaseDetail(nextCaseDetail); setCaseSupport(nextCaseSupport);
   }, [caseId, view]);
   useCaseSyncRefresh(caseId, load);
   useEffect(() => { mvpChatApi.upsertMember(caseId, currentUser).then(() => load()).catch((reason) => setError(reason instanceof Error ? reason.message : '은행 협업 화면을 불러오지 못했습니다.')); }, [caseId, load]);
   useEffect(() => { load().catch(() => undefined); }, [view, load]);
-  useEffect(() => { const beat = () => mvpChatApi.heartbeat(caseId, { ...currentUser, presence: 'VIEWING', channel: meta[view].presenceChannel }).then(() => load()).catch(() => undefined); void beat(); const timer = window.setInterval(beat, 10_000); return () => window.clearInterval(timer); }, [caseId, view, load]);
+  useEffect(() => {
+    const refreshExternalChanges = async () => {
+      try {
+        const selectedChannel: MessageChannel | undefined = view === 'CUSTOMER' ? 'CUSTOMER' : undefined;
+        const [nextBundle, allMessages, nextPresence, nextFacts, nextCaseDetail] = await Promise.all([
+          mvpChatApi.getBundle(caseId, 'bank'),
+          mvpChatApi.listMessages(caseId, selectedChannel),
+          mvpChatApi.listPresence(caseId),
+          mvpChatApi.listCaseFacts(caseId),
+          caseApi.get(caseId),
+        ]);
+        const nextMessages = view === 'COLLABORATION'
+          ? allMessages.filter((message) => message.channel === 'TEAM' || (message.message_kind === 'AI_RESPONSE' && message.visibility === 'BANK_INTERNAL'))
+          : view === 'AI_PRIVATE'
+            ? allMessages.filter((message) => message.channel === 'AI_INTERNAL' && (
+              message.actor_user_id === currentUser.user_id
+              || message.private_owner_user_id === currentUser.user_id
+              || (message.message_kind === 'SYSTEM_EVENT' && message.private_owner_user_id === null)
+            ) && !isStructuredCustomerAnswerNotice(message))
+            : allMessages;
+        setBundle(nextBundle); setMessages(nextMessages); setPresence(nextPresence); setFacts(nextFacts); setCaseDetail(nextCaseDetail);
+      } catch {
+        // Keep the last usable screen. Explicit user actions still surface errors.
+      }
+    };
+    const timer = window.setInterval(() => { void refreshExternalChanges(); }, 3000);
+    return () => window.clearInterval(timer);
+  }, [caseId, view]);
+  useEffect(() => {
+    const beat = () => mvpChatApi.heartbeat(caseId, { ...currentUser, presence: 'VIEWING', channel: meta[view].presenceChannel })
+      .then(() => mvpChatApi.listPresence(caseId))
+      .then(setPresence)
+      .catch(() => undefined);
+    void beat();
+    const timer = window.setInterval(beat, 10_000);
+    return () => window.clearInterval(timer);
+  }, [caseId, view]);
   useEffect(() => { setReports(readReports(caseId)); }, [caseId]);
 
   const currentCase: Record<string, unknown> = { ...(bundle?.case ?? {}), fraud_type: caseDetail?.type, summary: caseDetail?.summary };
   const brief = caseSupport?.case_brief?.summary ?? String(currentCase.initial_brief ?? 'Case 정보를 불러오는 중입니다.');
   const unresolvedItems = caseSupport?.unresolved_items ?? [];
-  const risks = (bundle?.verification_tasks ?? []).filter((item) => item.status !== 'COMPLETED');
+  const risks = [
+    ...deriveAnswerRisks(facts),
+    ...(bundle?.verification_tasks ?? [])
+      .filter((item) => item.status !== 'COMPLETED')
+      .map((item) => ({ risk_id: `verification-${item.verification_task_id}`, claim: item.claim, sourceLabel: '기관 확인 필요' })),
+  ];
   const owner = members.find((member) => member.role === 'CASE_OWNER');
   const emergencyAlertMessage = [...(bundle?.recent_messages ?? [])].reverse().find((message) =>
     message.channel === 'AI_INTERNAL'
@@ -121,9 +168,11 @@ export const BankCollaborationPage: React.FC = () => {
     !owner ? '메인 담당자를 배정해 주세요.' : null,
     currentCase.victim_transfer_status === 'UNKNOWN' ? '고객 상담에서 피해 여부와 실제 피해액을 확인해 주세요.' : null,
     currentCase.status !== 'CLOSED' && risks.length === 0 ? '기관 검증 화면에서 사칭 주장에 대한 확인 요청을 남겨 주세요.' : null,
-    ...unresolvedItems.map((item) => `AI 확인 필요 (${item.priority}): ${item.description}`),
+    ...unresolvedItems.filter((item) => item.priority !== 'P0').map((item) => `담당자 확인 필요 (${item.priority}): ${item.description}`),
   ].filter((value): value is string => Boolean(value));
   const onlineCount = useMemo(() => presence.filter((item) => item.presence === 'VIEWING' || item.presence === 'TYPING').length, [presence]);
+  const customerPresence = useMemo(() => presence.find((item) => item.channel === 'CUSTOMER' && (item.presence === 'VIEWING' || item.presence === 'TYPING')), [presence]);
+  const pendingCustomerQuestions = useMemo(() => (bundle?.questions ?? []).filter((item) => item.status === 'ASKED' || item.status === 'PENDING').length, [bundle?.questions]);
   const visibleReports = reports.filter((item) => !item.deletedAt);
   const trashedReports = reports.filter((item) => item.deletedAt);
   const persistReports = (next: ArchiveReport[]) => { setReports(next); writeReports(caseId, next); };
@@ -177,8 +226,42 @@ export const BankCollaborationPage: React.FC = () => {
     } finally { setSending(false); }
   };
   const shareAiMessage = async (message: MvpMessage) => { setSharingMessageId(message.message_id); try { await mvpChatApi.shareAiMessage(caseId, message.message_id, currentUser); await load(); } catch (reason) { setError(reason instanceof Error ? reason.message : 'AI 답변을 팀에 공유하지 못했습니다.'); } finally { setSharingMessageId(null); } };
-  const openWorkCard = (cardType: WorkCardType) => setActiveCard(createDraftWorkCard(cardType));
-  const handleQuickAction = (actionId: string) => openWorkCard(actionId as WorkCardType);
+  const openWorkCard = async (cardType: WorkCardType) => {
+    setGeneratingCard(true); setGeneratingCardStartedAt(new Date().toISOString()); setError(''); setActiveCard(null);
+    try {
+      const nextCard = createAiGeneratedWorkCard(await mvpChatApi.generateAiWorkCard(caseId, cardType));
+      const proposal = nextCard.payload;
+      try {
+        const notice = await mvpChatApi.createMessage(caseId, {
+          actor_type: 'BANK_AGENT', actor_user_id: 'case-copilot', actor_display_name: 'CaseCopilot', actor_role: null,
+          content: `업무 카드 준비됨 · ${nextCard.title}\n${String(proposal.summary ?? '')}\n다음 행동: ${String(proposal.next_action ?? '내용을 검토해 주세요.')}`,
+          channel: 'AI_INTERNAL', audience: 'BANK_INTERNAL', visibility: 'AI_PRIVATE', message_kind: 'SYSTEM_EVENT',
+        });
+        setMessages((items) => [...items, notice]);
+        setActiveCard({ ...nextCard, created_at: notice.created_at });
+      } catch {
+        setActiveCard(nextCard);
+        setError('업무 카드는 준비됐지만 타임라인 기록을 저장하지 못했습니다. 카드 작업은 계속할 수 있습니다.');
+      }
+    }
+    catch (reason) { setError(reason instanceof Error ? reason.message : 'AI 맞춤 업무 카드를 만들지 못했습니다.'); }
+    finally { setGeneratingCard(false); setGeneratingCardStartedAt(null); }
+  };
+  const completeActiveCard = async () => {
+    if (activeCard) {
+      try {
+        await mvpChatApi.createMessage(caseId, {
+          actor_type: 'BANK_STAFF', actor_user_id: currentUser.user_id, actor_display_name: currentUser.display_name, actor_role: currentUser.role,
+          content: `업무 실행 완료 · ${activeCard.title}\nShared Case에 결과가 반영되었습니다.`,
+          channel: 'AI_INTERNAL', audience: 'BANK_INTERNAL', visibility: 'AI_PRIVATE', message_kind: 'SYSTEM_EVENT',
+        });
+      } catch {
+        setError('업무 결과는 반영됐지만 AI 작업 타임라인 기록을 저장하지 못했습니다.');
+      }
+    }
+    await load();
+  };
+  const handleQuickAction = (actionId: string) => { void openWorkCard(actionId as WorkCardType); };
   const goToMessage = (messageId: string, sourceChannel?: string) => { if (sourceChannel) setView(sourceChannel === 'CUSTOMER' ? 'CUSTOMER' : sourceChannel === 'AI_INTERNAL' ? 'AI_PRIVATE' : 'COLLABORATION'); setFocusMessageId(messageId); window.setTimeout(() => setFocusMessageId(null), 1500); };
   useEffect(() => {
     const openBookmark = (event: Event) => {
@@ -190,6 +273,30 @@ export const BankCollaborationPage: React.FC = () => {
     return () => window.removeEventListener('mvp-bookmark-open', openBookmark);
   }, []);
   const stateLabel = (state?: string) => state === 'VIEWING' || state === 'TYPING' ? '접속/열람 중' : '부재중';
+  const bankTimelineCards = view === 'AI_PRIVATE'
+    ? [
+      ...((bundle?.questions ?? []) as CustomerQuestion[])
+        .filter((question) => question.status === 'ANSWERED' && Boolean(question.answer_text))
+        .map((question) => ({
+          id: `customer-answer-${question.question_id}`,
+          createdAt: question.answered_at ?? question.asked_at ?? new Date(0).toISOString(),
+          content: <BankQuestionAnswerCard question={question}/>,
+        })),
+      ...(generatingCard
+      ? [{
+        id: 'generating-work-card',
+        createdAt: generatingCardStartedAt ?? new Date().toISOString(),
+        content: <section className="flex items-center gap-2 rounded-2xl border border-violet-400/40 bg-slate-950 p-4 text-sm font-bold text-violet-200"><Loader2 size={17} className="animate-spin"/>Case 전체 문맥으로 맞춤 업무 카드를 만드는 중입니다.</section>,
+      }]
+      : activeCard
+        ? [{
+          id: activeCard.card_id,
+          createdAt: activeCard.created_at,
+          content: <WorkCardRenderer card={activeCard} context={{ caseId, requestedBy: currentUser.display_name, currentCase, facts, questions: (bundle?.questions ?? []) as import('../services/mvpChatApi').CustomerQuestion[], onRefresh: completeActiveCard, onClose: () => setActiveCard(null), onOpenCard: (type) => { void openWorkCard(type); } }}/>,
+        }]
+        : []),
+    ]
+    : [];
 
   return <AppLayout><main className="mx-auto max-w-[1440px] py-6 lg:ml-64"><div className="mb-4 flex items-center justify-between gap-3"><Link to={`/cases/${caseId}`} className="inline-flex items-center gap-1 text-sm font-bold text-slate-500"><ArrowLeft size={16}/> Case로 돌아가기</Link><button onClick={() => setModal('close')} className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700">사건 종료하기</button></div><section className="mb-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><div className="flex min-w-0 flex-wrap items-center gap-2"><h1 className="text-lg font-black">{String(currentCase.case_id ?? caseId).replace(/^VP-/, '#')}</h1><p className="min-w-[200px] flex-1 truncate text-xs text-slate-500">{brief}</p><button onClick={() => { if (screen === 'work') { setReports(readReports(caseId)); setScreen('reports'); } else { setScreen('work'); setSelectedReport(null); } }} className="ml-auto inline-flex items-center gap-1 rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-white">{screen === 'work' ? <FileText size={15}/> : <MessageSquare size={15}/>} {screen === 'work' ? '보고서 보기' : '채팅 보기'}</button></div><div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3"><UsersRound size={16} className="text-blue-600"/><button onClick={() => setModal('participants')} className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-700">참여자 {members.length}명 보기</button><span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-700">메인 담당자 {owner?.display_name ?? '미배정'}</span><span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700"><CircleDot size={13}/> 열람 중 {onlineCount}명</span><button onClick={() => { setAssigneeDraft(owner?.display_name ?? ''); setModal('assignee'); }} className="ml-auto inline-flex items-center gap-1 rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-white"><Pencil size={13}/>담당자 배정</button></div></section>{error && <p className="mb-4 rounded-xl bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
   {screen === 'reports' && <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center gap-2"><h2 className="mr-auto text-lg font-black">보고서 목록</h2><button onClick={() => setScreen('trash')} className="rounded-xl border px-3 py-2 text-xs font-bold">휴지통 {trashedReports.length}</button><button onClick={() => void createReport()} className="inline-flex items-center gap-1 rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-white"><FilePlus2 size={14}/>새 보고서 만들기</button></div><div className="mt-4 space-y-2">{visibleReports.length ? visibleReports.map((item) => <div key={item.id} className="flex items-center gap-3 rounded-xl border p-3"><button onClick={() => { setSelectedReport(item); setScreen('document'); }} className="min-w-0 flex-1 text-left"><p className="font-bold">{item.title}</p><p className="mt-1 text-xs text-slate-500">{item.type} · {new Date(item.createdAt).toLocaleString('ko-KR')}</p></button><button aria-label="보고서 휴지통으로 이동" onClick={() => moveReportToTrash(item.id)} className="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-700"><Trash2 size={16}/></button></div>) : <p className="rounded-xl bg-slate-50 p-8 text-center text-sm text-slate-500">보고서가 없습니다.</p>}</div></section>}
@@ -207,29 +314,29 @@ export const BankCollaborationPage: React.FC = () => {
           <button type="button" onClick={() => setView('AI_PRIVATE')} className={`rounded-lg px-2.5 py-1.5 text-[11px] font-bold transition ${view === 'AI_PRIVATE' ? 'bg-slate-950 text-white shadow-sm' : 'text-slate-600 hover:bg-white'}`}>AI 개인 작업 공간</button>
           <span className="mx-0.5 h-5 w-px bg-slate-300" aria-hidden="true" />
           <span className="px-1 text-[10px] font-black text-slate-400">외부</span>
-          <button type="button" onClick={() => setView('CUSTOMER')} className={`rounded-lg px-2.5 py-1.5 text-[11px] font-bold transition ${view === 'CUSTOMER' ? 'bg-blue-600 text-white shadow-sm' : 'text-blue-700 hover:bg-white'}`}>고객 대화</button>
+          <button type="button" onClick={() => setView('CUSTOMER')} className={`rounded-lg px-2.5 py-1.5 text-[11px] font-bold transition ${view === 'CUSTOMER' ? 'bg-blue-600 text-white shadow-sm' : 'text-blue-700 hover:bg-white'}`}>고객 대화{pendingCustomerQuestions > 0 ? ` · 대기 ${pendingCustomerQuestions}` : ''}</button>
         </div>}
         messages={messages}
         placeholder={view === 'AI_PRIVATE' ? 'CaseCopilot에게 분석 또는 질문 초안을 요청하세요.' : '메시지를 입력하세요.'}
         currentUserId={currentUser.user_id}
         theme={view === 'CUSTOMER' ? 'light' : 'dark'}
-        sending={sending}
+        sending={sending || generatingCard}
         onSend={send}
         onUploadFile={uploadFile}
         attachmentView="bank"
         quickActions={view === 'AI_PRIVATE' ? getBankWorkCardActions() : []}
         onQuickAction={handleQuickAction}
-        toolCards={view === 'AI_PRIVATE' ? <WorkCardRenderer card={activeCard} context={{ caseId, requestedBy: currentUser.display_name, currentCase, facts, onRefresh: load, onClose: () => setActiveCard(null), onOpenCard: openWorkCard }}/> : null}
+        timelineCards={bankTimelineCards}
         onShareMessage={view === 'AI_PRIVATE' ? shareAiMessage : undefined}
         sharingMessageId={sharingMessageId}
         draftStorageKey={`mvp-v2:draft:${caseId}:${view}`}
-        heightClassName="h-[636px]"
+        heightClassName="h-[780px]"
         focusMessageId={focusMessageId}
       />
     </section>
-    <aside className="grid h-[680px] min-h-0 grid-rows-[minmax(0,2fr)_minmax(0,3fr)] gap-4">
+    <aside className="grid h-[824px] min-h-0 grid-rows-[minmax(0,2fr)_minmax(0,3fr)] gap-4">
       <CaseLiveLog events={bundle?.recent_events ?? []} heightClassName="h-full" onMessageEvent={goToMessage} onWorkflowEvent={(event) => { if (event.event_type.startsWith('VERIFICATION_')) navigate(`/cases/${caseId}/verify`); }} emergencyMessageId={emergencyAlertMessage?.message_id}/>
-      <section className="min-h-0 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><h2 className="text-sm font-black">우선 조치 및 위험요소</h2><div className="mt-3 space-y-2">{nextTasks.length ? <><p className="text-[11px] font-bold text-slate-500">지금 해야 할 일</p>{nextTasks.map((task, index) => <p key={task} className="rounded-xl bg-blue-50 p-3 text-xs leading-5 text-blue-900"><span className="mr-1 font-black">{index + 1}.</span>{task}</p>)}</> : <p className="rounded-xl bg-emerald-50 p-3 text-xs text-emerald-800">현재 확인이 필요한 우선 업무가 없습니다.</p>}<p className="pt-2 text-[11px] font-bold text-slate-500">확인된 위험요소</p>{risks.length ? risks.map((item) => <div key={item.verification_task_id} className="rounded-xl bg-amber-50 p-3 text-xs leading-5 text-amber-900">{item.claim}</div>) : <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-500">확정된 위험요소가 없습니다.</p>}</div></section>
+      <BankPriorityPanel tasks={nextTasks} risks={risks} customerOnline={Boolean(customerPresence)} pendingQuestions={pendingCustomerQuestions}/>
     </aside>
   </div>}
   {modal && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/35 p-4"><section className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl"><div className="flex items-center justify-between"><h2 className="font-black">{modal === 'participants' ? 'Case 참여자' : modal === 'assignee' ? '메인 담당자 관리' : '사건 종료 확인'}</h2><button onClick={() => setModal(null)}><X size={18}/></button></div>{modal === 'participants' ? <div className="mt-4 space-y-2">{members.map((member) => { const state = presence.find((item) => item.user_id === member.user_id)?.presence; return <div key={member.user_id} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 text-sm"><div><p className="font-bold">{member.display_name}</p><p className="text-xs text-slate-500">{role[member.role]}</p></div><span className="rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-700">{stateLabel(state)}</span></div>; })}</div> : modal === 'assignee' ? <><div className="mt-3 flex flex-wrap gap-2">{members.map((member) => <button key={member.user_id} onClick={() => setAssigneeDraft(member.display_name)} className="rounded-full border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-800">{member.display_name} · {role[member.role]}</button>)}</div><input value={assigneeDraft} onChange={(event) => setAssigneeDraft(event.target.value)} placeholder="담당자 이름 입력" className="mt-4 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"/><div className="mt-4 flex justify-end gap-2"><button onClick={() => setModal(null)} className="rounded-xl border px-4 py-2 text-sm font-bold">취소</button><button onClick={async () => { await mvpChatApi.setPrimaryAssignee(caseId, assigneeDraft.trim() || null); await load(); setModal(null); }} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white">저장</button></div></> : <><p className="mt-3 text-sm leading-6 text-slate-600">정말 사건을 종료하겠습니까? 최종 리포트를 작성한 뒤 보고서 목록으로 이동합니다.</p><div className="mt-5 flex justify-end gap-2"><button onClick={() => setModal(null)} className="rounded-xl border px-4 py-2 text-sm font-bold">아니요</button><button onClick={closeCase} className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-bold text-white">네, 종결합니다</button></div></>}</section></div>}</main></AppLayout>;

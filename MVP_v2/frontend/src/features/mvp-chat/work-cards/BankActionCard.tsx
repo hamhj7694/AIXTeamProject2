@@ -14,11 +14,12 @@ const actions = [
   ['OTHER', '기타 업무'],
 ] as const;
 
-interface Props { caseId: string; requestedBy: string; onCompleted: () => Promise<void> | void; onClose: () => void; }
+interface Props { caseId: string; requestedBy: string; initialActionType?: string; initialNote?: string; onCompleted: () => Promise<void> | void; onClose: () => void; }
 
-export const BankActionCard: React.FC<Props> = ({ caseId, requestedBy, onCompleted, onClose }) => {
-  const [actionType, setActionType] = useState<(typeof actions)[number][0]>('PAYMENT_HOLD_REVIEW');
-  const [note, setNote] = useState('');
+export const BankActionCard: React.FC<Props> = ({ caseId, requestedBy, initialActionType, initialNote = '', onCompleted, onClose }) => {
+  const safeInitialAction = actions.some(([value]) => value === initialActionType) ? initialActionType as (typeof actions)[number][0] : 'PAYMENT_HOLD_REVIEW';
+  const [actionType, setActionType] = useState<(typeof actions)[number][0]>(safeInitialAction);
+  const [note, setNote] = useState(initialNote);
   const [stage, setStage] = useState<WorkCardStage>('DRAFT');
   const [result, setResult] = useState<CaseAction | null>(null);
   const [error, setError] = useState('');
@@ -33,6 +34,7 @@ export const BankActionCard: React.FC<Props> = ({ caseId, requestedBy, onComplet
       try { await mvpChatApi.createMessage(caseId, { actor_type: 'SYSTEM', actor_user_id: 'case-system', actor_display_name: '시스템', actor_role: null, content: `${requestedBy}님이 ${actionLabel} 업무를 등록했습니다. 실제 실행 여부는 담당자 확인이 필요합니다.`, channel: 'TEAM', audience: 'BANK_INTERNAL', visibility: 'BANK_INTERNAL', message_kind: 'SYSTEM_EVENT' }); }
       catch { setNoticeWarning('업무는 등록됐지만 은행 협업 알림을 동기화하지 못했습니다. 새로고침 후 확인해 주세요.'); }
       try { await onCompleted(); } catch { setNoticeWarning('업무는 등록됐지만 최신 화면을 불러오지 못했습니다. 새로고침해 주세요.'); }
+      onClose();
     } catch (reason) { setError(reason instanceof Error ? reason.message : '보호조치 업무를 등록하지 못했습니다.'); setStage('FAILED'); }
   };
   return <WorkCardFrame eyebrow="AI 개인 작업 · 보호조치" title="보호조치 업무 등록" description="실제 금융 조치를 자동 실행하지 않습니다. 담당자가 수행·확인할 업무를 Case에 등록합니다." stage={stage} onClose={onClose}>

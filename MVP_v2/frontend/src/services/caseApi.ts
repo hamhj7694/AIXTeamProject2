@@ -1,4 +1,4 @@
-import { notifyApiMutation } from './caseSync';
+import { generalApiRequest as request } from './generalApiClient';
 
 export type CaseRisk = 'NORMAL' | 'LOW' | 'HIGH';
 
@@ -32,14 +32,6 @@ interface StoredCaseResponse {
   created_at: string; updated_at: string;
 }
 
-const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
-const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
-  const response = await fetch(`${apiBaseUrl}${path}`, { ...init, headers: { 'Content-Type': 'application/json', ...init?.headers } });
-  const payload = await response.json().catch(() => null);
-  if (!response.ok) throw new Error(payload?.error?.message || payload?.detail?.message || '요청을 처리하지 못했습니다.');
-  notifyApiMutation(path, init, payload);
-  return payload as T;
-};
 const formatDateTime = (value: string) => new Date(value).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
 
 const toCaseDetail = (record: StoredCaseResponse): CaseDetail => {

@@ -1,4 +1,5 @@
 import { notifyApiMutation } from './caseSync';
+import { generalApiErrorMessage, generalApiRequest as request, generalApiUrl } from './generalApiClient';
 
 export type MessageChannel = 'TEAM' | 'CUSTOMER' | 'AI_INTERNAL';
 export type MessageAudience = 'BANK_INTERNAL' | 'CUSTOMER';
@@ -94,15 +95,7 @@ export interface CaseBundleV2 {
     published_at?: string | null;
   }>;
   /** AI가 현재 Case에 맞춰 생성한 질문 카드. 아직 생성되지 않았으면 빈 배열이다. */
-  questions?: Array<{
-    question_id?: string;
-    id?: string;
-    prompt?: string;
-    question?: string;
-    options?: string[];
-    choices?: string[];
-    mode?: 'PREVENT' | 'RECOVERY' | 'ALL' | string;
-  }>;
+  questions?: CustomerQuestion[];
 }
 
 export interface CustomerQuestionCandidate {
@@ -134,26 +127,29 @@ export interface CustomerQuestion extends CustomerQuestionCandidate {
   requested_by: string | null;
   asked_at: string | null;
   answered_at: string | null;
+  answer_message_id?: string | null;
   answer_text?: string | null;
   options?: string[];
 }
-export interface CaseFact { fact_id: string; case_id: string; field: string; value: string; source: 'AI_EXTRACTED' | 'HUMAN_CONFIRMED' | 'VERIFIED' | 'UNRESOLVED'; status: 'PROPOSED' | 'CONFIRMED' | 'UNRESOLVED'; confidence: number; evidence_message_id: string | null; confirmed_by: string | null; confirmed_at: string | null; created_at: string; }
+export interface AiWorkCardProposal {
+  card_type: 'FACT_REVIEW' | 'QUESTION_PLAN' | 'VERIFICATION_REQUEST' | 'BANK_ACTION' | 'CUSTOMER_NOTICE' | 'CASE_TRANSITION';
+  title: string;
+  summary: string;
+  context_sources: string[];
+  rationale: string[];
+  next_action: string;
+  questions: CustomerQuestionCandidate[];
+  suggested_claim: string | null;
+  suggested_target: string | null;
+  suggested_action_type: string | null;
+  suggested_action_note: string | null;
+  suggested_notice: string | null;
+  suggested_transition: string | null;
+  warnings: string[];
+  model_mode: string;
+}
+export interface CaseFact { fact_id: string; case_id: string; field: string; value: string; source: 'AI_EXTRACTED' | 'HUMAN_CONFIRMED' | 'VERIFIED' | 'UNRESOLVED'; status: 'PROPOSED' | 'CONFIRMED' | 'UNRESOLVED'; confidence: number; evidence_message_id: string | null; source_question_id?: string | null; confirmed_by: string | null; confirmed_at: string | null; created_at: string; }
 export interface PersonalNote { note_id: string; case_id: string; author_id: string; content: string; visibility: 'PRIVATE_TO_AUTHOR'; created_at: string; updated_at: string; }
-
-const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
-
-const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
-  const response = await fetch(`${apiBaseUrl}${path}`, {
-    ...init,
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
-  });
-  const payload = await response.json().catch(() => null);
-  if (!response.ok) {
-    throw new Error(payload?.error?.message || payload?.detail?.message || '요청을 처리하지 못했습니다.');
-  }
-  notifyApiMutation(path, init, payload);
-  return payload as T;
-};
 
 export const mvpChatApi = {
   getBundle: (caseId: string, view: 'customer' | 'bank'): Promise<CaseBundleV2> =>
@@ -171,15 +167,15 @@ export const mvpChatApi = {
     }),
   uploadAttachment: async (caseId: string, file: File, uploadedBy: string, visibility: MessageAttachment['visibility']): Promise<MessageAttachment> => {
     const path = `/api/cases/${encodeURIComponent(caseId)}/attachments?file_name=${encodeURIComponent(file.name)}&uploaded_by=${encodeURIComponent(uploadedBy)}&visibility=${encodeURIComponent(visibility)}`;
-    const response = await fetch(`${apiBaseUrl}${path}`, { method: 'POST', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file });
+    const response = await fetch(generalApiUrl(path), { method: 'POST', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file });
     const payload = await response.json().catch(() => null);
-    if (!response.ok) throw new Error(payload?.detail?.message || '파일을 업로드하지 못했습니다.');
+    if (!response.ok) throw new Error(generalApiErrorMessage(payload, response.status));
     notifyApiMutation(path, { method: 'POST' }, payload);
     return payload as MessageAttachment;
   },
   attachmentContentUrl: (attachment: MessageAttachment, view: 'bank' | 'customer'): string => {
     const path = attachment.download_url.replace(/\?view=(bank|customer)$/, `?view=${view}`);
-    return `${apiBaseUrl}${path}`;
+    return generalApiUrl(path);
   },
   listEvents: (caseId: string, after?: number): Promise<MvpEvent[]> =>
     request(`/api/cases/${encodeURIComponent(caseId)}/events${after === undefined ? '' : `?after=${after}`}`),
@@ -212,6 +208,13 @@ export const mvpChatApi = {
       attachments: [],
       created_at: result.created_at,
     })),
+  invokeCustomerAgent: (caseId: string, prompt: string, replyToMessageId: string, requester = { user_id: 'mvp-v2-customer', display_name: '고객' }): Promise<MvpMessage> =>
+    request(`/api/cases/${encodeURIComponent(caseId)}/ai/customer-replies`, {
+      method: 'POST',
+      body: JSON.stringify({ prompt, requester_user_id: requester.user_id, requester_display_name: requester.display_name, reply_to_message_id: replyToMessageId, client_request_id: crypto.randomUUID() }),
+    }),
+  generateAiWorkCard: (caseId: string, cardType: AiWorkCardProposal['card_type']): Promise<AiWorkCardProposal> =>
+    request(`/api/cases/${encodeURIComponent(caseId)}/ai/work-cards`, { method: 'POST', body: JSON.stringify({ card_type: cardType }) }),
   shareAiMessage: (caseId: string, messageId: string, sharedBy = { user_id: 'mvp-v2-current-user', display_name: '현재 사용자' }): Promise<MvpMessage> =>
     request(`/api/cases/${encodeURIComponent(caseId)}/ai/messages/${encodeURIComponent(messageId)}/share`, { method: 'POST', body: JSON.stringify({ shared_by_user_id: sharedBy.user_id, shared_by_display_name: sharedBy.display_name }) }),
   listCustomerQuestionCandidates: (caseId: string): Promise<CustomerQuestionCandidate[]> =>
@@ -222,6 +225,8 @@ export const mvpChatApi = {
     request(`/api/cases/${encodeURIComponent(caseId)}/customer-questions?view=${view}`),
   queueCustomerQuestions: (caseId: string, questions: CustomerQuestionCandidate[], requestedBy: string): Promise<CustomerQuestion[]> =>
     request(`/api/cases/${encodeURIComponent(caseId)}/customer-questions`, { method: 'POST', body: JSON.stringify({ questions, requested_by: requestedBy }) }),
+  ensureAiCustomerQuestions: (caseId: string): Promise<CustomerQuestion[]> =>
+    request(`/api/cases/${encodeURIComponent(caseId)}/ai/customer-questions/ensure`, { method: 'POST' }),
   answerCustomerQuestion: (caseId: string, questionId: string, rawAnswer: string, actor = { user_id: 'mvp-v2-customer', display_name: '고객' }): Promise<CustomerQuestion> =>
     request(`/api/cases/${encodeURIComponent(caseId)}/customer-questions/${encodeURIComponent(questionId)}/answer`, { method: 'POST', body: JSON.stringify({ raw_answer: rawAnswer, actor_user_id: actor.user_id, actor_display_name: actor.display_name }) }),
   listCaseFacts: (caseId: string): Promise<CaseFact[]> => request(`/api/cases/${encodeURIComponent(caseId)}/facts`),

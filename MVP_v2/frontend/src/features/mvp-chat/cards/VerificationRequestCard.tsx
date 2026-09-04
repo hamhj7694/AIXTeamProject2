@@ -3,11 +3,11 @@ import { Building2, Send, X } from 'lucide-react';
 import { caseWorkflowApi } from '../../../services/caseWorkflowApi';
 import { mvpChatApi } from '../../../services/mvpChatApi';
 
-interface Props { caseId: string; onCreated: () => Promise<void> | void; onClose: () => void; }
+interface Props { caseId: string; initialClaim?: string; initialTarget?: string; onCreated: () => Promise<void> | void; onClose: () => void; }
 
-export const VerificationRequestCard: React.FC<Props> = ({ caseId, onCreated, onClose }) => {
-  const [claim, setClaim] = useState('');
-  const [target, setTarget] = useState('');
+export const VerificationRequestCard: React.FC<Props> = ({ caseId, initialClaim = '', initialTarget = '', onCreated, onClose }) => {
+  const [claim, setClaim] = useState(initialClaim);
+  const [target, setTarget] = useState(initialTarget);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [completed, setCompleted] = useState(false);
@@ -21,6 +21,7 @@ export const VerificationRequestCard: React.FC<Props> = ({ caseId, onCreated, on
       try { await mvpChatApi.createMessage(caseId, { actor_type: 'SYSTEM', actor_user_id: 'case-system', actor_display_name: '시스템', actor_role: null, content: `기관 검증 업무가 등록되었습니다. 확인 대상: ${target.trim()}`, channel: 'TEAM', audience: 'BANK_INTERNAL', visibility: 'BANK_INTERNAL', message_kind: 'SYSTEM_EVENT' }); }
       catch { setNoticeWarning('검증 업무는 등록됐지만 은행 협업 알림을 동기화하지 못했습니다. 다시 등록하지 말고 새로고침해 주세요.'); }
       try { await onCreated(); } catch { setNoticeWarning('검증 업무는 등록됐지만 최신 화면을 불러오지 못했습니다. 새로고침해 주세요.'); }
+      onClose();
     }
     catch (reason) { setError(reason instanceof Error ? reason.message : '검증 요청을 만들지 못했습니다.'); }
     finally { setSaving(false); }

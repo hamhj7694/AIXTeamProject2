@@ -35,11 +35,16 @@ class QuestionRecommendationContext(StrictModel):
 
     confirmed_fields: list[TargetField] = Field(default_factory=list)
     pending_question_fields: list[TargetField] = Field(default_factory=list)
+    answered_question_fields: list[TargetField] = Field(default_factory=list)
     answered_question_ids: list[str] = Field(default_factory=list)
 
     def excluded_target_fields(self) -> set[TargetField]:
-        """사실 확인 또는 답변 대기 중인 항목만 다음 추천에서 제외한다."""
-        return {*self.confirmed_fields, *self.pending_question_fields}
+        """이미 확인했거나 질문·답변 이력이 있는 항목을 다음 추천에서 제외한다."""
+        return {
+            *self.confirmed_fields,
+            *self.pending_question_fields,
+            *self.answered_question_fields,
+        }
 
     def has_answered_question(self, question_id: str) -> bool:
         return question_id in self.answered_question_ids

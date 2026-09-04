@@ -39,6 +39,12 @@ class QuestionRecommendationContextTest(unittest.TestCase):
             pending_question_fields=[TargetField.PERSONAL_INFORMATION_EXPOSURE],
         )))
 
+    def test_answered_field_is_not_recommended_even_when_question_id_changed(self) -> None:
+        self.assertNotIn(TargetField.PERSONAL_INFORMATION_EXPOSURE, self._fields(QuestionRecommendationContext(
+            answered_question_fields=[TargetField.PERSONAL_INFORMATION_EXPOSURE],
+            answered_question_ids=["custom-question-id"],
+        )))
+
     def test_answered_question_id_blocks_only_the_same_question(self) -> None:
         fields = self._fields(QuestionRecommendationContext(answered_question_ids=["q_transfer_status"]))
         self.assertNotIn(TargetField.TRANSFER_STATUS, fields)

@@ -66,6 +66,7 @@ class PublicCustomerQuestionResponse(PublicWorkflowModel):
     requested_by: str | None = None
     asked_at: str | None = None
     answered_at: str | None = None
+    answer_message_id: str | None = None
     answer_text: str | None = None
     options: list[str] = Field(default_factory=list, max_length=8)
     customer_explanation: str | None = Field(default=None, max_length=500)
@@ -82,6 +83,7 @@ class PublicCustomerQuestionView(PublicWorkflowModel):
     status: Literal["PENDING", "ASKED", "ANSWERED", "SKIPPED"]
     sequence: int
     answered_at: str | None = None
+    answer_message_id: str | None = None
     answer_text: str | None = None
     options: list[str] = Field(default_factory=list, max_length=8)
     customer_explanation: str | None = Field(default=None, max_length=500)
@@ -104,6 +106,7 @@ class PublicCaseFactResponse(PublicWorkflowModel):
     status: Literal["PROPOSED", "CONFIRMED", "UNRESOLVED"]
     confidence: float = Field(ge=0, le=1)
     evidence_message_id: str | None = None
+    source_question_id: str | None = None
     confirmed_by: str | None = None
     confirmed_at: str | None = None
     created_at: str
@@ -262,7 +265,7 @@ def to_public_customer_question(record: dict[str, Any]) -> PublicCustomerQuestio
         "question_text": record["question_text"], "reason": record["reason"],
         "priority": record["priority"], "status": record["status"], "sequence": record["sequence"],
         "requested_by": record.get("requested_by"), "asked_at": record.get("asked_at"),
-        "answered_at": record.get("answered_at"), "answer_text": record.get("answer_text"),
+        "answered_at": record.get("answered_at"), "answer_message_id": record.get("answer_message_id"), "answer_text": record.get("answer_text"),
         "options": record.get("options", []),
         "customer_explanation": record.get("customer_explanation"),
         "answer_mode": record.get("answer_mode", "CHOICE_OR_TEXT"),
@@ -275,7 +278,7 @@ def to_public_customer_question_view(record: dict[str, Any]) -> PublicCustomerQu
         "question_id": record["question_id"], "case_id": record["case_id"],
         "question_text": record["question_text"], "priority": record["priority"],
         "status": record["status"], "sequence": record["sequence"],
-        "answered_at": record.get("answered_at"), "answer_text": record.get("answer_text"),
+        "answered_at": record.get("answered_at"), "answer_message_id": record.get("answer_message_id"), "answer_text": record.get("answer_text"),
         "options": record.get("options", []),
         "customer_explanation": record.get("customer_explanation"),
         "answer_mode": record.get("answer_mode", "CHOICE_OR_TEXT"),

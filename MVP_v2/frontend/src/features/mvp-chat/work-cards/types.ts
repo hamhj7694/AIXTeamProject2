@@ -1,4 +1,5 @@
-import type { CaseFact } from '../../../services/mvpChatApi';
+import type { CaseFact, CustomerQuestion } from '../../../services/mvpChatApi';
+import type { AiWorkCardProposal } from '../../../services/mvpChatApi';
 
 export type WorkCardType =
   | 'FACT_REVIEW'
@@ -20,11 +21,14 @@ export interface WorkCardDescriptor<TPayload extends Record<string, unknown> = R
   created_at: string;
 }
 
+export type AiGeneratedWorkCard = WorkCardDescriptor<AiWorkCardProposal & Record<string, unknown>>;
+
 export interface WorkCardRenderContext {
   caseId: string;
   requestedBy: string;
   currentCase: Record<string, unknown>;
   facts: CaseFact[];
+  questions: CustomerQuestion[];
   onRefresh: () => Promise<void> | void;
   onClose: () => void;
   onOpenCard: (cardType: WorkCardType) => void;

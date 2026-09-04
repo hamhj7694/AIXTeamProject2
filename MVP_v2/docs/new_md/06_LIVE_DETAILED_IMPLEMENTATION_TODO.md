@@ -20,6 +20,8 @@
 - [x] A-02 메시지 작성자 ID·표시명·역할·공개범위·유형 계약 정의 — 고객 Bundle 내부 메시지 제외 확인.
 - [x] A-03 본인 기준 말풍선 정렬 — 은행은 현재 은행직원, 고객은 현재 고객만 우측 확인.
 - [x] A-04 의미 있는 이벤트만 `updated_at`·Timeline에 반영 — presence heartbeat 제외.
+- [x] A-04-1 General API OpenAPI export와 Frontend TypeScript 계약 생성 명령(`api:generate`) 추가.
+- [x] A-04-2 네 개 도메인 API 모듈의 URL·오류 해석·mutation 알림을 `generalApiClient` 단일 전송 계층으로 통합.
 - [-] A-05 목록·개요의 Case 상태 한글화는 공통 `casePresentation`으로 단일화. 고객 진행 스테퍼의 서버 enum 직접 매핑은 후속.
 - [-] A-06 전용 `customer-emergency` API로 `RECOVERY` 전환·피해 상태·고객 확인·AI 긴급 알림 생성 완료. 상태 전환 사유/승인자 컬럼과 DB 트랜잭션/Outbox는 후속.
 - [ ] A-07 상태 전환 이벤트의 고객 공개 메시지 템플릿 정의.
@@ -123,6 +125,13 @@
 - [ ] E-23 Timeline 검색/유형 필터/북마크 이벤트 연결.
 - [x] E-24 업무 카드 공통 descriptor(`card_type/payload/stage/source`)와 카드 카탈로그 정의.
 - [x] E-25 카드 레지스트리에서 6종 업무 카드를 타입별 호출하도록 은행 AI 개인 작업공간 연결.
+- [x] E-25-1 빠른 AI 작업 6종을 Case 문맥 기반 AI 구조화 payload 생성 API와 연결.
+- [x] E-25-2 AI 카드 생성 로딩/실패 상태와 모델 표기, 맞춤 근거·경고 표시.
+- [x] E-25-3 질문·기관검증·보호조치·고객안내 카드에 AI 추천값 선입력.
+- [x] E-25-4 카드 공통 내용과 종류별 필수 실행값을 Case 문맥으로 채우고, 공급자 미설정 시 명시적 규칙 기반 초안 제공.
+- [x] E-25-5 질문 전송·업무 등록·안내 전송·상태 변경·Fact 확정 성공 시 활성 기능 카드 자동 닫기.
+- [x] E-25-6 AI 카드 정보 위계를 `Shared Case 맥락 출처 → 상황 요약 → 판단 근거 → 지금 할 일 → 실행 카드`로 재설계.
+- [x] E-25-7 CaseCopilot 출력 지침을 상황 판단/확인/미확인/권장 행동의 짧은 한국어 구조로 강화.
 - [x] E-26 고객 안내 작성 카드: 템플릿·직접 수정·명시 전송·고객 채널/은행 협업 알림 연결.
 - [x] E-27 원본 실행 성공 후 알림/재조회 실패를 부분 성공 경고로 분리해 중복 실행 방지.
 - [ ] E-28 서버가 반환한 `WorkCardDescriptor` 목록/상태를 메시지와 함께 복원하는 API adapter.
@@ -131,6 +140,9 @@
 - [x] E-31 고객 피해 발생 신고를 AI 개인 작업공간의 긴급 업무 알림으로 표시하고 일반 은행 협업 채널에서는 제외.
 - [x] E-32 피해 신고 타임라인 클릭 시 연결된 Case 공용 긴급 알림을 찾아 AI 개인 작업공간으로 이동·강조.
 - [x] E-32 `확인 및 확인중 정보` 플로팅 버튼·전체 질문/답변 상태 패널 구현.
+- [x] E-33 P0 미확인 항목을 Customer Agent가 중복 없이 자동 질문 카드로 등록하고 한 문항씩 전달.
+- [x] E-34 heartbeat 전체 화면 재조회 제거, 고객 Bundle 단일 조회, 채팅 초안 저장 debounce로 상호작용 지연 감소.
+- [x] E-35 은행 채팅 높이를 720px, 보조 레일을 764px로 확장.
 
 ## F. 기관 검증 화면
 
@@ -219,10 +231,41 @@ Frontend 선행 상태: `bookmarkStore` adapter가 Case/사용자별 로컬 저�
 
 ## 현재 다음 실행 묶음
 
-1. F-03~F-08 검증 결과 입력/공개/Case 반영
-2. E-12~E-16 Fact·검증·조치·상태 카드
-3. G-01~G-09 개인 메모·북마크 계약과 UI
-4. H-01~H-08 보고서 서버 영속화와 Recovery Mode
+1. 인증 principal·Case membership 기반 고객/은행/검증 API 경계
+2. WorkCard 서버 lifecycle(DRAFT→APPROVED→EXECUTED→DELIVERED)와 복원
+3. 보고서·북마크·RecoveryAction 서버 영속화
+4. SSE/WebSocket 실시간 동기화와 폴링 제거
+
+## N. 2026-09-03 사용자 중심 대격변
+
+- [x] N-01 고객 화면을 은행 공통 AppLayout에서 분리한 CustomerLayout 적용.
+- [x] N-02 고객 화면에서 Case 목록·은행 대응·기관 검증 내비게이션 제거.
+- [x] N-03 고객 입력 초안 Case별 자동 저장·복원.
+- [x] N-04 피해구제 요청 실패 시 로컬 Recovery 상태 롤백.
+- [x] N-05 Case 종료/PREVENT/RECOVERY에 따라 고객 안전 문구 변경.
+- [x] N-06 고객 질문 카드의 중복 설명 제거 및 핵심 질문 시각 위계 강화.
+- [x] N-07 은행 화면에서 외부 고객 변경을 3초 복구 Polling으로 반영하되 AI snapshot 재호출 제외.
+- [x] N-08 AI 카드 생성·실행 완료를 AI 개인 작업공간의 시간순 업무 카드로 기록.
+- [x] N-09 고객 질문 답변을 질문·답변·검토 상태가 포함된 AI_INTERNAL 카드로 생성.
+- [x] N-10 Question과 고객 공개 Message ID를 저장소에 영속 연결.
+- [x] N-11 MySQL 질문 답변 `answer_text` parity와 중복 Attachment repository 제거.
+- [x] N-12 CaseCopilot/WorkCard 문맥에 최근 대화·Fact·Action·Verification·Attachment 메타데이터 추가.
+- [x] N-13 제공자 오류/비정상 출력 시 명시적 규칙 기반 안전 초안 fallback.
+- [x] N-14 은행 우선업무 패널을 가장 먼저 할 일·응답 대기·위험요소 순으로 재설계.
+- [x] N-15 답변 완료 필드·질문 ID를 AI 추천 Context에 포함해 이미 질문/답변한 항목의 재추천 차단.
+- [x] N-16 General API 후보 필터와 Memory/SQLite/MySQL 저장소에 필드·정규화 문구 중복 방지 적용.
+- [x] N-17 고객의 송금·개인정보·인증정보·원격제어 앱 긍정 답변을 은행 위험요소에 즉시 표시.
+- [x] N-18 고객 일반 메시지에 고객 공개 전용 AI 응답 API와 채팅 UI 연결.
+- [x] N-18-1 CaseFact에 원 질문 ID를 연결하고 검토 카드를 질문·답변 중심의 사람 친화적 위계로 개편.
+- [x] N-18-2 과거 대문자/축약 target field 별칭을 canonical field로 통합해 질문·Fact 카드 중복 방지.
+- [x] N-18-3 고객 AI Case별 분/일 호출 상한·동시성·출력 토큰 제한과 원 메시지 reply 연결.
+- [x] N-18-4 Case route 변경 시 고객 자동 질문 준비 guard 초기화.
+- [x] N-18-4A 메시지·질문·답변·검증 결과·AI 업무 카드를 단일 `created_at ASC` 채팅 Timeline으로 병합하고 별도 하단 카드 경로 제거.
+- [ ] N-18-5 운영 다중 인스턴스용 Redis/DB 공유 고객 AI quota와 인증 사용자 rate limit.
+- [ ] N-19 의도적인 재확인만 허용하는 권한·사유·시점 포함 `RECHECK` 명령 설계.
+- [ ] N-20 실제 인증/RBAC와 서버 기준 actor/view 강제.
+- [ ] N-21 WorkCard DB lifecycle와 사용자별 draft/approval/result projection.
+- [ ] N-22 브라우저 기반 시각·키보드·모바일 E2E. 현재 제어 가능한 브라우저 세션 없음.
 
 ## 완료 판정
 

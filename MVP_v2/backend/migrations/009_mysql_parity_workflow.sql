@@ -22,24 +22,6 @@ ALTER TABLE verification_tasks
     ADD COLUMN rag_source VARCHAR(255) NULL,
     ADD COLUMN customer_visible BOOLEAN NOT NULL DEFAULT FALSE;
 
-CREATE TABLE IF NOT EXISTS attachments (
-    attachment_id VARCHAR(64) PRIMARY KEY,
-    case_id VARCHAR(32) NOT NULL,
-    original_name VARCHAR(255) NOT NULL,
-    mime_type VARCHAR(255) NOT NULL,
-    size_bytes BIGINT NOT NULL,
-    sha256 CHAR(64) NOT NULL,
-    uploaded_by VARCHAR(64) NOT NULL,
-    status VARCHAR(16) NOT NULL DEFAULT 'UPLOADED',
-    ai_readable BOOLEAN NOT NULL DEFAULT TRUE,
-    storage_key VARCHAR(500) NULL,
-    message_id VARCHAR(64) NULL,
-    created_at DATETIME(6) NOT NULL,
-    INDEX idx_attachments_case (case_id, created_at),
-    CONSTRAINT fk_attachments_case FOREIGN KEY (case_id) REFERENCES cases(case_id),
-    CONSTRAINT fk_attachments_message FOREIGN KEY (message_id) REFERENCES messages(message_id)
-);
-
 CREATE TABLE IF NOT EXISTS customer_questions (
     question_id VARCHAR(100) PRIMARY KEY,
     case_id VARCHAR(32) NOT NULL,
@@ -56,6 +38,7 @@ CREATE TABLE IF NOT EXISTS customer_questions (
     options_json JSON NOT NULL,
     question_message_id VARCHAR(64) NULL,
     answer_message_id VARCHAR(64) NULL,
+    answer_text TEXT NULL,
     created_at DATETIME(6) NOT NULL,
     INDEX idx_customer_questions_case (case_id, sequence),
     CONSTRAINT fk_customer_questions_case FOREIGN KEY (case_id) REFERENCES cases(case_id)

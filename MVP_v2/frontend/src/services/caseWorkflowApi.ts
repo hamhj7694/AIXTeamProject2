@@ -1,4 +1,4 @@
-import { notifyApiMutation } from './caseSync';
+import { generalApiRequest as request } from './generalApiClient';
 
 export interface WorkflowMessage {
   message_id: string;
@@ -83,22 +83,6 @@ export interface FinalReport {
   sections: Array<Record<string, unknown>>;
   created_at: string;
 }
-
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
-
-const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...init,
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
-  });
-  const payload = await response.json().catch(() => null);
-  if (!response.ok) {
-    const detail = payload?.detail;
-    throw new Error(payload?.error?.message || detail?.message || '요청을 처리하지 못했습니다.');
-  }
-  notifyApiMutation(path, init, payload);
-  return payload as T;
-};
 
 export const caseWorkflowApi = {
   getBundle: (caseId: string, view: 'entry' | 'customer' | 'bank'): Promise<CaseBundle> =>

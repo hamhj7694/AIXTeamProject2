@@ -1,4 +1,5 @@
 import type { WorkCardDescriptor, WorkCardType } from './types';
+import type { AiWorkCardProposal } from '../../../services/mvpChatApi';
 
 export interface WorkCardCatalogItem {
   id: WorkCardType;
@@ -31,3 +32,13 @@ export const createDraftWorkCard = (cardType: WorkCardType): WorkCardDescriptor 
     created_at: new Date().toISOString(),
   };
 };
+
+export const createAiGeneratedWorkCard = (proposal: AiWorkCardProposal): WorkCardDescriptor => ({
+  card_id: crypto.randomUUID(),
+  card_type: proposal.card_type,
+  stage: 'READY',
+  title: proposal.title,
+  payload: { ...proposal },
+  source: 'AI_PROPOSAL',
+  created_at: new Date().toISOString(),
+});

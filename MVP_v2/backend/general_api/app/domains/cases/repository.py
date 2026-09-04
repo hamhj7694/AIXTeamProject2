@@ -7,6 +7,20 @@ from typing import Any, Protocol
 from uuid import uuid4
 
 
+_TARGET_FIELD_ALIASES = {
+    "PERSONAL_INFO": "personal_information_exposure",
+    "PERSONAL_INFORMATION": "personal_information_exposure",
+    "AUTHENTICATION_INFO": "authentication_information_exposure",
+    "AUTH_INFO": "authentication_information_exposure",
+    "VICTIM_TRANSFER_STATUS": "transfer_status",
+}
+
+
+def normalize_target_field(value: str) -> str:
+    normalized = value.strip()
+    return _TARGET_FIELD_ALIASES.get(normalized.upper(), normalized.lower())
+
+
 class CaseRepository(Protocol):
     async def next_case_id(self) -> str: ...
     async def find_by_client_request_id(self, client_request_id: str) -> dict[str, Any] | None: ...
@@ -43,6 +57,7 @@ class CaseRepository(Protocol):
     async def list_customer_questions(self, case_id: str) -> list[dict[str, Any]]: ...
     async def queue_customer_questions(self, case_id: str, questions: list[dict[str, Any]], requested_by: str) -> list[dict[str, Any]]: ...
     async def dispatch_next_customer_question(self, case_id: str) -> dict[str, Any] | None: ...
+    async def link_customer_question_message(self, case_id: str, question_id: str, message_id: str) -> None: ...
     async def answer_customer_question(self, case_id: str, question_id: str, message_id: str, answer_text: str) -> dict[str, Any]: ...
     async def list_case_facts(self, case_id: str) -> list[dict[str, Any]]: ...
     async def propose_case_fact(self, case_id: str, question_id: str, value: str, evidence_message_id: str | None) -> dict[str, Any]: ...
@@ -412,10 +427,17 @@ class InMemoryCaseRepository:
         async with self._lock:
             if not any(item["case_id"] == case_id and not item.get("deleted_at") for item in self._records):
                 raise KeyError(case_id)
+            handled_questions = [
+                item for item in self._customer_questions
+                if item["case_id"] == case_id and item["status"] in {"PENDING", "ASKED", "ANSWERED"}
+            ]
             active_fields = {
-                item["target_field"]
-                for item in self._customer_questions
-                if item["case_id"] == case_id and item["status"] in {"PENDING", "ASKED"}
+                normalize_target_field(item["target_field"])
+                for item in handled_questions
+            }
+            active_texts = {
+                " ".join(str(item.get("question_text", "")).split()).casefold()
+                for item in handled_questions
             }
             sequence = max(
                 (int(item["sequence"]) for item in self._customer_questions if item["case_id"] == case_id),
@@ -424,12 +446,14 @@ class InMemoryCaseRepository:
             now = datetime.now(timezone.utc).isoformat()
             created: list[dict[str, Any]] = []
             for question in questions:
-                if question["target_field"] in active_fields:
+                target_field = normalize_target_field(question["target_field"])
+                normalized_text = " ".join(str(question["question_text"]).split()).casefold()
+                if target_field in active_fields or normalized_text in active_texts:
                     continue
                 sequence += 1
                 item = {
                     "question_id": f"cq-{uuid4().hex}", "case_id": case_id,
-                    "source": "BANK_SELECTED", "target_field": question["target_field"],
+                    "source": question.get("source", "BANK_SELECTED"), "target_field": target_field,
                     "question_text": question["question_text"], "reason": question["reason"],
                     "priority": question["priority"], "options": question.get("options", []),
                     "customer_explanation": question.get("customer_explanation"),
@@ -441,11 +465,13 @@ class InMemoryCaseRepository:
                 }
                 self._customer_questions.append(item)
                 created.append(deepcopy(item))
-                active_fields.add(question["target_field"])
+                active_fields.add(target_field)
+                active_texts.add(normalized_text)
             if created:
                 self._events.append({
                     "event_id": len(self._events) + 1, "case_id": case_id,
-                    "event_type": "CUSTOMER_QUESTIONS_QUEUED", "actor_type": "BANK_STAFF",
+                    "event_type": "CUSTOMER_QUESTIONS_QUEUED",
+                    "actor_type": "CUSTOMER_AGENT" if all(item.get("source") == "CUSTOMER_AGENT" for item in created) else "BANK_STAFF",
                     "payload": {"question_ids": [item["question_id"] for item in created]}, "occurred_at": now,
                 })
                 self._touch_case(case_id, now)
@@ -454,6 +480,8 @@ class InMemoryCaseRepository:
     async def dispatch_next_customer_question(self, case_id: str) -> dict[str, Any] | None:
         """Mark exactly one queued question as customer-visible."""
         async with self._lock:
+            if any(row["case_id"] == case_id and row["status"] == "ASKED" for row in self._customer_questions):
+                return None
             item = next((row for row in sorted(self._customer_questions, key=lambda row: row["sequence"])
                          if row["case_id"] == case_id and row["status"] == "PENDING"), None)
             if item is None:
@@ -468,6 +496,14 @@ class InMemoryCaseRepository:
             })
             self._touch_case(case_id, now)
             return deepcopy(item)
+
+    async def link_customer_question_message(self, case_id: str, question_id: str, message_id: str) -> None:
+        """Persist the public message that rendered a queued question card."""
+        async with self._lock:
+            item = next((row for row in self._customer_questions if row["case_id"] == case_id and row["question_id"] == question_id), None)
+            if item is None:
+                raise KeyError(question_id)
+            item["question_message_id"] = message_id
 
     async def answer_customer_question(self, case_id: str, question_id: str, message_id: str, answer_text: str) -> dict[str, Any]:
         async with self._lock:
@@ -497,13 +533,16 @@ class InMemoryCaseRepository:
             question = next((row for row in self._customer_questions if row["case_id"] == case_id and row["question_id"] == question_id), None)
             if question is None:
                 raise KeyError(question_id)
-            existing = next((row for row in self._case_facts if row["case_id"] == case_id and row["field"] == question["target_field"] and row["status"] == "PROPOSED"), None)
+            canonical_field = normalize_target_field(question["target_field"])
+            existing = next((row for row in self._case_facts if row["case_id"] == case_id and normalize_target_field(row["field"]) == canonical_field and row["status"] == "PROPOSED"), None)
             if existing is not None:
+                existing["field"] = canonical_field
                 existing["value"] = value
                 existing["evidence_message_id"] = evidence_message_id
+                existing["source_question_id"] = question_id
                 return deepcopy(existing)
             now = datetime.now(timezone.utc).isoformat()
-            fact = {"fact_id": f"fact-{uuid4().hex}", "case_id": case_id, "field": question["target_field"], "value": value, "source": "AI_EXTRACTED", "status": "PROPOSED", "confidence": 0.7, "evidence_message_id": evidence_message_id, "confirmed_by": None, "confirmed_at": None, "created_at": now}
+            fact = {"fact_id": f"fact-{uuid4().hex}", "case_id": case_id, "field": canonical_field, "value": value, "source": "AI_EXTRACTED", "status": "PROPOSED", "confidence": 0.7, "evidence_message_id": evidence_message_id, "source_question_id": question_id, "confirmed_by": None, "confirmed_at": None, "created_at": now}
             self._case_facts.append(fact)
             self._events.append({"event_id": len(self._events) + 1, "case_id": case_id, "event_type": "CASE_FACT_PROPOSED", "actor_type": "CUSTOMER_AGENT", "payload": {"fact_id": fact["fact_id"], "field": fact["field"]}, "occurred_at": now})
             self._touch_case(case_id, now)

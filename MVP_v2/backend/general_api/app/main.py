@@ -18,6 +18,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 from contracts.diagnosis import AnalyzeTextRequest
+from contracts.ai_internal.work_card import CaseWorkCardOutput, WorkCardType
 from contracts.public_api.case_analyze import (
     PublicAnalyzeCaseRequest,
     PublicAnalyzeCaseResponse,
@@ -75,6 +76,7 @@ from contracts.public_api.collaboration import (
     PublicAiInvocationRequest,
     PublicAiInvocationResponse,
     PublicAiShareRequest,
+    PublicCustomerAiReplyRequest,
     PublicCaseMemberResponse,
     PublicCaseMemberUpsertRequest,
     PublicCasePresenceResponse,
@@ -84,7 +86,7 @@ from contracts.public_api.collaboration import (
 )
 
 from .clients.diagnosis_ai import AiServiceAuthenticationError, AiServiceError, AiServiceQuotaError, HttpDiagnosisAiClient
-from .domains.cases.repository import CaseVersionConflictError, InMemoryCaseRepository
+from .domains.cases.repository import CaseVersionConflictError, InMemoryCaseRepository, normalize_target_field
 from .domains.cases.service import AnalyzeCaseService, InvalidCaseTransitionError, transition_case
 
 
@@ -113,6 +115,10 @@ class CaseOutcomeRequest(BaseModel):
     expected_version: int
     victim_transfer_status: Literal["UNKNOWN", "YES", "NO"]
     actual_loss_amount_krw: float | None = None
+
+
+class PublicWorkCardGenerateRequest(BaseModel):
+    card_type: WorkCardType
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:5174", "http://127.0.0.1:5174", "http://localhost:5175", "http://127.0.0.1:5175"],
@@ -371,16 +377,35 @@ def build_customer_question_candidates(case: dict, queued: list[dict]) -> list[P
 
 
 def build_question_recommendation_context(facts: list[dict], questions: list[dict]) -> dict:
-    """답변 수신과 사실 확정을 분리한 채 AI 질문 중복만 막는다."""
+    """답변 수신과 사실 확정을 분리하되 질문 이력이 있는 항목은 다시 묻지 않는다."""
     valid_fields = {
         "transfer_status", "transfer_purpose", "claimed_organization", "incident_claim",
         "personal_information_exposure", "authentication_information_exposure",
     }
     return {
-        "confirmed_fields": [item["field"] for item in facts if item.get("status") == "CONFIRMED" and item.get("field") in valid_fields],
-        "pending_question_fields": [item["target_field"] for item in questions if item.get("status") in {"PENDING", "ASKED"} and item.get("target_field") in valid_fields],
+        "confirmed_fields": [normalize_target_field(item["field"]) for item in facts if item.get("status") == "CONFIRMED" and normalize_target_field(item.get("field", "")) in valid_fields],
+        "pending_question_fields": [normalize_target_field(item["target_field"]) for item in questions if item.get("status") in {"PENDING", "ASKED"} and normalize_target_field(item.get("target_field", "")) in valid_fields],
+        "answered_question_fields": [normalize_target_field(item["target_field"]) for item in questions if item.get("status") == "ANSWERED" and normalize_target_field(item.get("target_field", "")) in valid_fields],
         "answered_question_ids": [item["question_id"] for item in questions if item.get("status") == "ANSWERED"],
     }
+
+
+def normalize_question_text(value: str) -> str:
+    """Whitespace/case differences must not bypass the duplicate-question guard."""
+    return " ".join(value.split()).casefold()
+
+
+def exclude_handled_question_candidates(
+    candidates: list[PublicQuestionCandidateResponse], questions: list[dict]
+) -> list[PublicQuestionCandidateResponse]:
+    handled = [item for item in questions if item.get("status") in {"PENDING", "ASKED", "ANSWERED"}]
+    handled_fields = {normalize_target_field(str(item.get("target_field", ""))) for item in handled}
+    handled_texts = {normalize_question_text(str(item.get("question_text", ""))) for item in handled}
+    return [
+        candidate for candidate in candidates
+        if normalize_target_field(candidate.target_field) not in handled_fields
+        and normalize_question_text(candidate.question_text) not in handled_texts
+    ]
 
 
 def to_public_case_support_snapshot(case_id: str, payload: dict, *, available: bool) -> PublicCaseSupportSnapshotResponse:
@@ -393,7 +418,17 @@ def to_public_case_support_snapshot(case_id: str, payload: dict, *, available: b
         ) if brief else None,
         recommended_questions=[PublicQuestionCandidateResponse(
             question_id=item["question_id"], target_field=item["target_field"],
-            question_text=item["question"], reason=item["reason"], priority=item["priority"], options=[],
+            question_text=item["question"], reason=item["reason"], priority=item["priority"],
+            options={
+                "transfer_status": ["아직 송금하지 않았어요", "이미 송금했어요", "잘 모르겠어요"],
+                "personal_information_exposure": ["제공하지 않았어요", "일부 제공했어요", "제공했어요", "잘 모르겠어요"],
+                "authentication_information_exposure": ["제공하지 않았어요", "제공했어요", "잘 모르겠어요"],
+            }.get(item["target_field"], []),
+            customer_explanation={
+                "transfer_status": "추가 피해를 막고 필요한 조치를 안내하기 위해 실제 송금 여부를 먼저 확인합니다.",
+                "personal_information_exposure": "개인정보 보호 조치가 필요한지 확인하는 질문입니다.",
+                "authentication_information_exposure": "계정과 금융정보를 보호하기 위해 인증정보 노출 여부를 확인합니다.",
+            }.get(item["target_field"]),
         ) for item in payload.get("recommended_questions", [])],
         unresolved_items=[PublicUnresolvedItemResponse.model_validate(item) for item in payload.get("unresolved_items", [])],
         warnings=payload.get("warnings", []),
@@ -428,7 +463,9 @@ async def list_customer_question_candidates(case_id: str) -> list[PublicQuestion
     queued = await repository.list_customer_questions(case_id)
     snapshot = await get_case_support_snapshot(case_id)
     # AI 장애 시에도 기존 deterministic 후보로 고객 확인 흐름을 멈추지 않는다.
-    return snapshot.recommended_questions if snapshot.available else build_customer_question_candidates(case, queued)
+    candidates = snapshot.recommended_questions if snapshot.available else build_customer_question_candidates(case, queued)
+    # AI 결과를 그대로 신뢰하지 않는다. 질문 이력 기반 최종 중복 방지는 General API가 담당한다.
+    return exclude_handled_question_candidates(candidates, queued)
 
 
 @app.get("/api/cases/{case_id}/customer-questions", response_model=list[PublicCustomerQuestionResponse | PublicCustomerQuestionView])
@@ -453,6 +490,29 @@ async def queue_customer_questions(case_id: str, request: PublicQueueCustomerQue
     return [to_public_customer_question(item) for item in items]
 
 
+@app.post("/api/cases/{case_id}/ai/customer-questions/ensure", response_model=list[PublicCustomerQuestionResponse])
+async def ensure_ai_customer_questions(case_id: str) -> list[PublicCustomerQuestionResponse]:
+    """Queue unresolved P0 safety questions once and deliver one active card at a time."""
+    case = await repository.get(case_id)
+    if case is None:
+        raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."})
+    existing = await repository.list_customer_questions(case_id)
+    handled_fields = {normalize_target_field(item["target_field"]) for item in existing if item.get("status") in {"PENDING", "ASKED", "ANSWERED"}}
+    snapshot = await get_case_support_snapshot(case_id)
+    candidates = snapshot.recommended_questions if snapshot.available else build_customer_question_candidates(case, existing)
+    p0_questions = [
+        {**candidate.model_dump(mode="python"), "source": "CUSTOMER_AGENT"}
+        for candidate in candidates
+        if candidate.priority == "P0" and normalize_target_field(candidate.target_field) not in handled_fields
+    ]
+    if not p0_questions:
+        await dispatch_next_customer_question_message(case_id)
+        return []
+    created = await repository.queue_customer_questions(case_id, p0_questions, "customer-agent")
+    await dispatch_next_customer_question_message(case_id)
+    return [to_public_customer_question(item) for item in created]
+
+
 async def dispatch_next_customer_question_message(case_id: str) -> PublicMessageResponse | None:
     """A confirmed queue is delivered one at a time through the public chat."""
     question = await repository.dispatch_next_customer_question(case_id)
@@ -464,6 +524,7 @@ async def dispatch_next_customer_question_message(case_id: str) -> PublicMessage
         "content": question["question_text"], "channel": "CUSTOMER", "audience": "CUSTOMER",
         "visibility": "CUSTOMER", "message_kind": "CHAT", "mentions": [], "log_event": False,
     })
+    await repository.link_customer_question_message(case_id, question["question_id"], message["message_id"])
     question["question_message_id"] = message["message_id"]
     return to_public_message(message)
 
@@ -482,6 +543,19 @@ async def answer_customer_question(case_id: str, question_id: str, request: Publ
     except KeyError as exc:
         raise HTTPException(status_code=404, detail={"code": "CUSTOMER_QUESTION_NOT_FOUND", "message": "응답 대기 중인 질문을 찾을 수 없습니다."}) from exc
     await repository.propose_case_fact(case_id, question_id, request.raw_answer, message["message_id"])
+    await repository.append_message(case_id, {
+        "actor_type": "BANK_AGENT", "actor_user_id": "case-copilot",
+        "actor_display_name": "CaseCopilot", "actor_role": "BANK_AGENT",
+        "content": (
+            "고객 답변 접수\n"
+            f"질문: {answered.get('question_text', '고객 확인 질문')}\n"
+            f"답변: {request.raw_answer}\n"
+            "상태: 담당자 확인 전 정보 후보"
+        ),
+        "channel": "AI_INTERNAL", "audience": "BANK_INTERNAL", "visibility": "AI_PRIVATE",
+        "message_kind": "SYSTEM_EVENT", "mentions": [], "private_owner_user_id": None,
+        "reply_to_message_id": message["message_id"], "log_event": False,
+    })
     await dispatch_next_customer_question_message(case_id)
     return to_public_customer_question(answered)
 
@@ -740,12 +814,96 @@ def build_mvp_copilot_reply(case: dict, verifications: list[dict], prompt: str) 
     )
 
 
+@app.post("/api/cases/{case_id}/ai/work-cards", response_model=CaseWorkCardOutput)
+async def generate_case_work_card(case_id: str, request: PublicWorkCardGenerateRequest) -> CaseWorkCardOutput:
+    case = await repository.get(case_id)
+    if case is None:
+        raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."})
+    facts = await repository.list_case_facts(case_id)
+    verifications = await repository.list_verifications(case_id)
+    actions = await repository.list_actions(case_id)
+    messages = await repository.list_messages(case_id)
+    attachments = await repository.list_attachments(case_id)
+    support = await get_case_support_snapshot(case_id)
+    try:
+        payload = await service.ai_client.generate_work_card({
+            "case_id": case_id,
+            "card_type": request.card_type,
+            "case_summary": case.get("initial_brief", ""),
+            "workflow_status": case.get("status", "TRIAGE"),
+            "case_mode": case.get("mode", "PREVENT"),
+            "fraud_type": case.get("fraud_type"),
+            "known_facts": [f"{item.get('field')}: {item.get('value')} ({item.get('status')})" for item in facts[:30]],
+            "recent_conversation": [
+                f"{item.get('actor_display_name', item.get('actor_type', '작성자'))}: {item.get('content', '')[:500]}"
+                for item in messages[-20:]
+                if item.get("channel") in {"TEAM", "CUSTOMER"}
+            ],
+            "pending_actions": [
+                f"{item.get('action_type')}: {item.get('note') or '상세 내용 없음'} ({item.get('status', 'REQUESTED')})"
+                for item in actions if item.get("status") not in {"COMPLETED", "CANCELLED"}
+            ][:20],
+            "attachment_summaries": [
+                f"{item.get('original_name', '첨부 파일')} ({item.get('mime_type', '형식 미상')}, {item.get('visibility', '공개 범위 미상')})"
+                for item in attachments[-10:]
+            ],
+            "unresolved_items": [f"{item.priority}: {item.description}" for item in support.unresolved_items[:20]],
+            "pending_verifications": [f"{item.get('target')}: {item.get('claim')}" for item in verifications if item.get("status") != "COMPLETED"][:20],
+            "question_candidates": [item.model_dump(mode="python") for item in support.recommended_questions[:10]],
+        })
+        return CaseWorkCardOutput.model_validate(payload)
+    except AiServiceQuotaError as exc:
+        raise HTTPException(status_code=429, detail={"code": "OPENAI_QUOTA_EXHAUSTED", "message": str(exc)}) from exc
+    except AiServiceAuthenticationError as exc:
+        raise HTTPException(status_code=401, detail={"code": "OPENAI_AUTHENTICATION_FAILED", "message": str(exc)}) from exc
+    except AiServiceError as exc:
+        raise HTTPException(status_code=503, detail={"code": "AI_WORK_CARD_FAILED", "message": str(exc)}) from exc
+
+
 @app.post("/api/cases/{case_id}/ai/invocations", response_model=PublicAiInvocationResponse, status_code=201)
 async def invoke_case_copilot(case_id: str, request: PublicAiInvocationRequest) -> PublicAiInvocationResponse:
     case = await repository.get(case_id)
     if case is None:
         raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."})
-    content = build_mvp_copilot_reply(case, await repository.list_verifications(case_id), request.prompt)
+    verifications = await repository.list_verifications(case_id)
+    facts = await repository.list_case_facts(case_id)
+    actions = await repository.list_actions(case_id)
+    attachments = await repository.list_attachments(case_id)
+    all_messages = await repository.list_messages(case_id)
+    unresolved = [item.get("claim", "추가 확인 항목") for item in verifications if item.get("status") != "COMPLETED"]
+    try:
+        ai_reply = await service.ai_client.generate_case_copilot_reply({
+            "case_id": case_id,
+            "prompt": request.prompt,
+            "case_summary": case.get("initial_brief", ""),
+            "workflow_status": case.get("status", "TRIAGE"),
+            "fraud_type": case.get("fraud_type"),
+            "transfer_status": case.get("victim_transfer_status"),
+            "known_facts": [f"{item.get('field')}: {item.get('value')} ({item.get('status')})" for item in facts[:30]],
+            "recent_conversation": [
+                f"{item.get('actor_display_name', item.get('actor_type', '작성자'))}: {item.get('content', '')[:500]}"
+                for item in all_messages[-30:]
+                if item.get("channel") in {"TEAM", "CUSTOMER"}
+                or (item.get("channel") == "AI_INTERNAL" and item.get("private_owner_user_id") in {None, request.requester_user_id})
+            ][-20:],
+            "pending_actions": [
+                f"{item.get('action_type')}: {item.get('note') or '상세 내용 없음'} ({item.get('status', 'REQUESTED')})"
+                for item in actions if item.get("status") not in {"COMPLETED", "CANCELLED"}
+            ][:20],
+            "attachment_summaries": [
+                f"{item.get('original_name', '첨부 파일')} ({item.get('mime_type', '형식 미상')}, {item.get('visibility', '공개 범위 미상')})"
+                for item in attachments[-10:]
+            ],
+            "unresolved_verifications": unresolved[:10],
+            "assistant_mode": "BANK_INTERNAL",
+        })
+    except AiServiceQuotaError as exc:
+        raise HTTPException(status_code=429, detail={"code": "OPENAI_QUOTA_EXHAUSTED", "message": str(exc)}) from exc
+    except AiServiceAuthenticationError as exc:
+        raise HTTPException(status_code=401, detail={"code": "OPENAI_AUTHENTICATION_FAILED", "message": str(exc)}) from exc
+    except AiServiceError as exc:
+        raise HTTPException(status_code=503, detail={"code": "AI_CASE_COPILOT_FAILED", "message": str(exc)}) from exc
+    content = ai_reply["content"]
     is_team_request = request.channel == "TEAM"
     message = await repository.append_message(case_id, {
         "actor_type": "BANK_AGENT", "actor_user_id": "case-copilot", "actor_display_name": "CaseCopilot",
@@ -756,8 +914,58 @@ async def invoke_case_copilot(case_id: str, request: PublicAiInvocationRequest) 
     })
     return PublicAiInvocationResponse(
         invocation_id=f"ai-{uuid4().hex}", message_id=message["message_id"], case_id=case_id,
-        channel="TEAM" if is_team_request else "AI_INTERNAL", content=content, model_mode="MVP_DETERMINISTIC", created_at=message["created_at"],
+        channel="TEAM" if is_team_request else "AI_INTERNAL", content=content, model_mode=ai_reply["model_mode"], created_at=message["created_at"],
     )
+
+
+@app.post("/api/cases/{case_id}/ai/customer-replies", response_model=PublicMessageResponse, status_code=201)
+async def invoke_customer_support_ai(case_id: str, request: PublicCustomerAiReplyRequest) -> PublicMessageResponse:
+    """Generate a customer-safe reply without exposing the bank-only Case bundle."""
+    case = await repository.get(case_id)
+    if case is None:
+        raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."})
+    all_messages = await repository.list_messages(case_id, "CUSTOMER")
+    questions = await repository.list_customer_questions(case_id)
+    customer_history = [
+        f"{item.get('actor_display_name', '상담 참여자')}: {item.get('content', '')[:500]}"
+        for item in all_messages[-20:]
+        if item.get("visibility") == "CUSTOMER"
+    ]
+    answered = [
+        f"질문: {item.get('question_text', '')} / 고객 답변: {item.get('answer_text', '')}"
+        for item in questions
+        if item.get("status") == "ANSWERED" and item.get("answer_text")
+    ][-10:]
+    try:
+        ai_reply = await service.ai_client.generate_case_copilot_reply({
+            "case_id": case_id,
+            "prompt": request.prompt,
+            "case_summary": "",
+            "workflow_status": case.get("status", "TRIAGE"),
+            "fraud_type": case.get("fraud_type"),
+            "transfer_status": case.get("victim_transfer_status"),
+            "known_facts": answered,
+            "recent_conversation": customer_history,
+            "pending_actions": [],
+            "attachment_summaries": [],
+            "unresolved_verifications": [],
+            "assistant_mode": "CUSTOMER_SUPPORT",
+        })
+    except AiServiceQuotaError as exc:
+        raise HTTPException(status_code=429, detail={"code": "OPENAI_QUOTA_EXHAUSTED", "message": str(exc)}) from exc
+    except AiServiceAuthenticationError as exc:
+        raise HTTPException(status_code=401, detail={"code": "OPENAI_AUTHENTICATION_FAILED", "message": str(exc)}) from exc
+    except AiServiceError as exc:
+        raise HTTPException(status_code=503, detail={"code": "AI_CUSTOMER_SUPPORT_FAILED", "message": str(exc)}) from exc
+    message = await repository.append_message(case_id, {
+        "actor_type": "CUSTOMER_AGENT", "actor_user_id": "customer-agent",
+        "actor_display_name": "안전 상담 AI", "actor_role": "CUSTOMER_AGENT",
+        "content": ai_reply["content"], "channel": "CUSTOMER", "audience": "CUSTOMER",
+        "visibility": "CUSTOMER", "message_kind": "AI_RESPONSE", "mentions": [],
+        "reply_to_message_id": request.reply_to_message_id, "client_request_id": request.client_request_id,
+        "log_event": False,
+    })
+    return to_public_message(message)
 
 
 @app.post("/api/cases/{case_id}/ai/messages/{message_id}/share", response_model=PublicMessageResponse, status_code=201)
@@ -847,6 +1055,12 @@ async def get_case_bundle(case_id: str, view: Literal["entry", "customer", "bank
     messages = [to_public_message(item).model_dump(mode="json") for item in await repository.list_messages(case_id, visible_channel)]
     actions = [to_public_action(item) for item in await repository.list_actions(case_id)]
     verifications = [to_public_verification(item) for item in await repository.list_verifications(case_id)]
+    question_records = await repository.list_customer_questions(case_id)
+    questions = [to_public_customer_question(item).model_dump(mode="json") for item in question_records]
+    progress_items = [
+        {"key": "customer_questions", "total": len(question_records), "answered": sum(item.get("status") == "ANSWERED" for item in question_records)},
+        {"key": "verification_tasks", "total": len(verifications), "completed": sum(item.status == "COMPLETED" for item in verifications)},
+    ]
     customer_verification_results: list[PublicCustomerVerificationResult] = []
     events = [to_public_event(item).model_dump(mode="json") for item in await repository.list_events(case_id)]
     # Customer view hides event details, but still needs the Case activity cursor
@@ -854,6 +1068,7 @@ async def get_case_bundle(case_id: str, view: Literal["entry", "customer", "bank
     cursor = str(events[-1]["event_id"]) if events else None
     voice = await repository.get_voice_session(case_id)
     if view == "customer":
+        questions = [to_public_customer_question_view(item).model_dump(mode="json") for item in question_records]
         customer_verification_results = [
             PublicCustomerVerificationResult(
                 verification_task_id=item.verification_task_id,
@@ -869,7 +1084,7 @@ async def get_case_bundle(case_id: str, view: Literal["entry", "customer", "bank
     return PublicCaseBundleResponse(
         case=to_public_case_summary_response(record).model_dump(mode="json"),
         live_report=None if view == "customer" else record.get("initial_report"),
-        questions=[], progress_items=[], verification_tasks=verifications,
+        questions=questions, progress_items=progress_items, verification_tasks=verifications,
         customer_verification_results=customer_verification_results,
         recent_messages=messages[-50:], recent_actions=actions[-50:], recent_events=events[-50:],
         voice_session=PublicVoiceSessionResponse.model_validate(voice) if voice else None, cursor=cursor,

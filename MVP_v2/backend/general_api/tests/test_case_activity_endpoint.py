@@ -153,7 +153,9 @@ class CaseActivityEndpointTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["case"]["case_id"], "VP-ACTIVITY")
         self.assertEqual(response.json()["recent_messages"][0]["message_id"], "msg-1")
-        self.assertIsNone(response.json()["cursor"])
+        # Customer payload hides event details but keeps the latest cursor so the
+        # client can detect that the Case changed and safely refetch its projection.
+        self.assertEqual(response.json()["cursor"], "7")
         self.assertEqual(response.json()["questions"], [])
         self.assertEqual(response.json()["verification_tasks"], [])
         self.assertEqual(response.json()["customer_verification_results"], [{
@@ -183,10 +185,19 @@ class CaseActivityEndpointTest(unittest.TestCase):
         self.assertNotIn("requested_by", projection)
 
     def test_customer_answer_is_persisted_for_receipt_card_restoration(self) -> None:
-        self.repository.append_message.return_value = {
+        customer_message = {
             "message_id": "msg-answer", "case_id": "VP-ACTIVITY", "actor_type": "CUSTOMER",
             "content": "있음", "created_at": "2026-09-02T01:05:00+00:00",
         }
+        ai_receipt = {
+            "message_id": "msg-ai-receipt", "case_id": "VP-ACTIVITY", "actor_type": "BANK_AGENT",
+            "actor_user_id": "case-copilot", "actor_display_name": "CaseCopilot", "actor_role": "BANK_AGENT",
+            "content": "고객 답변 접수\n질문: 이미 송금한 금액이 있나요?\n답변: 있음\n상태: 담당자 확인 전 정보 후보",
+            "channel": "AI_INTERNAL", "audience": "BANK_INTERNAL", "visibility": "AI_PRIVATE",
+            "message_kind": "SYSTEM_EVENT", "private_owner_user_id": None, "mentions": [],
+            "created_at": "2026-09-02T01:05:01+00:00",
+        }
+        self.repository.append_message.side_effect = [customer_message, ai_receipt]
         self.repository.answer_customer_question.return_value = {
             "question_id": "cq-1", "case_id": "VP-ACTIVITY", "source": "BANK_SELECTED",
             "target_field": "victim_transfer_status", "question_text": "이미 송금한 금액이 있나요?",
@@ -206,6 +217,11 @@ class CaseActivityEndpointTest(unittest.TestCase):
         self.repository.answer_customer_question.assert_awaited_once_with(
             "VP-ACTIVITY", "cq-1", "msg-answer", "있음"
         )
+        self.assertEqual(self.repository.append_message.await_count, 2)
+        receipt_payload = self.repository.append_message.await_args_list[1].args[1]
+        self.assertEqual(receipt_payload["channel"], "AI_INTERNAL")
+        self.assertIn("질문: 이미 송금한 금액이 있나요?", receipt_payload["content"])
+        self.assertIn("답변: 있음", receipt_payload["content"])
 
     def test_customer_emergency_updates_case_and_alerts_ai_private_only(self) -> None:
         self.repository.get.return_value = {**CASE, "version": 3}
