@@ -6,11 +6,12 @@ const MAX_FILE_BYTES = 10 * 1024 * 1024;
 
 interface Props {
   busy: boolean;
+  aiBusy: boolean;
   disabled?: boolean;
   onSend: (content: string, files: File[], requestAi: boolean) => Promise<void>;
 }
 
-export const CustomerComposer: React.FC<Props> = ({ busy, disabled = false, onSend }) => {
+export const CustomerComposer: React.FC<Props> = ({ busy, aiBusy, disabled = false, onSend }) => {
   const [draft, setDraft] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [requestAi, setRequestAi] = useState(true);
@@ -22,7 +23,7 @@ export const CustomerComposer: React.FC<Props> = ({ busy, disabled = false, onSe
     try {
       setError('');
       await onSend(draft.trim(), files, requestAi && Boolean(draft.trim()));
-      setDraft(''); setFiles([]); setRequestAi(false);
+      setDraft(''); setFiles([]);
     } catch (reason) { setError(reason instanceof Error ? reason.message : '메시지를 보내지 못했습니다.'); }
   };
   const addFiles = (incoming: FileList | null) => {
@@ -46,6 +47,7 @@ export const CustomerComposer: React.FC<Props> = ({ busy, disabled = false, onSe
       </div>
     </form>
     {error && <p className="customer-inline-error">{error} 작성한 내용은 유지했습니다.</p>}
+    {aiBusy && <p className="customer-ai-progress"><Sparkles size={13}/>AI가 방금 보낸 내용과 현재 상담 기록을 함께 살펴보고 있습니다. 계속 입력할 수 있습니다.</p>}
     <p className="customer-composer-help">Enter 전송 · Shift+Enter 줄바꿈 · 이미지·PDF·문서 최대 10개/각 10MB</p>
   </div>;
 };

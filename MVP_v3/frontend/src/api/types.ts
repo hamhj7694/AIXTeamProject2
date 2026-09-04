@@ -157,6 +157,8 @@ export interface CaseAction {
   actor_type: string;
   note: string;
   created_at: string;
+  updated_at?: string | null;
+  updated_by?: string | null;
 }
 
 export interface QuestionCandidate {
@@ -227,6 +229,11 @@ export interface CaseSupportSnapshot {
     risk_score: number;
     next_checks: string[];
   } | null;
+  case_context: {
+    key_signals: string[];
+    offender_claims: string[];
+    offender_demands: string[];
+  } | null;
   recommended_questions: QuestionCandidate[];
   unresolved_items: Array<{ target_field: string; description: string; priority: 'P0' | 'P1' | 'P2' }>;
   warnings: string[];
@@ -240,4 +247,57 @@ export interface AiInvocationResult {
   content: string;
   model_mode: string;
   created_at: string;
+}
+
+export type WorkCardType = 'FACT_REVIEW' | 'QUESTION_PLAN' | 'VERIFICATION_REQUEST' | 'BANK_ACTION' | 'CUSTOMER_NOTICE' | 'CASE_TRANSITION';
+
+export interface CaseWorkCard {
+  card_type: WorkCardType;
+  title: string;
+  summary: string;
+  context_sources: string[];
+  rationale: string[];
+  next_action: string;
+  questions: QuestionCandidate[];
+  suggested_claim?: string | null;
+  suggested_target?: string | null;
+  suggested_action_type?: string | null;
+  suggested_action_note?: string | null;
+  suggested_notice?: string | null;
+  suggested_transition?: string | null;
+  warnings: string[];
+  model_mode: string;
+}
+
+export interface PersonalNote {
+  note_id: string;
+  case_id: string;
+  author_id: string;
+  content: string;
+  visibility: 'PRIVATE_TO_AUTHOR';
+  created_at: string;
+  updated_at: string;
+}
+
+export type CaseMemberRole = 'CASE_OWNER' | 'CHAT_OPERATOR' | 'REVIEWER' | 'VIEWER';
+export type PresenceState = 'VIEWING' | 'TYPING' | 'AWAY' | 'OFFLINE';
+
+export interface CaseMember {
+  case_id: string;
+  user_id: string;
+  display_name: string;
+  role: CaseMemberRole;
+  status: 'ACTIVE' | 'REMOVED';
+  assigned_at: string;
+  updated_at: string;
+}
+
+export interface CasePresence {
+  case_id: string;
+  user_id: string;
+  display_name: string;
+  presence: PresenceState;
+  channel: MessageChannel;
+  last_seen_at: string;
+  expires_at: string;
 }

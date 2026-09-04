@@ -46,6 +46,7 @@ class CaseRepository(Protocol):
     async def update_verification(self, case_id: str, verification_task_id: str, expected_version: int, status: str, details: dict[str, Any] | None = None) -> dict[str, Any]: ...
     async def create_action(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]: ...
     async def list_actions(self, case_id: str) -> list[dict[str, Any]]: ...
+    async def update_action(self, case_id: str, action_id: str, status: str, updated_by: str) -> dict[str, Any]: ...
     async def update_case(self, case_id: str, expected_version: int, changes: dict[str, Any]) -> dict[str, Any]: ...
     async def create_voice_session(self, case_id: str, participants: list[str]) -> dict[str, Any]: ...
     async def update_voice_session(self, case_id: str, session_id: str, status: str) -> dict[str, Any]: ...
@@ -356,6 +357,26 @@ class InMemoryCaseRepository:
     async def list_actions(self, case_id: str) -> list[dict[str, Any]]:
         return [deepcopy(item) for item in self._actions if item["case_id"] == case_id]
 
+    async def update_action(self, case_id: str, action_id: str, status: str, updated_by: str) -> dict[str, Any]:
+        async with self._lock:
+            item = next((row for row in self._actions if row["case_id"] == case_id and row["action_id"] == action_id), None)
+            if item is None:
+                raise KeyError(action_id)
+            now = datetime.now(timezone.utc).isoformat()
+            item["status"] = status
+            item["updated_at"] = now
+            item["updated_by"] = updated_by
+            self._events.append({
+                "event_id": len(self._events) + 1,
+                "case_id": case_id,
+                "event_type": "CASE_CHECKLIST_UPDATED",
+                "actor_type": "BANK_STAFF",
+                "payload": {"action_id": action_id, "status": status},
+                "occurred_at": now,
+            })
+            self._touch_case(case_id, now)
+            return deepcopy(item)
+
     async def create_voice_session(self, case_id: str, participants: list[str]) -> dict[str, Any]:
         async with self._lock:
             if not any(item["case_id"] == case_id for item in self._records):
@@ -423,7 +444,7 @@ class InMemoryCaseRepository:
     async def queue_customer_questions(
         self, case_id: str, questions: list[dict[str, Any]], requested_by: str
     ) -> list[dict[str, Any]]:
-        """Queue bank-approved questions; never send them to the customer implicitly."""
+        """Queue reviewed questions or policy-allowlisted CUSTOMER_AGENT questions."""
         async with self._lock:
             if not any(item["case_id"] == case_id and not item.get("deleted_at") for item in self._records):
                 raise KeyError(case_id)

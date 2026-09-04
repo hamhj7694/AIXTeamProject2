@@ -1,7 +1,16 @@
-import type { CaseFact, DiagnosisEvent, RiskLevel, StoredCase, VerificationTask } from './api/types';
+import type { CaseFact, DiagnosisEvent, StoredCase, VerificationTask } from './api/types';
 
-export const riskLabel = (risk: RiskLevel) => ({ HIGH: '고위험', LOW: '주의', NORMAL: '낮은 위험' }[risk]);
-export const riskTone = (risk: RiskLevel) => ({ HIGH: 'danger', LOW: 'warning', NORMAL: 'safe' }[risk]);
+export type CaseState = 'LOSS' | 'SUSPECTED' | 'RESOLVED';
+
+/** User-facing state is driven by victim impact and work completion, not ML risk. */
+export const caseState = (item: StoredCase): CaseState => {
+  if (item.status === 'CLOSED' || item.mode === 'CLOSED') return 'RESOLVED';
+  if (item.mode === 'RECOVERY' || item.victim_transfer_status === 'YES' || (item.actual_loss_amount_krw ?? 0) > 0) return 'LOSS';
+  return 'SUSPECTED';
+};
+
+export const caseStateLabel = (state: CaseState) => ({ LOSS: '피해 발생', SUSPECTED: '의심', RESOLVED: '해결' }[state]);
+export const caseStateTone = (state: CaseState) => ({ LOSS: 'danger', SUSPECTED: 'warning', RESOLVED: 'safe' }[state]);
 
 export const statusLabel = (status: string, mode?: string) => {
   if (status === 'CLOSED' || mode === 'CLOSED') return '종료';
@@ -16,7 +25,9 @@ export const verificationStatusLabel = (status: string) => ({
   PENDING: '확인 대기', IN_PROGRESS: '확인 중', COMPLETED: '확인 완료', ON_HOLD: '보류', FAILED: '확인 불가',
 }[status] ?? status);
 
-export const actionLabel = (type: string) => ({
+export const actionLabel = (type: string) => {
+  if (type.startsWith('AI_CHECKLIST:')) return 'AI 추가 확인 체크리스트';
+  return ({
   PAYMENT_HOLD_REVIEW: '송금·지급정지 검토',
   ACCOUNT_REPORT_GUIDANCE: '사기이용계좌 신고 안내',
   EVIDENCE_PRESERVATION: '증빙자료 확보',
@@ -24,8 +35,10 @@ export const actionLabel = (type: string) => ({
   CUSTOMER_CALLBACK: '고객 재확인',
   HUMAN_TAKEOVER: '담당자 직접 대응',
   RESUME_AI: 'AI 지원 재개',
+  STAFF_JUDGMENT: '담당자 판단·조치 기록',
   OTHER: '기타 대응 업무',
-}[type] ?? type.replace(/_/g, ' '));
+  }[type] ?? type.replace(/_/g, ' '));
+};
 
 export const fieldLabel = (field: string) => ({
   transfer_status: '실제 송금 여부', VICTIM_TRANSFER_STATUS: '실제 송금 여부',

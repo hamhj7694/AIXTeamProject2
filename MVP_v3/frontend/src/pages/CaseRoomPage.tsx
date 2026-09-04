@@ -1,15 +1,30 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { AlertCircle, Bot, CheckCircle2, Loader2, PanelRightOpen, RefreshCw } from 'lucide-react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { AlertCircle, Bot, CheckCircle2, ChevronDown, ChevronUp, Loader2, PanelRightOpen, RefreshCw, Users } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
-import { casesApi } from '../api/cases';
-import type { CaseBundle, CaseFact, CaseSupportSnapshot, StoredCase, VerificationTask } from '../api/types';
+import { casesApi, CURRENT_BANK_USER } from '../api/cases';
+import type { CaseAction, CaseBundle, CaseFact, CaseMessage, CaseSupportSnapshot, StoredCase, VerificationTask } from '../api/types';
 import { ActionDialog, QuestionDialog, VerificationDialog } from '../components/CaseActionDialogs';
 import { CaseContextPanel } from '../components/CaseContextPanel';
 import { ConversationComposer, type ComposerTarget } from '../components/ConversationComposer';
 import { SharedConversation } from '../components/SharedConversation';
-import { caseSummary, incidentTitle, riskLabel, riskTone, statusLabel } from '../presentation';
+import { BankBookmarks } from '../components/BankBookmarks';
+import { BankPersonalNotes } from '../components/BankPersonalNotes';
+import { ParticipantManager } from '../components/ParticipantManager';
+import { readBankBookmarks, writeBankBookmarks, type BankBookmark } from '../bank/bookmarks';
+import { stripBankAiMention } from '../bank/aiMention';
+import { caseState, caseStateTone, caseSummary, incidentTitle, statusLabel } from '../presentation';
 
 type DialogState = { type: 'questions' } | { type: 'verification'; task?: VerificationTask } | { type: 'action' } | null;
+
+const caseContextRevision = (caseItem: StoredCase, bundle: CaseBundle, facts: CaseFact[]) => JSON.stringify({
+  // AI support에 실제로 전달되는 의미 상태만 지문화한다. 일반 채팅이나
+  // presence 갱신만으로 동일한 AI 사건 맥락을 다시 만들지 않는다.
+  case: [caseItem.victim_transfer_status],
+  questions: bundle.questions.map((item) => [item.question_id, item.status, item.answer_text, item.asked_at, item.answered_at]),
+  facts: facts.map((item) => [item.fact_id, item.status, item.value, item.confirmed_at]),
+  verifications: bundle.verification_tasks.map((item) => [item.verification_task_id, item.version, item.status, item.result_summary, item.updated_at]),
+  actions: bundle.recent_actions.map((item) => [item.action_id, item.status, item.note, item.created_at]),
+});
 
 export const CaseRoomPage: React.FC<{ onMutated: () => void }> = ({ onMutated }) => {
   const { caseId = '' } = useParams();
@@ -22,9 +37,19 @@ export const CaseRoomPage: React.FC<{ onMutated: () => void }> = ({ onMutated })
   const [error, setError] = useState('');
   const [partialWarnings, setPartialWarnings] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const [aiPendingCount, setAiPendingCount] = useState(0);
+  const [checklistBusy, setChecklistBusy] = useState(false);
   const [view, setView] = useState<'conversation' | 'timeline'>('conversation');
   const [dialog, setDialog] = useState<DialogState>(null);
   const [contextOpen, setContextOpen] = useState(false);
+  const [bookmarkOpen, setBookmarkOpen] = useState(false);
+  const [noteOpen, setNoteOpen] = useState(false);
+  const [participantOpen, setParticipantOpen] = useState(false);
+  const [briefOpen, setBriefOpen] = useState(true);
+  const [bookmarks, setBookmarks] = useState<BankBookmark[]>([]);
+  const lastSupportRevisionRef = useRef('');
+  const aiQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const aiGenerationRef = useRef(0);
 
   const load = useCallback(async (quiet = false, refreshSupport = !quiet) => {
     if (!caseId) return;
@@ -38,38 +63,132 @@ export const CaseRoomPage: React.FC<{ onMutated: () => void }> = ({ onMutated })
     }
     setCaseItem(caseResult.value); if (!quiet) setError('');
     const warnings: string[] = [];
-    if (bundleResult.status === 'fulfilled') setBundle(bundleResult.value); else warnings.push('대화와 업무 기록을 갱신하지 못했습니다.');
-    if (factsResult.status === 'fulfilled') setFacts(factsResult.value); else warnings.push('확인된 사실을 갱신하지 못했습니다.');
-    if (refreshSupport) {
+    const nextBundle = bundleResult.status === 'fulfilled' ? bundleResult.value : null;
+    const nextFacts = factsResult.status === 'fulfilled' ? factsResult.value : null;
+    if (nextBundle) setBundle(nextBundle); else warnings.push('대화와 업무 기록을 갱신하지 못했습니다.');
+    if (nextFacts) setFacts(nextFacts); else warnings.push('확인된 사실을 갱신하지 못했습니다.');
+    const nextRevision = nextBundle && nextFacts ? caseContextRevision(caseResult.value, nextBundle, nextFacts) : '';
+    const caseContextChanged = Boolean(nextRevision && nextRevision !== lastSupportRevisionRef.current);
+    if (refreshSupport || caseContextChanged) {
+      if (nextRevision) lastSupportRevisionRef.current = nextRevision;
       try { setSupport(await casesApi.support(caseId)); }
       catch { setSupport(null); warnings.push('AI Brief를 갱신하지 못해 최초 Brief를 표시합니다.'); }
     }
     setPartialWarnings(warnings); setLoading(false); setRefreshing(false);
   }, [caseId]);
 
+  const showMessage = (message: CaseMessage) => {
+    setBundle((current) => current ? {
+      ...current,
+      recent_messages: [...current.recent_messages.filter((item) => item.message_id !== message.message_id), message],
+    } : current);
+  };
+
+  const enqueueAiReply = useCallback((prompt?: string, responseStyle: 'CONVERSATIONAL' | 'BRIEF' = 'CONVERSATIONAL') => {
+    const generation = aiGenerationRef.current;
+    const targetCaseId = caseId;
+    setAiPendingCount((count) => count + 1);
+    const run = async () => {
+      try {
+        // TEAM은 고객에게 공개되지 않는 은행 내부 채널이며, 응답도 같은
+        // 타임라인에 표시된다. AI는 호출 시점에 DB의 최신 Case를 다시 읽는다.
+        const reply = await casesApi.invokeAi(targetCaseId, prompt, 'TEAM', responseStyle);
+        if (aiGenerationRef.current === generation) {
+          showMessage({
+            message_id: reply.message_id,
+            case_id: targetCaseId,
+            actor_type: 'BANK_AGENT',
+            actor_user_id: 'case-copilot',
+            actor_display_name: 'CaseCopilot',
+            actor_role: 'BANK_AGENT',
+            content: reply.content,
+            channel: 'TEAM',
+            audience: 'BANK_INTERNAL',
+            visibility: 'BANK_INTERNAL',
+            message_kind: 'AI_RESPONSE',
+            private_owner_user_id: null,
+            mentions: ['CaseCopilot'],
+            reply_to_message_id: null,
+            attachments: [],
+            created_at: reply.created_at,
+          });
+          await load(true, false);
+        }
+      } catch (reason) {
+        if (aiGenerationRef.current === generation) {
+          setError(reason instanceof Error ? `메시지는 저장됐지만 AI 답변을 만들지 못했습니다. ${reason.message}` : '메시지는 저장됐지만 AI 답변을 만들지 못했습니다.');
+        }
+      } finally {
+        if (aiGenerationRef.current === generation) setAiPendingCount((count) => Math.max(0, count - 1));
+      }
+    };
+    // 연속 입력은 병렬 호출하지 않고 저장 순서대로 분석해 응답 순서를 지킨다.
+    aiQueueRef.current = aiQueueRef.current.then(run, run);
+  }, [caseId, load]);
+
   useEffect(() => {
-    setCaseItem(null); setBundle(null); setSupport(null); setFacts([]); setDialog(null); setContextOpen(false); setError('');
+    aiGenerationRef.current += 1;
+    aiQueueRef.current = Promise.resolve();
+    setAiPendingCount(0);
+    lastSupportRevisionRef.current = '';
+    setCaseItem(null); setBundle(null); setSupport(null); setFacts([]); setDialog(null); setContextOpen(false); setBookmarkOpen(false); setNoteOpen(false); setParticipantOpen(false); setBriefOpen(true); setBookmarks(readBankBookmarks(caseId)); setError('');
     void load();
+    void casesApi.members(caseId).then((items) => items.some((item) => item.user_id === CURRENT_BANK_USER.user_id) ? undefined : casesApi.upsertMember(caseId, { ...CURRENT_BANK_USER, role: 'CHAT_OPERATOR' })).catch(() => undefined);
+    const heartbeat = () => { void casesApi.heartbeat(caseId, CURRENT_BANK_USER, 'VIEWING', 'TEAM').catch(() => undefined); };
+    heartbeat();
     const timer = window.setInterval(() => { void load(true); }, 5000);
-    return () => window.clearInterval(timer);
+    const presenceTimer = window.setInterval(heartbeat, 30000);
+    return () => { window.clearInterval(timer); window.clearInterval(presenceTimer); };
   }, [load]);
 
-  const refreshAfterMutation = async () => { await load(true, true); onMutated(); };
-  const send = async (content: string, files: File[], target: ComposerTarget) => {
-    setBusy(true);
+  const refreshAfterMutation = async () => { await load(true, false); onMutated(); };
+  const send = async (content: string, files: File[], target: ComposerTarget, requestAi: boolean) => {
+    setBusy(true); setError('');
     try {
       const visibility = target === 'CUSTOMER' ? 'CUSTOMER' : 'BANK_INTERNAL';
       const attachments = [];
       for (const file of files) attachments.push(await casesApi.uploadAttachment(caseId, file, visibility));
-      await casesApi.sendMessage(caseId, content, target, attachments.map((item) => item.attachment_id));
-      await refreshAfterMutation();
+      const message = await casesApi.sendMessage(caseId, content, target, attachments.map((item) => item.attachment_id));
+      // AI보다 먼저 저장된 메시지를 화면에 넣어 입력 대기를 즉시 끝낸다.
+      showMessage(message);
+      onMutated();
+      if (target === 'TEAM' && requestAi && content) {
+        const requestText = stripBankAiMention(content) || '현재 사건에서 가장 시급하게 확인하거나 조치할 사항을 알려주세요.';
+        const copilotPrompt = `은행 담당자의 질문: ${requestText}\n\n현재 Shared Case 맥락만 바탕으로, 동료에게 답하듯 자연스럽게 업무를 지원해 주세요. 확인되지 않은 사실은 추정하지 말고, 고객에게 자동 전송하거나 지급정지·신고 등 외부 조치를 완료한 것처럼 표현하지 마세요.`;
+        window.requestAnimationFrame(() => enqueueAiReply(copilotPrompt));
+      } else {
+        window.requestAnimationFrame(() => { void load(true, false); });
+      }
     } finally { setBusy(false); }
   };
   const invokeAi = async () => {
-    if (busy) return; setBusy(true); setError('');
-    try { await casesApi.invokeAi(caseId); await refreshAfterMutation(); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : 'AI 사건 정리를 요청하지 못했습니다.'); }
-    finally { setBusy(false); }
+    if (aiPendingCount > 0) return;
+    setError('');
+    enqueueAiReply(undefined, 'BRIEF');
+  };
+  const toggleBookmark = (bookmark: BankBookmark) => {
+    const next = bookmarks.some((item) => item.entryId === bookmark.entryId) ? bookmarks.filter((item) => item.entryId !== bookmark.entryId) : [...bookmarks, bookmark];
+    setBookmarks(next); writeBankBookmarks(caseId, next);
+  };
+  const createJudgment = async (note: string) => {
+    setChecklistBusy(true); setError('');
+    try {
+      await casesApi.createAction(caseId, 'STAFF_JUDGMENT', note);
+      await refreshAfterMutation();
+      return true;
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '담당자 판단을 저장하지 못했습니다.');
+      return false;
+    } finally { setChecklistBusy(false); }
+  };
+  const toggleChecklist = async (action: CaseAction, status: 'REQUESTED' | 'COMPLETED') => {
+    setChecklistBusy(true); setError('');
+    try {
+      await casesApi.updateAction(caseId, action.action_id, status);
+      await refreshAfterMutation();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '체크리스트 상태를 변경하지 못했습니다.');
+    } finally { setChecklistBusy(false); }
   };
 
   if (loading && !caseItem) return <section className="room-state"><Loader2 className="spin" size={24}/><strong>Shared Case를 불러오고 있습니다.</strong><span>대화와 현재 맥락을 함께 준비합니다.</span></section>;
@@ -79,22 +198,25 @@ export const CaseRoomPage: React.FC<{ onMutated: () => void }> = ({ onMutated })
   const brief = support?.case_brief?.summary || caseItem.initial_brief || caseSummary(caseItem);
   return <section className="case-room">
     <header className="case-room-header">
-      <div className="case-heading"><span className={`risk-dot ${riskTone(caseItem.risk)}`}/><div><div className="case-title-line"><span>{caseItem.case_id}</span><h1>{incidentTitle(caseItem)}</h1></div><p>{statusLabel(caseItem.status, caseItem.mode)} · 담당자 {caseItem.primary_assignee || '미배정'}</p></div></div>
-      <div className="room-header-actions"><span className={`risk-pill ${riskTone(caseItem.risk)}`}>{riskLabel(caseItem.risk)} {Math.round(caseItem.risk_score)}</span><Link className="customer-preview-link" to={`/customer/cases/${encodeURIComponent(caseId)}`}>고객 화면 열기</Link><button className="icon-button" onClick={() => void load(true)} aria-label="Case 새로고침"><RefreshCw size={17} className={refreshing ? 'spin' : ''}/></button><button className="context-open" onClick={() => setContextOpen(true)}><PanelRightOpen size={17}/>사건 맥락</button></div>
+      <div className="case-heading"><span className={`risk-dot ${caseStateTone(caseState(caseItem))}`}/><div><div className="case-title-line"><span>{caseItem.case_id}</span><h1>{incidentTitle(caseItem)}</h1></div><p>{statusLabel(caseItem.status, caseItem.mode)} · 담당자 {caseItem.primary_assignee || '미배정'}</p></div></div>
+      <div className="room-header-actions"><button className="participant-open" type="button" onClick={() => setParticipantOpen(true)}><Users size={16}/>참여자 관리</button><Link className="customer-preview-link" to={`/customer/cases/${encodeURIComponent(caseId)}`}>고객 화면 열기</Link><button className="icon-button" onClick={() => void load(true, true)} aria-label="Case와 AI 사건 맥락 새로고침"><RefreshCw size={17} className={refreshing ? 'spin' : ''}/></button><button className="context-open" onClick={() => setContextOpen(true)}><PanelRightOpen size={17}/>사건 맥락</button></div>
     </header>
     <div className="case-room-grid">
       <main className="conversation-column">
-        <section className="ai-brief"><div className="ai-brief-label"><Bot size={16}/><span>AI BRIEF</span>{support?.available && <small><CheckCircle2 size={12}/>최신 Case 반영</small>}</div><p>{brief}</p></section>
+        <section className={`ai-brief${briefOpen ? '' : ' collapsed'}`}><div className="ai-brief-label"><Bot size={16}/><span>AI BRIEF</span><div className="ai-brief-controls">{support?.available && <small><CheckCircle2 size={12}/>최신 Case 반영</small>}<button type="button" className="ai-brief-toggle" aria-expanded={briefOpen} aria-controls="case-ai-brief-content" onClick={() => setBriefOpen((current) => !current)}>{briefOpen ? <><span>접기</span><ChevronUp size={14}/></> : <><span>펼치기</span><ChevronDown size={14}/></>}</button></div></div>{briefOpen && <p id="case-ai-brief-content">{brief}</p>}</section>
         {partialWarnings.length > 0 && <div className="partial-warning"><AlertCircle size={15}/><span>{partialWarnings.join(' ')}</span></div>}
         {error && <div className="partial-warning danger"><AlertCircle size={15}/><span>{error}</span></div>}
-        <div className="conversation-toolbar"><div><button className={view === 'conversation' ? 'active' : ''} onClick={() => setView('conversation')}>대화</button><button className={view === 'timeline' ? 'active' : ''} onClick={() => setView('timeline')}>전체 기록</button></div><span>{refreshing ? '업데이트 확인 중' : '5초마다 안전 갱신'}</span></div>
-        <SharedConversation caseItem={caseItem} bundle={bundle} view={view} onEditVerification={(task) => setDialog({ type: 'verification', task })}/>
-        <ConversationComposer busy={busy} onSend={send} onOpenQuestions={() => setDialog({ type: 'questions' })} onOpenVerification={() => setDialog({ type: 'verification' })} onOpenAction={() => setDialog({ type: 'action' })} onInvokeAi={() => void invokeAi()}/>
+        <div className="conversation-toolbar"><div><button className={view === 'conversation' ? 'active' : ''} onClick={() => setView('conversation')}>대화</button><button className={view === 'timeline' ? 'active' : ''} onClick={() => setView('timeline')}>전체 기록</button></div><span>{refreshing ? '업데이트 확인 중' : '변경 시 AI 사건 맥락 자동 반영'}</span></div>
+        <SharedConversation caseItem={caseItem} bundle={bundle} view={view} bookmarkedIds={new Set(bookmarks.map((item) => item.entryId))} onToggleBookmark={toggleBookmark} onEditVerification={(task) => setDialog({ type: 'verification', task })}/>
+        <ConversationComposer busy={busy} aiBusy={aiPendingCount > 0} onSend={send} onOpenQuestions={() => setDialog({ type: 'questions' })} onOpenVerification={() => setDialog({ type: 'verification' })} onOpenAction={() => setDialog({ type: 'action' })} onInvokeAi={() => void invokeAi()} onOpenNotes={() => setNoteOpen(true)} onOpenBookmarks={() => setBookmarkOpen(true)} bookmarkCount={bookmarks.length}/>
       </main>
-      <CaseContextPanel caseItem={caseItem} bundle={bundle} support={support} facts={facts} open={contextOpen} onClose={() => setContextOpen(false)} onEditVerification={(task) => setDialog({ type: 'verification', task })} onCreateAction={() => setDialog({ type: 'action' })}/>
+      <CaseContextPanel caseItem={caseItem} bundle={bundle} facts={facts} support={support} open={contextOpen} onEditVerification={(task) => setDialog({ type: 'verification', task })} onCreateJudgment={createJudgment} onToggleChecklist={toggleChecklist} checklistBusy={checklistBusy}/>
     </div>
     {dialog?.type === 'questions' && <QuestionDialog caseId={caseId} initial={support?.recommended_questions ?? []} onDone={refreshAfterMutation} onClose={() => setDialog(null)}/>} 
     {dialog?.type === 'verification' && <VerificationDialog caseId={caseId} task={dialog.task} onDone={refreshAfterMutation} onClose={() => setDialog(null)}/>} 
     {dialog?.type === 'action' && <ActionDialog caseId={caseId} recovery={caseItem.mode === 'RECOVERY'} onDone={refreshAfterMutation} onClose={() => setDialog(null)}/>} 
+    <BankBookmarks open={bookmarkOpen} items={bookmarks} onClose={() => setBookmarkOpen(false)}/>
+    <BankPersonalNotes caseId={caseId} open={noteOpen} onClose={() => setNoteOpen(false)}/>
+    <ParticipantManager caseId={caseId} open={participantOpen} onClose={() => setParticipantOpen(false)} onChanged={refreshAfterMutation}/>
   </section>;
 };

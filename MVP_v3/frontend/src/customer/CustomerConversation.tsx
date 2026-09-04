@@ -8,6 +8,7 @@ import { CustomerQuestionCard } from './CustomerQuestionCard';
 import { RecoveryDetailCard } from './RecoveryCards';
 import type { RecoveryStep } from './recovery';
 import { buildCustomerTimeline, type CustomerTimelineEntry } from './timeline';
+import { SafeMarkdown } from '../components/SafeMarkdown';
 
 interface Props {
   bundle: CaseBundle;
@@ -25,7 +26,7 @@ const MessageEntry: React.FC<{ entry: CustomerTimelineEntry; message: CaseMessag
   const ai = message.actor_type === 'CUSTOMER_AGENT' || message.message_kind === 'AI_RESPONSE';
   return <article id={entry.id} className={`customer-message-row ${mine ? 'mine' : ''}`}>
     <span className={`customer-avatar ${mine ? 'customer' : ai ? 'ai' : 'bank'}`}>{mine ? <UserRound size={17}/> : ai ? <Bot size={17}/> : <ShieldCheck size={17}/>}</span>
-    <div className="customer-message-wrap"><div className="customer-entry-meta"><b>{mine ? '나' : message.actor_display_name || (ai ? '안전 상담 AI' : '은행 담당자')}</b><BookmarkButton entry={entry} active={active} label={mine ? '내 메시지' : ai ? 'AI 안내' : '은행 안내'} summary={message.content || '첨부파일'} onToggle={onToggle}/></div><div className="customer-message-bubble"><p>{message.content}</p>{message.attachments?.length > 0 && <div className="attachment-list">{message.attachments.map((attachment) => <a key={attachment.attachment_id} href={casesApi.customerAttachmentUrl(attachment)} target="_blank" rel="noreferrer"><FileText size={15}/><span>{attachment.original_name}</span><small>{Math.ceil(attachment.size_bytes / 1024)}KB</small></a>)}</div>}</div><time>{formatClock(message.created_at)}</time></div>
+    <div className="customer-message-wrap"><div className="customer-entry-meta"><b>{mine ? '나' : message.actor_display_name || (ai ? '안전 상담 AI' : '은행 담당자')}</b><BookmarkButton entry={entry} active={active} label={mine ? '내 메시지' : ai ? 'AI 안내' : '은행 안내'} summary={message.content || '첨부파일'} onToggle={onToggle}/></div><div className="customer-message-bubble"><SafeMarkdown content={message.content}/>{message.attachments?.length > 0 && <div className="attachment-list">{message.attachments.map((attachment) => <a key={attachment.attachment_id} href={casesApi.customerAttachmentUrl(attachment)} target="_blank" rel="noreferrer"><FileText size={15}/><span>{attachment.original_name}</span><small>{Math.ceil(attachment.size_bytes / 1024)}KB</small></a>)}</div>}</div><time>{formatClock(message.created_at)}</time></div>
   </article>;
 };
 

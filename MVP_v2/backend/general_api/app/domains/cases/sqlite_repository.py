@@ -103,6 +103,9 @@ class LocalSqliteCaseRepository(InMemoryCaseRepository):
     async def create_action(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]:
         result = await super().create_action(case_id, record); self._persist(); return result
 
+    async def update_action(self, case_id: str, action_id: str, status: str, updated_by: str) -> dict[str, Any]:
+        result = await super().update_action(case_id, action_id, status, updated_by); self._persist(); return result
+
     async def create_voice_session(self, case_id: str, participants: list[str]) -> dict[str, Any]:
         result = await super().create_voice_session(case_id, participants); self._persist(); return result
 

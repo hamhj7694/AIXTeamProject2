@@ -1,17 +1,19 @@
 import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, Check, Loader2, Plus, X } from 'lucide-react';
+import { AlertCircle, Check, ListChecks, Loader2, Plus, Sparkles, Trash2, X } from 'lucide-react';
 import { casesApi } from '../api/cases';
 import type { QuestionCandidate, VerificationTask } from '../api/types';
 import { actionLabel } from '../presentation';
 
 const DialogShell: React.FC<{ title: string; description: string; children: React.ReactNode; onClose: () => void }> = ({ title, description, children, onClose }) => {
   const dialogRef = useRef<HTMLElement>(null);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
   useEffect(() => {
     dialogRef.current?.focus();
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onCloseRef.current(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, []);
   return <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) onClose(); }}><section ref={dialogRef} tabIndex={-1} className="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title"><header><div><h2 id="dialog-title">{title}</h2><p>{description}</p></div><button className="icon-button" onClick={onClose} aria-label="창 닫기"><X size={18}/></button></header>{children}</section></div>;
 };
 
@@ -22,8 +24,10 @@ export const QuestionDialog: React.FC<{ caseId: string; initial: QuestionCandida
   const [selected, setSelected] = useState<string[]>(initial.filter((item) => item.priority === 'P0').map((item) => item.question_id));
   const [custom, setCustom] = useState('');
   const [loading, setLoading] = useState(initial.length === 0);
+  const [recommending, setRecommending] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [aiNote, setAiNote] = useState('');
   useEffect(() => {
     if (initial.length) return;
     let active = true;
@@ -36,6 +40,21 @@ export const QuestionDialog: React.FC<{ caseId: string; initial: QuestionCandida
     setItems((current) => [...current, { question_id: id, target_field: id, question_text: value, reason: '은행 담당자가 현재 Case 맥락에 따라 직접 추가했습니다.', priority: 'P1', options: [], answer_mode: 'TEXT', allow_free_text: true }]);
     setSelected((current) => [...current, id]); setCustom('');
   };
+  const recommendQuestions = async () => {
+    if (recommending) return;
+    setRecommending(true); setError(''); setAiNote('');
+    try {
+      const card = await casesApi.generateWorkCard(caseId, 'QUESTION_PLAN');
+      const recommended = card.questions ?? [];
+      setItems((current) => {
+        const keys = new Set(current.map((item) => `${item.target_field}|${item.question_text.trim()}`));
+        return [...current, ...recommended.filter((item) => !keys.has(`${item.target_field}|${item.question_text.trim()}`))];
+      });
+      setSelected((current) => [...new Set([...current, ...recommended.map((item) => item.question_id)])]);
+      setAiNote(recommended.length ? `${recommended.length}개의 질문 초안을 현재 목록에 반영했습니다. 내용을 검토하고 수정·선택해 주세요.` : '현재 Case에서 새로 추천할 질문이 없습니다.');
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'AI 질문 추천을 만들지 못했습니다.'); }
+    finally { setRecommending(false); }
+  };
   const chosen = useMemo(() => items.filter((item) => selected.includes(item.question_id)), [items, selected]);
   const submit = async () => {
     if (!chosen.length || saving) return;
@@ -44,8 +63,10 @@ export const QuestionDialog: React.FC<{ caseId: string; initial: QuestionCandida
     catch (reason) { setError(reason instanceof Error ? reason.message : '질문을 고객 대기열에 등록하지 못했습니다.'); }
     finally { setSaving(false); }
   };
-  return <DialogShell title="고객에게 확인할 질문" description="AI가 이미 확인한 내용을 제외하고 제안한 질문입니다. 필요한 항목만 선택하세요." onClose={onClose}>
+  return <DialogShell title="고객에게 확인 질문" description="AI가 이미 확인한 내용을 제외하고 제안한 질문입니다. 필요한 항목만 선택하세요." onClose={onClose}>
     <div className="dialog-body">
+      <div className="ai-dialog-action"><div><Sparkles size={16}/><span><b>AI 질문 추천</b><small>현재 Case의 대화·답변·확인 이력을 읽고 중복되지 않는 질문을 제안합니다.</small></span></div><button type="button" onClick={() => void recommendQuestions()} disabled={recommending || saving}>{recommending ? <Loader2 className="spin" size={15}/> : <Sparkles size={15}/>}AI에게 질문 추천 받기</button></div>
+      {aiNote && <p className="ai-recommendation-note">{aiNote}</p>}
       {loading ? <div className="dialog-loading"><Loader2 className="spin" size={18}/>현재 Case에서 필요한 질문을 정리하고 있습니다.</div> : <div className="question-options">{items.length ? items.map((item) => <label key={item.question_id}><input type="checkbox" checked={selected.includes(item.question_id)} onChange={() => setSelected((current) => current.includes(item.question_id) ? current.filter((id) => id !== item.question_id) : [...current, item.question_id])}/><span><b>{item.question_text}</b><small><em>{item.priority}</em>{item.reason}</small></span></label>) : <p className="dialog-empty">추가로 추천할 질문이 없습니다. 필요한 질문을 직접 추가할 수 있습니다.</p>}</div>}
       <div className="inline-add"><input value={custom} onChange={(event) => setCustom(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addCustom(); } }} placeholder="직접 질문 추가"/><button type="button" onClick={addCustom} disabled={!custom.trim()}><Plus size={15}/>추가</button></div>
       <DialogError message={error}/>
@@ -54,31 +75,70 @@ export const QuestionDialog: React.FC<{ caseId: string; initial: QuestionCandida
   </DialogShell>;
 };
 
+type VerificationDraft = { id: string; claim: string; target: string };
+
+const emptyVerificationDraft = (): VerificationDraft => ({ id: crypto.randomUUID(), claim: '', target: '' });
+
 export const VerificationDialog: React.FC<{ caseId: string; task?: VerificationTask | null; onDone: () => Promise<void>; onClose: () => void }> = ({ caseId, task, onDone, onClose }) => {
-  const [claim, setClaim] = useState(task?.claim ?? '');
-  const [target, setTarget] = useState(task?.target ?? '');
+  const [drafts, setDrafts] = useState<VerificationDraft[]>(() => task ? [] : [emptyVerificationDraft()]);
   const [status, setStatus] = useState(task?.status ?? 'PENDING');
   const [result, setResult] = useState(task?.result_summary ?? '');
   const [evidence, setEvidence] = useState(task?.evidence_url ?? '');
   const [source, setSource] = useState(task?.rag_source ?? '');
   const [customerVisible, setCustomerVisible] = useState(task?.customer_visible ?? false);
+  const [recommending, setRecommending] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [aiNote, setAiNote] = useState('');
+  const completeDrafts = drafts.filter((item) => item.claim.trim() && item.target.trim());
+
+  const updateDraft = (id: string, field: 'claim' | 'target', value: string) => {
+    setDrafts((current) => current.map((item) => item.id === id ? { ...item, [field]: value } : item));
+  };
+  const recommendVerification = async () => {
+    if (recommending) return;
+    setRecommending(true); setError(''); setAiNote('');
+    try {
+      const card = await casesApi.generateWorkCard(caseId, 'VERIFICATION_REQUEST');
+      const proposed = { claim: card.suggested_claim?.trim() ?? '', target: card.suggested_target?.trim() ?? '' };
+      if (!proposed.claim || !proposed.target) {
+        setAiNote('현재 Case에서 구체적인 기관 확인 초안을 만들지 못했습니다. 항목을 직접 입력해 주세요.');
+      } else {
+        setDrafts((current) => {
+          const duplicate = current.some((item) => item.claim.trim() === proposed.claim && item.target.trim() === proposed.target);
+          if (duplicate) return current;
+          const blankIndex = current.findIndex((item) => !item.claim.trim() && !item.target.trim());
+          if (blankIndex < 0) return [...current, { id: crypto.randomUUID(), ...proposed }];
+          return current.map((item, index) => index === blankIndex ? { ...item, ...proposed } : item);
+        });
+        setAiNote('AI가 사칭 주장과 공식 확인 대상을 초안으로 작성했습니다. 기관 공식 대표번호나 담당자 연락처를 확인해 수정할 수 있습니다.');
+      }
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'AI 기관 확인 추천을 만들지 못했습니다.'); }
+    finally { setRecommending(false); }
+  };
   const submit = async (event: FormEvent) => {
     event.preventDefault(); if (saving) return; setSaving(true); setError('');
     try {
-      if (task) await casesApi.updateVerification(caseId, task, { status, result_summary: result || null, evidence_url: evidence || null, rag_source: source || null, verified_by: '은행 담당자', customer_visible: customerVisible });
-      else await casesApi.createVerification(caseId, claim.trim(), target.trim());
+      if (task) {
+        await casesApi.updateVerification(caseId, task, { status, result_summary: result || null, evidence_url: evidence || null, rag_source: source || null, verified_by: '은행 담당자', customer_visible: customerVisible });
+      } else {
+        for (const draft of completeDrafts) await casesApi.createVerification(caseId, draft.claim.trim(), draft.target.trim());
+      }
       await onDone(); onClose();
     } catch (reason) { setError(reason instanceof Error ? reason.message : '기관 확인 업무를 저장하지 못했습니다.'); }
     finally { setSaving(false); }
   };
-  return <DialogShell title={task ? '기관 확인 결과' : '기관 확인 요청'} description="외부 기관에 자동 전송되지 않습니다. 공식 채널로 확인할 업무와 결과를 Shared Case에 기록합니다." onClose={onClose}>
+  return <DialogShell title={task ? '기관 확인 결과' : '기관 확인 리스트'} description={task ? '공식 채널에서 확인한 결과를 기록하고 고객 공개 여부를 결정합니다.' : '외부 기관으로 즉시 전송되지 않습니다. 확인할 주장과 공식 확인 대상을 목록으로 검토한 뒤 Shared Case에 등록합니다.'} onClose={onClose}>
     <form onSubmit={submit}><div className="dialog-body form-grid">
-      {!task && <><label>확인할 주장<textarea value={claim} onChange={(event) => setClaim(event.target.value)} rows={3} placeholder="예: 검찰이 안전계좌 이체를 요구했다" required/></label><label>확인 대상<input value={target} onChange={(event) => setTarget(event.target.value)} placeholder="기관명, 전화번호, 계좌번호 등" required/></label></>}
+      {!task && <>
+        <div className="ai-dialog-action"><div><Sparkles size={16}/><span><b>AI 기관 확인 추천</b><small>현재 Case 전체 맥락에서 사칭 기관·주장·확인 대상을 찾아 초안을 작성합니다.</small></span></div><button type="button" onClick={() => void recommendVerification()} disabled={recommending || saving}>{recommending ? <Loader2 className="spin" size={15}/> : <Sparkles size={15}/>}AI에게 추천 받기</button></div>
+        {aiNote && <p className="ai-recommendation-note">{aiNote}</p>}
+        <div className="verification-draft-list"><div className="verification-list-title"><span><ListChecks size={15}/><b>확인 예정 항목</b></span><small>{completeDrafts.length}개 등록 가능</small></div>{drafts.map((draft, index) => <section key={draft.id} className="verification-draft-item"><header><b>기관 확인 {index + 1}</b><button type="button" onClick={() => setDrafts((current) => current.length === 1 ? [emptyVerificationDraft()] : current.filter((item) => item.id !== draft.id))} aria-label={`기관 확인 ${index + 1} 삭제`}><Trash2 size={14}/></button></header><label>확인할 주장<textarea value={draft.claim} onChange={(event) => updateDraft(draft.id, 'claim', event.target.value)} rows={3} placeholder="예: 상대방이 서울중앙지검 수사관이라고 주장하며 안전계좌 이체를 요구했다"/></label><label>확인 기관·공식 연락처<input value={draft.target} onChange={(event) => updateDraft(draft.id, 'target', event.target.value)} placeholder="예: 서울중앙지검 공식 대표번호·담당 부서·사건번호"/></label></section>)}</div>
+        <button type="button" className="add-verification-draft" onClick={() => setDrafts((current) => [...current, emptyVerificationDraft()])}><Plus size={15}/>확인 항목 추가</button>
+      </>}
       {task && <><div className="read-only-summary"><span>확인 대상</span><b>{task.target}</b><p>{task.claim}</p></div><label>확인 상태<select value={status} onChange={(event) => setStatus(event.target.value)}><option value="PENDING">확인 대기</option><option value="IN_PROGRESS">확인 중</option><option value="COMPLETED">확인 완료</option><option value="ON_HOLD">보류</option><option value="FAILED">확인 불가</option></select></label><label>확인 결과<textarea value={result} onChange={(event) => setResult(event.target.value)} rows={3} placeholder="공식 채널에서 확인한 결과를 적어주세요."/></label><label>근거 URL<input value={evidence} onChange={(event) => setEvidence(event.target.value)} placeholder="https://..."/></label><label>공식 자료 출처<input value={source} onChange={(event) => setSource(event.target.value)} placeholder="기관 공식 홈페이지 또는 문서명"/></label><label className="check-row"><input type="checkbox" checked={customerVisible} onChange={(event) => setCustomerVisible(event.target.checked)}/>완료 결과를 고객에게 공개할 수 있음</label></>}
       <DialogError message={error}/>
-    </div><footer className="dialog-footer"><button type="button" className="secondary-action" onClick={onClose}>취소</button><button className="primary-action" disabled={saving || (!task && (!claim.trim() || !target.trim()))}>{saving ? <Loader2 className="spin" size={15}/> : <Check size={15}/>}저장</button></footer></form>
+    </div><footer className="dialog-footer"><button type="button" className="secondary-action" onClick={onClose}>취소</button><button className="primary-action" disabled={saving || (!task && completeDrafts.length === 0)}>{saving ? <Loader2 className="spin" size={15}/> : <Check size={15}/>} {task ? '결과 저장' : `확인 항목 ${completeDrafts.length}개 등록`}</button></footer></form>
   </DialogShell>;
 };
 

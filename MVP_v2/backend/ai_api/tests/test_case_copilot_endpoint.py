@@ -77,6 +77,52 @@ class CaseCopilotEndpointTest(unittest.TestCase):
                         self.assertIn("서울지검", payload["suggested_claim"])
                         self.assertIn("공식 대표번호", payload["suggested_target"])
 
+    def test_customer_support_has_safe_fallback_when_provider_is_unavailable(self) -> None:
+        with patch.dict(os.environ, {"CASE_COPILOT_MODE": "openai", "OPENAI_API_KEY": ""}, clear=False):
+            response = self.client.post("/ai/case-copilot/replies", json={
+                "case_id": "VP-1",
+                "prompt": "이미 송금했어요. 어떻게 해야 하나요?",
+                "transfer_status": "YES",
+                "assistant_mode": "CUSTOMER_SUPPORT",
+            })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["model_mode"], "CUSTOMER_SAFETY_FALLBACK")
+        self.assertIn("추가 송금", response.json()["content"])
+        self.assertIn("112", response.json()["content"])
+
+    def test_bank_case_summary_has_context_fallback_when_provider_is_unavailable(self) -> None:
+        with patch.dict(os.environ, {"CASE_COPILOT_MODE": "openai", "OPENAI_API_KEY": ""}, clear=False):
+            response = self.client.post("/ai/case-copilot/replies", json={
+                "case_id": "VP-1",
+                "prompt": "사건을 정리해 주세요.",
+                "case_summary": "검찰 사칭과 안전계좌 송금 요구 정황",
+                "known_facts": ["송금 여부: 미확인"],
+                "unresolved_verifications": ["서울지검 공식 발신 여부"],
+                "assistant_mode": "BANK_INTERNAL",
+                "response_style": "BRIEF",
+            })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["model_mode"], "BANK_CONTEXT_FALLBACK")
+        self.assertIn("## 상황 판단", response.json()["content"])
+        self.assertIn("서울지검 공식 발신 여부", response.json()["content"])
+
+    def test_primary_assignee_question_uses_latest_shared_case_assignment(self) -> None:
+        with patch.dict(os.environ, {"CASE_COPILOT_MODE": "openai", "OPENAI_API_KEY": ""}, clear=False):
+            response = self.client.post("/ai/case-copilot/replies", json={
+                "case_id": "VP-1",
+                "prompt": "이 사건 메인 담당자가 누구야?",
+                "primary_assignee": "김태환",
+                "participants": ["김태환 (메인 담당자)", "은행 담당자 (검토자)"],
+                "assistant_mode": "BANK_INTERNAL",
+            })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["model_mode"], "SHARED_CASE_LOOKUP")
+        self.assertIn("김태환", response.json()["content"])
+        self.assertIn("은행 담당자 (검토자)", response.json()["content"])
+
 
 class CustomerSupportCallBudgetTest(unittest.IsolatedAsyncioTestCase):
     async def test_per_minute_limit_stops_before_provider_call(self) -> None:

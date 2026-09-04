@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 import unittest
 from unittest.mock import patch
 
@@ -37,6 +38,20 @@ class AnalyzeCaseServiceTest(unittest.IsolatedAsyncioTestCase):
         stored = await self.repository.get(first.case_id or "")
         self.assertIsNotNone(stored)
         self.assertEqual(stored["initial_brief"], first.initial_brief)
+
+    async def test_case_persistence_keeps_signals_not_source_transcript(self) -> None:
+        source = "검찰 수사관입니다. 오늘 안에 안전계좌로 이체하고 가족에게 알리지 마세요."
+        with patch.dict(os.environ, {"DIAGNOSIS_EXTRACTOR_MODE": "fixture"}):
+            result = await self.service.analyze(AnalyzeTextRequest(text=source))
+
+        stored = await self.repository.get(result.case_id or "")
+        self.assertIsNotNone(stored)
+        persisted = json.dumps(stored, ensure_ascii=False)
+        self.assertEqual(stored["input_text"], "")
+        self.assertNotIn(source, persisted)
+        self.assertEqual(stored["diagnosis"]["model_metadata"]["source_text_retention"], "NONE")
+        self.assertTrue(stored["diagnosis"]["evidence"])
+        self.assertNotIn("안전계좌", persisted)
 
     async def test_normal_call_does_not_create_case(self) -> None:
         request = AnalyzeTextRequest(text="예금 만기일은 다음 달 15일입니다.")

@@ -538,6 +538,37 @@ class MySqlCaseRepository:
             await cursor.execute("SELECT action_id, case_id, action_type, status, actor_type, note, created_at FROM actions WHERE case_id=%s ORDER BY created_at, action_id", (case_id,))
             return [{**row, "created_at": row["created_at"].isoformat()} for row in await cursor.fetchall()]
 
+    async def update_action(self, case_id: str, action_id: str, status: str, updated_by: str) -> dict[str, Any]:
+        pool = await self._get_pool()
+        now = datetime.now()
+        async with pool.acquire() as connection:
+            try:
+                async with connection.cursor(aiomysql.DictCursor) as cursor:
+                    await cursor.execute(
+                        "SELECT action_id FROM actions WHERE case_id=%s AND action_id=%s FOR UPDATE",
+                        (case_id, action_id),
+                    )
+                    if not await cursor.fetchone():
+                        raise KeyError(action_id)
+                    await cursor.execute(
+                        "UPDATE actions SET status=%s WHERE case_id=%s AND action_id=%s",
+                        (status, case_id, action_id),
+                    )
+                    await cursor.execute(
+                        "INSERT INTO case_events (case_id, event_type, actor_type, payload_json, occurred_at) VALUES (%s,'CASE_CHECKLIST_UPDATED','BANK_STAFF',%s,%s)",
+                        (case_id, json.dumps({"action_id": action_id, "status": status, "updated_by": updated_by}), now),
+                    )
+                    await cursor.execute("UPDATE cases SET updated_at=%s WHERE case_id=%s", (now, case_id))
+                await connection.commit()
+            except Exception:
+                await connection.rollback()
+                raise
+        actions = await self.list_actions(case_id)
+        item = next((row for row in actions if row["action_id"] == action_id), None)
+        if item is None:
+            raise KeyError(action_id)
+        return item
+
     async def create_voice_session(self, case_id: str, participants: list[str]) -> dict[str, Any]:
         pool = await self._get_pool()
         from uuid import uuid4

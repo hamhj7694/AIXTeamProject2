@@ -62,6 +62,7 @@ class PublicCasePresenceResponse(PublicCollaborationModel):
 class PublicAiInvocationRequest(PublicCollaborationModel):
     prompt: str = Field(min_length=1, max_length=10_000)
     channel: Literal["TEAM", "AI_INTERNAL"] = "TEAM"
+    response_style: Literal["CONVERSATIONAL", "BRIEF"] = "CONVERSATIONAL"
     requester_user_id: str = Field(min_length=1, max_length=64)
     requester_display_name: str = Field(min_length=1, max_length=80)
     client_request_id: str | None = Field(default=None, max_length=100)

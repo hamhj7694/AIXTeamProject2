@@ -47,8 +47,14 @@ export const buildCustomerTimeline = (bundle: CaseBundle): CustomerTimelineEntry
     entries.push({ id: `customer-verification-${result.verification_task_id}`, kind: 'VERIFICATION', occurredAt: validDate(result.published_at, String(bundle.case.updated_at ?? new Date(0).toISOString())), sequence: sequence++, data: result });
   }
 
-  return entries.sort((left, right) => {
+  const chronological = entries.sort((left, right) => {
     const delta = Date.parse(left.occurredAt) - Date.parse(right.occurredAt);
     return (Number.isFinite(delta) ? delta : 0) || left.sequence - right.sequence;
   });
+  // An unanswered question is the customer's current task. Keep it after the
+  // chronological history until it is answered, even when newer chat arrives.
+  return [
+    ...chronological.filter((entry) => entry.kind !== 'QUESTION'),
+    ...chronological.filter((entry) => entry.kind === 'QUESTION'),
+  ];
 };

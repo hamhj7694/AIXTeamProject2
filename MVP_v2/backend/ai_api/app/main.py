@@ -27,6 +27,11 @@ case_copilot_service = CaseCopilotService()
 case_work_card_service = CaseWorkCardService()
 
 
+@app.get("/")
+async def root() -> dict[str, str]:
+    return {"service": "diagnosis-ai-api", "status": "ok", "health": "/health"}
+
+
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}

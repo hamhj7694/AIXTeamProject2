@@ -1,0 +1,96 @@
+name: csr-mvp-v3
+
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-csr}
+      MYSQL_USER: ${MYSQL_USER:-ham}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
+      TZ: UTC
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./database/01_mysql_csr_schema.sql:/docker-entrypoint-initdb.d/01_mysql_csr_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u$${MYSQL_USER} -p$${MYSQL_PASSWORD} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  ai-api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.ai-api
+    restart: unless-stopped
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?OPENAI_API_KEY is required}
+      OPENAI_EVENT_MODEL: ${OPENAI_EVENT_MODEL:-gpt-4o-mini}
+      OPENAI_CONTEXT_MODEL: ${OPENAI_CONTEXT_MODEL:-gpt-4o-mini}
+      OPENAI_CASE_BRIEF_MODEL: ${OPENAI_CASE_BRIEF_MODEL:-gpt-4o-mini}
+      OPENAI_CASE_COPILOT_MODEL: ${OPENAI_CASE_COPILOT_MODEL:-gpt-4o-mini}
+      OPENAI_CASE_WORK_CARD_MODEL: ${OPENAI_CASE_WORK_CARD_MODEL:-gpt-4o-mini}
+      OPENAI_TIMEOUT_SECONDS: ${OPENAI_TIMEOUT_SECONDS:-20}
+      DIAGNOSIS_MAX_INPUT_CHARS: ${DIAGNOSIS_MAX_INPUT_CHARS:-6000}
+      DIAGNOSIS_MAX_TURNS: ${DIAGNOSIS_MAX_TURNS:-30}
+      OPENAI_MAX_CALLS_PER_DIAGNOSIS: ${OPENAI_MAX_CALLS_PER_DIAGNOSIS:-31}
+      OPENAI_MAX_TOTAL_TOKENS_PER_DIAGNOSIS: ${OPENAI_MAX_TOTAL_TOKENS_PER_DIAGNOSIS:-16000}
+      OPENAI_EVENT_MAX_OUTPUT_TOKENS: ${OPENAI_EVENT_MAX_OUTPUT_TOKENS:-350}
+      OPENAI_CONTEXT_MAX_OUTPUT_TOKENS: ${OPENAI_CONTEXT_MAX_OUTPUT_TOKENS:-500}
+      OPENAI_CASE_COPILOT_MAX_OUTPUT_TOKENS: ${OPENAI_CASE_COPILOT_MAX_OUTPUT_TOKENS:-400}
+      OPENAI_CUSTOMER_AI_MAX_OUTPUT_TOKENS: ${OPENAI_CUSTOMER_AI_MAX_OUTPUT_TOKENS:-250}
+      OPENAI_CASE_WORK_CARD_MAX_OUTPUT_TOKENS: ${OPENAI_CASE_WORK_CARD_MAX_OUTPUT_TOKENS:-700}
+      CASE_COPILOT_MAX_INPUT_CHARS: ${CASE_COPILOT_MAX_INPUT_CHARS:-6000}
+      CUSTOMER_AI_MAX_CONCURRENCY: ${CUSTOMER_AI_MAX_CONCURRENCY:-2}
+      CUSTOMER_AI_MAX_CALLS_PER_MINUTE: ${CUSTOMER_AI_MAX_CALLS_PER_MINUTE:-6}
+      CUSTOMER_AI_MAX_CALLS_PER_DAY: ${CUSTOMER_AI_MAX_CALLS_PER_DAY:-40}
+      WINDOW_TURNS: ${WINDOW_TURNS:-10}
+
+  general-api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.general-api
+    restart: unless-stopped
+    environment:
+      CASE_REPOSITORY: mysql
+      MYSQL_HOST: ${DEPLOY_MYSQL_HOST:-mysql}
+      MYSQL_PORT: ${DEPLOY_MYSQL_PORT:-3306}
+      MYSQL_USER: ${MYSQL_USER:-ham}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-csr}
+      MYSQL_CONNECT_TIMEOUT_SECONDS: ${MYSQL_CONNECT_TIMEOUT_SECONDS:-10}
+      AI_API_BASE_URL: http://ai-api:8101
+      AI_API_TIMEOUT_SECONDS: ${AI_API_TIMEOUT_SECONDS:-120}
+      PROACTIVE_QUESTION_AUTOMATION: ${PROACTIVE_QUESTION_AUTOMATION:-1}
+      PROACTIVE_CASE_POLL_SECONDS: ${PROACTIVE_CASE_POLL_SECONDS:-3}
+      ATTACHMENT_STORAGE_ROOT: /app/data/uploads
+      MAX_ATTACHMENT_BYTES: ${MAX_ATTACHMENT_BYTES:-10485760}
+      CASE_ADMIN_DELETE_PASSWORD: ${CASE_ADMIN_DELETE_PASSWORD:?CASE_ADMIN_DELETE_PASSWORD is required}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://127.0.0.1:5176,http://localhost:5176}
+    volumes:
+      - attachment-data:/app/data/uploads
+    depends_on:
+      mysql:
+        condition: service_healthy
+      ai-api:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-80}:80"
+    depends_on:
+      general-api:
+        condition: service_healthy
+
+volumes:
+  mysql-data:
+  attachment-data:

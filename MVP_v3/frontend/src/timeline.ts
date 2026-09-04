@@ -1,3 +1,4 @@
+import { CURRENT_BANK_USER } from './api/cases';
 import type { CaseAction, CaseBundle, CaseEvent, CaseMessage, CustomerQuestion, StoredCase, VerificationTask } from './api/types';
 
 export type TimelineKind = 'BRIEF' | 'MESSAGE' | 'QUESTION' | 'ANSWER' | 'VERIFICATION_REQUEST' | 'VERIFICATION_RESULT' | 'ACTION' | 'EVENT';
@@ -20,7 +21,11 @@ export const buildTimeline = (caseItem: StoredCase, bundle: CaseBundle, includeT
   for (const message of bundle.recent_messages ?? []) {
     const duplicatedQuestion = message.actor_type === 'CUSTOMER_AGENT' && questionTexts.has(message.content.trim());
     const duplicatedAnswer = answerMessageIds.has(message.message_id) || (message.message_kind === 'SYSTEM_EVENT' && message.content.startsWith('고객 답변 접수'));
-    if (duplicatedQuestion || duplicatedAnswer || message.visibility === 'AI_PRIVATE') continue;
+    // AI 내부 응답은 고객에게는 절대 노출하지 않되, 요청한 은행 담당자는 자신의
+    // AI 요청·응답을 대화 흐름에서 확인할 수 있어야 한다.
+    const privateAiMessageForAnotherUser = message.visibility === 'AI_PRIVATE'
+      && message.private_owner_user_id !== CURRENT_BANK_USER.user_id;
+    if (duplicatedQuestion || duplicatedAnswer || privateAiMessageForAnotherUser) continue;
     entries.push({ id: `message-${message.message_id}`, kind: 'MESSAGE', occurredAt: message.created_at, sequence: sequence++, data: message });
   }
 

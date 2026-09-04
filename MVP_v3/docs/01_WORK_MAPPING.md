@@ -21,7 +21,7 @@ V3는 은행 담당자가 하나의 Shared Case에서 사건 파악, 고객 대�
 | Case 목록 | `frontend/src/components/CaseListPane.tsx` | 우선순위 선택, 검색, Empty/Error |
 | Case Room | `frontend/src/pages/CaseRoomPage.tsx` | Case 데이터 조율, polling, mutation refresh |
 | 중앙 Timeline | `frontend/src/components/SharedConversation.tsx` | 메시지·질문·검증·조치·Event 시간순 통합 |
-| 우측 Context | `frontend/src/components/CaseContextPanel.tsx` | 위험 근거, Claim, Demand, Fact, 미확인, 권장 조치 |
+| 우측 Context | `frontend/src/components/CaseContextPanel.tsx` | 위험 근거, Claim, Demand, Fact, AI 확인 체크리스트, 담당자 판단·조치 기록, 완료 항목 복원 |
 | 입력/첨부 | `frontend/src/components/ConversationComposer.tsx` | 고객/내부 채널, Enter 전송, 첨부 업로드 |
 | 업무 Dialog | `frontend/src/components/CaseActionDialogs.tsx` | 질문, Verification, Action 생성/수정 |
 | UI 표현 규칙 | `frontend/src/presentation.ts` | 상태·위험·시간·진단 Context 투영 |
@@ -79,6 +79,7 @@ V3는 은행 담당자가 하나의 Shared Case에서 사건 파악, 고객 대�
 Frontend는 AI API `8101`을 직접 호출하지 않는다. Frontend `5176`의 `/api` proxy가 General API `8100`을 호출하고 General API가 AI API를 오케스트레이션한다.
 
 AI Case Support는 5초 polling 대상이 아니다. 최초 Case 진입과 메시지·질문·검증·조치 등 의미 있는 변경 직후에만 갱신해 반복 유료 호출과 화면 지연을 방지한다.
+은행의 `사건 맥락`은 AI support의 최신 `case_context`(`key_signals`, `offender_claims`, `offender_demands`)를 우선 사용한다. 질문·답변·Fact·기관 확인·조치처럼 AI 입력에 포함되는 의미 상태의 변경 지문이 달라질 때만 재투영하며, 일반 채팅·presence 갱신만으로 AI support를 다시 호출하지 않는다.
 
 ## 5. Shared Case Timeline 규칙
 

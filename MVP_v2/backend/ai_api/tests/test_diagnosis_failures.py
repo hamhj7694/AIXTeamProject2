@@ -36,6 +36,15 @@ class _StaticFullContext:
         )
 
 
+class _RecordingFullContext:
+    def __init__(self) -> None:
+        self.payload = None
+
+    async def analyze(self, payload):
+        self.payload = payload
+        return ContextResult(summary="신호 기반 요약", incident_type="유형 확인 필요", confidence=0.7)
+
+
 class DiagnosisFailureTest(unittest.IsolatedAsyncioTestCase):
     def tearDown(self) -> None:
         load_model_bundle.cache_clear()
@@ -71,7 +80,18 @@ class DiagnosisFailureTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(any("TimeoutError" in warning for warning in result.warnings))
         self.assertEqual(result.context.summary, "검증용 전체 맥락")
 
-    async def test_all_turn_extraction_failures_raise_instead_of_normal_result(self) -> None:
+    async def test_context_handler_receives_signal_payload_not_raw_turns(self) -> None:
+        handler = _RecordingFullContext()
+        source = "검찰청 수사관입니다. 지금 안전계좌로 송금하세요."
+        with patch.dict(os.environ, {"DIAGNOSIS_EXTRACTOR_MODE": "fixture"}, clear=False):
+            await DiagnosisService(full_context_llm=handler).analyze(source)
+
+        self.assertIsInstance(handler.payload, dict)
+        self.assertEqual(handler.payload["source"], "STRUCTURED_RISK_SIGNALS_ONLY")
+        self.assertNotIn(source, json.dumps(handler.payload, ensure_ascii=False))
+        self.assertNotIn("evidence_text", json.dumps(handler.payload, ensure_ascii=False))
+
+    async def test_all_turn_extraction_failures_raise_for_text_without_safety_signals(self) -> None:
         client = Mock()
         client.responses.create = AsyncMock(return_value=SimpleNamespace(output_text="not-json"))
         with patch(
@@ -83,6 +103,24 @@ class DiagnosisFailureTest(unittest.IsolatedAsyncioTestCase):
         ):
             with self.assertRaisesRegex(RuntimeError, "모든 문장의 이벤트 추출"):
                 await extract_events("첫 번째 문장.")
+
+    async def test_all_turn_extraction_failures_fall_back_for_strong_phishing_signals(self) -> None:
+        client = Mock()
+        client.responses.create = AsyncMock(return_value=SimpleNamespace(output_text="not-json"))
+        source = "서울지검 수사관입니다. 오늘 안에 안전계좌로 이체하세요. 가족에게 알리지 마세요."
+        with patch(
+            "ai_api.app.domains.diagnosis.extractor.AsyncOpenAI", return_value=client,
+        ), patch.dict(
+            os.environ,
+            {"DIAGNOSIS_EXTRACTOR_MODE": "openai", "OPENAI_API_KEY": "test-key"},
+            clear=False,
+        ):
+            extraction = await extract_events(source)
+
+        self.assertEqual(extraction.extractor_model, "local-safety-fallback-v1")
+        self.assertEqual(extraction.successful_turn_ids, [1, 2, 3])
+        self.assertTrue(any(event.event_family == "IMPERSONATION" for event in extraction.events))
+        self.assertTrue(any(event.event_family == "MONEY_MOVEMENT" for event in extraction.events))
 
     async def test_openai_timeout_keeps_successful_turn_and_uses_configured_timeout(self) -> None:
         client = Mock()
