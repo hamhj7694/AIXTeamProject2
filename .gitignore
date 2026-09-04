@@ -5,11 +5,12 @@ dist/
 vite.config.js
 vite.config.d.ts
 쓰레기/
-.env
-.env.*3
+.env*
 !.env.example
 __pycache__/
 *.py[cod]
 MVP_v2/backend/data/*.sqlite3
 MVP_v2/backend/data/archive/
 MVP_v2/**/*.log
+MVP_v3/backend/data/
+MVP_v3/**/*.log

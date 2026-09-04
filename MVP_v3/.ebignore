@@ -1,0 +1,16 @@
+.git/
+.env*
+!.env.example
+**/__pycache__/
+**/.pytest_cache/
+**/*.py[cod]
+**/*.log
+**/node_modules/
+**/dist/
+**/coverage/
+backend/data/
+backend/**/tests/
+backend/contracts/**/fixtures/
+backend/contracts/**/*.example.json
+docs/
+PRD/
