@@ -74,7 +74,7 @@ export const CustomerCaseRoomPage: React.FC = () => {
         }
       } catch (reason) {
         if (aiGenerationRef.current === generation) {
-          setNotice(`메시지는 전달됐지만 AI 안내를 만들지 못했습니다. ${reason instanceof Error ? reason.message : '잠시 후 다시 요청해 주세요.'}`);
+          setNotice(`메시지는 전달됐지만 실제 AI 서버가 응답하지 않았습니다. 임의 안내는 생성하지 않았습니다. ${reason instanceof Error ? reason.message : '잠시 후 다시 요청해 주세요.'}`);
         }
       } finally {
         if (aiGenerationRef.current === generation) setAiPendingCount((count) => Math.max(0, count - 1));

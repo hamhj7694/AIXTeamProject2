@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { AlertCircle, Bot, CheckCircle2, ChevronDown, ChevronUp, Loader2, PanelRightOpen, RefreshCw, Users } from 'lucide-react';
+import { AlertCircle, Loader2, PanelRightOpen, RefreshCw, Users } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { casesApi, CURRENT_BANK_USER } from '../api/cases';
 import type { CaseAction, CaseBundle, CaseFact, CaseMessage, CaseSupportSnapshot, StoredCase, VerificationTask } from '../api/types';
@@ -13,7 +13,7 @@ import { ParticipantManager } from '../components/ParticipantManager';
 import { readBankBookmarks, writeBankBookmarks, type BankBookmark } from '../bank/bookmarks';
 import { stripBankAiMention } from '../bank/aiMention';
 import { mergePendingMessages, removeMessage, upsertMessage } from '../api/messageState';
-import { caseState, caseStateTone, caseSummary, incidentTitle, statusLabel } from '../presentation';
+import { caseState, caseStateTone, incidentTitle, statusLabel } from '../presentation';
 
 type DialogState = { type: 'questions' } | { type: 'verification'; task?: VerificationTask } | { type: 'action' } | null;
 type BankOutboxItem = {
@@ -54,7 +54,6 @@ export const CaseRoomPage: React.FC<{ onMutated: () => void }> = ({ onMutated })
   const [bookmarkOpen, setBookmarkOpen] = useState(false);
   const [noteOpen, setNoteOpen] = useState(false);
   const [participantOpen, setParticipantOpen] = useState(false);
-  const [briefOpen, setBriefOpen] = useState(true);
   const [bookmarks, setBookmarks] = useState<BankBookmark[]>([]);
   const lastSupportRevisionRef = useRef('');
   const aiQueueRef = useRef<Promise<void>>(Promise.resolve());
@@ -134,7 +133,7 @@ export const CaseRoomPage: React.FC<{ onMutated: () => void }> = ({ onMutated })
         }
       } catch (reason) {
         if (aiGenerationRef.current === generation) {
-          setError(reason instanceof Error ? `메시지는 저장됐지만 AI 답변을 만들지 못했습니다. ${reason.message}` : '메시지는 저장됐지만 AI 답변을 만들지 못했습니다.');
+          setError(reason instanceof Error ? `메시지는 저장됐지만 실제 AI 서버가 응답하지 않았습니다. 임의 답변은 생성하지 않았습니다. ${reason.message}` : '메시지는 저장됐지만 실제 AI 서버가 응답하지 않았습니다. 임의 답변은 생성하지 않았습니다.');
         }
       } finally {
         if (aiGenerationRef.current === generation) setAiPendingCount((count) => Math.max(0, count - 1));
@@ -152,7 +151,7 @@ export const CaseRoomPage: React.FC<{ onMutated: () => void }> = ({ onMutated })
     outboxRef.current.clear();
     setAiPendingCount(0);
     lastSupportRevisionRef.current = '';
-    setCaseItem(null); setBundle(null); setSupport(null); setFacts([]); setDialog(null); setContextOpen(false); setBookmarkOpen(false); setNoteOpen(false); setParticipantOpen(false); setBriefOpen(true); setBookmarks(readBankBookmarks(caseId)); setError('');
+    setCaseItem(null); setBundle(null); setSupport(null); setFacts([]); setDialog(null); setContextOpen(false); setBookmarkOpen(false); setNoteOpen(false); setParticipantOpen(false); setBookmarks(readBankBookmarks(caseId)); setError('');
     void load();
     void casesApi.members(caseId).then((items) => items.some((item) => item.user_id === CURRENT_BANK_USER.user_id) ? undefined : casesApi.upsertMember(caseId, { ...CURRENT_BANK_USER, role: 'CHAT_OPERATOR' })).catch(() => undefined);
     const heartbeat = () => { void casesApi.heartbeat(caseId, CURRENT_BANK_USER, 'VIEWING', 'TEAM').catch(() => undefined); };
@@ -276,7 +275,6 @@ export const CaseRoomPage: React.FC<{ onMutated: () => void }> = ({ onMutated })
   if (error && !caseItem) return <section className="room-state error"><AlertCircle size={24}/><strong>정보를 불러오지 못했습니다.</strong><span>{error}</span><button onClick={() => void load()}>다시 시도</button></section>;
   if (!caseItem || !bundle) return <section className="room-state error"><AlertCircle size={24}/><strong>Case 기록을 열 수 없습니다.</strong><span>General API의 Bundle 응답을 확인해 주세요.</span><button onClick={() => void load()}>다시 시도</button></section>;
 
-  const brief = support?.case_brief?.summary || caseItem.initial_brief || caseSummary(caseItem);
   return <section className="case-room">
     <header className="case-room-header">
       <div className="case-heading"><span className={`risk-dot ${caseStateTone(caseState(caseItem))}`}/><div><div className="case-title-line"><span>{caseItem.case_id}</span><h1>{incidentTitle(caseItem)}</h1></div><p>{statusLabel(caseItem.status, caseItem.mode)} · 담당자 {caseItem.primary_assignee || '미배정'}</p></div></div>
@@ -284,11 +282,10 @@ export const CaseRoomPage: React.FC<{ onMutated: () => void }> = ({ onMutated })
     </header>
     <div className="case-room-grid">
       <main className="conversation-column">
-        <section className={`ai-brief${briefOpen ? '' : ' collapsed'}`}><div className="ai-brief-label"><Bot size={16}/><span>AI BRIEF</span><div className="ai-brief-controls">{support?.available && <small><CheckCircle2 size={12}/>최신 Case 반영</small>}<button type="button" className="ai-brief-toggle" aria-expanded={briefOpen} aria-controls="case-ai-brief-content" onClick={() => setBriefOpen((current) => !current)}>{briefOpen ? <><span>접기</span><ChevronUp size={14}/></> : <><span>펼치기</span><ChevronDown size={14}/></>}</button></div></div>{briefOpen && <p id="case-ai-brief-content">{brief}</p>}</section>
         {partialWarnings.length > 0 && <div className="partial-warning"><AlertCircle size={15}/><span>{partialWarnings.join(' ')}</span></div>}
-        {error && <div className="partial-warning danger"><AlertCircle size={15}/><span>{error}</span></div>}
         <div className="conversation-toolbar"><div><button className={view === 'conversation' ? 'active' : ''} onClick={() => setView('conversation')}>대화</button><button className={view === 'timeline' ? 'active' : ''} onClick={() => setView('timeline')}>전체 기록</button></div><span>{refreshing ? '업데이트 확인 중' : '변경 시 AI 사건 맥락 자동 반영'}</span></div>
         <SharedConversation caseItem={caseItem} bundle={bundle} view={view} bookmarkedIds={new Set(bookmarks.map((item) => item.entryId))} onToggleBookmark={toggleBookmark} onEditVerification={(task) => setDialog({ type: 'verification', task })} onRetryMessage={retryMessage} onDismissMessage={dismissMessage}/>
+        {error && <div className="partial-warning danger composer-warning"><AlertCircle size={15}/><span>{error}</span></div>}
         <ConversationComposer busy={busy} aiBusy={aiPendingCount > 0} onSend={send} onOpenQuestions={() => setDialog({ type: 'questions' })} onOpenVerification={() => setDialog({ type: 'verification' })} onOpenAction={() => setDialog({ type: 'action' })} onInvokeAi={() => void invokeAi()} onOpenNotes={() => setNoteOpen(true)} onOpenBookmarks={() => setBookmarkOpen(true)} bookmarkCount={bookmarks.length}/>
       </main>
       <CaseContextPanel caseItem={caseItem} bundle={bundle} facts={facts} support={support} open={contextOpen} onEditVerification={(task) => setDialog({ type: 'verification', task })} onCreateJudgment={createJudgment} onToggleChecklist={toggleChecklist} checklistBusy={checklistBusy}/>

@@ -9,6 +9,11 @@ import re
 from openai import AsyncOpenAI, AuthenticationError, RateLimitError
 
 from contracts.ai_internal.work_card import CaseWorkCardInput, CaseWorkCardOutput, WorkCardQuestion
+from .copilot_service import (
+    CaseCopilotAuthenticationError,
+    CaseCopilotProviderError,
+    CaseCopilotQuotaError,
+)
 
 WORK_CARD_SCHEMA = {
     "type": "object", "additionalProperties": False,
@@ -201,7 +206,9 @@ class CaseWorkCardService:
     async def generate(self, request: CaseWorkCardInput) -> CaseWorkCardOutput:
         fallback = _build_context_card(request, "RULE_BASED_FALLBACK")
         if not os.getenv("OPENAI_API_KEY"):
-            return fallback
+            raise CaseCopilotAuthenticationError(
+                "OPENAI_API_KEY가 설정되지 않아 실제 AI 서버에 연결할 수 없습니다."
+            )
         client = AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"], timeout=float(os.getenv("OPENAI_TIMEOUT_SECONDS", "20")))
         try:
             response = await client.responses.create(
@@ -218,34 +225,29 @@ class CaseWorkCardService:
                 max_output_tokens=int(os.getenv("OPENAI_CASE_WORK_CARD_MAX_OUTPUT_TOKENS", "700")),
                 text={"format": {"type": "json_schema", "name": "case_work_card_v1", "schema": WORK_CARD_SCHEMA, "strict": True}},
             )
-        except RateLimitError:
-            return _provider_fallback(
-                fallback, "RULE_BASED_FALLBACK_QUOTA",
-                "OpenAI 사용 한도에 도달해 현재 Case 데이터 기반 규칙 초안을 표시합니다.",
-            )
-        except AuthenticationError:
-            return _provider_fallback(
-                fallback, "RULE_BASED_FALLBACK_AUTH",
-                "OpenAI 인증을 사용할 수 없어 현재 Case 데이터 기반 규칙 초안을 표시합니다.",
-            )
-        except Exception:
-            return _provider_fallback(
-                fallback, "RULE_BASED_FALLBACK_PROVIDER_ERROR",
-                "AI 제공자 응답을 사용할 수 없어 현재 Case 데이터 기반 규칙 초안을 표시합니다. 초안을 검토한 뒤 실행하세요.",
-            )
+        except RateLimitError as exc:
+            raise CaseCopilotQuotaError(
+                "OpenAI 사용 한도 또는 요청 한도에 도달해 AI 카드를 생성하지 못했습니다."
+            ) from exc
+        except AuthenticationError as exc:
+            raise CaseCopilotAuthenticationError(
+                "OpenAI 인증에 실패해 실제 AI 서버에 연결할 수 없습니다."
+            ) from exc
+        except Exception as exc:
+            raise CaseCopilotProviderError(
+                "실제 AI 서버에 연결하지 못해 AI 카드를 생성하지 않았습니다. 잠시 후 다시 시도해 주세요."
+            ) from exc
         try:
             payload = json.loads(response.output_text)
         except (TypeError, ValueError):
-            return _provider_fallback(
-                fallback, "RULE_BASED_FALLBACK_INVALID_OUTPUT",
-                "AI 응답 형식을 확인할 수 없어 현재 Case 데이터 기반 규칙 초안을 표시합니다. 초안을 검토한 뒤 실행하세요.",
+            raise CaseCopilotProviderError(
+                "AI 서버 응답 형식이 올바르지 않아 카드를 생성하지 않았습니다."
             )
         payload["card_type"] = request.card_type
         payload["model_mode"] = os.getenv("OPENAI_CASE_WORK_CARD_MODEL", "gpt-4o-mini")
         try:
             return CaseWorkCardOutput.model_validate(_fill_empty_proposal(payload, fallback))
         except (TypeError, ValueError):
-            return _provider_fallback(
-                fallback, "RULE_BASED_FALLBACK_INVALID_OUTPUT",
-                "AI 카드 내용을 안전하게 검증할 수 없어 현재 Case 데이터 기반 규칙 초안을 표시합니다.",
+            raise CaseCopilotProviderError(
+                "AI 서버 응답을 검증하지 못해 카드를 생성하지 않았습니다."
             )

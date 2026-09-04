@@ -29,6 +29,7 @@ class MySqlConfigurationTest(unittest.IsolatedAsyncioTestCase):
                     charset="utf8mb4",
                     connect_timeout=10,
                     autocommit=False,
+                    init_command="SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED",
                     minsize=1,
                     maxsize=5,
                 )

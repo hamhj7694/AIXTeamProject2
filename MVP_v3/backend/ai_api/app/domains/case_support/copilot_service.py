@@ -20,6 +20,10 @@ class CaseCopilotAuthenticationError(RuntimeError):
     pass
 
 
+class CaseCopilotProviderError(RuntimeError):
+    pass
+
+
 class CustomerSupportCallBudget:
     """Per-process hard stop; production also needs a shared Redis/DB quota."""
 
@@ -149,7 +153,9 @@ class CaseCopilotService:
                 model_mode="SHARED_CASE_LOOKUP",
             )
         if not os.getenv("OPENAI_API_KEY"):
-            return _customer_safety_fallback(request) if request.assistant_mode == "CUSTOMER_SUPPORT" else _bank_case_fallback(request)
+            raise CaseCopilotAuthenticationError(
+                "OPENAI_API_KEY가 설정되지 않아 실제 AI 서버에 연결할 수 없습니다."
+            )
 
         sections = {
             "담당자와 참여자": ([f"메인 담당자: {request.primary_assignee}"] if request.primary_assignee else ["메인 담당자: 미지정"])
@@ -210,20 +216,22 @@ class CaseCopilotService:
                     )),
                 )
         except RateLimitError as exc:
-            if request.assistant_mode == "CUSTOMER_SUPPORT":
-                return _customer_safety_fallback(request)
-            return _bank_case_fallback(request)
+            raise CaseCopilotQuotaError(
+                "OpenAI 사용 한도 또는 요청 한도에 도달해 AI 답변을 생성하지 못했습니다."
+            ) from exc
         except AuthenticationError as exc:
-            if request.assistant_mode == "CUSTOMER_SUPPORT":
-                return _customer_safety_fallback(request)
-            return _bank_case_fallback(request)
-        except Exception:
-            if request.assistant_mode == "CUSTOMER_SUPPORT":
-                return _customer_safety_fallback(request)
-            return _bank_case_fallback(request)
+            raise CaseCopilotAuthenticationError(
+                "OpenAI 인증에 실패해 실제 AI 서버에 연결할 수 없습니다."
+            ) from exc
+        except CaseCopilotQuotaError:
+            raise
+        except Exception as exc:
+            raise CaseCopilotProviderError(
+                "실제 AI 서버에 연결하지 못해 답변을 생성하지 않았습니다. 잠시 후 다시 시도해 주세요."
+            ) from exc
         content = response.output_text.strip()
         if not content:
-            raise RuntimeError("CaseCopilot이 비어 있는 응답을 반환했습니다.")
+            raise CaseCopilotProviderError("AI 서버가 빈 응답을 반환해 답변을 생성하지 않았습니다.")
         return CaseCopilotOutput(content=content, model_mode=os.getenv("OPENAI_CASE_COPILOT_MODEL", "gpt-4o-mini"))
 
 

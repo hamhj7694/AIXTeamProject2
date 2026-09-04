@@ -26,7 +26,7 @@ class AiServiceAuthenticationError(AiServiceError):
 
 class HttpDiagnosisAiClient:
     def __init__(self, base_url: str | None = None, timeout_seconds: float | None = None) -> None:
-        self.base_url = (base_url or os.getenv("AI_API_BASE_URL", "http://127.0.0.1:8001")).rstrip("/")
+        self.base_url = (base_url or os.getenv("AI_API_BASE_URL", "http://127.0.0.1:8101")).rstrip("/")
         self.timeout_seconds = timeout_seconds or float(os.getenv("AI_API_TIMEOUT_SECONDS", "120"))
 
     async def analyze(self, request: AnalyzeTextRequest) -> DiagnosisResult:

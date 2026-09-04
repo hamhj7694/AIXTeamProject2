@@ -17,14 +17,15 @@ class CaseCopilotEndpointTest(unittest.TestCase):
     def tearDown(self) -> None:
         self.client.close()
 
-    def test_missing_provider_uses_case_context_fallback(self) -> None:
+    def test_missing_provider_returns_explicit_connection_error(self) -> None:
         with patch.dict(os.environ, {"OPENAI_API_KEY": ""}, clear=False):
             response = self.client.post("/ai/case-copilot/replies", json={
                 "case_id": "VP-1", "prompt": "미확인 사실을 정리해 주세요.",
                 "case_summary": "기관 사칭 가능성", "unresolved_verifications": ["기관 연락처 확인"],
             })
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["model_mode"], "BANK_CONTEXT_FALLBACK")
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()["detail"]["code"], "OPENAI_AUTHENTICATION_FAILED")
+        self.assertIn("실제 AI 서버에 연결할 수 없습니다", response.json()["detail"]["message"])
 
     def test_rejects_oversized_prompt_before_provider_call(self) -> None:
         with patch.dict(os.environ, {"CASE_COPILOT_MAX_INPUT_CHARS": "5"}, clear=False):
@@ -32,30 +33,22 @@ class CaseCopilotEndpointTest(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["detail"]["code"], "INVALID_INPUT")
 
-    def test_work_card_fallback_is_structured_and_explicitly_labelled(self) -> None:
+    def test_work_card_missing_provider_returns_explicit_connection_error(self) -> None:
         with patch.dict(os.environ, {"OPENAI_API_KEY": ""}, clear=False):
             response = self.client.post("/ai/work-cards/generate", json={
                 "case_id": "VP-1", "card_type": "QUESTION_PLAN",
                 "case_summary": "기관 사칭 의심", "unresolved_items": ["P0: 실제 송금 여부"],
             })
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["card_type"], "QUESTION_PLAN")
-        self.assertEqual(response.json()["model_mode"], "RULE_BASED_FALLBACK")
-        self.assertTrue(response.json()["title"])
-        self.assertTrue(response.json()["summary"])
-        self.assertGreaterEqual(len(response.json()["questions"]), 1)
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()["detail"]["code"], "OPENAI_AUTHENTICATION_FAILED")
 
-    def test_every_work_card_fallback_contains_its_executable_content(self) -> None:
-        expected_fields = {
-            "FACT_REVIEW": [],
-            "QUESTION_PLAN": ["questions"],
-            "VERIFICATION_REQUEST": ["suggested_claim", "suggested_target"],
-            "BANK_ACTION": ["suggested_action_type", "suggested_action_note"],
-            "CUSTOMER_NOTICE": ["suggested_notice"],
-            "CASE_TRANSITION": ["suggested_transition"],
-        }
+    def test_every_work_card_type_refuses_to_make_fake_content_without_provider(self) -> None:
+        card_types = (
+            "FACT_REVIEW", "QUESTION_PLAN", "VERIFICATION_REQUEST",
+            "BANK_ACTION", "CUSTOMER_NOTICE", "CASE_TRANSITION",
+        )
         with patch.dict(os.environ, {"OPENAI_API_KEY": ""}, clear=False):
-            for card_type, fields in expected_fields.items():
+            for card_type in card_types:
                 with self.subTest(card_type=card_type):
                     response = self.client.post("/ai/work-cards/generate", json={
                         "case_id": "VP-1", "card_type": card_type,
@@ -63,21 +56,10 @@ class CaseCopilotEndpointTest(unittest.TestCase):
                         "workflow_status": "TRIAGE", "case_mode": "PREVENT",
                         "unresolved_items": ["P0: 실제 송금 여부"],
                     })
-                    self.assertEqual(response.status_code, 200)
-                    payload = response.json()
-                    self.assertTrue(payload["title"])
-                    self.assertTrue(payload["summary"])
-                    self.assertTrue(payload["context_sources"])
-                    self.assertTrue(payload["rationale"])
-                    self.assertTrue(payload["next_action"])
-                    self.assertTrue(payload["warnings"])
-                    for field in fields:
-                        self.assertTrue(payload[field])
-                    if card_type == "VERIFICATION_REQUEST":
-                        self.assertIn("서울지검", payload["suggested_claim"])
-                        self.assertIn("공식 대표번호", payload["suggested_target"])
+                    self.assertEqual(response.status_code, 401)
+                    self.assertEqual(response.json()["detail"]["code"], "OPENAI_AUTHENTICATION_FAILED")
 
-    def test_customer_support_has_safe_fallback_when_provider_is_unavailable(self) -> None:
+    def test_customer_support_reports_provider_unavailable_without_fake_reply(self) -> None:
         with patch.dict(os.environ, {"OPENAI_API_KEY": ""}, clear=False):
             response = self.client.post("/ai/case-copilot/replies", json={
                 "case_id": "VP-1",
@@ -86,12 +68,10 @@ class CaseCopilotEndpointTest(unittest.TestCase):
                 "assistant_mode": "CUSTOMER_SUPPORT",
             })
 
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["model_mode"], "CUSTOMER_SAFETY_FALLBACK")
-        self.assertIn("추가 송금", response.json()["content"])
-        self.assertIn("112", response.json()["content"])
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()["detail"]["code"], "OPENAI_AUTHENTICATION_FAILED")
 
-    def test_bank_case_summary_has_context_fallback_when_provider_is_unavailable(self) -> None:
+    def test_bank_case_summary_reports_provider_unavailable_without_fake_reply(self) -> None:
         with patch.dict(os.environ, {"OPENAI_API_KEY": ""}, clear=False):
             response = self.client.post("/ai/case-copilot/replies", json={
                 "case_id": "VP-1",
@@ -103,10 +83,8 @@ class CaseCopilotEndpointTest(unittest.TestCase):
                 "response_style": "BRIEF",
             })
 
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["model_mode"], "BANK_CONTEXT_FALLBACK")
-        self.assertIn("## 상황 판단", response.json()["content"])
-        self.assertIn("서울지검 공식 발신 여부", response.json()["content"])
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()["detail"]["code"], "OPENAI_AUTHENTICATION_FAILED")
 
     def test_primary_assignee_question_uses_latest_shared_case_assignment(self) -> None:
         with patch.dict(os.environ, {"OPENAI_API_KEY": ""}, clear=False):
