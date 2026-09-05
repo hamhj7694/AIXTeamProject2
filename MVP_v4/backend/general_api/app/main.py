@@ -3,7 +3,7 @@ from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 
 from backend.config import Settings
-from backend.contracts.case import ActorContext, CaseDelta, CaseProjection, CreateCaseRequest, CreateEventRequest
+from backend.contracts.case import ActorContext, ActorRole, CaseDelta, CaseProjection, CreateCaseRequest, CreateEventRequest, CreateMlIntakeRequest
 from backend.contracts.health import Health, Readiness
 from backend.database import database_readiness
 from backend.general_api.app.clients.ai import AiClient
@@ -38,6 +38,18 @@ def _case_error(error: Exception) -> None:
 
 def create_app() -> FastAPI:
     app = FastAPI(title="CSR General API", version="4.0.0")
+
+    @app.middleware("http")
+    async def test_actor_only(request: Request, call_next):
+        # Test transport support only. Production never derives authority from client headers.
+        if Settings.from_environment().app_env == "test":
+            actor_id, actor_role = request.headers.get("X-CSR-Test-Actor-ID"), request.headers.get("X-CSR-Test-Actor-Role")
+            if actor_id and actor_role:
+                try:
+                    request.state.csr_actor = ActorContext(actor_id=actor_id, role=ActorRole(actor_role))
+                except ValueError:
+                    pass
+        return await call_next(request)
 
     @app.get("/api/v4/health", response_model=Health)
     def health() -> Health:
@@ -114,6 +126,31 @@ def create_app() -> FastAPI:
         repository = CaseRepository(settings)
         try:
             return repository.append_event(parsed_id, actor, request)
+        except Exception as error:
+            _case_error(error)
+            raise
+        finally:
+            repository.close()
+
+    @app.post("/api/v4/cases/{case_id}/intake/ml", response_model=CaseProjection)
+    async def intake_ml(case_id: str, request: CreateMlIntakeRequest,
+                        actor: ActorContext = Depends(require_server_actor),
+                        settings: Settings = Depends(get_settings)) -> CaseProjection:
+        from uuid import UUID
+        try:
+            parsed_id = UUID(case_id)
+        except ValueError:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "CASE_NOT_FOUND"}) from None
+        try:
+            inference = await AiClient(settings).infer_structured_features(request.features)
+        except ValueError:
+            raise HTTPException(status_code=422, detail={"code": "INVALID_STRUCTURED_FEATURES"}) from None
+        except RuntimeError:
+            raise HTTPException(status_code=503, detail={"code": "ML_INFERENCE_UNAVAILABLE"}) from None
+        repository = CaseRepository(settings)
+        try:
+            return repository.record_ml_intake(parsed_id, actor, request,
+                                                inference.prediction.model_dump(), inference.provenance)
         except Exception as error:
             _case_error(error)
             raise

@@ -12,7 +12,9 @@
 - [x] P1-002 Case/Event/Projection API + server actor policy
 - [x] P1-003 revision/fingerprint delta merge
 
-다음 작업: P2-001 ML intake 연결. P0-006 승인 모델/threshold/feature order/guardrail을 변경하지 않는다.
+- [x] P2-001 approved ML structured-feature intake
+
+다음 작업: P2-002 feature extraction/reconstruction privacy boundary. 원문은 V4 DB에 저장하지 않는다.
 최종 gate에 남은 일: Ubuntu clean install/Nginx/systemd, 실제 HTTPS/HTTP-IP 브라우저, standalone copy/Scenario A+B.
 
 이후 P1-003부터 docs/02_IMPLEMENTATION_PLAN.md 순서로 진행. Gate 미통과 시 진입 금지.

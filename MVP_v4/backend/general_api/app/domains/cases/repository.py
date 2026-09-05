@@ -14,7 +14,7 @@ from sqlalchemy.engine import Connection, Engine
 from backend.config import Settings
 from backend.contracts.case import (
     ActorContext, ActorRole, CaseDelta, CaseEntityUpsert, CaseEvent, CaseParticipant, CaseProjection, CaseStatus,
-    CreateCaseRequest, CreateEventRequest, EntityType, EventType, SharedCase, Visibility,
+    CreateCaseRequest, CreateEventRequest, CreateMlIntakeRequest, EntityType, EventType, SharedCase, Visibility,
 )
 from backend.database import database_engine
 
@@ -144,6 +144,50 @@ class CaseRepository:
     def projection(self, case_id: UUID, actor: ActorContext) -> CaseProjection:
         with self.engine.connect() as connection:
             self._require_participant(connection, case_id, actor)
+            return self._projection(connection, case_id, actor)
+
+    def record_ml_intake(self, case_id: UUID, actor: ActorContext, request: CreateMlIntakeRequest,
+                         prediction: dict[str, Any], provenance: dict[str, Any]) -> CaseProjection:
+        if actor.role != ActorRole.BANK_STAFF:
+            raise CaseAccessDenied()
+        operation = "ML_INTAKE"
+        feature_fingerprint = _canonical_hash({"features": request.features, "prediction": prediction, "provenance": provenance})
+        with self.engine.begin() as connection:
+            self._require_participant(connection, case_id, actor)
+            duplicate = connection.execute(text("""
+                SELECT id, payload FROM context_features WHERE case_id = :case_id AND source_event_id = :source_event_id
+            """), {"case_id": str(case_id), "source_event_id": request.source_event_id}).mappings().first()
+            if duplicate:
+                stored = _decode_json(duplicate["payload"])
+                if stored.get("feature_fingerprint") != feature_fingerprint:
+                    raise IdempotencyConflict()
+                return self._projection(connection, case_id, actor)
+            case = self._case(connection, case_id)
+            if not case:
+                raise CaseNotFound()
+            if request.expected_version is not None and case["version"] != request.expected_version:
+                raise VersionConflict()
+            revision, version = int(case["revision"]) + 1, int(case["version"]) + 1
+            feature_id = uuid4()
+            payload = {"schema_version": "ml-intake.v1", "values": request.features, "feature_fingerprint": feature_fingerprint,
+                       "model_result": prediction, "provenance": provenance}
+            connection.execute(text("""
+                INSERT INTO context_features (id, case_id, source_event_id, schema_version, feature_fingerprint, payload, created_by, updated_by)
+                VALUES (:id, :case_id, :source_event_id, :schema_version, :feature_fingerprint, :payload, :actor_id, :actor_id)
+            """), {"id": str(feature_id), "case_id": str(case_id), "source_event_id": request.source_event_id,
+                   "schema_version": "ml-intake.v1", "feature_fingerprint": feature_fingerprint,
+                   "payload": json.dumps(payload, ensure_ascii=False), "actor_id": actor.actor_id})
+            self._insert_event(connection, uuid4(), case_id, EventType.ENTITY_CREATED, EntityType.CONTEXT_FEATURE, actor,
+                               Visibility.BANK_INTERNAL, revision,
+                               {"source_event_id": request.source_event_id, "risk_score": prediction["final_risk_score"],
+                                "classification": prediction["label"], "model_version": provenance["model_version"]}, feature_id)
+            fingerprint = self._case_fingerprint(case_id, case["mode"], case["loss_status"], revision, version)
+            connection.execute(text("""UPDATE cases SET revision=:revision, version=:version, fingerprint=:fingerprint,
+                updated_at=:updated_at, updated_by=:actor_id WHERE id=:case_id"""),
+                {"revision": revision, "version": version, "fingerprint": fingerprint, "updated_at": datetime.now(UTC),
+                 "actor_id": actor.actor_id, "case_id": str(case_id)})
+            self._insert_idempotency(connection, case_id, request.client_request_id, operation, feature_fingerprint,
+                                     EntityType.CONTEXT_FEATURE, feature_id)
             return self._projection(connection, case_id, actor)
 
     def delta(self, case_id: UUID, actor: ActorContext, known_revision: int, known_fingerprint: str | None) -> CaseDelta:

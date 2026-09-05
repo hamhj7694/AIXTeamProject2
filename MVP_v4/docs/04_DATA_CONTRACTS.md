@@ -34,3 +34,10 @@ CUSTOMER/BANK_INTERNAL/AI_PRIVATE projection은 서버 강제. 고객 query의 v
 - `POST /api/v4/cases/{case_id}/events` is BANK_STAFF-only, records an immutable Event and atomically advances Case revision/version/fingerprint. `AI_PRIVATE` writes are rejected.
 - Actor identity is `ActorContext` attached by trusted server authentication middleware. No request body, query `view`, or client header selects actor role or grants a projection.
 - A repeated `(case_id, client_request_id, CREATE_EVENT)` with identical request fingerprint returns the prior state. A changed payload for the same key, or a stale `expected_version`, returns 409.
+
+## P2-001 Structured-feature ML intake
+
+- `POST AI /intake/ml` accepts exactly the approved model feature names and calls the V4-only approved adapter. Feature order, threshold and guardrail remain in the model bundle.
+- `POST General /api/v4/cases/{case_id}/intake/ml` accepts a source event ID, expected version and structured numeric feature vector. It never accepts or stores source text.
+- General records one `context_features` row and one BANK_INTERNAL `CONTEXT_FEATURE` audit Event in one transaction, including result score/classification and model provenance; it advances Case revision/version/fingerprint once.
+- Same source event and matching feature/result fingerprint is a no-op. Changed duplicate is 409, stale version is 409, invalid vectors are 422, and unavailable AI is 503 without a Case write.

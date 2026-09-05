@@ -12,6 +12,8 @@ from backend.contracts.case import ActorContext, ActorRole
 from backend.database import database_engine
 from backend.general_api.app.main import create_app, get_settings, require_server_actor
 from backend.scripts.migrate import upgrade
+from backend.contracts.ml import MlInferenceResult, MlPrediction
+from backend.ai_api.app.domains.diagnosis.model_adapter import load_model_bundle
 
 
 @pytest.fixture
@@ -156,3 +158,48 @@ def test_missing_server_actor_and_nonparticipant_do_not_gain_case_access(case_ap
     app.dependency_overrides[require_server_actor] = lambda: actor["value"]
     actor["value"] = ActorContext(actor_id="other-customer", role=ActorRole.CUSTOMER)
     assert client.get(f"/api/v4/cases/{case_id}").status_code == 404
+
+
+def test_ml_intake_records_structured_features_event_and_is_idempotent(case_api, monkeypatch):
+    client, settings, _actor = case_api
+    case_id, created = create_staff_case(client)
+    features = {name: 0.0 for name in load_model_bundle()["model_features"]}
+    features["unknown_feature"] = 1.0
+    async def inference(_self, supplied):
+        if "unknown_feature" in supplied:
+            raise ValueError("INVALID_STRUCTURED_FEATURES")
+        assert supplied == {key: value for key, value in features.items() if key != "unknown_feature"}
+        return MlInferenceResult(prediction=MlPrediction(raw_ml_risk_score=98, final_risk_score=98, threshold_score=95,
+            candidate_signal_count=1, guardrail_applied=False, label="PHISHING"), provenance={"model_version": "12_07_recall_first_v1.0", "artifact_sha256": "a" * 64})
+    monkeypatch.setattr("backend.general_api.app.main.AiClient.infer_structured_features", inference)
+    request = {"client_request_id": str(uuid4()), "expected_version": created["case"]["version"],
+               "source_event_id": "telecom-1", "features": {key: value for key, value in features.items() if key != "unknown_feature"}}
+    first = client.post(f"/api/v4/cases/{case_id}/intake/ml", json=request)
+    assert first.status_code == 200, first.text
+    assert first.json()["case"]["version"] == 2
+    assert any(event["entity_type"] == "CONTEXT_FEATURE" for event in first.json()["events"])
+    assert client.post(f"/api/v4/cases/{case_id}/intake/ml", json=request).json()["case"]["version"] == 2
+    stale = client.post(f"/api/v4/cases/{case_id}/intake/ml", json={**request, "client_request_id": str(uuid4()), "source_event_id": "telecom-stale"})
+    assert stale.status_code == 409
+    bad = client.post(f"/api/v4/cases/{case_id}/intake/ml", json={**request, "client_request_id": str(uuid4()), "expected_version": 1, "source_event_id": "telecom-2", "features": features})
+    assert bad.status_code == 422
+    engine = database_engine(settings)
+    try:
+        with engine.connect() as connection:
+            payload = connection.execute(text("SELECT payload FROM context_features WHERE case_id=:case_id"), {"case_id": str(case_id)}).scalar_one()
+            assert "raw_text" not in str(payload) and "PHISHING" in str(payload)
+    finally:
+        engine.dispose()
+
+
+def test_ml_intake_reports_ai_unavailable_without_case_write(case_api, monkeypatch):
+    client, _settings, _actor = case_api
+    case_id, _created = create_staff_case(client)
+    async def unavailable(_self, _features):
+        raise RuntimeError("ML_INFERENCE_UNAVAILABLE")
+    monkeypatch.setattr("backend.general_api.app.main.AiClient.infer_structured_features", unavailable)
+    response = client.post(f"/api/v4/cases/{case_id}/intake/ml", json={
+        "client_request_id": str(uuid4()), "source_event_id": "telecom-unavailable", "features": {"x": 0.0},
+    })
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "ML_INFERENCE_UNAVAILABLE"

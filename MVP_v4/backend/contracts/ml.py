@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -24,3 +24,14 @@ class MlPreflight(BaseModel):
     sklearn_version: Literal["1.6.1"] = "1.6.1"
     feature_count: int = Field(gt=0)
     checks: dict[str, MlPrediction]
+
+
+class MlInferenceRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+    features: dict[str, float]
+
+
+class MlInferenceResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    prediction: MlPrediction
+    provenance: dict[str, Any]

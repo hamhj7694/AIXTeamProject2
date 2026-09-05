@@ -16,6 +16,7 @@ import pymysql
 
 from backend.config import ROOT, Settings
 from backend.contracts.case import ActorContext, ActorRole, CreateCaseRequest, CreateEventRequest, EntityType, EventType, Visibility
+from backend.ai_api.app.domains.diagnosis.model_adapter import load_model_bundle
 from backend.database import CURRENT_SCHEMA_REVISION, database_readiness
 from backend.general_api.app.domains.cases.repository import CaseRepository
 from backend.scripts.migrate import upgrade
@@ -54,7 +55,7 @@ def main() -> None:
     data_dir.mkdir()
     processes = []
     flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
-    report = {"mysql_migration": "NOT_RUN", "case_projection": "NOT_RUN", "api_health": "NOT_RUN", "ml_inference": "NOT_RUN", "conversational_inference": "NOT_IMPLEMENTED"}
+    report = {"mysql_migration": "NOT_RUN", "case_projection": "NOT_RUN", "ml_inference": "NOT_RUN", "ml_intake": "NOT_RUN", "api_health": "NOT_RUN", "conversational_inference": "NOT_IMPLEMENTED"}
     try:
         with (run_dir / "services.log").open("w", encoding="utf-8") as log:
             subprocess.run([executable, "--no-defaults", "--initialize-insecure", f"--datadir={data_dir}"],
@@ -111,6 +112,17 @@ def main() -> None:
                 assert ml["checks"]["signal_features"]["label"] == "PHISHING"
                 report["ml_inference"] = "PASS: actual model inference over HTTP /ready/ml"
                 assert wait_for(lambda: health(general_port, "/api/v4/health"))["service"] == "csr-general-api"
+                model_features = load_model_bundle()["model_features"]
+                request_id = str(uuid4())
+                actor_headers = {"X-CSR-Test-Actor-ID": "http-smoke-staff", "X-CSR-Test-Actor-Role": "BANK_STAFF"}
+                created = client.post(f"http://127.0.0.1:{general_port}/api/v4/cases", headers=actor_headers, json={
+                    "client_request_id": request_id, "customer_participant_id": "http-smoke-customer"})
+                assert created.status_code == 201
+                intake = client.post(f"http://127.0.0.1:{general_port}/api/v4/cases/{request_id}/intake/ml", headers=actor_headers, json={
+                    "client_request_id": str(uuid4()), "expected_version": 1, "source_event_id": "http-smoke-telecom",
+                    "features": {name: 0.0 for name in model_features}})
+                assert intake.status_code == 200 and intake.json()["case"]["version"] == 2
+                report["ml_intake"] = "PASS: General→AI approved ML intake persisted structured feature and Case revision"
                 readiness = client.get(f"http://127.0.0.1:{general_port}/api/v4/ready")
                 assert readiness.status_code == 503
                 assert readiness.json()["checks"] == {"database": "ok", "ai": "AI_NOT_READY"}

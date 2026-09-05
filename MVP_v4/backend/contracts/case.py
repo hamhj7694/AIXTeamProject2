@@ -169,6 +169,19 @@ class CaseDelta(StrictCaseModel):
     deleted_entity_ids: list[UUID] = Field(default_factory=list)
 
 
+class CreateMlIntakeRequest(WritePrecondition):
+    source_event_id: str = Field(min_length=1, max_length=128)
+    features: dict[str, float]
+
+    @field_validator("features")
+    @classmethod
+    def require_finite_features(cls, value: dict[str, float]) -> dict[str, float]:
+        import math
+        if not value or any(isinstance(item, bool) or not math.isfinite(item) for item in value.values()):
+            raise ValueError("features must be finite numbers")
+        return value
+
+
 class StructuredFeaturePayload(StrictCaseModel):
     """Text source/transcript cannot cross this contract boundary."""
     schema_version: str = Field(min_length=1, max_length=40)
