@@ -1,5 +1,12 @@
 # 결정 기록
 
+## D-012 · 2026-09-06 · P3-002 · Task와 제안 승인
+Task 단일 원본을 기존 테이블에 연결한다. 완료 결과/취소 사유 필수, 재개는 같은 ID를 유지한다.
+은행 참여자만 변경하며 Case/entity version, idempotency, stale suggestion을 서버에서 검사한다.
+MySQL은 Case write lock 획득 이후 consistent read를 시작해 동시 retry의 idempotency 결과를 읽는다.
+AI 추천 생성은 아직 연결되지 않아 UI를 비활성 상태로 명시한다. 승인 계약의 fixture 검증을 실제 AI 생성 성공으로 해석하지 않는다.
+개인 노트/북마크와 Task는 CustomerProgress를 자동 변경하거나 provider를 호출하지 않는다.
+
 ## D-011 · 2026-09-06 · P3-001 · Bank workspace projection and local browser harness
 The Bank Case Workspace reads only V4-persisted Case, Event, Context Feature, Fact and Verification data through bank-participant projections. It does not create a second Case source or synthesize a title, claim, demand, risk or conversation.
 The browser continues to use the existing revision/fingerprint delta API and Entity-ID merge helper. A Vite-only test proxy may add a test actor only when both explicit process variables are supplied; General API accepts that header only in `APP_ENV=test`, while production Nginx does neither.

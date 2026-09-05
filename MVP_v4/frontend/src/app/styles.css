@@ -74,4 +74,9 @@ button:disabled { cursor:not-allowed; opacity:.55; }
 .personal-notes p { white-space:pre-wrap; overflow-wrap:anywhere; }
 .personal-bookmarks li { display:flex; align-items:center; gap:8px; margin:10px 0; }
 .personal-bookmarks li>button:first-child { flex:1; text-align:left; }
+.task-workspace { max-height:28vh; overflow:auto; padding:10px 0; }
+.task-workspace button { font:inherit; font-size:12px; padding:6px 9px; background:white; border:1px solid #bacbd7; border-radius:4px; }
+.task-block { padding:12px; margin:8px 0; border:1px solid #dae4eb; border-left:3px solid #8aaabe; background:#f5f8fa; font-size:13px; }
+.task-block>span { float:right; color:#4d687c; }
+.task-block p { white-space:pre-wrap; overflow-wrap:anywhere; }
 @media(max-width:640px) { .timeline-panel { height:auto; min-height:80vh; padding:16px; } }

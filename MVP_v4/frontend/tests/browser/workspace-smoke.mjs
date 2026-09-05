@@ -11,6 +11,7 @@ const cache = resolve(root, '.cache/browser-ux');
 await mkdir(cache, { recursive: true });
 const chrome = spawn('C:/Program Files/Google/Chrome/Application/chrome.exe', [
   '--headless=new', '--disable-gpu', '--no-first-run', '--remote-debugging-port=19222',
+  '--window-size=1440,960',
   `--user-data-dir=${cache}/profile`, 'about:blank',
 ], { stdio: 'ignore', windowsHide: true });
 let ws;
@@ -156,6 +157,35 @@ try {
       await click('[role=dialog] button','닫기');
       checks.push('persistent private notes, bookmark add/cancel/persistence, unchanged shared revision, delta-stable target scroll/focus/highlight');
     }
+  }
+  if (process.argv.includes('--tasks')) {
+    await wait(`document.querySelector('[aria-label="대응 업무"]')`);
+    await click('.task-workspace button','업무 추가');
+    await input('[aria-label="업무 제목"]','실제 업무 흐름 검증');
+    await click('[role=dialog] button','저장');
+    await wait(`!document.querySelector('[role=dialog]') && document.querySelector('.task-block')`);
+    const taskId=await run(`document.querySelector('.task-block').dataset.taskId`);
+    await click('.task-block button','업무 수정');
+    await run(`const status=document.querySelector('[aria-label="업무 상태"]');status.value='COMPLETED';status.dispatchEvent(new Event('change',{bubbles:true}));`);
+    await click('[role=dialog] button','저장');
+    assert.equal(await run(`!!document.querySelector('[role=dialog]')`),true);
+    await input('[aria-label="처리 결과"]','거래 내역 확인을 기록했습니다.');
+    await click('[role=dialog] button','저장');
+    await wait(`!document.querySelector('[role=dialog]') && document.querySelector('.task-block').textContent.includes('완료')`);
+    await click('.task-block button','업무 수정');
+    await run(`(()=>{const status=document.querySelector('[aria-label="업무 상태"]');status.value='IN_PROGRESS';status.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+    await click('[role=dialog] button','저장');
+    await wait(`!document.querySelector('[role=dialog]') && document.querySelector('.task-block').textContent.includes('진행 중')`);
+    assert.equal(await run(`document.querySelector('.task-block').dataset.taskId`),taskId);
+    await click('.task-block button','업무 수정');
+    await run(`(()=>{const status=document.querySelector('[aria-label="업무 상태"]');status.value='CANCELLED';status.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+    await input('[aria-label="취소 사유"]','중복 업무로 확인되어 취소합니다.');
+    await click('[role=dialog] button','저장');
+    await wait(`!document.querySelector('[role=dialog]') && document.querySelector('.task-block').textContent.includes('중복 업무')`);
+    const updated=await request(`/cases/${cid}/workspace`);
+    assert.equal(updated.tasks[0].id,taskId);
+    assert.equal(updated.tasks[0].status,'CANCELLED');
+    checks.push('actual task create/required completion result/reopen same ID/cancel reason/Entity-ID delta persistence');
   }
   const shot=await call('Page.captureScreenshot',{format:'png'});
   await writeFile(resolve(cache,'list.png'),Buffer.from(shot.data,'base64'));

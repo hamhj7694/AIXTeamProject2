@@ -67,7 +67,12 @@ export interface BankCaseWorkspace {
   context_features: ContextFeature[];
   facts: CaseFact[];
   verifications: CaseVerification[];
+  tasks: CaseTask[];
+  suggestions: TaskSuggestion[];
 }
+
+export interface CaseTask { id: string; case_id: string; title: string; status: 'TODO' | 'IN_PROGRESS' | 'BLOCKED' | 'COMPLETED' | 'CANCELLED'; result: string | null; cancel_reason: string | null; version: number; updated_at: string; }
+export interface TaskSuggestion { id: string; case_id: string; proposal: Record<string, unknown>; source_revision: number; status: string; version: number; updated_at: string; }
 
 export async function readJson(path: string, signal?: AbortSignal, body?: unknown): Promise<unknown> {
   const response = await fetch(path, {

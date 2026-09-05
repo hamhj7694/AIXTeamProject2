@@ -12,6 +12,8 @@ from backend.general_api.app.domains.cases.repository import (
 )
 from backend.contracts.case import CaseTrashRequest
 from backend.contracts.personal import CreatePersonalNote, SetPersonalBookmark, PersonalWorkspace
+from backend.contracts.tasks import TaskCreate, TaskUpdate, SuggestionDecision
+from backend.general_api.app.domains.cases.tasks_repository import TaskRepository, StaleSuggestion, InvalidTaskProposal
 from backend.general_api.app.domains.cases.workspace_repository import WorkspaceRepository, AdminCredentialRejected, AdminCredentialUnavailable
 
 
@@ -28,6 +30,10 @@ def require_server_actor(request: Request) -> ActorContext:
 
 
 def _case_error(error: Exception) -> None:
+    if isinstance(error, StaleSuggestion):
+        raise HTTPException(status_code=409, detail={"code": "SUGGESTION_STALE"}) from None
+    if isinstance(error, InvalidTaskProposal):
+        raise HTTPException(status_code=422, detail={"code": "INVALID_TASK_PROPOSAL"}) from None
     if isinstance(error, AdminCredentialRejected):
         raise HTTPException(status_code=403, detail={"code": "ADMIN_PASSWORD_INVALID"}) from None
     if isinstance(error, AdminCredentialUnavailable):
@@ -270,6 +276,34 @@ def create_app() -> FastAPI:
     @app.post("/api/v4/cases/{case_id}/personal/bookmarks", response_model=PersonalWorkspace)
     def set_bookmark(case_id: str, request: SetPersonalBookmark, actor: ActorContext = Depends(require_server_actor), settings: Settings = Depends(get_settings)):
         return personal_repository_call(case_id, actor, settings, "set_bookmark", request)
+
+    def task_mutation(case_id, actor, settings, request, task_id=None, suggestion_id=None):
+        from uuid import UUID
+        try:
+            parsed = UUID(case_id)
+            tid = UUID(task_id) if task_id else None
+            sid = UUID(suggestion_id) if suggestion_id else None
+        except ValueError:
+            raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND"}) from None
+        repository = TaskRepository(settings)
+        try:
+            return repository.mutate(parsed, actor, request, task_id=tid, suggestion_id=sid)
+        except Exception as error:
+            _case_error(error)
+        finally:
+            repository.close()
+
+    @app.post("/api/v4/cases/{case_id}/tasks")
+    def create_task(case_id: str, request: TaskCreate, actor: ActorContext = Depends(require_server_actor), settings: Settings = Depends(get_settings)):
+        return task_mutation(case_id, actor, settings, request)
+
+    @app.post("/api/v4/cases/{case_id}/tasks/{task_id}")
+    def update_task(case_id: str, task_id: str, request: TaskUpdate, actor: ActorContext = Depends(require_server_actor), settings: Settings = Depends(get_settings)):
+        return task_mutation(case_id, actor, settings, request, task_id=task_id)
+
+    @app.post("/api/v4/cases/{case_id}/suggestions/{suggestion_id}/decision")
+    def decide_suggestion(case_id: str, suggestion_id: str, request: SuggestionDecision, actor: ActorContext = Depends(require_server_actor), settings: Settings = Depends(get_settings)):
+        return task_mutation(case_id, actor, settings, request, suggestion_id=suggestion_id)
 
     return app
 

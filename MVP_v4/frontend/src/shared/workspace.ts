@@ -13,6 +13,9 @@ export function workspaceEntityState(workspace: BankCaseWorkspace): CaseEntitySt
   for (const event of workspace.events) {
     entities[event.id] = { entity_id: event.id, version: event.case_revision, data: event as unknown as Record<string, unknown> };
   }
+  for (const item of [...(workspace.tasks ?? []), ...(workspace.suggestions ?? [])]) {
+    entities[item.id] = { entity_id: item.id, version: item.version, data: { ...item } };
+  }
   return { revision: workspace.case.revision, fingerprint: workspace.case.fingerprint, entities };
 }
 

@@ -36,6 +36,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--general-port", type=int, default=8100)
     parser.add_argument("--ai-port", type=int, default=8101)
+    parser.add_argument("--tasks", action="store_true", help="Include P3-002 MySQL contention checks")
     args = parser.parse_args()
     general_port, ai_port = args.general_port, args.ai_port
     executable = shutil.which("mysqld")
@@ -91,6 +92,9 @@ def main() -> None:
                 report["case_projection"] = "PASS: V4 Case create/event/customer visibility projection on MySQL"
             finally:
                 repository.close()
+            if args.tasks:
+                from backend.scripts.task_smoke import check_task_contention
+                report["task_contention"] = check_task_contention(settings)
             environment = dict(os.environ)
             environment.update(APP_ENV="test", DATABASE_URL=db_url,
                                AI_API_BASE_URL=f"http://127.0.0.1:{ai_port}", AI_TIMEOUT_SECONDS="2",
@@ -123,6 +127,16 @@ def main() -> None:
                     "features": {name: 0.0 for name in model_features}})
                 assert intake.status_code == 200 and intake.json()["case"]["version"] == 2
                 report["ml_intake"] = "PASS: General→AI approved ML intake persisted structured feature and Case revision"
+                if args.tasks:
+                    task_url = f"http://127.0.0.1:{general_port}/api/v4/cases/{request_id}/tasks"
+                    task_request = {"client_request_id": str(uuid4()), "expected_case_version": 2, "title": "HTTP task check"}
+                    task = client.post(task_url, headers=actor_headers, json=task_request)
+                    assert task.status_code == 200, task.text
+                    assert client.post(task_url, headers=actor_headers, json=task_request).json()["replayed"]
+                    workspace = client.get(task_url.removesuffix("/tasks") + "/workspace", headers=actor_headers).json()
+                    assert workspace["tasks"][0]["id"] == task.json()["entity_id"]
+                    assert workspace["case"]["version"] == 3
+                    report["task_http"] = "PASS: actual MySQL/General HTTP create, replay and workspace projection"
                 readiness = client.get(f"http://127.0.0.1:{general_port}/api/v4/ready")
                 assert readiness.status_code == 503
                 assert readiness.json()["checks"] == {"database": "ok", "ai": "AI_NOT_READY"}
@@ -136,7 +150,7 @@ def main() -> None:
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.wait(timeout=5)
-        output = ROOT / "docs/evidence/phase0_backend_smoke.json"
+        output = ROOT / "docs/evidence" / ("p3_tasks_smoke.json" if args.tasks else "phase0_backend_smoke.json")
         output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(report, ensure_ascii=False))
 

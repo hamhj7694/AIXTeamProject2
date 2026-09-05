@@ -18,6 +18,7 @@ from backend.contracts.case import (
     CreateEventRequest, CreateMlIntakeRequest, EntityType, EventType, SharedCase, Visibility,
 )
 from backend.database import database_engine
+from backend.contracts.tasks import CaseTask, TaskSuggestion
 
 
 class CaseNotFound(Exception):
@@ -193,7 +194,8 @@ class CaseRepository:
                              """), {"case_id": str(case_id), "customer_visibility": Visibility.CUSTOMER.value,
                                        "internal_visibility": Visibility.BANK_INTERNAL.value}).mappings()]
             return BankCaseWorkspace(case=projection.case, participants=projection.participants, events=projection.events,
-                                     context_features=feature_items, facts=facts, verifications=verifications)
+                                     context_features=feature_items, facts=facts, verifications=verifications,
+                                     tasks=self._tasks(connection, case_id), suggestions=self._suggestions(connection, case_id))
 
     def record_ml_intake(self, case_id: UUID, actor: ActorContext, request: CreateMlIntakeRequest,
                          prediction: dict[str, Any], provenance: dict[str, Any]) -> CaseProjection:
@@ -254,11 +256,32 @@ class CaseRepository:
                                             entity_id=item.id, version=item.case_revision,
                                             data=item.model_dump(mode="json"))
                            for item in projection.events if item.case_revision > known_revision)
+            if actor.role == ActorRole.BANK_STAFF:
+                upserts.extend(CaseEntityUpsert(entity_type=EntityType.TASK, entity_id=item.id, version=item.version,
+                    data=item.model_dump(mode='json')) for item in self._tasks(connection, case_id))
+                upserts.extend(CaseEntityUpsert(entity_type=EntityType.AI_SUGGESTION, entity_id=item.id, version=item.version,
+                    data=item.model_dump(mode='json')) for item in self._suggestions(connection, case_id))
             deleted_rows = connection.execute(text("""
                 SELECT id FROM case_events WHERE case_id = :case_id AND deleted_at IS NOT NULL AND case_revision > :revision
             """), {"case_id": str(case_id), "revision": known_revision}).scalars()
             return CaseDelta(case_id=case_id, revision=case.revision, fingerprint=case.fingerprint, unchanged=False,
                              upserts=upserts, deleted_entity_ids=[UUID(value) for value in deleted_rows])
+
+    @staticmethod
+    def _tasks(connection: Connection, case_id: UUID) -> list[CaseTask]:
+        return [CaseTask.model_validate(dict(row)) for row in connection.execute(text('''
+            SELECT id,case_id,title,status,result,cancel_reason,version,updated_at FROM tasks
+            WHERE case_id=:cid AND deleted_at IS NULL ORDER BY created_at,id
+        '''), {'cid': str(case_id)}).mappings()]
+
+    @staticmethod
+    def _suggestions(connection: Connection, case_id: UUID) -> list[TaskSuggestion]:
+        return [TaskSuggestion.model_validate({**dict(row), 'proposal': _decode_json(row['proposal'])})
+            for row in connection.execute(text('''
+                SELECT id,case_id,proposal,source_revision,status,version,updated_at FROM ai_suggestions
+                WHERE case_id=:cid AND suggestion_type='TASK' AND deleted_at IS NULL
+                    AND visibility IN ('CUSTOMER','BANK_INTERNAL') ORDER BY created_at,id
+            '''), {'cid': str(case_id)}).mappings()]
 
     def _case_list_item(self, connection: Connection, row: dict[str, Any]) -> CaseListItem:
         latest_feature = connection.execute(text("""

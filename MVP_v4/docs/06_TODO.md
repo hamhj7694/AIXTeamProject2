@@ -24,7 +24,10 @@
 
 - [x] P3-001 Bank Case list/conversation/context
 
-다음 작업: P3-002 Task/suggestion 승인 흐름. Task는 은행 업무의 단일 원본을 유지한다.
+- [x] P3-002 Task/suggestion 승인 흐름 (실제 AI 추천 생성은 P5)
+- [ ] P3-003 메모 autosave, version conflict/실패 시 draft 보존; 기존 개인 소유권/북마크 이동 재사용
+
+다음 작업: P3-003. P3-001A-3의 수동 메모 추가와 Event 북마크는 완료했으며 autosave만 별도 보완한다.
 최종 gate에 남은 일: Ubuntu clean install/Nginx/systemd, 실제 HTTPS/HTTP-IP 브라우저, standalone copy/Scenario A+B.
 
-이후 P1-003부터 docs/02_IMPLEMENTATION_PLAN.md 순서로 진행. Gate 미통과 시 진입 금지.
+이후 docs/02_IMPLEMENTATION_PLAN.md 순서로 진행. Phase 3 전체 gate는 P3-003 완료 후 판단한다.

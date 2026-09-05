@@ -5,6 +5,7 @@ from typing import Annotated, Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
+from backend.contracts.tasks import CaseTask, TaskSuggestion
 
 
 class Visibility(StrEnum):
@@ -222,6 +223,8 @@ class BankCaseWorkspace(CaseProjection):
     context_features: list[CaseContextFeature] = Field(default_factory=list)
     facts: list[CaseFact] = Field(default_factory=list)
     verifications: list[CaseVerification] = Field(default_factory=list)
+    tasks: list[CaseTask] = Field(default_factory=list)
+    suggestions: list[TaskSuggestion] = Field(default_factory=list)
 
 
 class CaseEntityUpsert(StrictCaseModel):

@@ -51,8 +51,11 @@ class WorkspaceRepository(CaseRepository):
         return PersonalWorkspace(actor_id=actor.actor_id, notes=notes, bookmarks=bookmarks)
 
     def _lock_personal_write(self, connection, case_id: UUID, actor: ActorContext):
-        self._bank_scope(connection, case_id, actor)
-        # Serialize Case-scoped personal writes (including absent bookmark row) without advancing Shared Case state.
+        if actor.role != ActorRole.BANK_STAFF:
+            raise CaseAccessDenied()
+        # Acquire the write lock before the first consistent read: MySQL REPEATABLE READ
+        # must see idempotency rows committed by a request that held this lock before us.
+        # Participation is checked inside the transaction; unauthorized writes roll back.
         locked = connection.execute(text("UPDATE cases SET version=version WHERE id=:id AND deleted_at IS NULL"), {"id": str(case_id)})
         if locked.rowcount != 1:
             raise CaseNotFound()

@@ -1,0 +1,11 @@
+{
+  "mysql_migration": "PASS: fresh MySQL migration 003, repeated upgrade",
+  "case_projection": "PASS: V4 Case create/event/customer visibility projection on MySQL",
+  "ml_inference": "PASS: actual model inference over HTTP /ready/ml",
+  "ml_intake": "PASS: General→AI approved ML intake persisted structured feature and Case revision",
+  "api_health": "PASS: AI 18301 + General 18300, actual HTTP adapter",
+  "conversational_inference": "NOT_IMPLEMENTED",
+  "task_contention": "PASS: four simultaneous duplicates commit once; two competing versions yield one commit/one conflict",
+  "task_http": "PASS: actual MySQL/General HTTP create, replay and workspace projection",
+  "readiness": "PASS: ML ready; unimplemented conversational/intake retain product 503; DB ready"
+}

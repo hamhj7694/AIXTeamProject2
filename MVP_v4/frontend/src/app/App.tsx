@@ -6,6 +6,8 @@ import { caseFromEntityState, latestRisk, timelineFromEntityState, workspaceEnti
 import { CaseList } from './CaseList.tsx';
 import { ConversationComposer, ConversationTimeline } from './Conversation.tsx';
 import { BookmarkButton, PersonalUtilities, usePersonalWorkspace } from './PersonalUtilities.tsx';
+import { TaskWorkspace } from './TaskWorkspace.tsx';
+import type { CaseTask, TaskSuggestion } from '../api/cases.ts';
 
 const POLL_INTERVAL_MS = 5_000;
 
@@ -77,6 +79,18 @@ export function App() {
 
   const currentCase = entityState ? caseFromEntityState(entityState) : null;
   const timeline = entityState ? timelineFromEntityState(entityState) : [];
+  const serverItems = Object.values(entityState?.entities ?? {}).map(item => item.data);
+  const tasks = serverItems.filter(item => 'title' in item && 'cancel_reason' in item) as unknown as CaseTask[];
+  const suggestions = serverItems.filter(item => 'proposal' in item && 'source_revision' in item) as unknown as TaskSuggestion[];
+  const refreshDelta = async () => {
+    const before = entityStateRef.current;
+    if (!selectedId || !before) return;
+    const delta = await getCaseDelta(selectedId, before.revision, before.fingerprint);
+    const latest = entityStateRef.current;
+    if (!latest || !latest.entities[selectedId]) return;
+    const next = mergeCaseDelta(latest, delta, localEditIds.current);
+    entityStateRef.current = next; setEntityState(next);
+  };
   const risk = workspace ? latestRisk(workspace.context_features, timeline) : { score: null, classification: null };
 
   return <div className="bank-workspace">
@@ -90,6 +104,7 @@ export function App() {
         {workspaceState === 'ready' && currentCase && currentCase.id === selectedId && <>
           <div className="case-heading"><div><span className="eyebrow">함께 확인하고 대응하는 공간</span><h2>사건 대화</h2></div></div>
           <ConversationTimeline events={timeline} actorId={personal.current?.actor_id ?? null} renderUtility={id => <BookmarkButton id={id} personal={personal} />} />
+          <TaskWorkspace key={selectedId} currentCase={currentCase} tasks={tasks} suggestions={suggestions} onChanged={refreshDelta} />
         </>}
         {selectedId && <ConversationComposer caseId={selectedId} utilities={<PersonalUtilities caseId={selectedId} events={timeline} personal={personal} />} />}
 

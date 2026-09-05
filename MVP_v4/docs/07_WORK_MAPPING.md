@@ -21,3 +21,5 @@ P3-001A-1 VERIFIED: migration 003, Case metadata/list/trash contracts and reposi
 P3-001A-2 VERIFIED: frontend Conversation projection/component/composer and related unit/browser tests. No provider/message sending endpoint added.
 
 P3-001A-3 VERIFIED: private workspace contracts/repository/API, personal utility UI and stable Event bookmarks; no schema change or Shared Case revision/AI trigger for private writes.
+
+P3-002 VERIFIED: contracts/tasks.py, tasks_repository.py, General Task/suggestion decision APIs, bank workspace/delta task projections, TaskWorkspace.tsx, test_tasks.py, task_smoke.py/phase0_smoke --tasks, real Chrome lifecycle checks. Existing tasks/ai_suggestions tables; no migration. MySQL lock acquired before consistent reads to serialize duplicate keys; four simultaneous retries commit once. No CustomerProgress coupling or provider call. Suggestion producer remains P5.

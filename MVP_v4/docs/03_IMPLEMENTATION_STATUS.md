@@ -6,6 +6,7 @@ PHASE_GATE: PASS — Phase 2 structured-feature intake and privacy boundary comp
 
 | Task | 상태 | 증거/남은 일 |
 |---|---|---|
+| P3-002 | VERIFIED | 75 backend/contract/regression, 17 frontend/typecheck/build PASS; real Chrome Task lifecycle PASS; MySQL concurrent duplicate/stale + actual HTTP PASS (evidence/p3_tasks_smoke.json). Persisted suggestion adoption tested with fixtures; AI recommendation generation remains P5 scope. |
 | P3-001A-3 | VERIFIED | 70 backend tests, 17 frontend tests/typecheck/build; real Chrome notes/bookmark toggle/persistence/delta-stable scroll/focus/highlight PASS. Private writes leave Case revision unchanged. |
 | P3-001A-2 | VERIFIED | 17 frontend tests/typecheck/build; real Chrome natural-language updates, channel drafts, AI OFF with actual ML/polling, editor focus/selection/IME DOM preservation PASS. No fake message/provider contract. |
 | P3-001A-1 | VERIFIED | 68 backend tests, 14 frontend tests/typecheck/build; MySQL migration 003/repeat + real HTTP PASS; real Chrome search/filter/sort/selection/admin failure+success/trash/restore PASS |
@@ -26,8 +27,8 @@ PHASE_GATE: PASS — Phase 2 structured-feature intake and privacy boundary comp
 Phase 4–7: PLANNED. 제품 Conversational Core, RAG, standalone/AWS E2E 완료 아님.
 시작 시 V3에 사용자 staged 변경 18개가 존재한다. 되돌리거나 수정하지 않는다.
 
-현재 기능: 실제 은행 참여자 Case 목록과 bank workspace projection, revision/fingerprint delta polling 기반 3열 화면, 두 API liveness, MySQL migration 002, V4 Shared Case create/read/event projection API, General→AI structured-feature ML intake, V4 내부 승인 ML artifact/adapter와 `/ready/ml`.
-AI 제품 `/ready`는 Conversational Core와 Intake가 미구현이므로 의도적으로 503이다. P1 Case create/read/event projection 외 Chat/Intake/Conversational/RAG/Tool/Agent 기능은 아직 미구현/미검증이다.
+현재 기능: migration 003, Case 목록/휴지통, 자연어 Event 표시, 개인 메모/북마크, Task 생성·수정·완료·취소·재개 및 저장된 제안의 승인 흐름, Entity ID delta polling, General→AI 승인 ML intake. P3-003의 메모 autosave는 다음 작업이다.
+AI 제품 `/ready`는 Conversational Core와 production text intake가 미구현이므로 의도적으로 503이다. 구조화 ML intake와 test-only text intake는 구현·검증됐다. 실제 대화/AI 추천 생성/RAG/Tool/Agent 및 전체 제품 E2E는 미완료다.
 현재 source audit: V3/외부 로컬 path/UUID 위반 0, symlink/junction 0 (애플리케이션 scope).
 V3 non-env tracked 파일 267개 hash 및 git status 기준 비교: 변경 0.
 환경변수 사용 13개/example 누락 0, 실제 env 열람 0.
