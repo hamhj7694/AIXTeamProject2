@@ -13,8 +13,9 @@ from sqlalchemy.engine import Connection, Engine
 
 from backend.config import Settings
 from backend.contracts.case import (
-    ActorContext, ActorRole, CaseDelta, CaseEntityUpsert, CaseEvent, CaseParticipant, CaseProjection, CaseStatus,
-    CreateCaseRequest, CreateEventRequest, CreateMlIntakeRequest, EntityType, EventType, SharedCase, Visibility,
+    ActorContext, ActorRole, BankCaseWorkspace, CaseContextFeature, CaseDelta, CaseEntityUpsert, CaseEvent,
+    CaseFact, CaseListItem, CaseParticipant, CaseProjection, CaseStatus, CaseVerification, CreateCaseRequest,
+    CreateEventRequest, CreateMlIntakeRequest, EntityType, EventType, SharedCase, Visibility,
 )
 from backend.database import database_engine
 
@@ -146,6 +147,51 @@ class CaseRepository:
             self._require_participant(connection, case_id, actor)
             return self._projection(connection, case_id, actor)
 
+    def list_bank_cases(self, actor: ActorContext) -> list[CaseListItem]:
+        if actor.role != ActorRole.BANK_STAFF:
+            raise CaseAccessDenied()
+        with self.engine.connect() as connection:
+            rows = connection.execute(text("""
+                SELECT cases.id, cases.case_number, cases.status, cases.mode, cases.loss_status, cases.revision,
+                    cases.version, cases.updated_at
+                FROM cases JOIN case_participants ON case_participants.case_id = cases.id
+                WHERE case_participants.participant_id = :actor_id
+                    AND case_participants.role = :role AND case_participants.deleted_at IS NULL
+                ORDER BY cases.updated_at DESC, cases.id DESC
+            """), {"actor_id": actor.actor_id, "role": ActorRole.BANK_STAFF.value}).mappings()
+            return [self._case_list_item(connection, dict(row)) for row in rows]
+
+    def bank_workspace(self, case_id: UUID, actor: ActorContext) -> BankCaseWorkspace:
+        if actor.role != ActorRole.BANK_STAFF:
+            raise CaseAccessDenied()
+        with self.engine.connect() as connection:
+            self._require_participant(connection, case_id, actor)
+            projection = self._projection(connection, case_id, actor)
+            context_rows = connection.execute(text("""
+                SELECT id, case_id, source_event_id, schema_version, feature_fingerprint, payload, received_at, version
+                FROM context_features WHERE case_id = :case_id AND deleted_at IS NULL
+                ORDER BY received_at DESC, id DESC
+            """), {"case_id": str(case_id)}).mappings()
+            feature_items = [CaseContextFeature.model_validate({**dict(row), "payload": _decode_json(row["payload"])})
+                             for row in context_rows]
+            facts = [CaseFact.model_validate({**dict(row), "value": _decode_json(row["value"])})
+                     for row in connection.execute(text("""
+                        SELECT id, field_key, value, status, visibility, version FROM facts
+                        WHERE case_id = :case_id AND visibility IN (:customer_visibility, :internal_visibility)
+                            AND deleted_at IS NULL ORDER BY created_at, id
+                     """), {"case_id": str(case_id), "customer_visibility": Visibility.CUSTOMER.value,
+                               "internal_visibility": Visibility.BANK_INTERNAL.value}).mappings()]
+            verifications = [CaseVerification.model_validate(dict(row))
+                             for row in connection.execute(text("""
+                                SELECT id, claim, status, result_summary, customer_visible, visibility, version
+                                FROM verifications WHERE case_id = :case_id
+                                    AND visibility IN (:customer_visibility, :internal_visibility) AND deleted_at IS NULL
+                                ORDER BY created_at, id
+                             """), {"case_id": str(case_id), "customer_visibility": Visibility.CUSTOMER.value,
+                                       "internal_visibility": Visibility.BANK_INTERNAL.value}).mappings()]
+            return BankCaseWorkspace(case=projection.case, participants=projection.participants, events=projection.events,
+                                     context_features=feature_items, facts=facts, verifications=verifications)
+
     def record_ml_intake(self, case_id: UUID, actor: ActorContext, request: CreateMlIntakeRequest,
                          prediction: dict[str, Any], provenance: dict[str, Any]) -> CaseProjection:
         if actor.role != ActorRole.BANK_STAFF:
@@ -210,6 +256,21 @@ class CaseRepository:
             """), {"case_id": str(case_id), "revision": known_revision}).scalars()
             return CaseDelta(case_id=case_id, revision=case.revision, fingerprint=case.fingerprint, unchanged=False,
                              upserts=upserts, deleted_entity_ids=[UUID(value) for value in deleted_rows])
+
+    def _case_list_item(self, connection: Connection, row: dict[str, Any]) -> CaseListItem:
+        latest_feature = connection.execute(text("""
+            SELECT payload FROM context_features WHERE case_id = :case_id AND deleted_at IS NULL
+            ORDER BY received_at DESC, id DESC LIMIT 1
+        """), {"case_id": row["id"]}).scalar()
+        result = _decode_json(latest_feature).get("model_result", {}) if latest_feature is not None else {}
+        latest_event = connection.execute(text("""
+            SELECT event_type FROM case_events WHERE case_id = :case_id
+                AND visibility IN (:customer_visibility, :internal_visibility) AND deleted_at IS NULL
+            ORDER BY case_revision DESC, created_at DESC, id DESC LIMIT 1
+        """), {"case_id": row["id"], "customer_visibility": Visibility.CUSTOMER.value,
+               "internal_visibility": Visibility.BANK_INTERNAL.value}).scalar()
+        return CaseListItem.model_validate({**row, "latest_event_type": latest_event,
+            "risk_score": result.get("final_risk_score"), "risk_classification": result.get("label")})
 
     @staticmethod
     def _case_fingerprint(case_id: UUID, mode: str, loss_status: str, revision: int, version: int) -> str:

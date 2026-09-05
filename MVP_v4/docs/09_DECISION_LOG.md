@@ -1,5 +1,9 @@
 # 결정 기록
 
+## D-011 · 2026-09-06 · P3-001 · Bank workspace projection and local browser harness
+The Bank Case Workspace reads only V4-persisted Case, Event, Context Feature, Fact and Verification data through bank-participant projections. It does not create a second Case source or synthesize a title, claim, demand, risk or conversation.
+The browser continues to use the existing revision/fingerprint delta API and Entity-ID merge helper. A Vite-only test proxy may add a test actor only when both explicit process variables are supplied; General API accepts that header only in `APP_ENV=test`, while production Nginx does neither.
+
 ## D-010 · 2026-09-06 · P1-002 · Server-owned Case projection boundary
 Case API actor identity is an `ActorContext` attached by trusted server authentication middleware, rather than a body field, query view, or client-selected header.
 Customer projections contain only their own participant record and CUSTOMER events; bank staff projections include BANK_INTERNAL events; AI_PRIVATE is excluded from both human projections and cannot be written through the staff Event endpoint.

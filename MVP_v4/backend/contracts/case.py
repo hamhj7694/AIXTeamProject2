@@ -153,6 +153,64 @@ class CaseProjection(StrictCaseModel):
     events: list[CaseEvent]
 
 
+class CaseListItem(StrictCaseModel):
+    """A bank participant's compact, server-projected Case list row."""
+    id: UUID
+    case_number: str = Field(min_length=1, max_length=40)
+    status: CaseStatus
+    mode: CaseMode
+    loss_status: LossStatus
+    revision: Revision
+    version: Version
+    updated_at: datetime
+    latest_event_type: EventType | None = None
+    risk_score: float | None = Field(default=None, ge=0, le=100)
+    risk_classification: str | None = Field(default=None, max_length=40)
+
+
+class CaseContextFeature(StrictCaseModel):
+    id: UUID
+    case_id: UUID
+    source_event_id: str = Field(min_length=1, max_length=128)
+    schema_version: str = Field(min_length=1, max_length=40)
+    feature_fingerprint: Fingerprint
+    payload: dict[str, Any]
+    received_at: datetime
+    version: Version
+
+    @field_validator("payload")
+    @classmethod
+    def forbid_source_text(cls, value: dict[str, Any]) -> dict[str, Any]:
+        StructuredFeaturePayload(schema_version="workspace-context", values=value)
+        return value
+
+
+class CaseFact(StrictCaseModel):
+    id: UUID
+    field_key: str = Field(min_length=1, max_length=120)
+    value: Any
+    status: str = Field(min_length=1, max_length=20)
+    visibility: Visibility
+    version: Version
+
+
+class CaseVerification(StrictCaseModel):
+    id: UUID
+    claim: str = Field(min_length=1)
+    status: str = Field(min_length=1, max_length=20)
+    result_summary: str | None = None
+    customer_visible: bool
+    visibility: Visibility
+    version: Version
+
+
+class BankCaseWorkspace(CaseProjection):
+    """Bank-only context projection. It contains only persisted Case entities."""
+    context_features: list[CaseContextFeature] = Field(default_factory=list)
+    facts: list[CaseFact] = Field(default_factory=list)
+    verifications: list[CaseVerification] = Field(default_factory=list)
+
+
 class CaseEntityUpsert(StrictCaseModel):
     entity_type: EntityType
     entity_id: UUID

@@ -8,9 +8,10 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 
 from backend.config import ROOT, Settings
-from backend.contracts.case import ActorContext, ActorRole
+from backend.contracts.case import ActorContext, ActorRole, CreateMlIntakeRequest
 from backend.database import database_engine
 from backend.general_api.app.main import create_app, get_settings, require_server_actor
+from backend.general_api.app.domains.cases.repository import CaseRepository
 from backend.scripts.migrate import upgrade
 from backend.contracts.ml import MlInferenceResult, MlPrediction
 from backend.ai_api.app.domains.diagnosis.model_adapter import load_model_bundle
@@ -147,6 +148,42 @@ def test_delta_is_noop_for_same_fingerprint_and_returns_only_new_events(case_api
     assert changed.status_code == 200
     assert changed.json()["unchanged"] is False
     assert {item["entity_type"] for item in changed.json()["upserts"]} >= {"CASE", "PARTICIPANT", "TASK"}
+
+
+def test_bank_case_workspace_lists_only_persisted_bank_projection(case_api):
+    client, settings, actor = case_api
+    case_id, _created = create_staff_case(client)
+    repository = CaseRepository(settings)
+    try:
+        repository.record_ml_intake(case_id, actor["value"], CreateMlIntakeRequest(
+            client_request_id=uuid4(), expected_version=1, source_event_id="workspace-source",
+            features={name: 0.0 for name in load_model_bundle()["model_features"]},
+        ), {"raw_ml_risk_score": 20.0, "final_risk_score": 20.0, "threshold_score": 95.0,
+            "candidate_signal_count": 0, "guardrail_applied": True, "label": "NORMAL"},
+        {"model_version": "approved", "artifact_sha256": "a" * 64})
+    finally:
+        repository.close()
+
+    listed = client.get("/api/v4/cases")
+    assert listed.status_code == 200, listed.text
+    item = listed.json()[0]
+    assert item["id"] == str(case_id)
+    assert item["case_number"].startswith("CSR-")
+    assert item["risk_score"] == 20.0 and item["risk_classification"] == "NORMAL"
+    assert item["latest_event_type"] == "ENTITY_CREATED"
+
+    workspace = client.get(f"/api/v4/cases/{case_id}/workspace")
+    assert workspace.status_code == 200, workspace.text
+    body = workspace.json()
+    assert body["case"]["version"] == 2
+    assert len(body["context_features"]) == 1
+    assert body["context_features"][0]["payload"]["model_result"]["label"] == "NORMAL"
+    assert body["facts"] == [] and body["verifications"] == []
+    assert all(event["visibility"] != "AI_PRIVATE" for event in body["events"])
+
+    actor["value"] = ActorContext(actor_id="customer-1", role=ActorRole.CUSTOMER)
+    assert client.get("/api/v4/cases").status_code == 403
+    assert client.get(f"/api/v4/cases/{case_id}/workspace").status_code == 403
 
 
 def test_missing_server_actor_and_nonparticipant_do_not_gain_case_access(case_api):

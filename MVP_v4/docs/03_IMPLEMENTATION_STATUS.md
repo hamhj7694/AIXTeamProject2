@@ -1,8 +1,8 @@
 # 구현 상태
 
 LAST_UPDATED: 2026-09-06
-CURRENT_PHASE: 1
-PHASE_GATE: PASS — Phase 0 foundation + local structured-feature ML preflight (Phase 1 entry permitted)
+CURRENT_PHASE: 3
+PHASE_GATE: PASS — Phase 2 structured-feature intake and privacy boundary complete; P3-001 local implementation gate passed
 
 | Task | 상태 | 증거/남은 일 |
 |---|---|---|
@@ -18,15 +18,16 @@ PHASE_GATE: PASS — Phase 0 foundation + local structured-feature ML preflight 
 | P2-001 | VERIFIED | General→AI approved structured-feature ML intake, V4 context feature/Event/revision persistence, duplicate/stale/invalid/unavailable handling; 58 backend and 9 frontend tests PASS |
 | P2-002 | VERIFIED | feature-only deterministic reconstruction contract; raw text rejected, no source persistence/provider call |
 | P2-003 | VERIFIED | test-only transient text adapter maps to approved features and reuses ML intake; raw source not persisted; 64 backend tests PASS |
+| P3-001 | VERIFIED | Bank-only case list/workspace projection and actual 3-column frontend; existing delta Entity-ID merge polling; 65 backend, 11 frontend tests, typecheck/build and isolation/env/UUID audit PASS |
 
-Phase 2–7: PLANNED. 기능 구현/AI 실호출/Standalone/E2E 완료 아님.
+Phase 4–7: PLANNED. 제품 Conversational Core, RAG, standalone/AWS E2E 완료 아님.
 시작 시 V3에 사용자 staged 변경 18개가 존재한다. 되돌리거나 수정하지 않는다.
 
-현재 기능: React 연결 확인 화면, 두 API liveness, MySQL migration 002, V4 Shared Case create/read/event projection API, General→AI structured-feature ML intake, V4 내부 승인 ML artifact/adapter와 `/ready/ml`.
+현재 기능: 실제 은행 참여자 Case 목록과 bank workspace projection, revision/fingerprint delta polling 기반 3열 화면, 두 API liveness, MySQL migration 002, V4 Shared Case create/read/event projection API, General→AI structured-feature ML intake, V4 내부 승인 ML artifact/adapter와 `/ready/ml`.
 AI 제품 `/ready`는 Conversational Core와 Intake가 미구현이므로 의도적으로 503이다. P1 Case create/read/event projection 외 Chat/Intake/Conversational/RAG/Tool/Agent 기능은 아직 미구현/미검증이다.
 현재 source audit: V3/외부 로컬 path/UUID 위반 0, symlink/junction 0 (애플리케이션 scope).
 V3 non-env tracked 파일 267개 hash 및 git status 기준 비교: 변경 0.
-환경변수 사용 11개/example 누락 0, 실제 env 열람 0.
+환경변수 사용 13개/example 누락 0, 실제 env 열람 0.
 알려진 경고: third-party AnyIO deprecation 1, npm esbuild allow-scripts 알림. 실제 build는 PASS.
 P0-006 copied V4 + fresh venv ML isolation PASS: 원본 repo read/network 차단, 새 V4 내부 dependency/model에서 정상·위험 synthetic inference PASS.
 Ubuntu/Nginx/systemd 실실행, 최종 full standalone build/migration/health/E2E 및 제품 E2E A/B는 NOT_RUN.

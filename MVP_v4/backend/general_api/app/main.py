@@ -3,7 +3,7 @@ from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 
 from backend.config import Settings
-from backend.contracts.case import ActorContext, ActorRole, CaseDelta, CaseProjection, CreateCaseRequest, CreateEventRequest, CreateMlIntakeRequest, CreateTestTextIntakeRequest
+from backend.contracts.case import ActorContext, ActorRole, BankCaseWorkspace, CaseDelta, CaseListItem, CaseProjection, CreateCaseRequest, CreateEventRequest, CreateMlIntakeRequest, CreateTestTextIntakeRequest
 from backend.contracts.health import Health, Readiness
 from backend.database import database_readiness
 from backend.general_api.app.clients.ai import AiClient
@@ -78,6 +78,18 @@ def create_app() -> FastAPI:
             repository.close()
         return JSONResponse(status_code=status.HTTP_201_CREATED, content=projection.model_dump(mode="json"))
 
+    @app.get("/api/v4/cases", response_model=list[CaseListItem])
+    def list_cases(actor: ActorContext = Depends(require_server_actor),
+                   settings: Settings = Depends(get_settings)) -> list[CaseListItem]:
+        repository = CaseRepository(settings)
+        try:
+            return repository.list_bank_cases(actor)
+        except Exception as error:
+            _case_error(error)
+            raise
+        finally:
+            repository.close()
+
     @app.get("/api/v4/cases/{case_id}", response_model=CaseProjection)
     def get_case(case_id: str, actor: ActorContext = Depends(require_server_actor),
                  settings: Settings = Depends(get_settings)) -> CaseProjection:
@@ -89,6 +101,23 @@ def create_app() -> FastAPI:
         repository = CaseRepository(settings)
         try:
             return repository.projection(parsed_id, actor)
+        except Exception as error:
+            _case_error(error)
+            raise
+        finally:
+            repository.close()
+
+    @app.get("/api/v4/cases/{case_id}/workspace", response_model=BankCaseWorkspace)
+    def get_bank_workspace(case_id: str, actor: ActorContext = Depends(require_server_actor),
+                           settings: Settings = Depends(get_settings)) -> BankCaseWorkspace:
+        from uuid import UUID
+        try:
+            parsed_id = UUID(case_id)
+        except ValueError:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "CASE_NOT_FOUND"}) from None
+        repository = CaseRepository(settings)
+        try:
+            return repository.bank_workspace(parsed_id, actor)
         except Exception as error:
             _case_error(error)
             raise
