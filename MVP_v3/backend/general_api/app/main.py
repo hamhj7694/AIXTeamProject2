@@ -1351,6 +1351,18 @@ async def invoke_customer_support_ai(case_id: str, request: PublicCustomerAiRepl
         for item in questions
         if item.get("status") == "ANSWERED" and item.get("answer_text")
     ][-10:]
+    # Always include visible unanswered cards, even when retrieval cannot match a vague "이 질문".
+    service_questions = [
+        {
+            'source': 'CSR_QUESTION_CARD', 'status': 'ASKED',
+            'question_text': str(item.get('question_text', ''))[:1000],
+            'customer_explanation': str(item.get('customer_explanation') or '')[:1000],
+            'options': [str(option)[:160] for option in (item.get('options') or [])[:10]],
+        }
+        for item in questions
+        if item.get('status') == 'ASKED' and item.get('question_text')
+        and item.get('case_id', case_id) == case_id
+    ][:5]
     retrieved = retrieve_context(case_id, request.prompt, collect_records(
         case_id, messages=all_messages, questions=questions, verifications=verifications, customer=True,
     ), customer=True)
@@ -1370,6 +1382,7 @@ async def invoke_customer_support_ai(case_id: str, request: PublicCustomerAiRepl
             "assistant_mode": "CUSTOMER_SUPPORT",
             "primary_assignee": case.get('primary_assignee'),
             "customer_progress": progress_ai_context(progress),
+            "customer_service_questions": service_questions,
             "published_verification_results": published_results,
             "attachment_summaries": [str(item.get('original_name', '첨부 자료')) for item in attachments
                                      if item.get('visibility') == 'CUSTOMER'][-10:],
@@ -1382,7 +1395,7 @@ async def invoke_customer_support_ai(case_id: str, request: PublicCustomerAiRepl
         raise HTTPException(status_code=503, detail={"code": "AI_CUSTOMER_SUPPORT_FAILED", "message": str(exc)}) from exc
     message = await repository.append_message(case_id, {
         "actor_type": "CUSTOMER_AGENT", "actor_user_id": "customer-agent",
-        "actor_display_name": "안전 상담 AI", "actor_role": "CUSTOMER_AGENT",
+        "actor_display_name": "서비스 이용 안내" if ai_reply.get('model_mode') == 'SERVICE_UI_GUIDANCE' else "안전 상담 AI", "actor_role": "CUSTOMER_AGENT",
         "content": ai_reply["content"], "channel": "CUSTOMER", "audience": "CUSTOMER",
         "visibility": "CUSTOMER", "message_kind": "AI_RESPONSE", "mentions": [],
         "reply_to_message_id": request.reply_to_message_id, "client_request_id": request.client_request_id,
@@ -1809,7 +1822,28 @@ async def update_customer_progress(case_id: str, step: ProgressStep, request: Up
 async def request_progress_confirmation(case_id: str, step: ProgressStep):
     await require_case(case_id)
     await repository.create_action(case_id, {'_progress_command': {'step': step, 'request_confirmation': True}})
-    return build_customer_progress(await repository.list_actions(case_id))
+    progress = build_customer_progress(await repository.list_actions(case_id))
+    item = next(value for value in progress if value.step == step)
+    # Keep the request visible in both conversations. Stable request IDs make
+    # retries idempotent and repair a partial notification failure on retry.
+    notification_key = f"progress-confirmation-{step}-{item.revision}"
+    await repository.append_message(case_id, {
+        "actor_type": "CUSTOMER_AGENT", "actor_user_id": "customer-progress",
+        "actor_display_name": "서비스 알림", "actor_role": "CUSTOMER_AGENT",
+        "content": f"‘{item.label}’ 처리 결과 확인 요청을 담당자에게 전달했습니다.",
+        "channel": "CUSTOMER", "audience": "CUSTOMER", "visibility": "CUSTOMER",
+        "message_kind": "SYSTEM_EVENT", "mentions": [],
+        "client_request_id": f"{notification_key}-customer", "log_event": False,
+    })
+    await repository.append_message(case_id, {
+        "actor_type": "CUSTOMER", "actor_user_id": "customer-progress",
+        "actor_display_name": "고객 확인 요청", "actor_role": "CUSTOMER",
+        "content": f"고객이 ‘{item.label}’ 처리 결과 확인을 요청했습니다. 담당자 결과 등록이 필요합니다.",
+        "channel": "TEAM", "audience": "BANK_INTERNAL", "visibility": "BANK_INTERNAL",
+        "message_kind": "SYSTEM_EVENT", "mentions": [],
+        "client_request_id": f"{notification_key}-bank", "log_event": True,
+    })
+    return progress
 
 
 @app.post("/api/cases/{case_id}/actions", response_model=PublicActionResponse, status_code=201)

@@ -55,10 +55,14 @@ class CustomerAnswerStructuringService:
                 yes_value="TRANSFERRED",
             )
         if target_field is TargetField.PERSONAL_INFORMATION_EXPOSURE:
+            partial = ("일부", "일부분", "앞자리", "뒷자리", "몇자리", "조금", "몇개")
+            shared = ("제공했", "알려줬", "알려주었", "입력했", "유출됐", "유출되었", "전달했", "말했", "보냈", "넘겼")
+            if any(marker in text for marker in partial) and any(marker in text for marker in shared):
+                return "PARTIALLY_EXPOSED"
             return self._yes_no_value(
                 text,
                 negative=("제공안", "제공하지않", "안알려", "알려주지않", "입력안", "유출안"),
-                positive=("제공했", "알려줬", "알려주었", "입력했", "유출됐", "유출되었"),
+                positive=shared,
                 no_value="NOT_EXPOSED",
                 yes_value="EXPOSED",
             )
@@ -66,9 +70,17 @@ class CustomerAnswerStructuringService:
             return self._yes_no_value(
                 text,
                 negative=("제공안", "제공하지않", "안알려", "알려주지않", "입력안"),
-                positive=("제공했", "알려줬", "알려주었", "입력했"),
+                positive=("제공했", "알려줬", "알려주었", "입력했", "전달했", "말했", "보냈", "넘겼"),
                 no_value="NOT_EXPOSED",
                 yes_value="EXPOSED",
+            )
+        if target_field is TargetField.REMOTE_CONTROL_APP:
+            return self._yes_no_value(
+                text,
+                negative=("설치안", "설치하지않", "깔지않", "안깔", "다운로드안"),
+                positive=("설치했", "깔았", "다운로드했"),
+                no_value="NOT_INSTALLED",
+                yes_value="INSTALLED",
             )
         return None
 

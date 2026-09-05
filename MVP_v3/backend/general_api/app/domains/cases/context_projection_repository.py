@@ -11,6 +11,7 @@ import aiomysql
 
 
 ClaimOutcome = Literal['CLAIMED', 'CACHED', 'IN_PROGRESS', 'STALE']
+CASE_SUPPORT_SCHEMA_VERSION = 'case-support.v3'
 
 
 @dataclass(frozen=True)
@@ -70,7 +71,7 @@ class ContextProjectionRepository:
                     if current != requested_revision:
                         await connection.commit()
                         return ProjectionClaim('STALE', current, last_success_revision=success_revision, last_success_payload=payload)
-                    if success_revision == current and payload is not None and row.get('schema_version') == 'case-support.v2':
+                    if success_revision == current and payload is not None and row.get('schema_version') == CASE_SUPPORT_SCHEMA_VERSION:
                         await connection.commit()
                         return ProjectionClaim('CACHED', current, last_success_revision=success_revision, last_success_payload=payload)
                     if row and row.get('generating_revision') == current and row.get('lease_expires_at') and row['lease_expires_at'] > now:
@@ -97,7 +98,7 @@ class ContextProjectionRepository:
                 raise
 
     async def complete(self, case_id: str, revision: int, lease_token: str, payload: dict[str, Any], *,
-                       schema_version: str = 'case-support.v2', model_version: str | None = None,
+                       schema_version: str = CASE_SUPPORT_SCHEMA_VERSION, model_version: str | None = None,
                        prompt_version: str | None = None) -> bool:
         encoded = json.dumps(payload, ensure_ascii=False)
         now = datetime.now()

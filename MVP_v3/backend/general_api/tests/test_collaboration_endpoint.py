@@ -85,6 +85,14 @@ class CollaborationEndpointTest(unittest.TestCase):
         }]
         self.repository.list_customer_questions.return_value = [{
             "question_text": "개인정보를 제공했나요?", "answer_text": "예", "status": "ANSWERED",
+        }, {
+            'case_id': 'CASE-1', 'question_text': '인증번호를 제공하셨나요?', 'status': 'ASKED',
+            'customer_explanation': '인증정보 제공 여부만 확인합니다.', 'options': ['제공함', '제공하지 않음'],
+            'reason': '비공개 내부 판단', 'requested_by': '비공개 직원 식별자',
+        }, {
+            'case_id': 'CASE-1', 'question_text': '아직 공개하지 않은 질문', 'status': 'PENDING',
+        }, {
+            'case_id': 'OTHER-CASE', 'question_text': '다른 사건 질문', 'status': 'ASKED',
         }]
         self.repository.append_message.return_value = {
             "message_id": "msg-customer-ai-1", "case_id": "CASE-1", "actor_type": "CUSTOMER_AGENT",
@@ -106,6 +114,10 @@ class CollaborationEndpointTest(unittest.TestCase):
         self.assertEqual(payload["assistant_mode"], "CUSTOMER_SUPPORT")
         self.assertEqual(payload["pending_actions"], [])
         self.assertEqual(payload["unresolved_verifications"], [])
+        self.assertEqual(payload['customer_service_questions'], [{
+            'source': 'CSR_QUESTION_CARD', 'status': 'ASKED', 'question_text': '인증번호를 제공하셨나요?',
+            'customer_explanation': '인증정보 제공 여부만 확인합니다.', 'options': ['제공함', '제공하지 않음'],
+        }])
         saved = self.repository.append_message.await_args.args[1]
         self.assertEqual(saved["reply_to_message_id"], "msg-customer-1")
 

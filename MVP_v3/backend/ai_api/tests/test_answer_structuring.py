@@ -25,6 +25,14 @@ class CustomerAnswerStructuringTest(unittest.TestCase):
         self.assertEqual(result.structured_value, "NOT_EXPOSED")
         self.assertFalse(result.unresolved)
 
+    def test_partial_personal_information_wording_is_structured(self) -> None:
+        result = self.service.structure_answer(
+            TargetField.PERSONAL_INFORMATION_EXPOSURE,
+            "주민등록번호 앞자리만 전달했어요",
+        )
+        self.assertEqual(result.structured_value, "PARTIALLY_EXPOSED")
+        self.assertFalse(result.unresolved)
+
     def test_ambiguous_answer_is_preserved_as_unresolved(self) -> None:
         raw_answer = "아마 아직 안 했던 것 같아요"
         result = self.service.structure_answer(TargetField.TRANSFER_STATUS, raw_answer)

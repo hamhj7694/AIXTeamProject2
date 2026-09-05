@@ -9,6 +9,16 @@ from pydantic import Field
 from contracts.diagnosis import StrictModel
 
 
+class CustomerServiceQuestion(StrictModel):
+    """Server-selected question cards currently exposed to this Case's customer."""
+
+    source: Literal['CSR_QUESTION_CARD'] = 'CSR_QUESTION_CARD'
+    status: Literal['ASKED'] = 'ASKED'
+    question_text: str = Field(min_length=1, max_length=1_000)
+    customer_explanation: str = Field(default='', max_length=1_000)
+    options: list[str] = Field(default_factory=list, max_length=10)
+
+
 class CaseCopilotInput(StrictModel):
     case_id: str = Field(min_length=1, max_length=80)
     prompt: str = Field(min_length=1, max_length=6_000)
@@ -24,6 +34,7 @@ class CaseCopilotInput(StrictModel):
     recent_conversation: list[str] = Field(default_factory=list, max_length=20)
     pending_actions: list[str] = Field(default_factory=list, max_length=20)
     customer_progress: list[str] = Field(default_factory=list, max_length=10)
+    customer_service_questions: list[CustomerServiceQuestion] = Field(default_factory=list, max_length=5)
     published_verification_results: list[str] = Field(default_factory=list, max_length=10)
     attachment_summaries: list[str] = Field(default_factory=list, max_length=10)
     unresolved_verifications: list[str] = Field(default_factory=list, max_length=10)

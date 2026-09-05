@@ -60,6 +60,18 @@ class CustomerProgressTest(unittest.TestCase):
         self.assertEqual(relief['status'], 'UNKNOWN')
         self.assertTrue(relief['confirmation_requested'])
         self.assertEqual(len(self.repo._actions), 1)
+        customer_notice = [item for item in self.repo._messages if item.get('channel') == 'CUSTOMER']
+        bank_notice = [item for item in self.repo._messages if item.get('channel') == 'TEAM']
+        self.assertEqual(len(customer_notice), 1)
+        self.assertEqual(len(bank_notice), 1)
+        self.assertIn('처리 결과 확인 요청을 담당자에게 전달했습니다', customer_notice[0]['content'])
+        self.assertIn('고객이', bank_notice[0]['content'])
+        self.assertIn('담당자 결과 등록이 필요합니다', bank_notice[0]['content'])
+        customer_bundle = self.client.get('/api/cases/VP-TEST/bundle', params={'view': 'customer'}).json()
+        bank_bundle = self.client.get('/api/cases/VP-TEST/bundle', params={'view': 'bank'}).json()
+        self.assertTrue(any('담당자에게 전달했습니다' in item['content'] for item in customer_bundle['recent_messages']))
+        self.assertFalse(any('담당자 결과 등록이 필요합니다' in item['content'] for item in customer_bundle['recent_messages']))
+        self.assertTrue(any('담당자 결과 등록이 필요합니다' in item['content'] for item in bank_bundle['recent_messages']))
         response = self.client.put(self.url + '/RELIEF', json=self.values(1))
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.json()[-1]['confirmation_requested'])

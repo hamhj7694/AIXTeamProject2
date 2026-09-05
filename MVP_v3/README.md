@@ -13,6 +13,12 @@ Browser :5176
 
 Frontend가 AI API를 직접 호출하지 않는다. General API가 필요한 Case Context만 AI API에 전달한다.
 
+AI가 DB를 직접 수정하지도 않는다. Window AI·LLM·답변 구조화 계층은 분석 결과와 사실 후보를 만들고,
+General API가 공개 범위·상태 전이·중복·버전을 검사한 뒤 MySQL에 기록한다. 고객 질문 답변은
+원문 메시지와 사실 후보로 저장되고, AI API가 지원 필드의 의미를 구조화해 사건 맥락에 투영한다.
+고객용 안전 상담과 은행용 CaseCopilot은 서로 다른 지침·공개 범위를 사용하며 아래 환경변수로
+각각 다른 모델을 선택할 수 있다.
+
 ## 환경변수 위치
 
 환경변수 파일은 루트의 `MVP_v3/.env` 하나만 사용한다. AI API, General API,
@@ -22,6 +28,8 @@ migration 스크립트와 Docker Compose가 모두 이 파일을 기준으로 �
 | 키 | 사용자가 수정할 내용 |
 |---|---|
 | `OPENAI_API_KEY` | 실제 OpenAI API 키 |
+| `OPENAI_CUSTOMER_SUPPORT_MODEL` | 고객용 안전 상담 AI 모델. 미설정 시 `OPENAI_CASE_COPILOT_MODEL` 사용 |
+| `OPENAI_BANK_COPILOT_MODEL` | 은행 직원용 CaseCopilot 모델. 미설정 시 `OPENAI_CASE_COPILOT_MODEL` 사용 |
 | `MYSQL_USER`, `MYSQL_DATABASE` | 실제 MySQL 계정과 DB 이름; 예제는 `ham`, `csr` |
 | `MYSQL_PASSWORD` | `MYSQL_USER` 계정의 실제 비밀번호 |
 | `MYSQL_ROOT_PASSWORD` | 포함된 MySQL 컨테이너를 사용할 때 설정할 별도 비밀번호 |

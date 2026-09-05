@@ -25,7 +25,7 @@ export const CustomerProgressPanel: React.FC<{
       {item.next_action && <p className="progress-next"><strong>지금 할 일</strong> {item.next_action}</p>}
       {item.reference && <small>확인 근거: {item.reference}</small>}
       {item.confirmed_at && <small>확인 시각: {new Date(item.confirmed_at).toLocaleString('ko-KR')}</small>}
-      {item.confirmation_requested ? <p role="status">담당자에게 확인 요청이 기록됐습니다. 답변 대기 중입니다.</p> :
+      {item.confirmation_requested ? <><button type="button" disabled><Check size={13}/> 담당자 확인 요청됨</button><p role="status">고객·은행 채팅에 요청이 기록됐습니다. 담당자 답변 대기 중입니다.</p></> :
         <button type="button" disabled={pending !== null} onClick={() => void request(item.step)}>{pending === item.step ? '요청 저장 중…' : '담당자에게 확인 요청'}</button>}
     </article>)}</div>
     {!items.length && <p className="customer-progress-summary">처리 결과를 아직 불러오지 못했습니다. 완료 여부는 확인되지 않았습니다.</p>}
