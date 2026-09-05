@@ -13,7 +13,7 @@ from sqlalchemy.engine import Connection, Engine
 
 from backend.config import Settings
 from backend.contracts.case import (
-    ActorContext, ActorRole, CaseEvent, CaseParticipant, CaseProjection, CaseStatus,
+    ActorContext, ActorRole, CaseDelta, CaseEntityUpsert, CaseEvent, CaseParticipant, CaseProjection, CaseStatus,
     CreateCaseRequest, CreateEventRequest, EntityType, EventType, SharedCase, Visibility,
 )
 from backend.database import database_engine
@@ -145,6 +145,27 @@ class CaseRepository:
         with self.engine.connect() as connection:
             self._require_participant(connection, case_id, actor)
             return self._projection(connection, case_id, actor)
+
+    def delta(self, case_id: UUID, actor: ActorContext, known_revision: int, known_fingerprint: str | None) -> CaseDelta:
+        with self.engine.connect() as connection:
+            self._require_participant(connection, case_id, actor)
+            projection = self._projection(connection, case_id, actor)
+            case = projection.case
+            if known_fingerprint == case.fingerprint:
+                return CaseDelta(case_id=case_id, revision=case.revision, fingerprint=case.fingerprint, unchanged=True)
+            upserts = [CaseEntityUpsert(entity_type=EntityType.CASE, entity_id=case.id, version=case.version,
+                                        data=case.model_dump(mode="json"))]
+            upserts.extend(CaseEntityUpsert(entity_type=EntityType.PARTICIPANT, entity_id=item.id, version=item.version,
+                                            data=item.model_dump(mode="json")) for item in projection.participants)
+            upserts.extend(CaseEntityUpsert(entity_type=EntityType.CASE if item.entity_type == EntityType.CASE else item.entity_type,
+                                            entity_id=item.id, version=item.case_revision,
+                                            data=item.model_dump(mode="json"))
+                           for item in projection.events if item.case_revision > known_revision)
+            deleted_rows = connection.execute(text("""
+                SELECT id FROM case_events WHERE case_id = :case_id AND deleted_at IS NOT NULL AND case_revision > :revision
+            """), {"case_id": str(case_id), "revision": known_revision}).scalars()
+            return CaseDelta(case_id=case_id, revision=case.revision, fingerprint=case.fingerprint, unchanged=False,
+                             upserts=upserts, deleted_entity_ids=[UUID(value) for value in deleted_rows])
 
     @staticmethod
     def _case_fingerprint(case_id: UUID, mode: str, loss_status: str, revision: int, version: int) -> str:

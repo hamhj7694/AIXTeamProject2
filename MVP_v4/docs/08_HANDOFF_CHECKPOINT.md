@@ -1,13 +1,14 @@
 # Handoff Checkpoint
 
 LAST_UPDATED: 2026-09-06
-CURRENT_PHASE: 1
-CURRENT_TASK: P1-003
+CURRENT_PHASE: 2
+CURRENT_TASK: P2-001
 CURRENT_STATUS: IN_PROGRESS
 
 ## LAST_COMPLETED
 - P1-001 VERIFIED: Shared Case data contracts and V4-only migration 002. SQLite/MySQL migration repeat, 49 tests, audit/env PASS.
 - P1-002 VERIFIED: V4 Case create/read/event/projection API. Trusted server actor context, participant authorization, visibility projection, event audit, idempotency/409 all verified on SQLite and disposable MySQL.
+- P1-003 VERIFIED: revision/fingerprint delta API and ID merge helper protect no-op polling, stale responses and local drafts without SSE or full Case replacement.
 - P0-006 VERIFIED: 승인 모델/adapter를 V4 내부로 이식하고 실제 load/predict, `/ready/ml`, fresh copied V4 + fresh venv isolation, Phase 0 Gate를 통과.
 - P0-005 VERIFIED: AWS 자산/audit/scaffold gate; Backend 23 + Frontend 7 PASS; evidence/phase0_gate.json.
 - P0-004 VERIFIED: React/Vite scaffold, same-origin health, createUuid, tests 7 PASS, clean install/typecheck/build PASS.
@@ -25,6 +26,7 @@ CURRENT_STATUS: IN_PROGRESS
 - P0-006: backend/models/WINDOW_LOGISTIC_DASHBOARD_EXPERIMENTAL_SAMPLE_v1.pkl, diagnosis/{model_adapter,preflight}.py, contracts/ml.py, scripts/{model_preflight,isolated_model_probe}.py, scripts/verify_model_isolation.py, ML dependency pins, health/smoke/gate/tests/docs/evidence 업데이트.
 - P1-001: backend/contracts/case.py, migrations/002_shared_case_schema.py, database.py, schema/contract tests, docs/04/03/06/07/08/09.
 - P1-002: backend/general_api/app/domains/cases/repository.py, general main.py, contracts/case.py, tests/backend/test_case_api.py, phase0_smoke.py, docs/03/04/06/07/08/09.
+- P1-003: backend contracts/repository/main delta path, frontend/src/shared/caseDelta.ts, backend/frontend delta tests, docs/03/06/07/08.
 
 ## COMMANDS_RUN
 - P0-006 requirements ML install: sandbox FAIL → 승인 실행 PASS; pip check PASS.
@@ -36,6 +38,7 @@ CURRENT_STATUS: IN_PROGRESS
 - P1-001: migration 002 applied/reapplied on SQLite and disposable MySQL; full pytest 49 PASS; static isolation/env audit PASS.
 - P1-001 final revalidation: `.venv\\Scripts\\python.exe -m pytest tests -q` 49 PASS; disposable MySQL migration 002/repeat + General→AI HTTP smoke PASS; frontend typecheck/test/build PASS; static isolation/env/UUID audits PASS.
 - P1-002: `.venv\\Scripts\\python.exe -m pytest tests -q` 53 PASS; disposable MySQL case create/event/customer projection + migration repeat + HTTP health/ML smoke PASS; static isolation/env/UUID audit PASS; frontend typecheck, 7 tests and production build PASS.
+- P1-003: 54 backend/contract/regression PASS; frontend 9 tests/typecheck/build PASS; isolation and UUID audit PASS.
 - P0-005 python -m scripts.phase0_gate: sandbox 마지막 build FAIL → 승인 실행에서 전체 PASS(23 backend, 7 frontend, npm ci/typecheck/build, pip check, static/env audit).
 - python -m scripts.verify_frontend_uuid_usage: PASS, helper 밖 직접 사용 0.
 - V3 baseline SHA-256/status 비교: 267 non-env tracked 파일 변경 0, status 차이 0. evidence/v3-preservation-check.json.
@@ -69,14 +72,14 @@ CURRENT_STATUS: IN_PROGRESS
 - frontend/dist/index.html 및 assets 생성. UUID native/fallback/request-header 계약 검증. 실제 브라우저 HTTPS/HTTP-IP 핵심 E2E는 아직 아님.
 
 ## INCOMPLETE_CHANGES
-- P0-001~006/P1-001/P1-002 are verified. P1-003 is starting; no partial P1-003 code yet.
+- P0-001~006/P1-001/P1-002/P1-003 are verified. P2-001 is starting; no partial P2-001 code yet.
 - 의도된 미구현: Case/Chat/Intake/Conversational/RAG/Tool/Agent 제품 경로. AI 전체 `/ready`는 conversational/text_intake 미구현을 명시하며 503.
 - 최종 full standalone copy/frontend build/new DB migration/full API readiness/E2E 및 Ubuntu 실행 NOT_RUN.
 
 ## NEXT_EXACT_STEPS
-1. P1-003: Define a revision/fingerprint delta endpoint and entity-ID partial merge contract on top of P1-002 projection. Preserve local drafts/focus/cursor/selection/IME; do not replace the full Case object on polling.
-2. Add repository/API/frontend-state tests for no-op fingerprints, changed/deleted entities, stale response handling and local draft preservation. Do not add Case UI, SSE, or AI calls.
-3. Run the P1-003 gate and commit only after all contract/backend/frontend regression checks pass.
+1. P2-001: connect the approved V4-only structured-feature model to a Case intake endpoint; retain threshold, feature order and guardrail unchanged.
+2. Persist structured features only, create/update a Case through V4 repositories, and avoid source-text DB storage or paid AI calls.
+3. Test normal no-case and phishing-risk Case paths before advancing to P2-002.
 
 ## BLOCKERS
 - GAP-AI-001: 공식지식 RAG 원본 미확인. AI_REUSE_MAP 참조.

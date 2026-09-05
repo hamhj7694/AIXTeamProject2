@@ -10,9 +10,9 @@
 
 - [x] P1-001 Shared Case schema/contract + migration 002
 - [x] P1-002 Case/Event/Projection API + server actor policy
-- [ ] P1-003 revision/fingerprint delta merge
+- [x] P1-003 revision/fingerprint delta merge
 
-다음 작업: P1-003 revision/fingerprint change-aware delta 및 Entity ID 병합 계약. 제품 AI readiness 503을 성공으로 덮지 않는다.
+다음 작업: P2-001 ML intake 연결. P0-006 승인 모델/threshold/feature order/guardrail을 변경하지 않는다.
 최종 gate에 남은 일: Ubuntu clean install/Nginx/systemd, 실제 HTTPS/HTTP-IP 브라우저, standalone copy/Scenario A+B.
 
 이후 P1-003부터 docs/02_IMPLEMENTATION_PLAN.md 순서로 진행. Gate 미통과 시 진입 금지.

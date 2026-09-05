@@ -127,6 +127,26 @@ def test_event_version_conflict_and_idempotency_conflict(case_api):
     assert reuse.json()["detail"]["code"] == "IDEMPOTENCY_KEY_REUSED"
 
 
+def test_delta_is_noop_for_same_fingerprint_and_returns_only_new_events(case_api):
+    client, _settings, _actor = case_api
+    case_id, created = create_staff_case(client)
+    unchanged = client.get(f"/api/v4/cases/{case_id}/delta", params={
+        "known_revision": 1, "known_fingerprint": created["case"]["fingerprint"],
+    })
+    assert unchanged.status_code == 200
+    assert unchanged.json()["unchanged"] is True
+    assert unchanged.json()["upserts"] == []
+    event = client.post(f"/api/v4/cases/{case_id}/events", json={
+        "client_request_id": str(uuid4()), "expected_version": 1, "event_type": "ENTITY_CREATED",
+        "entity_type": "TASK", "visibility": "BANK_INTERNAL", "payload": {"task_status": "TODO"},
+    })
+    assert event.status_code == 200
+    changed = client.get(f"/api/v4/cases/{case_id}/delta", params={"known_revision": 1})
+    assert changed.status_code == 200
+    assert changed.json()["unchanged"] is False
+    assert {item["entity_type"] for item in changed.json()["upserts"]} >= {"CASE", "PARTICIPANT", "TASK"}
+
+
 def test_missing_server_actor_and_nonparticipant_do_not_gain_case_access(case_api):
     client, _settings, actor = case_api
     case_id, _created = create_staff_case(client)

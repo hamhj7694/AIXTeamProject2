@@ -14,7 +14,7 @@ PHASE_GATE: PASS — Phase 0 foundation + local structured-feature ML preflight 
 | P0-006 | VERIFIED | V4 artifact/adapter load/inference PASS; fresh copied V4 + fresh venv model isolation PASS; 39 backend tests, HTTP smoke, full Phase 0 gate PASS |
 | P1-001 | VERIFIED | migration 002 Shared Case schema + typed contracts; SQLite/MySQL migration tests, 49 full tests, isolation/env audit PASS |
 | P1-002 | VERIFIED | V4 Case create/read/event/projection API; server-attached actor policy, participant scope, CUSTOMER/BANK_INTERNAL projection, AI_PRIVATE exclusion, 409/idempotency PASS on SQLite and disposable MySQL |
-| P1-003 | IN_PROGRESS | revision/fingerprint change-aware delta contract and entity-ID merge; no frontend Case UI yet |
+| P1-003 | VERIFIED | delta endpoint + Entity ID merge helper; same fingerprint no-op, stale revision ignore, local draft-preserving merge; 54 backend and 9 frontend tests PASS |
 
 Phase 2–7: PLANNED. 기능 구현/AI 실호출/Standalone/E2E 완료 아님.
 시작 시 V3에 사용자 staged 변경 18개가 존재한다. 되돌리거나 수정하지 않는다.

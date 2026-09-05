@@ -153,6 +153,22 @@ class CaseProjection(StrictCaseModel):
     events: list[CaseEvent]
 
 
+class CaseEntityUpsert(StrictCaseModel):
+    entity_type: EntityType
+    entity_id: UUID
+    version: Version
+    data: dict[str, Any]
+
+
+class CaseDelta(StrictCaseModel):
+    case_id: UUID
+    revision: Revision
+    fingerprint: Fingerprint
+    unchanged: bool
+    upserts: list[CaseEntityUpsert] = Field(default_factory=list)
+    deleted_entity_ids: list[UUID] = Field(default_factory=list)
+
+
 class StructuredFeaturePayload(StrictCaseModel):
     """Text source/transcript cannot cross this contract boundary."""
     schema_version: str = Field(min_length=1, max_length=40)

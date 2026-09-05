@@ -1,9 +1,9 @@
-from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 
 from backend.config import Settings
-from backend.contracts.case import ActorContext, CaseProjection, CreateCaseRequest, CreateEventRequest
+from backend.contracts.case import ActorContext, CaseDelta, CaseProjection, CreateCaseRequest, CreateEventRequest
 from backend.contracts.health import Health, Readiness
 from backend.database import database_readiness
 from backend.general_api.app.clients.ai import AiClient
@@ -77,6 +77,25 @@ def create_app() -> FastAPI:
         repository = CaseRepository(settings)
         try:
             return repository.projection(parsed_id, actor)
+        except Exception as error:
+            _case_error(error)
+            raise
+        finally:
+            repository.close()
+
+    @app.get("/api/v4/cases/{case_id}/delta", response_model=CaseDelta)
+    def get_case_delta(case_id: str, known_revision: int = Query(default=0, ge=0),
+                       known_fingerprint: str | None = Query(default=None, pattern=r"^[a-f0-9]{64}$"),
+                       actor: ActorContext = Depends(require_server_actor),
+                       settings: Settings = Depends(get_settings)) -> CaseDelta:
+        from uuid import UUID
+        try:
+            parsed_id = UUID(case_id)
+        except ValueError:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "CASE_NOT_FOUND"}) from None
+        repository = CaseRepository(settings)
+        try:
+            return repository.delta(parsed_id, actor, known_revision, known_fingerprint)
         except Exception as error:
             _case_error(error)
             raise
