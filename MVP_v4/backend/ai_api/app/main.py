@@ -5,6 +5,7 @@ from backend.contracts.health import Health, Readiness
 from backend.contracts.ml import MlInferenceRequest, MlInferenceResult, MlPreflight, MlPrediction
 from backend.ai_api.app.domains.diagnosis.preflight import model_preflight
 from backend.ai_api.app.domains.diagnosis.model_adapter import load_model_bundle, metadata, predict
+from backend.contracts.reconstruction import FeatureReconstruction, FeatureReconstructionRequest
 
 app = FastAPI(title="CSR AI API", version="4.0.0")
 
@@ -50,3 +51,12 @@ def ml_intake(request: MlInferenceRequest) -> MlInferenceResult | JSONResponse:
     except Exception:
         result = Readiness(service="csr-ai-api", ready=False, checks={"ml": "ML_INFERENCE_UNAVAILABLE"})
         return JSONResponse(status_code=503, content=result.model_dump())
+
+
+@app.post("/reconstruct/features", response_model=FeatureReconstruction)
+def reconstruct_features(request: FeatureReconstructionRequest) -> FeatureReconstruction:
+    """Deterministic context handoff; no raw source or paid LLM is present on this route."""
+    prediction = request.prediction
+    return FeatureReconstruction(classification=prediction.label, risk_score=prediction.final_risk_score,
+                                 candidate_signal_count=prediction.candidate_signal_count,
+                                 summary_code="RISK_SIGNAL" if prediction.label == "PHISHING" else "NO_SIGNAL")

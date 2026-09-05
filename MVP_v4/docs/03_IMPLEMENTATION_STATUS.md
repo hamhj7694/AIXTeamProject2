@@ -16,7 +16,8 @@ PHASE_GATE: PASS — Phase 0 foundation + local structured-feature ML preflight 
 | P1-002 | VERIFIED | V4 Case create/read/event/projection API; server-attached actor policy, participant scope, CUSTOMER/BANK_INTERNAL projection, AI_PRIVATE exclusion, 409/idempotency PASS on SQLite and disposable MySQL |
 | P1-003 | VERIFIED | delta endpoint + Entity ID merge helper; same fingerprint no-op, stale revision ignore, local draft-preserving merge; 54 backend and 9 frontend tests PASS |
 | P2-001 | VERIFIED | General→AI approved structured-feature ML intake, V4 context feature/Event/revision persistence, duplicate/stale/invalid/unavailable handling; 58 backend and 9 frontend tests PASS |
-| P2-002 | IN_PROGRESS | feature extraction/reconstruction privacy boundary; no source text persistence or paid AI call |
+| P2-002 | VERIFIED | feature-only deterministic reconstruction contract; raw text rejected, no source persistence/provider call |
+| P2-003 | IN_PROGRESS | test text/feature intake; threshold no-case and privacy regression |
 
 Phase 2–7: PLANNED. 기능 구현/AI 실호출/Standalone/E2E 완료 아님.
 시작 시 V3에 사용자 staged 변경 18개가 존재한다. 되돌리거나 수정하지 않는다.
