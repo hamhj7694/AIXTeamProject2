@@ -34,6 +34,8 @@ class PublicCaseReadResponse(PublicCaseReadModel):
     actual_loss_amount_krw: float | None = None
     created_at: str
     updated_at: str
+    deleted_at: str | None = None
+    trash_expires_at: str | None = None
 
 
 class PublicCaseSummaryResponse(PublicCaseReadModel):
@@ -70,6 +72,8 @@ def to_public_case_read_response(record: dict[str, Any]) -> PublicCaseReadRespon
         "actual_loss_amount_krw": record.get("actual_loss_amount_krw"),
         "created_at": record["created_at"],
         "updated_at": record["updated_at"],
+        "deleted_at": record.get("deleted_at"),
+        "trash_expires_at": record.get("trash_expires_at"),
     })
 
 

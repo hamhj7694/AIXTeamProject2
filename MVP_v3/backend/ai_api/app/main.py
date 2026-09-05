@@ -8,12 +8,14 @@ from openai import APIConnectionError, AuthenticationError, RateLimitError
 
 from contracts.ai_internal.case_snapshot import CaseSnapshotAiInput, CaseSnapshotPresentation
 from contracts.ai_internal.case_copilot import CaseCopilotInput, CaseCopilotOutput
+from contracts.ai_internal.final_report import FinalCaseReportInput, FinalCaseReportOutput
 from contracts.ai_internal.work_card import CaseWorkCardInput, CaseWorkCardOutput
 from contracts.diagnosis import AnalyzeTextRequest, DiagnosisResult
 from request_trace import install_request_trace
 
 from .domains.case_support import CaseSnapshotAiAdapter
 from .domains.case_support.copilot_service import CaseCopilotAuthenticationError, CaseCopilotQuotaError, CaseCopilotService
+from .domains.case_support.final_report_service import FinalCaseReportService
 from .domains.case_support.work_card_service import CaseWorkCardService
 from .domains.diagnosis import DiagnosisService
 from .domains.diagnosis.budget import DiagnosisBudgetExceededError
@@ -29,6 +31,7 @@ service = DiagnosisService()
 case_snapshot_adapter = CaseSnapshotAiAdapter()
 case_copilot_service = CaseCopilotService()
 case_work_card_service = CaseWorkCardService()
+final_report_service = FinalCaseReportService()
 
 
 @app.on_event("startup")
@@ -104,6 +107,18 @@ async def generate_case_work_card(request: CaseWorkCardInput) -> CaseWorkCardOut
         raise HTTPException(status_code=401, detail={"code": "OPENAI_AUTHENTICATION_FAILED", "message": str(exc)}) from exc
     except Exception as exc:
         raise HTTPException(status_code=503, detail={"code": "AI_WORK_CARD_FAILED", "message": str(exc)}) from exc
+
+
+@app.post("/ai/final-reports/generate", response_model=FinalCaseReportOutput)
+async def generate_final_case_report(request: FinalCaseReportInput) -> FinalCaseReportOutput:
+    try:
+        return await final_report_service.generate(request)
+    except CaseCopilotQuotaError as exc:
+        raise HTTPException(status_code=429, detail={"code": "OPENAI_QUOTA_EXHAUSTED", "message": str(exc)}) from exc
+    except CaseCopilotAuthenticationError as exc:
+        raise HTTPException(status_code=401, detail={"code": "OPENAI_AUTHENTICATION_FAILED", "message": str(exc)}) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail={"code": "AI_FINAL_REPORT_FAILED", "message": str(exc)}) from exc
 
 
 @app.post("/ai/analyze/windows", response_model=list)

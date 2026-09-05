@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from .customer_progress import CustomerProgressItem
 
 
@@ -200,8 +200,17 @@ class PublicCreateActionRequest(PublicWorkflowModel):
 
 
 class PublicUpdateActionRequest(PublicWorkflowModel):
-    status: Literal["REQUESTED", "COMPLETED"]
+    status: Literal["REQUESTED", "COMPLETED", "CANCELLED"] | None = None
+    note: str | None = Field(default=None, min_length=1, max_length=10_000)
     updated_by: str = Field(min_length=1, max_length=128)
+
+    @model_validator(mode="after")
+    def require_change(self):
+        if self.status is None and self.note is None:
+            raise ValueError("상태 또는 내용을 하나 이상 변경해야 합니다.")
+        if self.note is not None and not self.note.strip():
+            raise ValueError("체크리스트 내용은 비워둘 수 없습니다.")
+        return self
 
 
 class PublicActionCommandRequest(PublicWorkflowModel):
@@ -254,6 +263,7 @@ class PublicReportResponse(PublicWorkflowModel):
     status: Literal["LIVE", "FINAL"]
     sections: list[dict[str, Any]]
     created_at: str
+    note: str | None = None
 
 
 class PublicActionResponse(PublicWorkflowModel):

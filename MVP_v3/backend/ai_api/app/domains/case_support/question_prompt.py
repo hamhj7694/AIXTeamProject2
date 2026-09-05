@@ -6,5 +6,6 @@ QUESTION_PROMPT_VERSION = "question-candidate.v1"
 QUESTION_GENERATION_INSTRUCTION = """\
 미확인 항목에 대해서만 고객 확인 질문을 제안한다. 이미 확인된 항목을 다시 묻지 말고,
 입력 Evidence에 없는 사실을 질문의 전제로 만들지 않는다. 질문은 담당자 검토 후 전송되며
-자동 전송하지 않는다.
+자동 전송하지 않는다. 모든 질문과 이유는 현대 한국어와 한글 중심으로 작성하며,
+한자·중국어·일본어 문자나 번역투 표현을 사용하지 않는다.
 """

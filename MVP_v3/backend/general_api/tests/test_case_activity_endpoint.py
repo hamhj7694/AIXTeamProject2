@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import unittest
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
 
@@ -17,19 +17,46 @@ BUNDLE_CASE = {
     "created_at": "2026-09-02T01:00:00+00:00", "updated_at": "2026-09-02T01:00:00+00:00",
 }
 
+FINAL_AI_REPORT = {
+    "title": "보이스피싱 대응 최종 결과 보고서",
+    "executive_summary": "기관 사칭 의심 사건의 확인 및 대응 결과를 정리했습니다.",
+    "incident_summary": "고객에게 기관을 사칭한 연락과 송금 요구가 있었습니다.",
+    "verified_facts": ["고객 진술을 접수했습니다."],
+    "actions_taken": ["추가 송금 중단을 안내했습니다."],
+    "resolution": "담당자 검토를 거쳐 사건 대응을 종결했습니다.",
+    "follow_up": ["추가 연락이 오면 공식 채널로 재확인합니다."],
+    "cautions": ["실제 금융 조치 완료 여부는 별도로 확인해야 합니다."],
+    "model_mode": "test-model",
+}
+
 
 class CaseActivityEndpointTest(unittest.TestCase):
     def setUp(self) -> None:
+        self.admin_env = patch.dict("os.environ", {"CASE_ADMIN_DELETE_PASSWORD": "test-admin"})
+        self.admin_env.start()
         self.client = TestClient(general_main.app)
         self.original_repository = general_main.repository
         self.repository = AsyncMock()
         self.repository.get.return_value = CASE
         self.repository.get_voice_session.return_value = None
+        self.repository.list_case_facts.return_value = []
+        self.repository.list_verifications.return_value = []
+        self.repository.list_actions.return_value = []
+        self.repository.list_messages.return_value = []
+        self.repository.list_customer_questions.return_value = []
         general_main.repository = self.repository
+        self.ai_report_patch = patch.object(
+            general_main.service.ai_client,
+            "generate_final_report",
+            new=AsyncMock(return_value=FINAL_AI_REPORT),
+        )
+        self.generate_final_report = self.ai_report_patch.start()
 
     def tearDown(self) -> None:
         general_main.repository = self.original_repository
+        self.ai_report_patch.stop()
         self.client.close()
+        self.admin_env.stop()
 
     def test_create_message_returns_public_message(self) -> None:
         self.repository.append_message.return_value = {
@@ -169,9 +196,60 @@ class CaseActivityEndpointTest(unittest.TestCase):
         voice = self.client.post("/api/cases/VP-ACTIVITY/voice-sessions", json={"participants": ["CUSTOMER", "BANK_STAFF"]})
         active = self.client.patch("/api/cases/VP-ACTIVITY/voice-sessions/voice-1", json={"status": "ACTIVE"})
         transcript = self.client.post("/api/cases/VP-ACTIVITY/voice-sessions/voice-1/transcript", json={"speaker": "CUSTOMER", "content": "상담 내용"})
-        final = self.client.post("/api/cases/VP-ACTIVITY/reports/finalize", json={"expected_version": 1, "note": "종료"})
+        final = self.client.post("/api/cases/VP-ACTIVITY/reports/finalize", json={"expected_version": 1, "password": "test-admin", "note": "종료"})
         self.assertEqual([voice.status_code, active.status_code, transcript.status_code, final.status_code], [201, 200, 201, 200])
         self.assertEqual(final.json()["status"], "FINAL")
+        self.generate_final_report.assert_awaited_once()
+        finalize_args = self.repository.finalize_report.await_args.args
+        self.assertEqual(finalize_args[:3], ("VP-ACTIVITY", 1, "종료"))
+        self.assertEqual(finalize_args[4]["title"], FINAL_AI_REPORT["title"])
+
+    def test_closed_case_can_be_reopened_with_admin_password(self) -> None:
+        self.repository.reopen_case.return_value = {
+            **BUNDLE_CASE, "version": 3, "mode": "RECOVERY", "status": "IN_PROGRESS",
+        }
+
+        denied = self.client.post("/api/cases/VP-ACTIVITY/reopen", json={"expected_version": 2, "password": "wrong"})
+        reopened = self.client.post("/api/cases/VP-ACTIVITY/reopen", json={"expected_version": 2, "password": "test-admin"})
+
+        self.assertEqual(denied.status_code, 403)
+        self.assertEqual(reopened.status_code, 200)
+        self.assertEqual(reopened.json()["mode"], "RECOVERY")
+        self.assertEqual(reopened.json()["status"], "IN_PROGRESS")
+        self.repository.reopen_case.assert_awaited_once_with("VP-ACTIVITY", 2)
+
+    def test_final_report_can_be_downloaded_as_pdf_and_word(self) -> None:
+        self.repository.get_final_report.return_value = {
+            "report_id": "final-VP-ACTIVITY", "case_id": "VP-ACTIVITY", "report_version": 1,
+            "status": "FINAL", "created_at": "2026-09-02T01:02:00+00:00",
+            "sections": [
+                {"section_key": "executive_summary", "content": {"text": "최종 요약"}, "version": 1},
+                {"section_key": "follow_up", "content": {"items": ["공식 채널로 재확인"]}, "version": 1},
+            ],
+        }
+
+        pdf = self.client.get("/api/cases/VP-ACTIVITY/reports/final/export?format=pdf")
+        word = self.client.get("/api/cases/VP-ACTIVITY/reports/final/export?format=docx")
+
+        self.assertEqual(pdf.status_code, 200)
+        self.assertEqual(pdf.headers["content-type"], "application/pdf")
+        self.assertTrue(pdf.content.startswith(b"%PDF"))
+        self.assertEqual(word.status_code, 200)
+        self.assertIn("wordprocessingml.document", word.headers["content-type"])
+        self.assertTrue(word.content.startswith(b"PK"))
+
+    def test_case_trash_restore_and_permanent_delete_require_admin_password(self) -> None:
+        self.repository.list_attachments.return_value = []
+
+        denied = self.client.post("/api/cases/VP-ACTIVITY/trash", json={"password": "wrong"})
+        moved = self.client.post("/api/cases/VP-ACTIVITY/trash", json={"password": "test-admin"})
+        restored = self.client.post("/api/cases/VP-ACTIVITY/restore", json={"password": "test-admin"})
+        purged = self.client.request("DELETE", "/api/cases/trash/VP-ACTIVITY", json={"password": "test-admin"})
+
+        self.assertEqual([denied.status_code, moved.status_code, restored.status_code, purged.status_code], [403, 204, 204, 204])
+        self.repository.delete_case.assert_awaited_once_with("VP-ACTIVITY")
+        self.repository.restore_case.assert_awaited_once_with("VP-ACTIVITY")
+        self.repository.purge_case.assert_awaited_once_with("VP-ACTIVITY")
 
     def test_bundle_contains_only_case_scoped_resources_and_cursor(self) -> None:
         self.repository.get.return_value = BUNDLE_CASE

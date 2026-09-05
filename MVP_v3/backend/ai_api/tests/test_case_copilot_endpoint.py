@@ -42,6 +42,21 @@ class CaseCopilotEndpointTest(unittest.TestCase):
         self.assertEqual(response.status_code, 401)
         self.assertEqual(response.json()["detail"]["code"], "OPENAI_AUTHENTICATION_FAILED")
 
+    def test_final_report_missing_provider_does_not_create_fake_report(self) -> None:
+        with patch.dict(os.environ, {"OPENAI_API_KEY": ""}, clear=False):
+            response = self.client.post("/ai/final-reports/generate", json={
+                "case_id": "VP-1",
+                "case_summary": "기관 사칭 가능성",
+                "workflow_status": "IN_PROGRESS",
+                "case_mode": "PREVENT",
+                "known_facts": ["고객 진술 접수"],
+                "closure_note": "담당자 확인 후 종결",
+            })
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()["detail"]["code"], "OPENAI_AUTHENTICATION_FAILED")
+        self.assertIn("최종 결과 보고서", response.json()["detail"]["message"])
+
     def test_every_work_card_type_refuses_to_make_fake_content_without_provider(self) -> None:
         card_types = (
             "FACT_REVIEW", "QUESTION_PLAN", "VERIFICATION_REQUEST",

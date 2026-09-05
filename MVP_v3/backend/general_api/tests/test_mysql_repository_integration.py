@@ -274,6 +274,22 @@ class MySqlCaseRepositoryIntegrationTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await self.repository.find_by_client_request_id(record["client_request_id"]))["case_id"], case_id)
         self.assertIn(case_id, [item["case_id"] for item in await self.repository.list()])
 
+    async def test_trash_hides_case_then_restore_and_purge_work(self) -> None:
+        case_id = f"A0-{uuid4().hex[:12].upper()}"
+        self.case_ids.append(case_id)
+        await self.repository.create(await self._record(case_id=case_id, client_request_id=f"trash-{uuid4().hex}"))
+
+        await self.repository.delete_case(case_id)
+        self.assertIsNone(await self.repository.get(case_id))
+        self.assertNotIn(case_id, [item["case_id"] for item in await self.repository.list()])
+        self.assertIn(case_id, [item["case_id"] for item in await self.repository.list_trashed_cases()])
+
+        await self.repository.restore_case(case_id)
+        self.assertIsNotNone(await self.repository.get(case_id))
+        await self.repository.delete_case(case_id)
+        await self.repository.purge_case(case_id)
+        self.assertIsNone(await self.repository.get(case_id, include_deleted=True))
+
     async def test_failed_create_rolls_back_all_rows(self) -> None:
         case_id = f"A0-{uuid4().hex[:12].upper()}"
         self.case_ids.append(case_id)
@@ -315,6 +331,35 @@ class MySqlCaseRepositoryIntegrationTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await self.repository.list_verifications(case_id))[0]["verification_task_id"], verification["verification_task_id"])
         self.assertEqual((await self.repository.list_actions(case_id))[0]["action_id"], action["action_id"])
         self.assertEqual([event["event_type"] for event in await self.repository.list_events(case_id)][-2:], ["VERIFICATION_CREATED", "BANK_ACTION_ADDED"])
+
+    async def test_finalize_creates_report_card_and_reopen_restores_previous_state(self) -> None:
+        case_id = f"A6-{uuid4().hex[:12].upper()}"
+        self.case_ids.append(case_id)
+        await self.repository.create(await self._record(case_id=case_id, client_request_id=f"a6-{uuid4().hex}"))
+        sections = [
+            {"section_key": "executive_summary", "content": {"text": "최종 요약"}},
+            {"section_key": "resolution", "content": {"text": "사건 대응 종결"}},
+        ]
+        report_card = {
+            "title": "최종 결과 보고서", "executive_summary": "최종 요약", "incident_summary": "기관 사칭 의심",
+            "verified_facts": ["고객 진술 접수"], "actions_taken": ["송금 중단 안내"],
+            "resolution": "사건 대응 종결", "follow_up": [], "cautions": [], "model_mode": "test-model",
+        }
+
+        report = await self.repository.finalize_report(case_id, 1, "종결 메모", sections, report_card)
+        closed = await self.repository.get(case_id)
+        messages = await self.repository.list_messages(case_id)
+        reopened = await self.repository.reopen_case(case_id, 2)
+
+        self.assertEqual(report["status"], "FINAL")
+        self.assertEqual(closed["mode"], "CLOSED")
+        self.assertEqual(closed["status"], "CLOSED")
+        self.assertEqual(messages[-1]["message_kind"], "REPORT_CARD")
+        self.assertIn("최종 결과 보고서", messages[-1]["content"])
+        self.assertEqual(reopened["mode"], "PREVENT")
+        self.assertEqual(reopened["status"], "TRIAGE")
+        self.assertEqual(reopened["version"], 3)
+        self.assertEqual([event["event_type"] for event in await self.repository.list_events(case_id)][-2:], ["CASE_REPORT_FINALIZED", "CASE_REOPENED"])
 
     async def test_member_upsert_is_immediately_visible_across_pool_connections(self) -> None:
         case_id = f"A5-{uuid4().hex[:12].upper()}"
