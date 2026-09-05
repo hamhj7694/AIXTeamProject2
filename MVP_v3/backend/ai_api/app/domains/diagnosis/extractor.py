@@ -407,6 +407,7 @@ async def extract_context_from_signal_payload(
         instructions=(
             "You receive only structured anti-fraud signals, never a call transcript. "
             "Write a concise Korean case summary, distinguish claims from verified facts, "
+            "Use plain Korean for every user-facing string including incident_type; keep schema keys unchanged. "
             "separately describe claims, requested actions, and manipulation tactics, "
             "and recommend safe next checks. Do not invent names, account numbers, quoted "
             "utterances, or a final financial decision."

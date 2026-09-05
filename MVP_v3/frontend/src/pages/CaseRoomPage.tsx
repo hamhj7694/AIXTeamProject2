@@ -68,6 +68,8 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ onMutated, contextOp
   const lastSupportRevisionRef = useRef('');
   const aiQueueRef = useRef<Promise<void>>(Promise.resolve());
   const aiGenerationRef = useRef(0);
+  const activeCaseIdRef = useRef(caseId);
+  activeCaseIdRef.current = caseId;
   const loadRequestRef = useRef(0);
   const pendingMessagesRef = useRef(new Map<string, CaseMessage>());
   const outboxRef = useRef(new Map<string, BankOutboxItem>());
@@ -115,7 +117,7 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ onMutated, contextOp
   }, [caseId]);
 
   const showMessage = (message: CaseMessage) => {
-    setBundle((current) => current ? {
+    setBundle((current) => current && current.case.case_id === message.case_id ? {
       ...current,
       recent_messages: upsertMessage(current.recent_messages, message),
     } : current);
@@ -126,6 +128,7 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ onMutated, contextOp
     const targetCaseId = caseId;
     setAiPendingCount((count) => count + 1);
     const run = async () => {
+      if (aiGenerationRef.current !== generation || activeCaseIdRef.current !== targetCaseId) return;
       try {
         // TEAM은 고객에게 공개되지 않는 은행 내부 채널이며, 응답도 같은
         // 타임라인에 표시된다. AI는 호출 시점에 DB의 최신 Case를 다시 읽는다.
@@ -170,7 +173,7 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ onMutated, contextOp
     loadRequestRef.current += 1;
     pendingMessagesRef.current.clear();
     outboxRef.current.clear();
-    setAiPendingCount(0);
+    setAiPendingCount(0); setBusy(false);
     lastSupportRevisionRef.current = '';
     setCaseItem(null); setBundle(null); setSupport(null); setFacts([]); setDialog(null); setBookmarkOpen(false); setNoteOpen(false); setParticipantOpen(false); setBookmarks(readBankBookmarks(caseId)); setError('');
     // Register the existing demo identity before mounting editors that require membership.
@@ -190,11 +193,14 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ onMutated, contextOp
     heartbeat();
     const timer = window.setInterval(() => { void load(true); }, 5000);
     const presenceTimer = window.setInterval(heartbeat, 30000);
-    return () => { active = false; window.clearInterval(timer); window.clearInterval(presenceTimer); };
+    return () => { active = false; aiGenerationRef.current += 1; loadRequestRef.current += 1; window.clearInterval(timer); window.clearInterval(presenceTimer); };
   }, [load]);
 
   const refreshAfterMutation = async () => { await load(true, false); onMutated(); };
   const deliverMessage = async (item: BankOutboxItem) => {
+    const generation = aiGenerationRef.current;
+    const isCurrent = () => generation === aiGenerationRef.current && activeCaseIdRef.current === item.message.case_id;
+    if (!isCurrent()) return;
     setBusy(true); setError('');
     const sendingMessage = { ...item.message, delivery_state: 'SENDING' as const, delivery_error: null };
     item.message = sendingMessage;
@@ -207,6 +213,7 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ onMutated, contextOp
         item.attachmentIds.push(attachment.attachment_id);
       }
       const message = await casesApi.sendMessage(caseId, item.content, item.target, item.attachmentIds, item.message.client_request_id!);
+      if (!isCurrent()) return;
       loadRequestRef.current += 1;
       pendingMessagesRef.current.delete(item.message.client_request_id!);
       outboxRef.current.delete(item.message.client_request_id!);
@@ -215,9 +222,9 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ onMutated, contextOp
       if (item.target === 'TEAM' && item.requestAi && item.content) {
         const requestText = stripBankAiMention(item.content) || '현재 사건에서 가장 시급하게 확인하거나 조치할 사항을 알려주세요.';
         const copilotPrompt = `은행 담당자의 질문: ${requestText}\n\n현재 Shared Case 맥락만 바탕으로, 동료에게 답하듯 자연스럽게 업무를 지원해 주세요. 확인되지 않은 사실은 추정하지 말고, 고객에게 자동 전송하거나 지급정지·신고 등 외부 조치를 완료한 것처럼 표현하지 마세요.`;
-        window.requestAnimationFrame(() => enqueueAiReply(copilotPrompt));
+        window.requestAnimationFrame(() => { if (isCurrent()) enqueueAiReply(copilotPrompt); });
       } else {
-        window.requestAnimationFrame(() => { void load(true, false); });
+        window.requestAnimationFrame(() => { if (isCurrent()) void load(true, false); });
       }
     } catch (reason) {
       const failed = {
@@ -225,11 +232,12 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ onMutated, contextOp
         delivery_state: 'FAILED' as const,
         delivery_error: reason instanceof Error ? reason.message : '서버에 전송하지 못했습니다.',
       };
+      if (!isCurrent()) return;
       item.message = failed;
       pendingMessagesRef.current.set(failed.client_request_id!, failed);
       showMessage(failed);
       setError('메시지를 전송하지 못했습니다. 말풍선의 다시 전송을 눌러주세요.');
-    } finally { setBusy(false); }
+    } finally { if (isCurrent()) setBusy(false); }
   };
   const send = (content: string, files: File[], target: ComposerTarget, requestAi: boolean): Promise<void> => {
     const clientRequestId = crypto.randomUUID();

@@ -35,6 +35,8 @@ export const CustomerCaseRoomPage: React.FC = () => {
   const [bookmarks, setBookmarks] = useState<CustomerBookmark[]>([]);
   const aiQueueRef = useRef<Promise<void>>(Promise.resolve());
   const aiGenerationRef = useRef(0);
+  const activeCaseIdRef = useRef(caseId);
+  activeCaseIdRef.current = caseId;
   const loadRequestRef = useRef(0);
   const pendingMessagesRef = useRef(new Map<string, CaseMessage>());
   const outboxRef = useRef(new Map<string, CustomerOutboxItem>());
@@ -54,7 +56,7 @@ export const CustomerCaseRoomPage: React.FC = () => {
   }, [caseId]);
 
   const showMessage = (message: CaseMessage) => {
-    setBundle((current) => current ? {
+    setBundle((current) => current && current.case.case_id === message.case_id ? {
       ...current,
       recent_messages: upsertMessage(current.recent_messages, message),
     } : current);
@@ -65,6 +67,7 @@ export const CustomerCaseRoomPage: React.FC = () => {
     const targetCaseId = caseId;
     setAiPendingCount((count) => count + 1);
     const run = async () => {
+      if (aiGenerationRef.current !== generation || activeCaseIdRef.current !== targetCaseId) return;
       try {
         // 서버는 이 호출 시점의 고객 공개 대화와 누적 질문 답변을 다시 읽는다.
         const message = await casesApi.invokeCustomerAi(targetCaseId, prompt, replyToMessageId);
@@ -91,7 +94,7 @@ export const CustomerCaseRoomPage: React.FC = () => {
     loadRequestRef.current += 1;
     pendingMessagesRef.current.clear();
     outboxRef.current.clear();
-    setAiPendingCount(0);
+    setAiPendingCount(0); setBusy(false);
     setBundle(null); setError(''); setNotice(''); setLoading(true); setConfirmRecovery(false);
     setBookmarks(readCustomerBookmarks(caseId));
     void load();
@@ -99,7 +102,7 @@ export const CustomerCaseRoomPage: React.FC = () => {
     heartbeat();
     const timer = window.setInterval(() => void load(true), 4000);
     const presenceTimer = window.setInterval(heartbeat, 30000);
-    return () => { window.clearInterval(timer); window.clearInterval(presenceTimer); };
+    return () => { aiGenerationRef.current += 1; loadRequestRef.current += 1; window.clearInterval(timer); window.clearInterval(presenceTimer); };
   }, [caseId, load]);
 
   const refresh = async () => { await load(true); };
@@ -117,6 +120,9 @@ export const CustomerCaseRoomPage: React.FC = () => {
   const closed = String(bundle?.case.status ?? '') === 'CLOSED' || String(bundle?.case.mode ?? '') === 'CLOSED';
 
   const deliverMessage = async (item: CustomerOutboxItem) => {
+    const generation = aiGenerationRef.current;
+    const isCurrent = () => generation === aiGenerationRef.current && activeCaseIdRef.current === item.message.case_id;
+    if (!isCurrent()) return;
     setBusy(true); setError(''); setNotice('');
     const sendingMessage = { ...item.message, delivery_state: 'SENDING' as const, delivery_error: null };
     item.message = sendingMessage;
@@ -128,14 +134,15 @@ export const CustomerCaseRoomPage: React.FC = () => {
         item.attachmentIds.push(attachment.attachment_id);
       }
       const message = await casesApi.sendCustomerMessage(caseId, item.content, item.attachmentIds, item.message.client_request_id!);
+      if (!isCurrent()) return;
       loadRequestRef.current += 1;
       pendingMessagesRef.current.delete(item.message.client_request_id!);
       outboxRef.current.delete(item.message.client_request_id!);
       showMessage(message);
       if (item.requestAi && item.content) {
-        window.requestAnimationFrame(() => enqueueCustomerAiReply(item.content, message.message_id));
+        window.requestAnimationFrame(() => { if (isCurrent()) enqueueCustomerAiReply(item.content, message.message_id); });
       } else {
-        window.requestAnimationFrame(() => { void refresh(); });
+        window.requestAnimationFrame(() => { if (isCurrent()) void refresh(); });
       }
     } catch (reason) {
       const failed = {
@@ -143,11 +150,12 @@ export const CustomerCaseRoomPage: React.FC = () => {
         delivery_state: 'FAILED' as const,
         delivery_error: reason instanceof Error ? reason.message : '서버에 전송하지 못했습니다.',
       };
+      if (!isCurrent()) return;
       item.message = failed;
       pendingMessagesRef.current.set(failed.client_request_id!, failed);
       showMessage(failed);
       setError('메시지를 전송하지 못했습니다. 말풍선의 다시 전송을 눌러주세요.');
-    } finally { setBusy(false); }
+    } finally { if (isCurrent()) setBusy(false); }
   };
   const send = (content: string, files: File[], requestAi: boolean): Promise<void> => {
     const clientRequestId = crypto.randomUUID();

@@ -848,29 +848,11 @@ async def dispatch_next_customer_question_message(case_id: str) -> PublicMessage
 async def answer_customer_question(case_id: str, question_id: str, request: PublicAnswerCustomerQuestionRequest) -> PublicCustomerQuestionResponse:
     await require_case(case_id)
     try:
-        message = await repository.append_message(case_id, {
-            "actor_type": "CUSTOMER", "actor_user_id": request.actor_user_id,
-            "actor_display_name": request.actor_display_name, "actor_role": "CUSTOMER",
-            "content": request.raw_answer, "channel": "CUSTOMER", "audience": "CUSTOMER",
-            "visibility": "CUSTOMER", "message_kind": "CHAT", "mentions": [], "log_event": False,
-        })
-        answered = await repository.answer_customer_question(case_id, question_id, message["message_id"], request.raw_answer)
+        answered = await repository.submit_customer_answer(case_id, question_id, request.raw_answer, request.actor_user_id, request.actor_display_name)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail={"code": "CUSTOMER_QUESTION_NOT_FOUND", "message": "응답 대기 중인 질문을 찾을 수 없습니다."}) from exc
-    await repository.propose_case_fact(case_id, question_id, request.raw_answer, message["message_id"])
-    await repository.append_message(case_id, {
-        "actor_type": "BANK_AGENT", "actor_user_id": "case-copilot",
-        "actor_display_name": "CaseCopilot", "actor_role": "BANK_AGENT",
-        "content": (
-            "고객 답변 접수\n"
-            f"질문: {answered.get('question_text', '고객 확인 질문')}\n"
-            f"답변: {request.raw_answer}\n"
-            "상태: 담당자 확인 전 정보 후보"
-        ),
-        "channel": "AI_INTERNAL", "audience": "BANK_INTERNAL", "visibility": "AI_PRIVATE",
-        "message_kind": "SYSTEM_EVENT", "mentions": [], "private_owner_user_id": None,
-        "reply_to_message_id": message["message_id"], "log_event": False,
-    })
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail={"code": "CUSTOMER_ANSWER_CONFLICT", "message": "이미 다른 답변이 저장된 질문입니다. 최신 내용을 확인해 주세요."}) from exc
     if _answer_reports_customer_loss(answered, request.raw_answer):
         await _activate_customer_recovery(
             case_id,
@@ -2098,12 +2080,12 @@ def _report_export_lines(case_id: str, report: dict) -> list[tuple[str, list[str
         content = section.get("content") or {}
         lines: list[str] = []
         if content.get("text"):
-            lines.append(str(content["text"]))
-        lines.extend(str(item) for item in content.get("items", []) if str(item).strip())
+            lines.append(user_text(str(content["text"])))
+        lines.extend(user_text(str(item)) for item in content.get("items", []) if str(item).strip())
         if content.get("closure_note"):
             lines.append(f"담당자 종결 메모: {content['closure_note']}")
         if lines:
-            blocks.append((labels.get(section.get("section_key"), section.get("section_key", "내용")), lines))
+            blocks.append((labels.get(section.get("section_key"), "추가 보고 내용"), lines))
     return blocks
 
 

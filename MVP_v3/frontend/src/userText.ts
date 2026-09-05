@@ -13,19 +13,32 @@ const labels: Record<string, string> = {
   payment_hold_review: '지급정지 검토', human_takeover: '담당자 직접 대응', staff_judgment: '담당자 판단',
   evidence_preservation: '증빙 보관', account_report_guidance: '계좌 신고 안내',
   not_provided: '제공하지 않음', not_transferred: '송금하지 않음', unknown: '확인되지 않음',
+  'social engineering': '심리적 기만', 'social-engineering': '심리적 기만', social_engineering: '심리적 기만',
 };
 const pattern = new RegExp('(?<![A-Za-z0-9_])(' + Object.keys(labels).sort((a, b) => b.length - a.length).join('|') + ')(?![A-Za-z0-9_])', 'gi');
-export const userText = (text: string): string => text.split(/(https?:\/\/[^\s<>]+|[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}|[^\s]+\.(?:pdf|docx?|xlsx?|png|jpe?g|txt|csv))/gi).map((part, index) => index % 2 ? part : part.replace(pattern, (token) => labels[token.toLowerCase()]).replace(/\b[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)+\b/g, '추가 확인 정보')).join('');
+export const userText = (text: string): string => text.split(/(https?:\/\/[^\s<>]+|[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}|[^\s]+\.(?:pdf|docx?|xlsx?|png|jpe?g|txt|csv))/gi).map((part, index) => index % 2 ? part : part.replace(pattern, (token) => labels[token.toLowerCase()])).join('');
 
-const visibleKeys = new Set(['content', 'note', 'summary', 'situation_summary', 'initial_brief', 'question_text', 'customer_explanation', 'reason', 'description', 'result_summary', 'claim', 'target', 'value', 'evidence_text', 'text', 'incident_type', 'next_action', 'answer_text', 'staff_text', 'ai_text', 'title', 'label', 'purpose']);
+export const optionLabel = (value: string): string => ({ YES: '예', NO: '아니요', UNKNOWN: '잘 모르겠어요' }[value] ?? userText(value));
+export const questionAnswerLabel = (answer: string, options: string[] = []): string => options.includes(answer) ? optionLabel(answer) : answer;
+
+// These values may be used by edit forms or sent back to the API. Never translate them in transit.
+const sourceKeys = new Set(['staff_text', 'answer_text', 'value', 'evidence_text', 'note', 'closure_note']);
+
+const visibleKeys = new Set(['content', 'note', 'summary', 'situation_summary', 'initial_brief', 'question_text', 'customer_explanation', 'reason', 'description', 'result_summary', 'claim', 'target', 'value', 'evidence_text', 'text', 'incident_type', 'next_action', 'answer_text', 'staff_text', 'ai_text', 'title', 'label', 'purpose', 'suggested_claim', 'suggested_target', 'suggested_action_note', 'suggested_notice', 'rationale']);
 const visibleArrays = new Set(['key_signals', 'offender_claims', 'offender_demands', 'manipulation_tactics', 'customer_exposure', 'next_actions', 'claims', 'recommended_next_steps', 'warnings', 'next_checks']);
 export const presentResponse = (value: unknown, key = ''): unknown => {
+  if (sourceKeys.has(key)) return value;
+  if (key === 'content' && typeof value === 'string') {
+    try { if (typeof JSON.parse(value) === 'object') return value; } catch { /* ordinary prose */ }
+  }
   if (typeof value === 'string') return visibleKeys.has(key) || visibleArrays.has(key) ? userText(value) : value;
   if (Array.isArray(value)) return value.map((item) => presentResponse(item, key));
   if (value && typeof value === 'object') {
     const record = value as Record<string, unknown>;
+    // Human-owned editable records must retain their original draft values.
+    if ('task_id' in record || 'verification_task_id' in record || 'action_id' in record || 'decision_id' in record || 'fact_id' in record || 'author_id' in record) return value;
     return Object.fromEntries(Object.entries(record).map(([childKey, child]) => [childKey,
-      childKey === 'content' && ['CUSTOMER', 'BANK_STAFF'].includes(String(record.actor_type)) ? child : presentResponse(child, childKey)]));
+      childKey === 'content' && (record.message_kind === 'REPORT_CARD' || ['CUSTOMER', 'BANK_STAFF'].includes(String(record.actor_type))) ? child : presentResponse(child, childKey)]));
   }
   return value;
 };

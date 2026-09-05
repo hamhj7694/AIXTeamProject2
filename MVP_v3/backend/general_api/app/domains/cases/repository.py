@@ -67,6 +67,7 @@ class CaseRepository(Protocol):
     async def dispatch_next_customer_question(self, case_id: str) -> dict[str, Any] | None: ...
     async def link_customer_question_message(self, case_id: str, question_id: str, message_id: str) -> None: ...
     async def answer_customer_question(self, case_id: str, question_id: str, message_id: str, answer_text: str) -> dict[str, Any]: ...
+    async def submit_customer_answer(self, case_id: str, question_id: str, answer_text: str, actor_user_id: str, actor_display_name: str) -> dict[str, Any]: ...
     async def list_case_facts(self, case_id: str) -> list[dict[str, Any]]: ...
     async def propose_case_fact(self, case_id: str, question_id: str, value: str, evidence_message_id: str | None) -> dict[str, Any]: ...
     async def confirm_case_fact(self, case_id: str, fact_id: str, confirmed_by: str) -> dict[str, Any]: ...
@@ -82,6 +83,10 @@ class CaseCreationConflictError(Exception):
 
 class CasePersistenceError(Exception):
     """Initial Case/report persistence failed, distinct from AI analysis."""
+
+
+def answer_receipt(question_text: str, answer_text: str) -> str:
+    return f'고객 답변 접수\n질문: {question_text}\n답변: {answer_text}\n상태: 담당자 확인 전 정보 후보'
 
 
 class CaseVersionConflictError(Exception):
@@ -633,6 +638,51 @@ class InMemoryCaseRepository:
             })
             self._touch_case(case_id, now)
             return deepcopy(item)
+
+    async def submit_customer_answer(self, case_id: str, question_id: str, answer_text: str, actor_user_id: str, actor_display_name: str) -> dict[str, Any]:
+        """Commit the answer, public message, fact candidate and private receipt together."""
+        async with self._lock:
+            if not any(r['case_id'] == case_id and not r.get('deleted_at') for r in self._records):
+                raise KeyError(case_id)
+            question = next((r for r in self._customer_questions if r['case_id'] == case_id and r['question_id'] == question_id), None)
+            if question is None:
+                raise KeyError(question_id)
+            if question['status'] == 'ANSWERED':
+                if question.get('answer_text') == answer_text:
+                    return deepcopy(question)
+                raise ValueError('CUSTOMER_ANSWER_CONFLICT')
+            if question['status'] != 'ASKED':
+                raise KeyError(question_id)
+            now = datetime.now(timezone.utc).isoformat()
+            message_id = f'msg-{uuid4().hex}'
+            message = {'message_id': message_id, 'case_id': case_id, 'actor_type': 'CUSTOMER',
+                       'actor_user_id': actor_user_id, 'actor_display_name': actor_display_name, 'actor_role': 'CUSTOMER',
+                       'content': answer_text, 'channel': 'CUSTOMER', 'audience': 'CUSTOMER', 'visibility': 'CUSTOMER',
+                       'message_kind': 'CHAT', 'mentions': [], 'attachments': [], 'created_at': now}
+            receipt = {**message, 'message_id': f'msg-{uuid4().hex}', 'actor_type': 'BANK_AGENT',
+                       'actor_user_id': 'case-copilot', 'actor_display_name': 'CaseCopilot', 'actor_role': 'BANK_AGENT',
+                       'content': answer_receipt(question['question_text'], answer_text), 'channel': 'AI_INTERNAL',
+                       'audience': 'BANK_INTERNAL', 'visibility': 'AI_PRIVATE', 'message_kind': 'SYSTEM_EVENT',
+                       'private_owner_user_id': None, 'reply_to_message_id': message_id}
+            field = normalize_target_field(question['target_field'])
+            existing = next((f for f in self._case_facts if f['case_id'] == case_id and normalize_target_field(f['field']) == field and f['status'] == 'PROPOSED'), None)
+            fact = {**(existing or {}), 'fact_id': existing['fact_id'] if existing else f'fact-{uuid4().hex}',
+                    'case_id': case_id, 'field': field, 'value': answer_text, 'source': 'AI_EXTRACTED', 'status': 'PROPOSED',
+                    'confidence': 0.7, 'evidence_message_id': message_id, 'source_question_id': question_id,
+                    'confirmed_by': None, 'confirmed_at': None, 'created_at': existing['created_at'] if existing else now}
+            self._messages.extend([message, receipt])
+            if existing is not None:
+                existing.update(fact)
+            else:
+                self._case_facts.append(fact)
+            question.update(status='ANSWERED', answered_at=now, answer_message_id=message_id, answer_text=answer_text)
+            for event_type, actor, payload in [
+                ('CUSTOMER_QUESTION_ANSWERED', 'CUSTOMER', {'question_id': question_id, 'message_id': message_id}),
+                ('CASE_FACT_PROPOSED', 'CUSTOMER_AGENT', {'fact_id': fact['fact_id'], 'field': field}),
+            ]:
+                self._events.append({'event_id': len(self._events) + 1, 'case_id': case_id, 'event_type': event_type, 'actor_type': actor, 'payload': payload, 'occurred_at': now})
+            self._touch_case(case_id, now)
+            return deepcopy(question)
 
     async def list_case_facts(self, case_id: str) -> list[dict[str, Any]]:
         return [deepcopy(item) for item in self._case_facts if item["case_id"] == case_id]

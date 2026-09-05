@@ -368,10 +368,10 @@ class CaseActivityEndpointTest(unittest.TestCase):
             "private_owner_user_id": None, "mentions": ["CaseCopilot"],
             "created_at": "2026-09-02T01:05:02+00:00",
         }
-        self.repository.append_message.side_effect = [customer_message, ai_receipt, recovery_alert]
+        self.repository.append_message.side_effect = [recovery_alert]
         self.repository.list_messages.return_value = []
         self.repository.get.return_value = {**CASE, "version": 2, "mode": "PREVENT", "victim_transfer_status": "UNKNOWN"}
-        self.repository.answer_customer_question.return_value = {
+        self.repository.submit_customer_answer.return_value = {
             "question_id": "cq-1", "case_id": "VP-ACTIVITY", "source": "BANK_SELECTED",
             "target_field": "victim_transfer_status", "question_text": "이미 송금한 금액이 있나요?",
             "reason": "피해 여부 확인", "priority": "P0", "status": "ANSWERED", "sequence": 1,
@@ -387,14 +387,11 @@ class CaseActivityEndpointTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["answer_text"], "있음")
-        self.repository.answer_customer_question.assert_awaited_once_with(
-            "VP-ACTIVITY", "cq-1", "msg-answer", "있음"
+        self.repository.submit_customer_answer.assert_awaited_once_with(
+            "VP-ACTIVITY", "cq-1", "있음", "customer-1", "고객"
         )
-        self.assertEqual(self.repository.append_message.await_count, 3)
-        receipt_payload = self.repository.append_message.await_args_list[1].args[1]
-        self.assertEqual(receipt_payload["channel"], "AI_INTERNAL")
-        self.assertIn("질문: 이미 송금한 금액이 있나요?", receipt_payload["content"])
-        self.assertIn("답변: 있음", receipt_payload["content"])
+        self.assertEqual(self.repository.append_message.await_count, 1)  # recovery alert only
+        self.repository.propose_case_fact.assert_not_awaited()  # included in the atomic repository operation
         self.repository.update_case.assert_awaited_once_with("VP-ACTIVITY", 2, {
             "victim_transfer_status": "YES", "mode": "RECOVERY",
         })
