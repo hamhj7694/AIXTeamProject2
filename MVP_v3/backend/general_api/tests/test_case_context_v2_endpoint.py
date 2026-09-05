@@ -1,4 +1,5 @@
 import asyncio
+import os
 import unittest
 from unittest.mock import patch
 
@@ -11,6 +12,9 @@ from general_api.app.domains.cases.repository import InMemoryCaseRepository
 
 class CaseContextV2EndpointTest(unittest.TestCase):
     def setUp(self):
+        self.permission_patch = patch.dict(os.environ, {"MVP_OPEN_PERMISSIONS": "0"})
+        self.permission_patch.start()
+        self.addCleanup(self.permission_patch.stop)
         self.repository = InMemoryCaseRepository()
         self.repository._records = [{"case_id": "VP-V2", "context_revision": 1}]
         self.repository._members = [

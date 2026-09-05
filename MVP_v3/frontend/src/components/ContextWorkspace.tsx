@@ -58,7 +58,7 @@ export const ContextWorkspace: React.FC<{ caseId: string; refreshKey: string; in
   return <>
     {error && <div className="context-edit-error" role="alert">{error} <button type="button" disabled={busy} onClick={() => void reload()}>다시 불러오기</button></div>}
     {!data ? <p className="context-empty">사실·업무 기록을 불러오는 중입니다.</p> : <>
-      {!data.can_review && <div className="context-note">현재 역할은 검토 권한이 없습니다. 사실 확정·제안 채택·업무 완료는 메인 담당자 또는 검토자가 처리합니다. <button type="button" onClick={onOpenParticipants}>참여자 관리에서 내 역할 설정</button></div>}
+      {!data.can_review && <div className="permission-notice"><strong>검토 권한이 필요합니다</strong><p>사실 확정·제안 채택·업무 완료는 메인 담당자 또는 검토자가 처리할 수 있습니다.</p><button className="secondary-action" type="button" onClick={onOpenParticipants}>참여자 관리에서 내 역할 설정</button></div>}
       <section className="context-section"><h3>사실 현황</h3><h4>확인된 사실</h4>
         {!data.confirmed_facts.length && !data.legacy_facts.some(f => f.status === 'CONFIRMED') && <Empty/>}
         {data.confirmed_facts.map(f => <article className="context-resource" key={f.fact_id}><b>{userText(f.display_label)}</b><p>{userText(f.display_value)}</p><small>담당자 확인 · {time(f.confirmed_at)}</small></article>)}

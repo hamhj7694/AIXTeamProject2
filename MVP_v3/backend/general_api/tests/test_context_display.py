@@ -1,4 +1,5 @@
 import unittest
+import os
 from unittest.mock import patch
 from fastapi.testclient import TestClient
 import general_api.app.main as main
@@ -7,6 +8,9 @@ from contracts.user_text import user_text
 
 class ContextDisplayTest(unittest.TestCase):
     def setUp(self):
+        permission_patch = patch.dict(os.environ, {"MVP_OPEN_PERMISSIONS": "0"})
+        permission_patch.start()
+        self.addCleanup(permission_patch.stop)
         self.repo = InMemoryCaseRepository()
         self.repo._records = [{'case_id': 'VP-1'}, {'case_id': 'VP-2'}]
         self.repo._members = [{'case_id': 'VP-1', 'user_id': 'staff', 'role': 'CHAT_OPERATOR', 'status': 'ACTIVE'}]
