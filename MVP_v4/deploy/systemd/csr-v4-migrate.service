@@ -1,0 +1,16 @@
+[Unit]
+Description=CSR V4 database migration
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/MVP_v4
+EnvironmentFile=/home/ubuntu/MVP_v4/.env
+ExecStart=/home/ubuntu/MVP_v4/.venv/bin/python -m backend.scripts.migrate
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/home/ubuntu/MVP_v4

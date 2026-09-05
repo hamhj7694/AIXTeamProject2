@@ -1,0 +1,21 @@
+[Unit]
+Description=CSR V4 AI API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/MVP_v4
+EnvironmentFile=/home/ubuntu/MVP_v4/.env
+ExecStart=/home/ubuntu/MVP_v4/.venv/bin/python -m backend.scripts.start ai
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/home/ubuntu/MVP_v4
+
+[Install]
+WantedBy=multi-user.target

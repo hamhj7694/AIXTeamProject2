@@ -1,0 +1,12 @@
+# 작업 매핑
+
+| Task | 파일 | API | DB | 테스트 | 의존 |
+|---|---|---|---|---|---|
+| P0-001 | AGENTS.md, docs/00–09, docs/source/*, docs/evidence/*, README.md, .gitignore | 없음 | 없음 | 문서/원본 hash 검증 | 승인 V1.5 |
+| P0-002 | docs/AI_REUSE_MAP.md | V3 AI 계약 조사만 | V3 DB 접근 없음 | 원본 코드 경계 확인 | P0-001 |
+| P0-003 | backend/* incl. scripts/phase0_smoke.py, .env.example, pytest.ini, tests/backend/*, tests/contracts/* | /health, /ready, /api/v4/health, /api/v4/ready | migration 001 application_metadata + alembic_version | health/config/migration 계약, 별도 disposable MySQL + 실제 HTTP adapter | P0-002 |
+| P0-004 | frontend/package{,-lock}.json, tsconfig*.json, vite.config.ts, index.html, src/app/*, src/api/health.ts, src/shared/uuid.ts, tests/*.test.mjs | GET /api/v4/health + X-Request-ID | 없음 | UUID native/fallback/RFC bits/collision sample, API contract, npm ci/typecheck/build | P0-003 |
+| P0-005 | scripts/{verify_self_contained,verify_env_example,verify_frontend_uuid_usage,phase0_gate}.py, backend/scripts/start.py, deploy/nginx/*, deploy/systemd/*, deploy/scripts/*, .gitattributes, docs/AWS_DEPLOYMENT.md, tests/regression/* | same-origin proxy, fixed production ports | systemd migration one-shot | static isolation/env/UUID, injection regression, deploy contracts, overall gate with JSON evidence | P0-004 |
+| P0-006 (VERIFIED) | backend/models/artifact, backend/ai_api/app/domains/diagnosis/{model_adapter,preflight}.py, backend/config.py(link check), backend/requirements.txt, backend/contracts/ml.py, AI health/readiness, backend/scripts/{model_preflight,isolated_model_probe}.py, scripts/verify_model_isolation.py, tests/backend/test_model_runtime.py, tests/contracts/test_health.py, smoke/gate, provenance docs | GET /ready/ml (실제 추론 preflight), /ready 제품 미준비 구분 | DB schema 변경 없음 | 승인 hash/실모델 load/predict/invalid input/path confinement, 복사본 fresh venv + 원본 repo read/network 차단 하 추론, 전체 gate | P0-005, AI_REUSE_MAP(기존 조사 재사용) |
+| P1-001 (VERIFIED) | backend/contracts/case.py, migrations/002_shared_case_schema.py, database.py, schema/contract tests, docs | 없음 (persisted API는 P1-002) | V4 Shared Case 22 entities + idempotency key; migration head 002 | schema constraints/feature text rejection/SQLite+MySQL repeat migration/full regression | Phase 0 gate |
+| P1-002 (IN_PROGRESS) | backend/general_api/app/domains/cases/*, contracts/case.py, general main/API tests, docs | Case create/read + Event/role projection | Uses migration 002, no schema changes planned | server actor policy, visibility leakage 0, event audit, idempotency/409 baseline | P1-001 |

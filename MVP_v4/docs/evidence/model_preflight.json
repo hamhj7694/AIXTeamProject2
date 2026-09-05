@@ -1,0 +1,34 @@
+{
+  "task": "P0-006",
+  "passed": true,
+  "ml": {
+    "service": "csr-ai-api",
+    "capability": "structured_feature_ml",
+    "ready": true,
+    "artifact_sha256": "662db2a9351dc4ca2c453776ae6f45750e465234cc9abcecc65b58a6b047c5fc",
+    "model_status": "EXPERIMENTAL_SAMPLE",
+    "model_version": "12_07_recall_first_v1.0",
+    "sklearn_version": "1.6.1",
+    "feature_count": 23,
+    "checks": {
+      "zero_features": {
+        "raw_ml_risk_score": 29.02943331672428,
+        "final_risk_score": 20.0,
+        "threshold_score": 95.0,
+        "candidate_signal_count": 0,
+        "guardrail_applied": true,
+        "label": "NORMAL"
+      },
+      "signal_features": {
+        "raw_ml_risk_score": 97.60035508086297,
+        "final_risk_score": 97.60035508086297,
+        "threshold_score": 95.0,
+        "candidate_signal_count": 91,
+        "guardrail_applied": false,
+        "label": "PHISHING"
+      }
+    }
+  },
+  "paid_api_calls": 0,
+  "conversational_inference": "NOT_IMPLEMENTED"
+}

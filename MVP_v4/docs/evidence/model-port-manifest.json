@@ -1,0 +1,16 @@
+﻿[
+    {
+        "kind":  "model",
+        "source":  "MVP_v3/backend/ai_api/models/WINDOW_LOGISTIC_DASHBOARD_EXPERIMENTAL_SAMPLE_v1.pkl",
+        "destination":  "backend/models/WINDOW_LOGISTIC_DASHBOARD_EXPERIMENTAL_SAMPLE_v1.pkl",
+        "source_sha256":  "662db2a9351dc4ca2c453776ae6f45750e465234cc9abcecc65b58a6b047c5fc",
+        "destination_sha256":  "662db2a9351dc4ca2c453776ae6f45750e465234cc9abcecc65b58a6b047c5fc"
+    },
+    {
+        "kind":  "adapter",
+        "source":  "MVP_v3/backend/ai_api/app/domains/diagnosis/model_adapter.py",
+        "destination":  "backend/ai_api/app/domains/diagnosis/model_adapter.py",
+        "source_sha256":  "22df856934de07fa75ef581860623a2e2e2beed42d27d3de7d6c3027927a0cdb",
+        "destination_sha256":  "78720a3729de565313694181ace0f979649aeb793d2b8f6be4a8b90284e4de79"
+    }
+]

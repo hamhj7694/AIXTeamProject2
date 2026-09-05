@@ -1,0 +1,77 @@
+{
+  "task": "P0-006",
+  "scope": "Phase 0 foundation + actual structured-feature ML",
+  "steps": [
+    {
+      "gate": "actual_model_preflight",
+      "exit_code": 0
+    },
+    {
+      "gate": "backend_contract_regression",
+      "exit_code": 0
+    },
+    {
+      "gate": "python_dependency_check",
+      "exit_code": 0
+    },
+    {
+      "gate": "frontend_clean_install",
+      "exit_code": 0
+    },
+    {
+      "gate": "frontend_typecheck",
+      "exit_code": 0
+    },
+    {
+      "gate": "frontend_contract_uuid",
+      "exit_code": 0
+    },
+    {
+      "gate": "frontend_build",
+      "exit_code": 0
+    }
+  ],
+  "passed": true,
+  "not_run": [
+    "Conversational/LLM inference",
+    "final standalone clean install",
+    "Ubuntu nginx/systemd",
+    "product E2E A/B"
+  ],
+  "isolation": {
+    "passed": true,
+    "scanned_application_files": 42,
+    "symlinks_or_junctions": 0,
+    "violations": [],
+    "scope": "application source/config/deploy; docs/tests/dependency installations/runtime cache excluded from text patterns"
+  },
+  "environment": {
+    "passed": true,
+    "used_names": [
+      "AI_API_BASE_URL",
+      "AI_API_HOST",
+      "AI_API_PORT",
+      "AI_TIMEOUT_SECONDS",
+      "APP_ENV",
+      "ATTACHMENT_STORAGE_ROOT",
+      "DATABASE_URL",
+      "GENERAL_API_BASE_URL",
+      "GENERAL_API_HOST",
+      "GENERAL_API_PORT",
+      "VECTOR_STORE_PATH"
+    ],
+    "missing_names": [],
+    "reserved_names": [
+      "MAX_API_CALLS",
+      "MAX_CONCURRENCY",
+      "MAX_COST",
+      "MAX_INPUT_TOKENS",
+      "MAX_OUTPUT_TOKENS",
+      "MAX_RETRIES",
+      "OPENAI_API_KEY",
+      "OPENAI_MODEL"
+    ],
+    "real_env_files_read": 0
+  },
+  "dist": true
+}

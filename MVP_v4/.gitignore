@@ -1,0 +1,16 @@
+.env
+.env.*
+!.env.example
+.venv/
+node_modules/
+dist/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.cache/
+backend/data/*
+!backend/data/.gitkeep
+*.log
+coverage/
+test-results/
+playwright-report/
