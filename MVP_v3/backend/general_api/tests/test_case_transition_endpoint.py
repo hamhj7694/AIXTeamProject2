@@ -36,6 +36,14 @@ class CaseTransitionEndpointTest(unittest.TestCase):
         self.assertEqual(response.json()["detail"]["code"], "INVALID_STATE_TRANSITION")
         self.repository.update_case.assert_not_awaited()
 
+    def test_generic_patch_cannot_bypass_finalize(self) -> None:
+        for changes in ({'status': 'CLOSED'}, {'mode': 'CLOSED'}, {'status': 'CLOSED', 'mode': 'CLOSED'}):
+            with self.subTest(changes=changes):
+                response = self.client.patch('/api/cases/VP-TRANSITION', json={'expected_version': 1, **changes})
+                self.assertEqual(response.status_code, 409)
+                self.assertEqual(response.json()['detail']['code'], 'INVALID_STATE_TRANSITION')
+        self.repository.update_case.assert_not_awaited()
+
     def test_stale_version_returns_conflict(self) -> None:
         from general_api.app.domains.cases.repository import CaseVersionConflictError
         self.repository.update_case.side_effect = CaseVersionConflictError(3)

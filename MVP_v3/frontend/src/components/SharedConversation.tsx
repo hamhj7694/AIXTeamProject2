@@ -6,7 +6,7 @@ import { actionLabel, formatClock, verificationStatusLabel } from '../presentati
 import { buildTimeline, type TimelineEntry } from '../timeline';
 import type { CaseBundle } from '../api/types';
 import type { BankBookmark } from '../bank/bookmarks';
-import { eventLabel } from '../userText';
+import { eventLabel, userText, questionAnswerLabel } from '../userText';
 import { SafeMarkdown } from './SafeMarkdown';
 
 interface Props {
@@ -103,7 +103,13 @@ const storedReportPayload = (stored: InitialReport): FinalReportCardPayload => (
 });
 
 const FinalReportCard: React.FC<{ report: FinalReportCardPayload; caseId: string; createdAt: string; bookmark: React.ReactNode }> = ({ report, caseId, createdAt, bookmark }) => {
-  const list = (title: string, items: string[]) => items.length > 0 && <section><h4>{title}</h4><ul>{items.map((item, index) => <li key={`${title}-${index}`}>{item}</li>)}</ul></section>;
+  // Work on a display copy after parsing. Never run prose substitution on JSON keys/IDs.
+  report = { ...report };
+  for (const key of ['title', 'executive_summary', 'incident_summary', 'customer_impact_summary', 'resolution'] as const) {
+    const text = report[key];
+    if (text) report[key] = userText(text);
+  }
+  const list = (title: string, items: string[]) => items.length > 0 && <section><h4>{title}</h4><ul>{items.map((item, index) => <li key={`${title}-${index}`}>{userText(item)}</li>)}</ul></section>;
   return <article className="final-report-card">
     <header><span><FileText size={18}/></span><div><small>AI FINAL REPORT · v{report.report_version}</small><h3>{report.title}</h3></div>{bookmark}</header>
     <p className="final-report-summary">{report.executive_summary}</p>
@@ -163,7 +169,7 @@ const EntryCard: React.FC<{ entry: TimelineEntry; bookmark: React.ReactNode; onE
   if (entry.kind === 'QUESTION' || entry.kind === 'ANSWER') {
     const question = entry.data as CustomerQuestion;
     if (entry.kind === 'QUESTION') return <article className="question-dispatch-card"><MessageCircleQuestion size={15}/><div><div className="entry-meta"><b>고객에게 확인 질문 발송</b>{bookmark}<time>{formatClock(entry.occurredAt)}</time></div><p>{question.question_text}</p></div><span>{question.status === 'ANSWERED' ? '답변 수신' : '답변 대기'}</span></article>;
-    return <article className="timeline-card question-card is-complete"><div className="timeline-card-icon"><CheckCircle2 size={17}/></div><div><div className="entry-meta"><b>고객 답변</b>{bookmark}<time>{formatClock(entry.occurredAt)}</time></div><p className="timeline-title">{question.question_text}</p><p className="timeline-result">{question.answer_text}</p><small>담당자 확인 전 고객 진술입니다.</small></div></article>;
+    return <article className="timeline-card question-card is-complete"><div className="timeline-card-icon"><CheckCircle2 size={17}/></div><div><div className="entry-meta"><b>고객 답변</b>{bookmark}<time>{formatClock(entry.occurredAt)}</time></div><p className="timeline-title">{question.question_text}</p><p className="timeline-result">{questionAnswerLabel(question.answer_text ?? '', question.options)}</p><small>담당자 확인 전 고객 진술입니다.</small></div></article>;
   }
   if (entry.kind === 'FINAL_REPORT') {
     const stored = entry.data as InitialReport;

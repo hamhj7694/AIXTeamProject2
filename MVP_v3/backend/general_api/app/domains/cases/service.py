@@ -110,6 +110,8 @@ async def transition_case(repository: CaseRepository, case_id: str, expected_ver
     changes = {key: value for key, value in (("status", status), ("mode", mode)) if value is not None}
     if not changes:
         return current
+    if status == 'CLOSED' or mode == 'CLOSED':
+        raise InvalidCaseTransitionError('사건 종결은 관리자 확인과 최종 보고서 생성 절차를 이용해 주세요.')
     if status is not None and status not in STATUS_TRANSITIONS.get(current["status"], set()):
         raise InvalidCaseTransitionError(f"Invalid status transition: {current['status']} -> {status}")
     if mode is not None and mode not in MODE_TRANSITIONS.get(current["mode"], set()):

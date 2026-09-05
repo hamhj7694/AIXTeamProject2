@@ -536,6 +536,43 @@ class MySqlCaseRepositoryIntegrationTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sum(item is not None for item in delivered), 1)
 
 
+    async def test_atomic_customer_answer_retries_and_rollback(self) -> None:
+        case_id = f'ANSWER-{uuid4().hex[:12]}'
+        self.case_ids.append(case_id)
+        await self.repository.create(await self._record(case_id=case_id, client_request_id=uuid4().hex))
+        await self.repository.queue_customer_questions(case_id, [{
+            'question_id': 'q_audit', 'target_field': 'personal_info_shared',
+            'question_text': '개인정보를 제공했나요?', 'reason': '노출 확인', 'priority': 'P0',
+        }], 'test')
+        question = await self.repository.dispatch_next_customer_question(case_id)
+        question_id = question['question_id']
+        before = await self.repository.list_messages(case_id)
+        with self.assertRaises(KeyError):
+            await self.repository.submit_customer_answer(case_id, 'missing', '예', 'customer', '고객')
+        self.assertEqual(await self.repository.list_messages(case_id), before)
+        original_execute = aiomysql.DictCursor.execute
+
+        async def fail_fact_insert(cursor, query, args=None):
+            if query.startswith('INSERT INTO case_facts'):
+                raise RuntimeError('audit injected fact failure')
+            return await original_execute(cursor, query, args)
+
+        with patch.object(aiomysql.DictCursor, 'execute', fail_fact_insert):
+            with self.assertRaisesRegex(RuntimeError, 'audit injected'):
+                await self.repository.submit_customer_answer(case_id, question_id, '아니요', 'customer', '고객')
+        self.assertEqual(await self.repository.list_messages(case_id), before)
+        self.assertEqual((await self.repository.list_customer_questions(case_id))[0]['status'], 'ASKED')
+        results = await asyncio.gather(*[
+            self.repository.submit_customer_answer(case_id, question_id, '아니요', 'customer', '고객') for _ in range(3)
+        ])
+        self.assertEqual(len({r['answer_message_id'] for r in results}), 1)
+        self.assertEqual(len(await self.repository.list_messages(case_id)), len(before) + 2)
+        self.assertEqual(len(await self.repository.list_case_facts(case_id)), 1)
+        with self.assertRaisesRegex(ValueError, 'CUSTOMER_ANSWER_CONFLICT'):
+            await self.repository.submit_customer_answer(case_id, question_id, '예', 'customer', '고객')
+        self.assertEqual(len(await self.repository.list_messages(case_id)), len(before) + 2)
+
+
 class RepositorySelectionTest(unittest.TestCase):
     def test_only_mysql_repository_is_available_at_runtime(self) -> None:
         with patch.dict(os.environ, {"CASE_REPOSITORY": "memory"}, clear=False):

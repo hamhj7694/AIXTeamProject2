@@ -9,6 +9,7 @@ import { RecoveryDetailCard } from './RecoveryCards';
 import type { RecoveryStep } from './recovery';
 import { buildCustomerTimeline, type CustomerTimelineEntry } from './timeline';
 import { SafeMarkdown } from '../components/SafeMarkdown';
+import { questionAnswerLabel } from '../userText';
 
 interface Props {
   bundle: CaseBundle;
@@ -57,7 +58,7 @@ export const CustomerConversation: React.FC<Props> = ({ bundle, busy, bookmarked
     }
     if (entry.kind === 'ANSWER') {
       const question = entry.data as CustomerQuestion;
-      return <article id={entry.id} key={entry.id} className="customer-card-entry customer-answer-card"><div className="customer-card-bookmark"><BookmarkButton entry={entry} active={active} label="접수된 답변" summary={`${question.question_text} — ${question.answer_text}`} onToggle={onToggleBookmark}/></div><div className="customer-card-kicker success"><CheckCircle2 size={16}/><span>답변이 안전하게 접수되었습니다.</span></div><h3>{question.question_text}</h3><p>{question.answer_text}</p><small>은행 담당자가 확인할 정보 후보로 전달되었습니다. 아직 최종 확정된 사실은 아닙니다.</small><time>{formatClock(entry.occurredAt)}</time></article>;
+      return <article id={entry.id} key={entry.id} className="customer-card-entry customer-answer-card"><div className="customer-card-bookmark"><BookmarkButton entry={entry} active={active} label="접수된 답변" summary={`${question.question_text} — ${question.answer_text}`} onToggle={onToggleBookmark}/></div><div className="customer-card-kicker success"><CheckCircle2 size={16}/><span>답변이 안전하게 접수되었습니다.</span></div><h3>{question.question_text}</h3><p>{questionAnswerLabel(question.answer_text ?? '', question.options)}</p><small>은행 담당자가 확인할 정보 후보로 전달되었습니다. 아직 최종 확정된 사실은 아닙니다.</small><time>{formatClock(entry.occurredAt)}</time></article>;
     }
     if (entry.kind === 'VERIFICATION') {
       const result = entry.data as CustomerVerificationResult;

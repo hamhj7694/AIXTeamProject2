@@ -43,7 +43,7 @@ export const EditableContext: React.FC<{section: Section; title: string; lines: 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [expanded, setExpanded] = useState(false);
-  const effective = item?.staff_text != null ? bulletLines(item.staff_text) : [...new Set(lines.flatMap(bulletLines))];
+  const effective = item?.staff_text != null ? item.staff_text.split('\n').filter(line => line.trim()) : [...new Set(lines.flatMap(bulletLines))];
   const visible = expanded ? effective : effective.slice(0, summary ? 4 : 3);
   const overflow = effective.length > (summary ? 4 : 3) || effective.some((line) => line.length > 150);
   const save = async (operation: Operation) => {
@@ -55,7 +55,7 @@ export const EditableContext: React.FC<{section: Section; title: string; lines: 
   return <section className={`context-section editable-context ${summary ? 'context-overview' : ''}`}>
     <h3>{title}<span className="context-edit-tools">
       {item?.deleted_by ? <button type="button" onClick={() => void save('RESTORE')} disabled={busy} title="숨김 해제"><RotateCcw size={13}/><span className="sr-only">{title} 숨김 해제</span></button> : <>
-        <button type="button" disabled={busy} title="항목 추가·수정" onClick={() => {setDraft(effective.join('\n')); setVersion(item?.item_version ?? 0); setError('');}}><Pencil size={13}/><span className="sr-only">{title} 항목 추가·수정</span></button>
+        <button type="button" disabled={busy} title="항목 추가·수정" onClick={() => {setDraft(item?.staff_text ?? effective.join('\n')); setVersion(item?.item_version ?? 0); setError('');}}><Pencil size={13}/><span className="sr-only">{title} 항목 추가·수정</span></button>
         <button type="button" disabled={busy} title="숨기기" onClick={() => void save('DELETE')}><X size={13}/><span className="sr-only">{title} 숨기기</span></button>
       </>}
       {item?.staff_text != null && <button type="button" disabled={busy} title="직원 수정 해제 · 최신 자동 내용 사용" onClick={() => void save('RESET')}><RotateCcw size={13}/><span className="sr-only">직원 수정 해제</span></button>}

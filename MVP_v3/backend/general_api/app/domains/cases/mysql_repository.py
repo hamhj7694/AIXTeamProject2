@@ -11,7 +11,7 @@ import aiomysql
 from pymysql.err import IntegrityError
 from request_trace import trace_stage
 
-from .repository import CaseCreationConflictError, CaseVersionConflictError, normalize_target_field
+from .repository import CaseCreationConflictError, CaseVersionConflictError, normalize_target_field, answer_receipt
 
 
 def _utc_naive(value: str) -> datetime:
@@ -926,6 +926,61 @@ class MySqlCaseRepository:
                 await connection.commit()
             except Exception: await connection.rollback(); raise
         row["status"] = "ANSWERED"; row["answered_at"] = now; row["answer_message_id"] = message_id; row["answer_text"] = answer_text; return self._question_row(row)
+
+    async def submit_customer_answer(self, case_id: str, question_id: str, answer_text: str, actor_user_id: str, actor_display_name: str) -> dict[str, Any]:
+        pool = await self._get_pool()
+        now = datetime.now()
+        async with pool.acquire() as connection:
+            try:
+                async with connection.cursor(aiomysql.DictCursor) as cursor:
+                    # Match message writers' case-first lock order; serialize concurrent retries.
+                    await cursor.execute('SELECT case_id FROM cases WHERE case_id=%s AND deleted_at IS NULL FOR UPDATE', (case_id,))
+                    if not await cursor.fetchone():
+                        raise KeyError(case_id)
+                    await cursor.execute('SELECT * FROM customer_questions WHERE case_id=%s AND question_id=%s FOR UPDATE', (case_id, question_id))
+                    row = await cursor.fetchone()
+                    if not row:
+                        raise KeyError(question_id)
+                    if row['status'] == 'ANSWERED':
+                        if row['answer_text'] != answer_text:
+                            raise ValueError('CUSTOMER_ANSWER_CONFLICT')
+                        await connection.commit()
+                        return self._question_row(row)
+                    if row['status'] != 'ASKED':
+                        raise KeyError(question_id)
+                    message_id = f'msg-{uuid.uuid4().hex}'
+                    receipt_id = f'msg-{uuid.uuid4().hex}'
+                    await cursor.executemany(
+                        '''INSERT INTO messages
+                           (message_id,case_id,actor_type,actor_user_id,actor_display_name,actor_role,content,
+                            channel,audience,visibility,message_kind,mentions_json,reply_to_message_id,attachments_json,created_at)
+                           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'[]',%s,'[]',%s)''',
+                        [(message_id, case_id, 'CUSTOMER', actor_user_id, actor_display_name, 'CUSTOMER', answer_text,
+                          'CUSTOMER', 'CUSTOMER', 'CUSTOMER', 'CHAT', None, now),
+                         (receipt_id, case_id, 'BANK_AGENT', 'case-copilot', 'CaseCopilot', 'BANK_AGENT',
+                          answer_receipt(row['question_text'], answer_text), 'AI_INTERNAL', 'BANK_INTERNAL', 'AI_PRIVATE', 'SYSTEM_EVENT', message_id, now)],
+                    )
+                    field = normalize_target_field(row['target_field'])
+                    await cursor.execute("SELECT * FROM case_facts WHERE case_id=%s AND status='PROPOSED' FOR UPDATE", (case_id,))
+                    candidates = await cursor.fetchall()
+                    fact = next((f for f in candidates if normalize_target_field(f['field_name']) == field), None)
+                    fact_id = fact['fact_id'] if fact else f'fact-{uuid.uuid4().hex}'
+                    if fact:
+                        await cursor.execute('UPDATE case_facts SET value=%s,evidence_message_id=%s,source_question_id=%s WHERE fact_id=%s', (answer_text, message_id, question_id, fact_id))
+                    else:
+                        await cursor.execute("INSERT INTO case_facts (fact_id,case_id,field_name,value,source,status,confidence,evidence_message_id,source_question_id,created_at) VALUES (%s,%s,%s,%s,'AI_EXTRACTED','PROPOSED',0.7000,%s,%s,%s)", (fact_id, case_id, field, answer_text, message_id, question_id, now))
+                    await cursor.execute("UPDATE customer_questions SET status='ANSWERED',answered_at=%s,answer_message_id=%s,answer_text=%s WHERE case_id=%s AND question_id=%s", (now, message_id, answer_text, case_id, question_id))
+                    await cursor.executemany('INSERT INTO case_events (case_id,event_type,actor_type,payload_json,occurred_at) VALUES (%s,%s,%s,%s,%s)', [
+                        (case_id, 'CUSTOMER_QUESTION_ANSWERED', 'CUSTOMER', json.dumps({'question_id': question_id, 'message_id': message_id}), now),
+                        (case_id, 'CASE_FACT_PROPOSED', 'CUSTOMER_AGENT', json.dumps({'fact_id': fact_id, 'field': field}), now),
+                    ])
+                    await cursor.execute('UPDATE cases SET updated_at=%s WHERE case_id=%s', (now, case_id))
+                await connection.commit()
+            except Exception:
+                await connection.rollback()
+                raise
+        row.update(status='ANSWERED', answered_at=now, answer_message_id=message_id, answer_text=answer_text)
+        return self._question_row(row)
 
     async def list_case_facts(self, case_id: str) -> list[dict[str, Any]]:
         pool = await self._get_pool()

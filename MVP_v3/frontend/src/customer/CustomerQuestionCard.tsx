@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { MessageCircleQuestion, Send } from 'lucide-react';
 import type { CustomerQuestion } from '../api/types';
+import { optionLabel } from '../userText';
 
 interface Props {
   question: CustomerQuestion;
@@ -30,7 +31,7 @@ export const CustomerQuestionCard: React.FC<Props> = ({ question, position, tota
     <div className="customer-card-kicker"><MessageCircleQuestion size={16}/><span>확인이 필요한 질문</span><b>{position}/{Math.max(total, position)}</b></div>
     <fieldset disabled={busy}>
       <legend>{question.question_text}</legend>
-      {options.length > 0 && <div className="customer-question-options">{options.map((option) => <button key={option} type="button" className={selected === option ? 'selected' : ''} aria-pressed={selected === option} onClick={() => { setSelected(option); setCustom(''); }}>{option}</button>)}</div>}
+      {options.length > 0 && <div className="customer-question-options">{options.map((option) => <button key={option} type="button" className={selected === option ? 'selected' : ''} aria-pressed={selected === option} onClick={() => { setSelected(option); setCustom(''); }}>{optionLabel(option)}</button>)}</div>}
       {question.allow_free_text !== false && <label className="customer-free-answer"><span>선택지에 없으면 직접 입력해 주세요.</span><input value={custom} onChange={(event) => { setCustom(event.target.value); if (event.target.value) setSelected(''); }} onKeyDown={(event) => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) { event.preventDefault(); void submit(); } }} placeholder="직접 답변 입력"/></label>}
       <div className="customer-question-footer"><small>확실하지 않아도 괜찮습니다. 기억나는 범위에서 답해 주세요.</small><button type="button" onClick={() => void submit()} disabled={!answer || busy}><Send size={15}/>{busy ? '저장 중' : '답변 보내기'}</button></div>
       {error && <p className="customer-inline-error">{error} 입력한 답변은 유지했습니다.</p>}
