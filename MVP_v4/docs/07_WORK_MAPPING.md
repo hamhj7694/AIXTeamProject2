@@ -17,3 +17,5 @@ P3-001A-1 VERIFIED: migration 003, Case metadata/list/trash contracts and reposi
 | P2-002 (VERIFIED) | reconstruction contract/tests, docs | feature-only reconstruction boundary | no source text storage | transient input boundary, structured payload only, no paid provider call | P2-001 |
 | P2-003 (VERIFIED) | AI test-text adapter, General test-only intake, contracts/tests, docs | test-only text → approved features → ML intake | no raw source persistence | test environment restriction, duplicate/stale/privacy/no-provider regressions | P2-002 |
 | P3-001 (VERIFIED) | bank workspace contracts/repository/API, frontend Case API/3-column UI/delta state, Vite test proxy, API/frontend tests, docs | GET case list; GET bank workspace; existing GET delta polling | Uses migration 002; no schema change | bank scope, real ML context/event/risk projection, AI_PRIVATE exclusion, no-op/stale Entity-ID merge, frontend typecheck/test/build, audit | Phase 2 gate |
+
+P3-001A-2 VERIFIED: frontend Conversation projection/component/composer and related unit/browser tests. No provider/message sending endpoint added.

@@ -1,7 +1,7 @@
 # TODO
 
 - [x] P3-001A-1 compact list/search/filter/sort/admin trash/restore
-- [ ] P3-001A-2 natural-language Conversation and channel/AI participation UI shells
+- [x] P3-001A-2 natural-language Conversation and channel/AI participation UI shells
 - [ ] P3-001A-3 actor-private notes/bookmarks and navigation
 - [ ] RIGHT-UX: natural-language Context without internal developer terminology (outside P3-001A)
 

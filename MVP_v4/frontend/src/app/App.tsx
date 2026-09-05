@@ -4,13 +4,11 @@ import { mergeCaseDelta, type CaseEntityState } from '../shared/caseDelta.ts';
 import { caseFromEntityState, latestRisk, timelineFromEntityState, workspaceEntityState } from '../shared/workspace.ts';
 
 import { CaseList } from './CaseList.tsx';
+import { ConversationComposer, ConversationTimeline } from './Conversation.tsx';
 
 const POLL_INTERVAL_MS = 5_000;
 
-function displayTime(value: string): string {
-  const date = new Date(value);
-  return Number.isNaN(date.valueOf()) ? '-' : new Intl.DateTimeFormat('ko-KR', { dateStyle: 'short', timeStyle: 'short' }).format(date);
-}
+import { displayTime } from '../shared/caseList.ts';
 
 function riskLabel(score: number | null, classification: string | null): string {
   return score === null ? '분석 대기' : `${score.toFixed(1)} · ${classification ?? '분류 없음'}`;
@@ -54,16 +52,22 @@ export function App() {
   useEffect(() => {
     if (!selectedId || workspaceState !== 'ready') return undefined;
     let active = true;
+    let pending = false;
     const poll = async () => {
       const current = entityStateRef.current;
-      if (!current) return;
+      if (!current || pending || current.entities[selectedId]?.data.id !== selectedId) return;
+      pending = true;
       try {
         const delta = await getCaseDelta(selectedId, current.revision, current.fingerprint);
         if (!active || delta.unchanged) return;
-        const next = mergeCaseDelta(current, delta, localEditIds.current);
+        const latest = entityStateRef.current;
+        if (!latest || latest.entities[selectedId]?.data.id !== selectedId) return;
+        const next = mergeCaseDelta(latest, delta, localEditIds.current);
         entityStateRef.current = next;
         setEntityState(next);
+        setError(null);
       } catch (reason) { if (active) setError(errorText(reason)); }
+      finally { pending = false; }
     };
     const interval = window.setInterval(poll, POLL_INTERVAL_MS);
     return () => { active = false; window.clearInterval(interval); };
@@ -74,17 +78,19 @@ export function App() {
   const risk = workspace ? latestRisk(workspace.context_features, timeline) : { score: null, classification: null };
 
   return <div className="bank-workspace">
-    <header className="app-header"><div><strong>CSR</strong><span>Case Share Room</span></div><small>Bank Case Workspace · revision polling</small></header>
+    <header className="app-header"><div><strong>CSR</strong><span>Case Share Room</span></div><small>은행 상담 공간</small></header>
     <main className="case-layout">
       <CaseList selectedId={selectedId} onSelect={setSelectedId} />
-      <section className="timeline-panel" aria-label="공유 사건 타임라인">
+      <section className="timeline-panel" aria-label="공유 사건 대화">
         {!selectedId && <p className="state">왼쪽에서 사건을 선택해 주세요.</p>}
         {selectedId && workspaceState === 'loading' && <p className="state">공유 사건을 불러오는 중입니다.</p>}
         {selectedId && workspaceState === 'error' && <p className="state error">{error}</p>}
-        {workspaceState === 'ready' && currentCase && <><div className="case-heading"><div><span className="eyebrow">SHARED CASE</span><h2>{currentCase.id}</h2></div><span className="revision">revision {currentCase.revision}</span></div>
-          <ol className="timeline">{timeline.map((event) => <li key={event.id}><time>{displayTime(event.created_at)}</time><div><strong>{event.entity_type}</strong><span>{event.event_type} · {event.visibility}</span>
-            {typeof event.payload.risk_score === 'number' && <p>위험 점수 {event.payload.risk_score.toFixed(1)} · {String(event.payload.classification ?? '')}</p>}
-          </div></li>)}</ol></>}
+        {workspaceState === 'ready' && currentCase && currentCase.id === selectedId && <>
+          <div className="case-heading"><div><span className="eyebrow">함께 확인하고 대응하는 공간</span><h2>사건 대화</h2></div></div>
+          <ConversationTimeline events={timeline} />
+        </>}
+        {selectedId && <ConversationComposer caseId={selectedId} />}
+
       </section>
       <aside className="context-panel" aria-label="사건 컨텍스트"><h2>사건 컨텍스트</h2>
         {!workspace && <p className="state">선택한 사건의 실제 저장 정보를 표시합니다.</p>}
