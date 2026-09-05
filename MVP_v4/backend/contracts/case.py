@@ -119,6 +119,40 @@ class CaseEvent(StrictCaseModel):
     created_at: datetime
 
 
+class ActorContext(StrictCaseModel):
+    """Identity supplied by trusted server authentication middleware, never by request bodies or query values."""
+    actor_id: str = Field(min_length=1, max_length=128)
+    role: ActorRole
+
+
+class CreateCaseRequest(StrictCaseModel):
+    client_request_id: UUID
+    mode: CaseMode = CaseMode.PREVENT
+    loss_status: LossStatus = LossStatus.UNKNOWN
+    # A bank employee needs the customer identity to open a case on the customer's behalf.
+    customer_participant_id: str | None = Field(default=None, min_length=1, max_length=128)
+
+
+class CreateEventRequest(WritePrecondition):
+    event_type: EventType
+    entity_type: EntityType
+    entity_id: UUID | None = None
+    visibility: Visibility = Visibility.BANK_INTERNAL
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("payload")
+    @classmethod
+    def forbid_source_text(cls, value: dict[str, Any]) -> dict[str, Any]:
+        StructuredFeaturePayload(schema_version="event", values=value)
+        return value
+
+
+class CaseProjection(StrictCaseModel):
+    case: SharedCase
+    participants: list[CaseParticipant]
+    events: list[CaseEvent]
+
+
 class StructuredFeaturePayload(StrictCaseModel):
     """Text source/transcript cannot cross this contract boundary."""
     schema_version: str = Field(min_length=1, max_length=40)

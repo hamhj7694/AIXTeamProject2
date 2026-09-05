@@ -1,5 +1,10 @@
 # 결정 기록
 
+## D-010 · 2026-09-06 · P1-002 · Server-owned Case projection boundary
+Case API actor identity is an `ActorContext` attached by trusted server authentication middleware, rather than a body field, query view, or client-selected header.
+Customer projections contain only their own participant record and CUSTOMER events; bank staff projections include BANK_INTERNAL events; AI_PRIVATE is excluded from both human projections and cannot be written through the staff Event endpoint.
+The P1 baseline provides no end-user authentication mechanism yet. An auth middleware integration must attach the actor before protected endpoints can serve an HTTP caller.
+
 ## D-009 · 2026-09-06 · P1-001 · Shared Case schema baseline
 Migration 002 creates the V4-owned Shared Case entity set and idempotency key record from the approved PRD.
 The schema uses `tasks` as the only new bank-work source and deliberately creates no legacy `actions` table.

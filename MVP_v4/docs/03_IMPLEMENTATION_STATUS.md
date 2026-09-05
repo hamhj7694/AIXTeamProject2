@@ -13,13 +13,14 @@ PHASE_GATE: PASS — Phase 0 foundation + local structured-feature ML preflight 
 | P0-005 | VERIFIED | 전체 scaffold gate PASS: Backend/contract/regression 23, Frontend 7, npm ci/typecheck/build, audit/env. evidence/phase0_gate.json |
 | P0-006 | VERIFIED | V4 artifact/adapter load/inference PASS; fresh copied V4 + fresh venv model isolation PASS; 39 backend tests, HTTP smoke, full Phase 0 gate PASS |
 | P1-001 | VERIFIED | migration 002 Shared Case schema + typed contracts; SQLite/MySQL migration tests, 49 full tests, isolation/env audit PASS |
-| P1-002 | IN_PROGRESS | Case/Event/Projection API with server-side actor policy; no frontend Case UI yet |
+| P1-002 | VERIFIED | V4 Case create/read/event/projection API; server-attached actor policy, participant scope, CUSTOMER/BANK_INTERNAL projection, AI_PRIVATE exclusion, 409/idempotency PASS on SQLite and disposable MySQL |
+| P1-003 | IN_PROGRESS | revision/fingerprint change-aware delta contract and entity-ID merge; no frontend Case UI yet |
 
 Phase 2–7: PLANNED. 기능 구현/AI 실호출/Standalone/E2E 완료 아님.
 시작 시 V3에 사용자 staged 변경 18개가 존재한다. 되돌리거나 수정하지 않는다.
 
-현재 기능: React 연결 확인 화면, 두 API liveness, MySQL migration 002, V4 내부 승인 structured-feature ML artifact/adapter와 `/ready/ml`.
-AI 제품 `/ready`는 Conversational Core와 Intake가 미구현이므로 의도적으로 503이다. Case/Chat/Intake/Conversational/RAG/Tool/Agent 기능은 아직 미구현/미검증이다.
+현재 기능: React 연결 확인 화면, 두 API liveness, MySQL migration 002, V4 Shared Case create/read/event projection API, V4 내부 승인 structured-feature ML artifact/adapter와 `/ready/ml`.
+AI 제품 `/ready`는 Conversational Core와 Intake가 미구현이므로 의도적으로 503이다. P1 Case create/read/event projection 외 Chat/Intake/Conversational/RAG/Tool/Agent 기능은 아직 미구현/미검증이다.
 현재 source audit: V3/외부 로컬 path/UUID 위반 0, symlink/junction 0 (애플리케이션 scope).
 V3 non-env tracked 파일 267개 hash 및 git status 기준 비교: 변경 0.
 환경변수 사용 11개/example 누락 0, 실제 env 열람 0.

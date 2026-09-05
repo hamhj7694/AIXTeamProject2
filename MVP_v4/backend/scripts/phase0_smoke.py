@@ -9,12 +9,15 @@ import subprocess
 import sys
 import tempfile
 import time
+from uuid import uuid4
 
 import httpx
 import pymysql
 
 from backend.config import ROOT, Settings
+from backend.contracts.case import ActorContext, ActorRole, CreateCaseRequest, CreateEventRequest, EntityType, EventType, Visibility
 from backend.database import CURRENT_SCHEMA_REVISION, database_readiness
+from backend.general_api.app.domains.cases.repository import CaseRepository
 from backend.scripts.migrate import upgrade
 
 
@@ -51,7 +54,7 @@ def main() -> None:
     data_dir.mkdir()
     processes = []
     flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
-    report = {"mysql_migration": "NOT_RUN", "api_health": "NOT_RUN", "ml_inference": "NOT_RUN", "conversational_inference": "NOT_IMPLEMENTED"}
+    report = {"mysql_migration": "NOT_RUN", "case_projection": "NOT_RUN", "api_health": "NOT_RUN", "ml_inference": "NOT_RUN", "conversational_inference": "NOT_IMPLEMENTED"}
     try:
         with (run_dir / "services.log").open("w", encoding="utf-8") as log:
             subprocess.run([executable, "--no-defaults", "--initialize-insecure", f"--datadir={data_dir}"],
@@ -73,6 +76,20 @@ def main() -> None:
             upgrade(settings)
             assert database_readiness(settings) == "ok"
             report["mysql_migration"] = f"PASS: fresh MySQL migration {CURRENT_SCHEMA_REVISION}, repeated upgrade"
+            repository = CaseRepository(settings)
+            try:
+                staff = ActorContext(actor_id="smoke-staff", role=ActorRole.BANK_STAFF)
+                create_id = uuid4()
+                created = repository.create_case(staff, CreateCaseRequest(
+                    client_request_id=create_id, customer_participant_id="smoke-customer"))
+                repository.append_event(create_id, staff, CreateEventRequest(
+                    client_request_id=uuid4(), expected_version=created.case.version, event_type=EventType.ENTITY_CREATED,
+                    entity_type=EntityType.TASK, visibility=Visibility.BANK_INTERNAL, payload={"task_status": "TODO"}))
+                customer = repository.projection(create_id, ActorContext(actor_id="smoke-customer", role=ActorRole.CUSTOMER))
+                assert {event.visibility.value for event in customer.events} == {Visibility.CUSTOMER.value}
+                report["case_projection"] = "PASS: V4 Case create/event/customer visibility projection on MySQL"
+            finally:
+                repository.close()
             environment = dict(os.environ)
             environment.update(APP_ENV="test", DATABASE_URL=db_url,
                                AI_API_BASE_URL=f"http://127.0.0.1:{ai_port}", AI_TIMEOUT_SECONDS="2",

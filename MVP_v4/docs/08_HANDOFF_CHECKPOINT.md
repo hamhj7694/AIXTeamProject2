@@ -2,11 +2,12 @@
 
 LAST_UPDATED: 2026-09-06
 CURRENT_PHASE: 1
-CURRENT_TASK: P1-002
+CURRENT_TASK: P1-003
 CURRENT_STATUS: IN_PROGRESS
 
 ## LAST_COMPLETED
 - P1-001 VERIFIED: Shared Case data contracts and V4-only migration 002. SQLite/MySQL migration repeat, 49 tests, audit/env PASS.
+- P1-002 VERIFIED: V4 Case create/read/event/projection API. Trusted server actor context, participant authorization, visibility projection, event audit, idempotency/409 all verified on SQLite and disposable MySQL.
 - P0-006 VERIFIED: 승인 모델/adapter를 V4 내부로 이식하고 실제 load/predict, `/ready/ml`, fresh copied V4 + fresh venv isolation, Phase 0 Gate를 통과.
 - P0-005 VERIFIED: AWS 자산/audit/scaffold gate; Backend 23 + Frontend 7 PASS; evidence/phase0_gate.json.
 - P0-004 VERIFIED: React/Vite scaffold, same-origin health, createUuid, tests 7 PASS, clean install/typecheck/build PASS.
@@ -23,6 +24,7 @@ CURRENT_STATUS: IN_PROGRESS
 - P0-005: scripts audit/gate 4종, backend/scripts/start.py, deploy/nginx config, systemd 3 units, build/health shell, .gitattributes, tests/regression 2 files, AWS/README/연속성 문서, evidence/phase0_gate.json 및 v3-preservation-check.json.
 - P0-006: backend/models/WINDOW_LOGISTIC_DASHBOARD_EXPERIMENTAL_SAMPLE_v1.pkl, diagnosis/{model_adapter,preflight}.py, contracts/ml.py, scripts/{model_preflight,isolated_model_probe}.py, scripts/verify_model_isolation.py, ML dependency pins, health/smoke/gate/tests/docs/evidence 업데이트.
 - P1-001: backend/contracts/case.py, migrations/002_shared_case_schema.py, database.py, schema/contract tests, docs/04/03/06/07/08/09.
+- P1-002: backend/general_api/app/domains/cases/repository.py, general main.py, contracts/case.py, tests/backend/test_case_api.py, phase0_smoke.py, docs/03/04/06/07/08/09.
 
 ## COMMANDS_RUN
 - P0-006 requirements ML install: sandbox FAIL → 승인 실행 PASS; pip check PASS.
@@ -33,6 +35,7 @@ CURRENT_STATUS: IN_PROGRESS
 - Phase 0 Gate PASS: actual_model_preflight, 39 backend/contract/regression tests, pip check, npm ci/typecheck/frontend tests/build, isolation/env audit. evidence/phase0_gate.json.
 - P1-001: migration 002 applied/reapplied on SQLite and disposable MySQL; full pytest 49 PASS; static isolation/env audit PASS.
 - P1-001 final revalidation: `.venv\\Scripts\\python.exe -m pytest tests -q` 49 PASS; disposable MySQL migration 002/repeat + General→AI HTTP smoke PASS; frontend typecheck/test/build PASS; static isolation/env/UUID audits PASS.
+- P1-002: `.venv\\Scripts\\python.exe -m pytest tests -q` 53 PASS; disposable MySQL case create/event/customer projection + migration repeat + HTTP health/ML smoke PASS; static isolation/env/UUID audit PASS; frontend typecheck, 7 tests and production build PASS.
 - P0-005 python -m scripts.phase0_gate: sandbox 마지막 build FAIL → 승인 실행에서 전체 PASS(23 backend, 7 frontend, npm ci/typecheck/build, pip check, static/env audit).
 - python -m scripts.verify_frontend_uuid_usage: PASS, helper 밖 직접 사용 0.
 - V3 baseline SHA-256/status 비교: 267 non-env tracked 파일 변경 0, status 차이 0. evidence/v3-preservation-check.json.
@@ -57,22 +60,23 @@ CURRENT_STATUS: IN_PROGRESS
 - V4 actual local preflight: zero signal final 20/NORMAL; 91 synthetic signal features final 97.60035508086297/PHISHING. 유료 API 호출 0.
 - `/ready/ml` 200; General → AI actual HTTP smoke PASS; 전체 `/ready`는 conversational/text_intake가 NOT_IMPLEMENTED이므로 의도된 503.
 - Phase 0 Gate PASS. Phase 1 entry permitted.
-- Migration head is 002. P1-001 establishes schema only; it does not itself provide case CRUD, authorization or projections.
+- Migration head is 002. P1-001 establishes schema; P1-002 provides the V4 Case create/read/event authorization and human projection baseline.
 - P1-001 common gate revalidated after migration-head reporting fix: frontend typecheck, 7 frontend tests, production build, 49 backend/contract/regression tests, MySQL HTTP smoke, internal-path/env/UUID audits all PASS.
+- P1-002: Case create/read/event mutation uses only V4 migration 002; no new schema migration, V3 dependency, header/body/query role override, or AI call.
 - P0-005 gate의 모든 구현 범위 검증 PASS. 정적 application source/config/deploy 35개에서 위반 0, symlink/junction 0.
 - 사용 환경변수 11개 전부 example에 존재; 8개 AI 설정은 향후 예약 변수. 지금 비용제어가 구현된 것으로 해석 금지.
 - 모든 작성은 MVP_v4 내부. V3 267개 non-env tracked 파일 및 기존 staged 상태 보존 확인.
 - frontend/dist/index.html 및 assets 생성. UUID native/fallback/request-header 계약 검증. 실제 브라우저 HTTPS/HTTP-IP 핵심 E2E는 아직 아님.
 
 ## INCOMPLETE_CHANGES
-- P0-001~006/P1-001 are verified. P1-002 is starting; no partial P1-002 code yet.
+- P0-001~006/P1-001/P1-002 are verified. P1-003 is starting; no partial P1-003 code yet.
 - 의도된 미구현: Case/Chat/Intake/Conversational/RAG/Tool/Agent 제품 경로. AI 전체 `/ready`는 conversational/text_intake 미구현을 명시하며 503.
 - 최종 full standalone copy/frontend build/new DB migration/full API readiness/E2E 및 Ubuntu 실행 NOT_RUN.
 
 ## NEXT_EXACT_STEPS
-1. P1-002: General API V4 Case create/read/event/projection baseline. API actor context/visibility is server-owned, never a `view` query trust boundary.
-2. Implement repository and API tests for one shared Case, customer/bank projections, event audit, expected_version=409 and retry idempotency baseline; do not add frontend Case UI or AI calls.
-3. Run P1 gate and update Status/TODO/Mapping/Handoff. P1-003 will add revision/fingerprint change-aware delta merge after base projection API is stable.
+1. P1-003: Define a revision/fingerprint delta endpoint and entity-ID partial merge contract on top of P1-002 projection. Preserve local drafts/focus/cursor/selection/IME; do not replace the full Case object on polling.
+2. Add repository/API/frontend-state tests for no-op fingerprints, changed/deleted entities, stale response handling and local draft preservation. Do not add Case UI, SSE, or AI calls.
+3. Run the P1-003 gate and commit only after all contract/backend/frontend regression checks pass.
 
 ## BLOCKERS
 - GAP-AI-001: 공식지식 RAG 원본 미확인. AI_REUSE_MAP 참조.
@@ -89,5 +93,5 @@ CURRENT_STATUS: IN_PROGRESS
 - 기존 staged 변경을 이번 작업으로 간주하거나 되돌리지 말 것.
 
 ## SOURCE_OF_TRUTH_CHANGES
-- 제품 요구 변경 없음. D-001~009 참조. P0-006/P1-001 완료는 코드/evidence와 stale 상태 문서의 정합화다.
+- 제품 요구 변경 없음. D-001~010 참조. P0-006/P1-001/P1-002 완료는 코드/evidence와 stale 상태 문서의 정합화다.
 - Git commit policy is now applied. The first V4 commit will establish the already verified P0-001~P0-006 and P1-001 baseline without reconstructing unrecorded intermediate file states; subsequent atomic tasks are committed individually after their gates.

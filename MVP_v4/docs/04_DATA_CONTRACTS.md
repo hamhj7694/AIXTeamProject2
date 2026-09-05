@@ -26,3 +26,11 @@ CUSTOMER/BANK_INTERNAL/AI_PRIVATE projection은 서버 강제. 고객 query의 v
 - `idempotency_keys` scopes a retry key by case and operation. P1-002 will use it before write side effects.
 - `StructuredFeaturePayload` rejects source-text keys recursively. Feature-only intake mapping is P2 work.
 - `expected_version`/409, actual authorization and role projection behavior are P1-002/P1-003 API work; schema alone does not grant access.
+
+## P1-002 Case/Event/Projection API
+
+- `POST /api/v4/cases` creates a case and participant set. A customer can create only for self; a bank staff actor must provide the customer participant ID. The UUID `client_request_id` deterministically identifies a retried create.
+- `GET /api/v4/cases/{case_id}` returns a role projection. CUSTOMER receives only its participant record and CUSTOMER events; BANK_STAFF receives CUSTOMER and BANK_INTERNAL events. `AI_PRIVATE` is not an API projection.
+- `POST /api/v4/cases/{case_id}/events` is BANK_STAFF-only, records an immutable Event and atomically advances Case revision/version/fingerprint. `AI_PRIVATE` writes are rejected.
+- Actor identity is `ActorContext` attached by trusted server authentication middleware. No request body, query `view`, or client header selects actor role or grants a projection.
+- A repeated `(case_id, client_request_id, CREATE_EVENT)` with identical request fingerprint returns the prior state. A changed payload for the same key, or a stale `expected_version`, returns 409.

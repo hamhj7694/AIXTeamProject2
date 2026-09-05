@@ -1,5 +1,6 @@
 {
   "mysql_migration": "PASS: fresh MySQL migration 002, repeated upgrade",
+  "case_projection": "PASS: V4 Case create/event/customer visibility projection on MySQL",
   "api_health": "PASS: AI 18101 + General 18100, actual HTTP adapter",
   "ml_inference": "PASS: actual model inference over HTTP /ready/ml",
   "conversational_inference": "NOT_IMPLEMENTED",
