@@ -16,7 +16,9 @@
 
 다음 작업: P2-002 feature extraction/reconstruction privacy boundary. 원문은 V4 DB에 저장하지 않는다.
 - [x] P2-002 feature-only reconstruction privacy boundary
-- [ ] P2-003 test text/feature intake
+- [x] P2-003 test text/feature intake
+
+다음 작업: P3-001 Bank Case list/conversation/context. Phase 2 gate 결과를 확인한다.
 최종 gate에 남은 일: Ubuntu clean install/Nginx/systemd, 실제 HTTPS/HTTP-IP 브라우저, standalone copy/Scenario A+B.
 
 이후 P1-003부터 docs/02_IMPLEMENTATION_PLAN.md 순서로 진행. Gate 미통과 시 진입 금지.

@@ -203,3 +203,25 @@ def test_ml_intake_reports_ai_unavailable_without_case_write(case_api, monkeypat
     })
     assert response.status_code == 503
     assert response.json()["detail"]["code"] == "ML_INFERENCE_UNAVAILABLE"
+
+
+def test_test_text_intake_is_transient_and_reuses_ml_persistence(case_api, monkeypatch):
+    client, settings, _actor = case_api
+    case_id, _created = create_staff_case(client)
+    from backend.contracts.ml import MlInferenceResult, MlPrediction, TestTextFeatureResult
+    async def extract(_self, text):
+        assert text == "demo raw source"
+        return TestTextFeatureResult(features={name: 0.0 for name in load_model_bundle()["model_features"]})
+    async def infer(_self, _features):
+        return MlInferenceResult(prediction=MlPrediction(raw_ml_risk_score=20, final_risk_score=20, threshold_score=95,
+            candidate_signal_count=0, guardrail_applied=True, label="NORMAL"), provenance={"model_version": "test", "artifact_sha256": "a" * 64})
+    monkeypatch.setattr("backend.general_api.app.main.AiClient.extract_test_text_features", extract)
+    monkeypatch.setattr("backend.general_api.app.main.AiClient.infer_structured_features", infer)
+    response = client.post(f"/api/v4/cases/{case_id}/intake/test-text", json={"client_request_id": str(uuid4()),
+        "expected_version": 1, "source_event_id": "text-1", "text": "demo raw source"})
+    assert response.status_code == 200
+    engine = database_engine(settings)
+    try:
+        with engine.connect() as connection:
+            assert "demo raw source" not in str(connection.execute(text("SELECT payload FROM context_features")).scalar_one())
+    finally: engine.dispose()

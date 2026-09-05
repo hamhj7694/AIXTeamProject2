@@ -2,7 +2,7 @@
 
 LAST_UPDATED: 2026-09-06
 CURRENT_PHASE: 2
-CURRENT_TASK: P2-003
+CURRENT_TASK: P3-001
 CURRENT_STATUS: IN_PROGRESS
 
 ## LAST_COMPLETED
@@ -11,6 +11,7 @@ CURRENT_STATUS: IN_PROGRESS
 - P1-003 VERIFIED: revision/fingerprint delta API and ID merge helper protect no-op polling, stale responses and local drafts without SSE or full Case replacement.
 - P2-001 VERIFIED: actual General→AI approved ML structured-feature intake persists V4 context feature, audit Event and Case revision with duplicate/stale/invalid/unavailable protection.
 - P2-002 VERIFIED: deterministic feature-only reconstruction endpoint rejects reconstructable source text and has no provider call or persistence.
+- P2-003 VERIFIED: test-only transient text adapter maps to approved features then reuses P2-001; raw source is absent from DB/Event payloads.
 - P0-006 VERIFIED: 승인 모델/adapter를 V4 내부로 이식하고 실제 load/predict, `/ready/ml`, fresh copied V4 + fresh venv isolation, Phase 0 Gate를 통과.
 - P0-005 VERIFIED: AWS 자산/audit/scaffold gate; Backend 23 + Frontend 7 PASS; evidence/phase0_gate.json.
 - P0-004 VERIFIED: React/Vite scaffold, same-origin health, createUuid, tests 7 PASS, clean install/typecheck/build PASS.
@@ -76,13 +77,12 @@ CURRENT_STATUS: IN_PROGRESS
 - frontend/dist/index.html 및 assets 생성. UUID native/fallback/request-header 계약 검증. 실제 브라우저 HTTPS/HTTP-IP 핵심 E2E는 아직 아님.
 
 ## INCOMPLETE_CHANGES
-- P0-001~006/P1-001/P1-002/P1-003/P2-001/P2-002 are verified. P2-003 is starting; no partial P2-003 code yet.
+- P0-001~006/P1-001/P1-002/P1-003/P2-001/P2-002/P2-003 are verified. P3-001 is next.
 - 의도된 미구현: Case/Chat/Intake/Conversational/RAG/Tool/Agent 제품 경로. AI 전체 `/ready`는 conversational/text_intake 미구현을 명시하며 503.
 - 최종 full standalone copy/frontend build/new DB migration/full API readiness/E2E 및 Ubuntu 실행 NOT_RUN.
 
 ## NEXT_EXACT_STEPS
-1. P2-003: add test-only transient text intake that maps to structured features, returns threshold-below no-case and delegates risk paths through P2-001.
-2. Prove raw text is not persisted in DB/events/logs and do not invoke paid providers.
+1. P3-001: implement Bank Case list/conversation/context on the existing Shared Case APIs without creating another Case source.
 
 ## BLOCKERS
 - GAP-AI-001: 공식지식 RAG 원본 미확인. AI_REUSE_MAP 참조.

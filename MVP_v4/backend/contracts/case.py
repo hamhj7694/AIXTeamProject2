@@ -182,6 +182,11 @@ class CreateMlIntakeRequest(WritePrecondition):
         return value
 
 
+class CreateTestTextIntakeRequest(WritePrecondition):
+    source_event_id: str = Field(min_length=1, max_length=128)
+    text: str = Field(min_length=1, max_length=2000)
+
+
 class StructuredFeaturePayload(StrictCaseModel):
     """Text source/transcript cannot cross this contract boundary."""
     schema_version: str = Field(min_length=1, max_length=40)

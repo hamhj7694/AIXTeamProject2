@@ -35,3 +35,13 @@ class MlInferenceResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
     prediction: MlPrediction
     provenance: dict[str, Any]
+
+
+class TestTextFeatureRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    text: str = Field(min_length=1, max_length=2000)
+
+
+class TestTextFeatureResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    features: dict[str, float]

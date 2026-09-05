@@ -3,7 +3,7 @@ from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 
 from backend.config import Settings
-from backend.contracts.case import ActorContext, ActorRole, CaseDelta, CaseProjection, CreateCaseRequest, CreateEventRequest, CreateMlIntakeRequest
+from backend.contracts.case import ActorContext, ActorRole, CaseDelta, CaseProjection, CreateCaseRequest, CreateEventRequest, CreateMlIntakeRequest, CreateTestTextIntakeRequest
 from backend.contracts.health import Health, Readiness
 from backend.database import database_readiness
 from backend.general_api.app.clients.ai import AiClient
@@ -151,6 +151,32 @@ def create_app() -> FastAPI:
         try:
             return repository.record_ml_intake(parsed_id, actor, request,
                                                 inference.prediction.model_dump(), inference.provenance)
+        except Exception as error:
+            _case_error(error)
+            raise
+        finally:
+            repository.close()
+
+    @app.post("/api/v4/cases/{case_id}/intake/test-text", response_model=CaseProjection)
+    async def intake_test_text(case_id: str, request: CreateTestTextIntakeRequest,
+                               actor: ActorContext = Depends(require_server_actor),
+                               settings: Settings = Depends(get_settings)) -> CaseProjection:
+        from uuid import UUID
+        if settings.app_env != "test":
+            raise HTTPException(status_code=404, detail={"code": "TEST_TEXT_INTAKE_DISABLED"})
+        try:
+            parsed_id = UUID(case_id)
+            features = (await AiClient(settings).extract_test_text_features(request.text)).features
+            inference = await AiClient(settings).infer_structured_features(features)
+        except ValueError:
+            raise HTTPException(status_code=422, detail={"code": "INVALID_STRUCTURED_FEATURES"}) from None
+        except RuntimeError:
+            raise HTTPException(status_code=503, detail={"code": "TEST_TEXT_INTAKE_UNAVAILABLE"}) from None
+        repository = CaseRepository(settings)
+        try:
+            return repository.record_ml_intake(parsed_id, actor, CreateMlIntakeRequest(
+                client_request_id=request.client_request_id, expected_version=request.expected_version,
+                source_event_id=request.source_event_id, features=features), inference.prediction.model_dump(), inference.provenance)
         except Exception as error:
             _case_error(error)
             raise
