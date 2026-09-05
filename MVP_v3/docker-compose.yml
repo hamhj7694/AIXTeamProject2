@@ -59,6 +59,7 @@ services:
     restart: unless-stopped
     environment:
       CASE_REPOSITORY: mysql
+      MVP_OPEN_PERMISSIONS: ${MVP_OPEN_PERMISSIONS:-0}
       MYSQL_HOST: ${DEPLOY_MYSQL_HOST:-mysql}
       MYSQL_PORT: ${DEPLOY_MYSQL_PORT:-3306}
       MYSQL_USER: ${MYSQL_USER:-ham}

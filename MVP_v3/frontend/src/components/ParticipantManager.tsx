@@ -1,6 +1,7 @@
 import React, { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Loader2, RefreshCw, UserPlus, Users, Wifi, WifiOff, X } from 'lucide-react';
 import { casesApi, CURRENT_BANK_USER, CURRENT_CUSTOMER_USER } from '../api/cases';
+import { loadRuntimePermissionsMode, type PermissionsMode } from '../api/contextWorkspace';
 import type { CaseMember, CaseMemberRole, CasePresence } from '../api/types';
 
 interface Props {
@@ -25,12 +26,13 @@ export const ParticipantManager: React.FC<Props> = ({ caseId, open, onClose, onC
   const [initialized, setInitialized] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [permissionsMode, setPermissionsMode] = useState<PermissionsMode>('ROLE_BASED');
 
   const load = useCallback(async () => {
-    setLoading(true); setError('');
+    setLoading(true); setError(''); setPermissionsMode('ROLE_BASED');
     try {
-      const [memberList, presenceList] = await Promise.all([casesApi.members(caseId), casesApi.presence(caseId)]);
-      setMembers(memberList); setPresence(presenceList);
+      const [memberList, presenceList, mode] = await Promise.all([casesApi.members(caseId), casesApi.presence(caseId), loadRuntimePermissionsMode()]);
+      setMembers(memberList); setPresence(presenceList); setPermissionsMode(mode);
       setAssignee(memberList.find((item) => item.role === 'CASE_OWNER')?.display_name ?? '');
       setInitialized(true);
     } catch (reason) { setError(reason instanceof Error ? reason.message : '참여자 정보를 불러오지 못했습니다.'); }
@@ -88,7 +90,7 @@ export const ParticipantManager: React.FC<Props> = ({ caseId, open, onClose, onC
       <header><Users size={19}/><div><h2 id="participant-title">참여자 관리</h2><p>현재 관계자와 접속 상태, 메인 담당자를 관리합니다.</p></div><button type="button" onClick={() => void load()} aria-label="참여자 정보 새로고침"><RefreshCw size={16} className={loading ? 'spin' : ''}/></button><button ref={closeRef} type="button" onClick={onClose} aria-label="참여자 관리 닫기"><X size={18}/></button></header>
       {error && <p className="participant-error">{error}</p>}
       <div className="participant-scroll">
-        <section className="assignee-setting"><h3>현재 사용자 역할</h3><p>로그인 없는 시연 환경입니다. 내 역할을 검토자로 설정하면 사실 확정·AI 제안 채택·업무 완료를 처리할 수 있습니다. 다른 메인 담당자는 변경하지 않습니다.</p>{members.filter((member) => member.user_id === CURRENT_BANK_USER.user_id).map((member) => <div key={member.user_id}><strong>{member.display_name} · {roleLabel(member.role)}</strong>{!['CASE_OWNER', 'REVIEWER'].includes(member.role) && <button type="button" disabled={loading || busy} onClick={() => void updateRole(member, 'REVIEWER')}>내 역할을 검토자로 설정</button>}</div>)}</section>
+        {permissionsMode === 'MVP_OPEN' ? <section className="permission-notice permission-notice-neutral"><h3>MVP 테스트 모드</h3><p>모든 사용자가 사건 내용을 편집하고 사실·제안·업무를 검토할 수 있습니다.</p></section> : <section className="assignee-setting participant-role-setting"><h3>현재 사용자 역할</h3><p>사실 확정·AI 제안 채택·업무 완료에는 검토 권한이 필요합니다.</p>{members.filter((member) => member.user_id === CURRENT_BANK_USER.user_id).map((member) => <div key={member.user_id}><strong>{member.display_name} · {roleLabel(member.role)}</strong>{!['CASE_OWNER', 'REVIEWER'].includes(member.role) && <button className="secondary-action" type="button" disabled={loading || busy} onClick={() => void updateRole(member, 'REVIEWER')}>내 역할을 검토자로 설정</button>}</div>)}</section>}
         <section className="customer-presence-card"><div className={customerPresence && customerPresence.presence !== 'OFFLINE' ? 'online' : 'offline'}>{customerPresence && customerPresence.presence !== 'OFFLINE' ? <Wifi size={17}/> : <WifiOff size={17}/>}</div><span><small>고객 연결 상태</small><strong>{presenceLabel(customerPresence?.presence)}</strong><p>{customerPresence ? `마지막 확인 ${new Date(customerPresence.last_seen_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}` : '현재 고객 접속 신호가 없습니다.'}</p></span></section>
         <section className="assignee-setting"><h3>메인 담당자 설정</h3><p>사건 대응을 총괄할 담당자를 한 명 지정합니다.</p><div><select value={assignee} onChange={(event) => setAssignee(event.target.value)} disabled={loading || busy}><option value="">미배정</option>{members.map((member) => <option key={member.user_id} value={member.display_name}>{member.display_name}</option>)}</select><button type="button" onClick={() => void saveAssignee()} disabled={loading || busy}><Check size={14}/>설정</button></div></section>
         <section className="participant-list"><div><h3>현재 관계자</h3><span>{members.length}명</span></div>{loading && !initialized ? <p className="participant-state"><Loader2 className="spin" size={17}/>불러오는 중</p> : members.length === 0 ? <p className="participant-state">등록된 관계자가 없습니다.</p> : members.map((member) => {

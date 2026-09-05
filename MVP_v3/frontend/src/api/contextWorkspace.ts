@@ -7,9 +7,11 @@ export type ContextSuggestion = { suggestion_id: string; title: string; rational
 export type ContextTask = { task_id: string; title: string; description: string; status: string; version: number; result_summary?: string; cancellation_reason?: string };
 export type ContextDecision = { decision_id: string; title: string; rationale: string; created_at: string; supersedes_decision_id: string | null };
 export type LegacyContextItem = { id: string; title: string; status: string; value?: string; confirmed_at?: string };
+export type PermissionsMode = 'MVP_OPEN' | 'ROLE_BASED';
 export interface ContextWorkspaceData {
   case_id: string;
   context_revision: number;
+  permissions_mode: PermissionsMode;
   can_write: boolean;
   can_review: boolean;
   confirmed_facts: ContextFact[];
@@ -27,6 +29,15 @@ export interface ContextWorkspaceData {
   legacy_records: LegacyContextItem[];
   legacy_archived_suggestions: LegacyContextItem[];
 }
+
+export const loadRuntimePermissionsMode = async (): Promise<PermissionsMode> => {
+  try {
+    const config = await request<{ permissions_mode?: unknown } | null>('/api/runtime-config');
+    return config?.permissions_mode === 'MVP_OPEN' ? 'MVP_OPEN' : 'ROLE_BASED';
+  } catch {
+    return 'ROLE_BASED';
+  }
+};
 
 export const contextUrl = (caseId: string, path: string) => `/api/cases/${encodeURIComponent(caseId)}/context-v2/${path}?actor_user_id=${encodeURIComponent(CURRENT_BANK_USER.user_id)}`;
 export const loadContextWorkspace = (caseId: string, signal?: AbortSignal) => request<ContextWorkspaceData>(contextUrl(caseId, 'workspace'), { signal });

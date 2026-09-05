@@ -1554,8 +1554,30 @@ async def context_display_repository(case_id):
     return ContextItemRepository(repository) if isinstance(repository, MySqlCaseRepository) else InMemoryContextItemRepository(repository)
 
 
+def mvp_open_permissions() -> bool:
+    """Explicit local-demo override only; never changes stored member roles."""
+    return os.getenv("MVP_OPEN_PERMISSIONS", "0").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def mvp_context_permissions(actor_user_id: str) -> bool:
+    # Human bank-workspace access only. This is not authentication: keep the
+    # known customer/AI identities out, and never widen customer projections.
+    actor = actor_user_id.strip().lower()
+    return mvp_open_permissions() and bool(actor) and actor not in {
+        "mvp-v3-customer", "customer", "customer-agent", "case-copilot", "ai", "system:context-ai",
+    } and not actor.startswith("system:")
+
+
+@app.get("/api/runtime-config")
+async def read_runtime_config() -> dict:
+    # Deliberately expose only the UI mode, never environment values or secrets.
+    return {"permissions_mode": "MVP_OPEN" if mvp_open_permissions() else "ROLE_BASED"}
+
+
 async def bank_display_repository(case_id, actor_user_id):
     store = await context_display_repository(case_id)
+    if mvp_context_permissions(actor_user_id):
+        return store
     members = await repository.list_members(case_id)
     if not any(item.get('user_id') == actor_user_id and item.get('role') in {'CASE_OWNER', 'CHAT_OPERATOR', 'REVIEWER'} for item in members):
         raise HTTPException(status_code=403, detail='이 사건의 담당자 또는 검토자만 맥락을 편집할 수 있습니다.')
@@ -1582,6 +1604,8 @@ async def require_context_v2_member(
 ):
     """Temporary MVP authorization until authenticated sessions replace actor_user_id."""
     await require_case(case_id)
+    if mvp_context_permissions(actor_user_id):
+        return case_context_v2_repository()
     allowed_roles = {
         "READ": {"CASE_OWNER", "CHAT_OPERATOR", "REVIEWER", "VIEWER"},
         "WRITE": {"CASE_OWNER", "CHAT_OPERATOR", "REVIEWER"},
@@ -1643,8 +1667,10 @@ async def read_context_workspace(case_id: str, actor_user_id: str):
     )
     result = build_workspace(resources, facts, actions, questions)
     role = next((m.get("role") for m in members if m.get("user_id") == actor_user_id and m.get("status", "ACTIVE") == "ACTIVE"), None)
-    result["can_write"] = role in {"CASE_OWNER", "CHAT_OPERATOR", "REVIEWER"}
-    result["can_review"] = role in {"CASE_OWNER", "REVIEWER"}
+    allow_all = mvp_context_permissions(actor_user_id)
+    result["permissions_mode"] = "MVP_OPEN" if allow_all else "ROLE_BASED"
+    result["can_write"] = allow_all or role in {"CASE_OWNER", "CHAT_OPERATOR", "REVIEWER"}
+    result["can_review"] = allow_all or role in {"CASE_OWNER", "REVIEWER"}
     return result
 
 
@@ -1766,8 +1792,10 @@ async def read_context_display(case_id: str, actor_user_id: str):
     # 사건 화면을 여는 순간 프론트가 현재 직원을 참여자로 등록한다. 새 Case에서는
     # 그 등록과 이 조회가 동시에 도착할 수 있다. 아직 역할이 준비되지 않았다면
     # 오류나 다른 직원의 수정본을 내보내지 않고 빈 편집본으로 응답한다.
-    # 실제 변경(PATCH)은 아래에서 계속 역할을 검증한다.
+    # 로컬 MVP 모드에서만 은행 업무 권한을 개방하고, 그 외에는 PATCH도 역할을 검증한다.
     store = await context_display_repository(case_id)
+    if mvp_context_permissions(actor_user_id):
+        return [item for item in await store.list_items(case_id, include_deleted=True) if item.semantic_key == 'display']
     members = await repository.list_members(case_id)
     if not any(item.get('user_id') == actor_user_id and item.get('role') in {'CASE_OWNER', 'CHAT_OPERATOR', 'REVIEWER'} for item in members):
         return []
