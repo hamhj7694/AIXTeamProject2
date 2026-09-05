@@ -1395,7 +1395,7 @@ async def invoke_customer_support_ai(case_id: str, request: PublicCustomerAiRepl
         raise HTTPException(status_code=503, detail={"code": "AI_CUSTOMER_SUPPORT_FAILED", "message": str(exc)}) from exc
     message = await repository.append_message(case_id, {
         "actor_type": "CUSTOMER_AGENT", "actor_user_id": "customer-agent",
-        "actor_display_name": "안전 상담 AI", "actor_role": "CUSTOMER_AGENT",
+        "actor_display_name": "서비스 이용 안내" if ai_reply.get('model_mode') == 'SERVICE_UI_GUIDANCE' else "안전 상담 AI", "actor_role": "CUSTOMER_AGENT",
         "content": ai_reply["content"], "channel": "CUSTOMER", "audience": "CUSTOMER",
         "visibility": "CUSTOMER", "message_kind": "AI_RESPONSE", "mentions": [],
         "reply_to_message_id": request.reply_to_message_id, "client_request_id": request.client_request_id,
@@ -1822,7 +1822,28 @@ async def update_customer_progress(case_id: str, step: ProgressStep, request: Up
 async def request_progress_confirmation(case_id: str, step: ProgressStep):
     await require_case(case_id)
     await repository.create_action(case_id, {'_progress_command': {'step': step, 'request_confirmation': True}})
-    return build_customer_progress(await repository.list_actions(case_id))
+    progress = build_customer_progress(await repository.list_actions(case_id))
+    item = next(value for value in progress if value.step == step)
+    # Keep the request visible in both conversations. Stable request IDs make
+    # retries idempotent and repair a partial notification failure on retry.
+    notification_key = f"progress-confirmation-{step}-{item.revision}"
+    await repository.append_message(case_id, {
+        "actor_type": "CUSTOMER_AGENT", "actor_user_id": "customer-progress",
+        "actor_display_name": "서비스 알림", "actor_role": "CUSTOMER_AGENT",
+        "content": f"‘{item.label}’ 처리 결과 확인 요청을 담당자에게 전달했습니다.",
+        "channel": "CUSTOMER", "audience": "CUSTOMER", "visibility": "CUSTOMER",
+        "message_kind": "SYSTEM_EVENT", "mentions": [],
+        "client_request_id": f"{notification_key}-customer", "log_event": False,
+    })
+    await repository.append_message(case_id, {
+        "actor_type": "CUSTOMER", "actor_user_id": "customer-progress",
+        "actor_display_name": "고객 확인 요청", "actor_role": "CUSTOMER",
+        "content": f"고객이 ‘{item.label}’ 처리 결과 확인을 요청했습니다. 담당자 결과 등록이 필요합니다.",
+        "channel": "TEAM", "audience": "BANK_INTERNAL", "visibility": "BANK_INTERNAL",
+        "message_kind": "SYSTEM_EVENT", "mentions": [],
+        "client_request_id": f"{notification_key}-bank", "log_event": True,
+    })
+    return progress
 
 
 @app.post("/api/cases/{case_id}/actions", response_model=PublicActionResponse, status_code=201)

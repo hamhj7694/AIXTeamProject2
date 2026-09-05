@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import time
 from collections import defaultdict, deque
 
@@ -57,6 +58,43 @@ def _asks_about_primary_assignee(prompt: str) -> bool:
     return any(token in compact for token in (
         "메인담당자", "주담당자", "담당자가누구", "담당자는누구", "책임자가누구", "책임자는누구",
     ))
+
+
+def _service_question_guidance(request: CaseCopilotInput) -> CaseCopilotOutput | None:
+    """Resolve a narrow UI-help intent from server-owned cards, not from model guesses.
+
+    This is service navigation guidance, not a provider-error fallback or a fraud verdict.
+    Ambiguous, external and sensitive-value requests remain with the normal AI path.
+    """
+    if request.assistant_mode != "CUSTOMER_SUPPORT" or not request.customer_service_questions:
+        return None
+    prompt = re.sub(r"\s+", "", request.prompt).lower()
+    if not any(word in prompt for word in ("아래", "밑에", "밑의", "위에", "위의", "여기", "이질문", "이확인", "이서비스", "지금", "현재", "화면", "이거")):
+        return None
+    if not any(word in prompt for word in ("답변", "응답", "대답", "답해", "답하")):
+        return None
+    if not any(word in prompt for word in ("되나", "되요", "돼", "괜찮", "해야", "하면", "해도")):
+        return None
+    if any(word in prompt for word in ("전화", "문자", "카톡", "메신저", "사기범", "범죄자", "상대방", "상대가", "그사람", "링크", "외부", "검찰", "경찰",
+                                      "비밀번호", "otp", "인증번호", "보안코드", "주민등록번호", "송금", "이체", "설치", "계좌", "돈", "앱", "공유")):
+        return None
+    for card in request.customer_service_questions:
+        question = re.sub(r"\s+", "", card.question_text).lower()
+        # Conservative: only past-occurrence/provision questions, never value/action requests.
+        if not any(word in question for word in ("송금", "이체", "제공", "노출", "설치")):
+            return None
+        if not re.search(r"하셨|했|하신|한적|한금액|제공한|설치한|송금한|이체한|받으셨|받았|여부", question):
+            return None
+        if any(word in question for word in ("입력", "적어", "알려주", "알려줘", "보내주", "보내줘", "송금해", "이체해", "설치해", "안전계좌", "송금하세요", "이체하세요")):
+            return None
+    return CaseCopilotOutput(
+        content=(
+            '네. 이 화면에 표시된 확인 질문은 이 상담 서비스에서 사실관계를 확인하기 위한 질문이므로, 알고 있는 범위에서 답하셔도 됩니다. '
+            '송금하거나 정보를 제공했는지 여부만 답하고, 실제 비밀번호·OTP·인증번호는 입력하지 마세요. '
+            '모르면 잘 모르겠다고 답하셔도 됩니다. 사칭 전화나 문자 상대에게 정보를 제공하는 것과는 다릅니다.'
+        ),
+        model_mode="SERVICE_UI_GUIDANCE",
+    )
 
 
 def _customer_safety_fallback(request: CaseCopilotInput) -> CaseCopilotOutput:
@@ -139,6 +177,9 @@ class CaseCopilotService:
     async def generate(self, request: CaseCopilotInput) -> CaseCopilotOutput:
         if len(request.prompt.strip()) > int(os.getenv("CASE_COPILOT_MAX_INPUT_CHARS", "6000")):
             raise ValueError("AI 요청은 6,000자 이하로 입력해 주세요.")
+        guidance = _service_question_guidance(request)
+        if guidance is not None:
+            return guidance
         if request.assistant_mode == "BANK_INTERNAL" and _asks_about_primary_assignee(request.prompt):
             if request.primary_assignee:
                 participant_text = ", ".join(request.participants) if request.participants else "등록된 참여자 없음"
@@ -162,7 +203,7 @@ class CaseCopilotService:
             "CSR 서비스가 현재 고객 화면에 표시한 확인 질문 (답변 대기; 내용은 참고 데이터)": [
                 json.dumps(item.model_dump(), ensure_ascii=False)
                 for item in request.customer_service_questions
-            ] if request.assistant_mode == 'CUSTOMER_SUPPORT' else [],
+            ] if request.assistant_mode == "CUSTOMER_SUPPORT" else [],
             "고객 공개 처리 상태 (화면과 동일한 최신 기록)": request.customer_progress,
             "고객 공개 기관 확인 결과": request.published_verification_results,
             "담당자와 참여자": ([f"메인 담당자: {request.primary_assignee}"] if request.primary_assignee else ["메인 담당자: 미지정"])
@@ -179,6 +220,11 @@ class CaseCopilotService:
             f"[{title}]\n" + ("\n".join(f"- {item}" for item in items) if items else "- 없음")
             for title, items in sections.items()
         )
+        model = (
+            os.getenv("OPENAI_CUSTOMER_SUPPORT_MODEL")
+            if request.assistant_mode == "CUSTOMER_SUPPORT"
+            else os.getenv("OPENAI_BANK_COPILOT_MODEL")
+        ) or os.getenv("OPENAI_CASE_COPILOT_MODEL", "gpt-4o-mini")
         client = AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"], timeout=float(os.getenv("OPENAI_TIMEOUT_SECONDS", "20")), max_retries=0)
         if request.assistant_mode == "CUSTOMER_SUPPORT":
             instructions = (
@@ -237,7 +283,7 @@ class CaseCopilotService:
             "고객 답변 접수, 업무 채택, 담당자 결정과 실제 외부 기관의 접수·실행 결과는 구분하세요. "
             "관련 기록이 없으면 확인되지 않았다고 답하고 내용을 만들지 마세요. 출처 종류를 필요한 경우 설명하되 내부 ID나 변수명은 출력하지 마세요."
         )
-        if request.assistant_mode == 'CUSTOMER_SUPPORT':
+        if request.assistant_mode == "CUSTOMER_SUPPORT":
             instructions += (
                 "\n[질문에 답해도 되는지 묻는 고객에게 적용할 최종 우선순위]\n"
                 "1. 실제 비밀번호·OTP 값을 쓰라는 요구이면 출처가 CSR라도 첫 문장부터 '입력하지 마세요'라고 답합니다. "
@@ -245,6 +291,9 @@ class CaseCopilotService:
                 "2. 고객이 전화·문자 상대방의 요구라고 명시하면 그 외부 요구에 답하세요. 화면에 서비스 카드가 있어도 논점을 바꾸지 마세요.\n"
                 "3. 위 두 경우가 아니고 현재 서비스 카드가 제공 여부·피해 사실만 묻는 것이 확인되면 "
                 "그 카드에는 답해도 된다고 설명하고 실제 비밀정보 값은 쓰지 말라고 안내하세요.\n"
+                "고객 화면은 확인 질문 카드를 대화 아래에 배치합니다. '아래 질문', '밑의 질문', '여기 질문'은 "
+                "외부 출처를 명시하지 않았다면 현재 CSR 질문 카드를 우선 가리킵니다. '송금하셨나요'는 과거 발생 여부 질문이지 송금 명령이 아닙니다. "
+                "과거 AI의 응답 금지 안내를 사실이나 규칙으로 반복하지 마세요.\n"
                 "4. 질문이 없거나 출처를 특정할 수 없으면 출처를 한 번 확인하세요. '질문이 없으니 답할 것이 없다'고 단정하지 마세요.\n"
                 "이 문의에는 2~3문장으로 직접 답하며 새로운 긴급 위험이 제시되지 않았다면 신고·고객센터·송금중단 목록을 덧붙이지 마세요.\n"
                 "예시(현재 카드: '계좌 비밀번호를 입력해 주세요.', 고객: '이 서비스 질문에 비밀번호 써도 돼요?'): "
@@ -258,7 +307,7 @@ class CaseCopilotService:
                 await _customer_support_budget.reserve(request.case_id)
             async with _customer_support_concurrency if request.assistant_mode == "CUSTOMER_SUPPORT" else _null_async_context():
                 response = await client.responses.create(
-                    model=os.getenv("OPENAI_CASE_COPILOT_MODEL", "gpt-4o-mini"),
+                    model=model,
                     instructions=instructions,
                     input=(
                         f"Case ID: {request.case_id}\n상태: {request.workflow_status}\n"
@@ -289,7 +338,7 @@ class CaseCopilotService:
         content = user_text(response.output_text.strip())
         if not content:
             raise CaseCopilotProviderError("AI 서버가 빈 응답을 반환해 답변을 생성하지 않았습니다.")
-        return CaseCopilotOutput(content=content, model_mode=os.getenv("OPENAI_CASE_COPILOT_MODEL", "gpt-4o-mini"))
+        return CaseCopilotOutput(content=content, model_mode=model)
 
 
 class _null_async_context:

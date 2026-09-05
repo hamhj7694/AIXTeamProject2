@@ -15,6 +15,7 @@ from contracts.ai_internal.mvp_workflow import QuestionRecommendationContext, Ta
 from contracts.diagnosis import DiagnosisResult
 
 from .workflow import MvpWorkflowService
+from .answer_service import CustomerAnswerStructuringService
 
 
 class CaseSnapshotAiAdapter:
@@ -273,8 +274,13 @@ class CaseSnapshotAiAdapter:
         for field, label in positive_signal_labels.items():
             current = field_values.get(field)
             if current is not None and CaseSnapshotAiAdapter._answer_polarity(current[0]) is True:
-                key_signals.append(label)
-                customer_exposure.append(label)
+                projected_label = (
+                    "개인정보 일부 제공 발생"
+                    if field == "personal_information_exposure" and current[0].casefold() == "partially_exposed"
+                    else label
+                )
+                key_signals.append(projected_label)
+                customer_exposure.append(projected_label)
 
         claimed_organization = field_values.get("claimed_organization")
         if claimed_organization and not CaseSnapshotAiAdapter._is_unknown_answer(claimed_organization[0]):
@@ -329,14 +335,28 @@ class CaseSnapshotAiAdapter:
         # 낮은 신뢰 상태부터 넣고, 고객 답변과 담당자 확정 사실이 차례로 덮어쓴다.
         for fact in ai_input.facts:
             if fact.status == "PROPOSED" and fact.value.strip():
-                values[fact.field] = (fact.value.strip(), "proposed")
+                values[fact.field] = (CaseSnapshotAiAdapter._structured_value(fact.field, fact.value), "proposed")
         for question in ai_input.questions:
             if question.status == "ANSWERED" and question.answer_text and question.answer_text.strip():
-                values[question.target_field] = (question.answer_text.strip(), "answered")
+                values[question.target_field] = (
+                    CaseSnapshotAiAdapter._structured_value(question.target_field, question.answer_text),
+                    "answered",
+                )
         for fact in ai_input.facts:
             if fact.status == "CONFIRMED" and fact.value.strip():
-                values[fact.field] = (fact.value.strip(), "confirmed")
+                values[fact.field] = (CaseSnapshotAiAdapter._structured_value(fact.field, fact.value), "confirmed")
         return values
+
+    @staticmethod
+    def _structured_value(field: str, value: str) -> str:
+        """Normalize supported answers while preserving every unresolved raw value."""
+        raw_value = value.strip()
+        try:
+            target_field = TargetField(field)
+        except ValueError:
+            return raw_value
+        result = CustomerAnswerStructuringService().structure_answer(target_field, raw_value)
+        return result.structured_value or raw_value
 
     @staticmethod
     def _base_summary(brief) -> str:
@@ -349,6 +369,8 @@ class CaseSnapshotAiAdapter:
     def _field_statement(field: str, value: str, source: str) -> str:
         polarity = CaseSnapshotAiAdapter._answer_polarity(value)
         authority = "확인 결과" if source == "confirmed" else "고객 답변상" if source == "answered" else "AI 분석상"
+        if field == "personal_information_exposure" and value.casefold() == "partially_exposed":
+            return f"{authority} 개인정보 일부를 제공한 상태입니다."
         labels = {
             "transfer_status": ("이미 송금한 상태", "아직 송금하지 않은 상태"),
             "personal_information_exposure": ("개인정보를 제공한 상태", "개인정보를 제공하지 않은 상태"),
@@ -378,7 +400,8 @@ class CaseSnapshotAiAdapter:
             "아니", "않", "안했", "못했", "없", "not_",
         )
         positive_markers = (
-            "이미송금", "송금했", "이체했", "제공했", "설치했", "transferred", "provided", "yes", "true", "예", "네",
+            "이미송금", "송금했", "이체했", "제공했", "설치했", "전달했", "알려줬",
+            "transferred", "provided", "partially_exposed", "exposed", "installed", "yes", "true", "예", "네",
         )
         if normalized in explicit_negative_values or any(marker in normalized for marker in negative_markers):
             return False

@@ -150,6 +150,24 @@ class CaseSnapshotAiAdapterTest(unittest.TestCase):
         self.assertNotIn("경찰청 소속이라고 주장", context.offender_claims)
         self.assertIn("안전계좌 검증 명목의 자금 이동 요구", context.offender_demands)
 
+    def test_partial_personal_information_answer_is_visible_in_customer_exposure(self) -> None:
+        fixture = Path(__file__).resolve().parents[2] / "contracts" / "ai_internal" / "fixtures" / "diagnosis.high.v1.json"
+        diagnosis = json.loads(fixture.read_text(encoding="utf-8"))["response"]
+
+        result = CaseSnapshotAiAdapter().build_presentation({
+            "case_id": "VP-SNAPSHOT-PARTIAL-EXPOSURE",
+            "diagnosis": diagnosis,
+            "questions": [{
+                "question_id": "q-personal", "target_field": "personal_information_exposure",
+                "question_text": "주민등록번호나 계좌번호 등 개인정보를 제공하셨나요?",
+                "priority": "P0", "status": "ANSWERED",
+                "answer_text": "주민등록번호 앞자리만 전달했어요",
+            }],
+        })
+
+        self.assertIn("개인정보 일부 제공 발생", result.case_context.customer_exposure)
+        self.assertIn("고객 답변상 개인정보 일부를 제공한 상태입니다", result.case_brief.summary)
+
 
 if __name__ == "__main__":
     unittest.main()
