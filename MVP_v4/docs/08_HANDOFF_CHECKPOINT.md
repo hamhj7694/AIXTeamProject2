@@ -2,8 +2,8 @@
 
 LAST_UPDATED: 2026-09-06
 CURRENT_PHASE: 3
-CURRENT_TASK: P3-001
-CURRENT_STATUS: VERIFIED_LOCAL_GATE
+CURRENT_TASK: P3-002
+CURRENT_STATUS: NOT_STARTED
 
 ## LAST_COMPLETED
 - P1-001 VERIFIED: Shared Case data contracts and V4-only migration 002. SQLite/MySQL migration repeat, 49 tests, audit/env PASS.
@@ -12,7 +12,7 @@ CURRENT_STATUS: VERIFIED_LOCAL_GATE
 - P2-001 VERIFIED: actual General→AI approved ML structured-feature intake persists V4 context feature, audit Event and Case revision with duplicate/stale/invalid/unavailable protection.
 - P2-002 VERIFIED: deterministic feature-only reconstruction endpoint rejects reconstructable source text and has no provider call or persistence.
 - P2-003 VERIFIED: test-only transient text adapter maps to approved features then reuses P2-001; raw source is absent from DB/Event payloads.
-- P3-001 VERIFIED_LOCAL_GATE: bank-only Case list/workspace projection and actual 3-column React workspace use V4 data plus existing Entity-ID delta merge polling. Backend 65, frontend 11/typecheck/build, isolation/env/UUID audit PASS. Local browser HTTP smoke follows the required commit.
+- P3-001 VERIFIED: bank-only Case list/workspace projection and actual 3-column React workspace use V4 data plus existing Entity-ID delta merge polling. Backend 65, frontend 11/typecheck/build, isolation/env/UUID audit PASS. V4-only headless Chrome browser smoke rendered the seeded Case/Event/Context risk flow through the Vite API proxy.
 - P0-006 VERIFIED: 승인 모델/adapter를 V4 내부로 이식하고 실제 load/predict, `/ready/ml`, fresh copied V4 + fresh venv isolation, Phase 0 Gate를 통과.
 - P0-005 VERIFIED: AWS 자산/audit/scaffold gate; Backend 23 + Frontend 7 PASS; evidence/phase0_gate.json.
 - P0-004 VERIFIED: React/Vite scaffold, same-origin health, createUuid, tests 7 PASS, clean install/typecheck/build PASS.
@@ -34,6 +34,7 @@ CURRENT_STATUS: VERIFIED_LOCAL_GATE
 - P2-001: AI /intake/ml, ml/case contracts, General AI client/repository/main, P2 API/contract tests, phase0_smoke.py, docs/03/04/06/07/08.
 - P2-002/P2-003: feature-only reconstruction/test-only transient text intake contracts, APIs/tests and continuity docs.
 - P3-001: `.env.example`, Case workspace contracts/repository/General API, frontend `api/cases.ts`, `shared/workspace.ts`, App/CSS, Vite test-only proxy, backend/frontend workspace tests and docs/03/06/07/08/09.
+- P3-001 post-commit smoke artifacts: ignored `backend/data/p3_browser.db`, process logs and headless Chrome DOM/screenshot/profile only. These are not deployment assets or tracked source.
 
 ## COMMANDS_RUN
 - P0-006 requirements ML install: sandbox FAIL → 승인 실행 PASS; pip check PASS.
@@ -66,6 +67,7 @@ CURRENT_STATUS: VERIFIED_LOCAL_GATE
 - python --version: 3.11.9, node --version: 24.18.0, npm.cmd --version: 11.16.0.
 - py -0p: 설치 발견 실패. python 명령은 정상. py launcher 사용하지 않음.
 - P3-001: `.venv\\Scripts\\python.exe -m pytest tests -q` 65 PASS; `npm.cmd run typecheck` PASS; `npm.cmd test` 11 PASS; approved `npm.cmd run build` PASS; V4 self-contained/env/UUID audits PASS; `git diff --check -- MVP_v4` PASS.
+- P3-001 post-commit: migrated V4-only `backend/data/p3_browser.db`; started test-only AI 18101, General 18100 and Vite 15173. `/ready/ml` 200, General health 200, frontend 200; General `/ready` 503 by intended Conversational Core readiness contract. Created Case → test-text feature intake → approved ML result 97.28208066915009/PHISHING → Case list/workspace → changed delta then fingerprint no-op → Vite `/api` proxy → headless Chrome DOM/screenshot PASS. No raw source text persisted.
 
 ## KNOWN_GOOD_STATE
 - P0-006 모델: SHA-256 662db2a9351dc4ca2c453776ae6f45750e465234cc9abcecc65b58a6b047c5fc, scikit-learn 1.6.1, 23 features, threshold 95.0, guardrail 유지.
@@ -80,15 +82,16 @@ CURRENT_STATUS: VERIFIED_LOCAL_GATE
 - 모든 작성은 MVP_v4 내부. V3 267개 non-env tracked 파일 및 기존 staged 상태 보존 확인.
 - frontend/dist/index.html 및 assets 생성. UUID native/fallback/request-header 계약 검증. 실제 브라우저 HTTPS/HTTP-IP 핵심 E2E는 아직 아님.
 - P3-001 uses no schema change or provider call. `/api/v4/cases` and `/api/v4/cases/{id}/workspace` are bank-participant scoped, exclude AI_PRIVATE, and return only persisted entities. A Vite test-only proxy injects an actor only with two explicit process variables and only works against `APP_ENV=test`.
+- V4 test-harness servers are intentionally still running: AI `http://127.0.0.1:18101`, General `http://127.0.0.1:18100`, Frontend `http://127.0.0.1:15173`. They use the ignored V4-only SQLite smoke DB and must be stopped only when the V4 work is finished or a replacement V4 harness is required.
 
 ## INCOMPLETE_CHANGES
-- P0-001~006/P1-001/P1-002/P1-003/P2-001/P2-002/P2-003/P3-001 local gate are verified. Required local-browser HTTP smoke is next after the P3-001 commit.
+- P0-001~006/P1-001/P1-002/P1-003/P2-001/P2-002/P2-003/P3-001 are verified. P3-002 is next.
 - 의도된 미구현: Case/Chat/Intake/Conversational/RAG/Tool/Agent 제품 경로. AI 전체 `/ready`는 conversational/text_intake 미구현을 명시하며 503.
 - 최종 full standalone copy/frontend build/new DB migration/full API readiness/E2E 및 Ubuntu 실행 NOT_RUN.
 
 ## NEXT_EXACT_STEPS
-1. Complete the required P3-001 post-commit local browser HTTP smoke: identify only V4 processes, start V4 AI/General/Frontend test harness on non-conflicting ports, migrate/seed a V4-only disposable DB, then verify health/readiness, real Case list/workspace/delta flow and leave only those three V4 servers running.
-2. Record the smoke result, then continue P3-002 Task/suggestion approval flow if the working tree is clean.
+1. Read the approved P3-002 acceptance criteria, then implement Task/suggestion approval flow without creating a second bank-work source. Reuse the running V4 test harness only if it fits the focused smoke.
+2. Preserve P3-001 server ownership and ports; never terminate unrelated processes or V3 services.
 
 ## BLOCKERS
 - GAP-AI-001: 공식지식 RAG 원본 미확인. AI_REUSE_MAP 참조.

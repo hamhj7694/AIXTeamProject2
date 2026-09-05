@@ -3,6 +3,7 @@
 ## D-011 · 2026-09-06 · P3-001 · Bank workspace projection and local browser harness
 The Bank Case Workspace reads only V4-persisted Case, Event, Context Feature, Fact and Verification data through bank-participant projections. It does not create a second Case source or synthesize a title, claim, demand, risk or conversation.
 The browser continues to use the existing revision/fingerprint delta API and Entity-ID merge helper. A Vite-only test proxy may add a test actor only when both explicit process variables are supplied; General API accepts that header only in `APP_ENV=test`, while production Nginx does neither.
+The post-commit V4-only browser smoke used an ignored SQLite test DB and loopback ports 18101/18100/15173. It verified a persisted 97.28208066915009 PHISHING result, changed/no-op delta behavior, Vite proxy and rendered workspace; it did not assert production readiness, which remains 503 until Conversational Core is implemented.
 
 ## D-010 · 2026-09-06 · P1-002 · Server-owned Case projection boundary
 Case API actor identity is an `ActorContext` attached by trusted server authentication middleware, rather than a body field, query view, or client-selected header.

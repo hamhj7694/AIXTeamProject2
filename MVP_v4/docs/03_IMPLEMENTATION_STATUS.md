@@ -18,7 +18,7 @@ PHASE_GATE: PASS — Phase 2 structured-feature intake and privacy boundary comp
 | P2-001 | VERIFIED | General→AI approved structured-feature ML intake, V4 context feature/Event/revision persistence, duplicate/stale/invalid/unavailable handling; 58 backend and 9 frontend tests PASS |
 | P2-002 | VERIFIED | feature-only deterministic reconstruction contract; raw text rejected, no source persistence/provider call |
 | P2-003 | VERIFIED | test-only transient text adapter maps to approved features and reuses ML intake; raw source not persisted; 64 backend tests PASS |
-| P3-001 | VERIFIED | Bank-only case list/workspace projection and actual 3-column frontend; existing delta Entity-ID merge polling; 65 backend, 11 frontend tests, typecheck/build and isolation/env/UUID audit PASS |
+| P3-001 | VERIFIED | Bank-only case list/workspace projection and actual 3-column frontend; existing delta Entity-ID merge polling; 65 backend, 11 frontend tests, typecheck/build and isolation/env/UUID audit PASS; V4-only browser HTTP smoke rendered Case/Event/Context risk flow PASS |
 
 Phase 4–7: PLANNED. 제품 Conversational Core, RAG, standalone/AWS E2E 완료 아님.
 시작 시 V3에 사용자 staged 변경 18개가 존재한다. 되돌리거나 수정하지 않는다.
