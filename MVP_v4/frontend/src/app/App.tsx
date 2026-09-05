@@ -5,6 +5,7 @@ import { caseFromEntityState, latestRisk, timelineFromEntityState, workspaceEnti
 
 import { CaseList } from './CaseList.tsx';
 import { ConversationComposer, ConversationTimeline } from './Conversation.tsx';
+import { BookmarkButton, PersonalUtilities, usePersonalWorkspace } from './PersonalUtilities.tsx';
 
 const POLL_INTERVAL_MS = 5_000;
 
@@ -23,6 +24,7 @@ function errorText(error: unknown): string {
 
 export function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const personal = usePersonalWorkspace(selectedId);
   const [workspace, setWorkspace] = useState<BankCaseWorkspace | null>(null);
   const [entityState, setEntityState] = useState<CaseEntityState | null>(null);
   const [workspaceState, setWorkspaceState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
@@ -87,9 +89,9 @@ export function App() {
         {selectedId && workspaceState === 'error' && <p className="state error">{error}</p>}
         {workspaceState === 'ready' && currentCase && currentCase.id === selectedId && <>
           <div className="case-heading"><div><span className="eyebrow">함께 확인하고 대응하는 공간</span><h2>사건 대화</h2></div></div>
-          <ConversationTimeline events={timeline} />
+          <ConversationTimeline events={timeline} actorId={personal.current?.actor_id ?? null} renderUtility={id => <BookmarkButton id={id} personal={personal} />} />
         </>}
-        {selectedId && <ConversationComposer caseId={selectedId} />}
+        {selectedId && <ConversationComposer caseId={selectedId} utilities={<PersonalUtilities caseId={selectedId} events={timeline} personal={personal} />} />}
 
       </section>
       <aside className="context-panel" aria-label="사건 컨텍스트"><h2>사건 컨텍스트</h2>

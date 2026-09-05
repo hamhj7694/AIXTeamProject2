@@ -16,6 +16,12 @@ const chrome = spawn('C:/Program Files/Google/Chrome/Application/chrome.exe', [
 let ws;
 const checks=[];
 try {
+  let healthy=false;
+  for(let i=0;i<100;i++) {
+    try { healthy=(await fetch('http://127.0.0.1:15173/api/v4/health')).ok; if(healthy) break; } catch { }
+    await pause(100);
+  }
+  assert.ok(healthy,'V4 General and proxy ready');
   let page;
   for(let i=0;i<100;i++) {
     try { page=await (await fetch('http://127.0.0.1:19222/json/new?http://127.0.0.1:15173/',{method:'PUT'})).json(); break; } catch { await pause(100); }
@@ -106,6 +112,50 @@ try {
     await click('[role=dialog] button','닫기');
     assert.equal(await run(`[...document.querySelectorAll('.composer-input button')].find(e=>e.textContent==='전송').disabled`),true);
     checks.push('question draft shell, no fake sending/provider');
+    if (process.argv.includes('--personal')) {
+      const before=(await request(`/cases/${cid}`)).case;
+      const target=(await request(`/cases/${cid}`)).events[0].id;
+      await wait(`document.querySelector('[data-item-id="${target}"] button') && !document.querySelector('[data-item-id="${target}"] button').disabled`);
+      await run(`document.querySelector('[data-item-id="${target}"] button').click()`);
+      await wait(`document.querySelector('[data-item-id="${target}"] button').getAttribute('aria-pressed')==='true'`);
+      await run(`document.querySelector('[data-item-id="${target}"] button').click()`);
+      await wait(`document.querySelector('[data-item-id="${target}"] button').getAttribute('aria-pressed')==='false'`);
+      await run(`document.querySelector('[data-item-id="${target}"] button').click()`);
+      await wait(`document.querySelector('[data-item-id="${target}"] button').getAttribute('aria-pressed')==='true'`);
+      await click('.function-toolbar button','개인 메모');
+      await input('[aria-label="개인 메모 내용"]','개인 업무 메모 보존');
+      await click('[role=dialog] button','닫기');
+      await click('.function-toolbar button','개인 메모');
+      assert.equal(await run(`document.querySelector('[aria-label="개인 메모 내용"]').value`),'개인 업무 메모 보존');
+      await click('[role=dialog] button','메모 추가');
+      await wait(`document.querySelector('.personal-notes').textContent.includes('개인 업무 메모 보존')`);
+      await click('[role=dialog] button','닫기');
+      const after=(await request(`/cases/${cid}`)).case;
+      assert.equal(before.revision,after.revision);
+      const personal=await request(`/cases/${cid}/personal`);
+      assert.equal(personal.notes.length,1);
+      assert.equal(personal.bookmarks.filter(b=>b.active).length,1);
+      const projection=await request(`/cases/${cid}/workspace`);
+      assert.ok(!JSON.stringify(projection).includes('개인 업무 메모 보존'));
+      await request(`/cases/${cid}/events`,{client_request_id:createUuid(),expected_version:after.version,event_type:'CASE_UPDATED',entity_type:'CASE',visibility:'CUSTOMER',payload:{change:'BROWSER_POLL_CHECK'}});
+      await wait(`document.querySelectorAll('.conversation-notice').length===5`);
+      await click('.function-toolbar button','내 북마크 (1)');
+      await wait(`document.querySelector('.personal-bookmarks')`);
+      await click('.personal-bookmarks button','사건 접수');
+      await wait(`document.getElementById('conversation-${target}').classList.contains('bookmark-highlight')`);
+      assert.equal(await run(`document.activeElement.id`),`conversation-${target}`);
+      // Reload proves persistence independently of local React state.
+      await call('Page.reload');
+      await wait(`document.querySelector('.case-search')`);
+      await input('.case-search',title);
+      await wait(`document.querySelectorAll('.compact-row').length===1`);
+      await run(`document.querySelector('.case-item').click()`);
+      await wait(`document.querySelector('[data-item-id="${target}"] button')?.getAttribute('aria-pressed')==='true'`);
+      await click('.function-toolbar button','개인 메모');
+      await wait(`document.querySelector('.personal-notes').textContent.includes('개인 업무 메모 보존')`);
+      await click('[role=dialog] button','닫기');
+      checks.push('persistent private notes, bookmark add/cancel/persistence, unchanged shared revision, delta-stable target scroll/focus/highlight');
+    }
   }
   const shot=await call('Page.captureScreenshot',{format:'png'});
   await writeFile(resolve(cache,'list.png'),Buffer.from(shot.data,'base64'));

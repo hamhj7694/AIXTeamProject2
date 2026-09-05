@@ -65,4 +65,13 @@ button:disabled { cursor:not-allowed; opacity:.55; }
 .composer-hint { font-size:11px; color:#6b7e8b; }
 .question-drafts { padding:0; list-style:none; font-size:13px; }
 .question-drafts input[type=checkbox] { width:auto; margin-right:8px; }
+.bookmark-toggle { border:0; background:transparent; color:#376788; font-size:20px; padding:0 3px; }
+.bookmark-toggle[aria-pressed=true] { color:#8a671e; }
+.bookmark-highlight .conversation-notice, .bookmark-highlight .conversation-bubble { outline:3px solid #caab52; background:#fff9e7; }
+.personal-notes, .personal-bookmarks { padding:0; list-style:none; }
+.personal-notes li { padding:12px 0; border-bottom:1px solid #dbe4ea; }
+.personal-notes time { font-size:11px; color:#6d7f8e; }
+.personal-notes p { white-space:pre-wrap; overflow-wrap:anywhere; }
+.personal-bookmarks li { display:flex; align-items:center; gap:8px; margin:10px 0; }
+.personal-bookmarks li>button:first-child { flex:1; text-align:left; }
 @media(max-width:640px) { .timeline-panel { height:auto; min-height:80vh; padding:16px; } }

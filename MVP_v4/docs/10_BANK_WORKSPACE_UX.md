@@ -13,3 +13,11 @@ Direct user request dated 2026-09-06 supersedes the earlier event-viewer present
 - Polling: existing revision/fingerprint no-op and Entity-ID merge; stale responses ignored, no entire Case replacement, editor DOM/draft/focus/selection/IME preserved.
 
 Atomic execution: P3-001A-1 list/search/filter/sort/trash; P3-001A-2 Conversation/local composer; P3-001A-3 private notes/bookmarks/utilities. Each requires tests, browser smoke, documentation and commit. Then resume P3-002.
+
+## Implemented contracts
+
+- Migration 003 adds Case title/summary and reversible deletion metadata without changing approved ML fields. Search uses explicit user-facing metadata; private Event payloads are never searched.
+- POST Case trash requires server actor, administrator credential and expected Case version. Password has no application fallback and is never logged or returned; malformed trash requests use redacted validation responses. Delete/restore generate BANK_INTERNAL audit Events.
+- GET Case personal and POST personal/notes or personal/bookmarks are BANK_STAFF participant-only. Owner comes only from ActorContext. Notes are append-only, idempotent private records. Bookmarks currently reference real EVENT IDs, including inactive versions for safe reactivation; inaccessible originals return available=false. Message/entity types are extended only when their real read contracts exist.
+- Private mutations serialize per Case, enforce bookmark versions and idempotency, preserve Shared Case revision/fingerprint, and never write a shared Event containing private text or call AI.
+- AI participation and message channel are explicitly local preference/draft shells. They do not claim live provider or delivery behavior. RIGHT UX remains deferred.

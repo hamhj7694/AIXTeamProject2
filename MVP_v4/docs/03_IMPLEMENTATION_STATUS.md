@@ -6,6 +6,7 @@ PHASE_GATE: PASS — Phase 2 structured-feature intake and privacy boundary comp
 
 | Task | 상태 | 증거/남은 일 |
 |---|---|---|
+| P3-001A-3 | VERIFIED | 70 backend tests, 17 frontend tests/typecheck/build; real Chrome notes/bookmark toggle/persistence/delta-stable scroll/focus/highlight PASS. Private writes leave Case revision unchanged. |
 | P3-001A-2 | VERIFIED | 17 frontend tests/typecheck/build; real Chrome natural-language updates, channel drafts, AI OFF with actual ML/polling, editor focus/selection/IME DOM preservation PASS. No fake message/provider contract. |
 | P3-001A-1 | VERIFIED | 68 backend tests, 14 frontend tests/typecheck/build; MySQL migration 003/repeat + real HTTP PASS; real Chrome search/filter/sort/selection/admin failure+success/trash/restore PASS |
 | P0-001 | VERIFIED | 필수 문서 13개, Source/PRD exact copy PASS; V3 267개 non-env tracked hash 기준 저장 |

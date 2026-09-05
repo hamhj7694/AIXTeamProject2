@@ -19,3 +19,5 @@ P3-001A-1 VERIFIED: migration 003, Case metadata/list/trash contracts and reposi
 | P3-001 (VERIFIED) | bank workspace contracts/repository/API, frontend Case API/3-column UI/delta state, Vite test proxy, API/frontend tests, docs | GET case list; GET bank workspace; existing GET delta polling | Uses migration 002; no schema change | bank scope, real ML context/event/risk projection, AI_PRIVATE exclusion, no-op/stale Entity-ID merge, frontend typecheck/test/build, audit | Phase 2 gate |
 
 P3-001A-2 VERIFIED: frontend Conversation projection/component/composer and related unit/browser tests. No provider/message sending endpoint added.
+
+P3-001A-3 VERIFIED: private workspace contracts/repository/API, personal utility UI and stable Event bookmarks; no schema change or Shared Case revision/AI trigger for private writes.

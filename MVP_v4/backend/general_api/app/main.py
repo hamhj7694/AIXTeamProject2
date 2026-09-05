@@ -11,6 +11,7 @@ from backend.general_api.app.domains.cases.repository import (
     CaseAccessDenied, CaseNotFound, CaseRepository, IdempotencyConflict, VersionConflict,
 )
 from backend.contracts.case import CaseTrashRequest
+from backend.contracts.personal import CreatePersonalNote, SetPersonalBookmark, PersonalWorkspace
 from backend.general_api.app.domains.cases.workspace_repository import WorkspaceRepository, AdminCredentialRejected, AdminCredentialUnavailable
 
 
@@ -242,6 +243,33 @@ def create_app() -> FastAPI:
             _case_error(error)
         finally:
             repository.close()
+
+    def personal_repository_call(case_id: str, actor: ActorContext, settings: Settings, method: str, request=None):
+        from uuid import UUID
+        try:
+            parsed = UUID(case_id)
+        except ValueError:
+            raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND"}) from None
+        repository = WorkspaceRepository(settings)
+        try:
+            args = (parsed, actor) if request is None else (parsed, actor, request)
+            return getattr(repository, method)(*args)
+        except Exception as error:
+            _case_error(error)
+        finally:
+            repository.close()
+
+    @app.get("/api/v4/cases/{case_id}/personal", response_model=PersonalWorkspace)
+    def personal(case_id: str, actor: ActorContext = Depends(require_server_actor), settings: Settings = Depends(get_settings)):
+        return personal_repository_call(case_id, actor, settings, "personal")
+
+    @app.post("/api/v4/cases/{case_id}/personal/notes", response_model=PersonalWorkspace)
+    def add_note(case_id: str, request: CreatePersonalNote, actor: ActorContext = Depends(require_server_actor), settings: Settings = Depends(get_settings)):
+        return personal_repository_call(case_id, actor, settings, "add_note", request)
+
+    @app.post("/api/v4/cases/{case_id}/personal/bookmarks", response_model=PersonalWorkspace)
+    def set_bookmark(case_id: str, request: SetPersonalBookmark, actor: ActorContext = Depends(require_server_actor), settings: Settings = Depends(get_settings)):
+        return personal_repository_call(case_id, actor, settings, "set_bookmark", request)
 
     return app
 
