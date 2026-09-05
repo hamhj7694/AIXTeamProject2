@@ -1351,6 +1351,18 @@ async def invoke_customer_support_ai(case_id: str, request: PublicCustomerAiRepl
         for item in questions
         if item.get("status") == "ANSWERED" and item.get("answer_text")
     ][-10:]
+    # Always include visible unanswered cards, even when retrieval cannot match a vague "이 질문".
+    service_questions = [
+        {
+            'source': 'CSR_QUESTION_CARD', 'status': 'ASKED',
+            'question_text': str(item.get('question_text', ''))[:1000],
+            'customer_explanation': str(item.get('customer_explanation') or '')[:1000],
+            'options': [str(option)[:160] for option in (item.get('options') or [])[:10]],
+        }
+        for item in questions
+        if item.get('status') == 'ASKED' and item.get('question_text')
+        and item.get('case_id', case_id) == case_id
+    ][:5]
     retrieved = retrieve_context(case_id, request.prompt, collect_records(
         case_id, messages=all_messages, questions=questions, verifications=verifications, customer=True,
     ), customer=True)
@@ -1370,6 +1382,7 @@ async def invoke_customer_support_ai(case_id: str, request: PublicCustomerAiRepl
             "assistant_mode": "CUSTOMER_SUPPORT",
             "primary_assignee": case.get('primary_assignee'),
             "customer_progress": progress_ai_context(progress),
+            "customer_service_questions": service_questions,
             "published_verification_results": published_results,
             "attachment_summaries": [str(item.get('original_name', '첨부 자료')) for item in attachments
                                      if item.get('visibility') == 'CUSTOMER'][-10:],
