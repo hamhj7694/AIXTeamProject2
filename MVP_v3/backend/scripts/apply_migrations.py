@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import os
 import re
 from pathlib import Path
@@ -32,7 +33,22 @@ def execute_all(cursor: pymysql.cursors.Cursor, sql: str) -> None:
         pass
 
 
+def requested_migrations() -> set[str] | None:
+    parser = argparse.ArgumentParser(description="Apply MVP_v3 database migrations in filename order.")
+    parser.add_argument("--only", action="append", default=[], metavar="FILENAME",
+                        help="Apply only the exact migration filename; repeat for multiple files.")
+    values = set(parser.parse_args().only)
+    if not values:
+        return None
+    available = {path.name for path in MIGRATIONS_DIR.glob("*.sql")}
+    unknown = values - available
+    if unknown:
+        parser.error(f"unknown migration: {', '.join(sorted(unknown))}")
+    return values
+
+
 def main() -> None:
+    selected = requested_migrations()
     load_dotenv(MVP_ROOT / ".env")
     database = os.getenv("MYSQL_DATABASE", "csr")
     if not re.fullmatch(r"[A-Za-z0-9_]+", database):
@@ -69,7 +85,10 @@ def main() -> None:
             )
             connection.commit()
 
-            for migration in sorted(MIGRATIONS_DIR.glob("*.sql")):
+            migrations = sorted(MIGRATIONS_DIR.glob("*.sql"))
+            if selected is not None:
+                migrations = [item for item in migrations if item.name in selected]
+            for migration in migrations:
                 cursor.execute(
                     "SELECT 1 FROM schema_migrations WHERE migration_name=%s",
                     (migration.name,),

@@ -21,6 +21,8 @@ class CaseCopilotInput(StrictModel):
     known_facts: list[str] = Field(default_factory=list, max_length=30)
     recent_conversation: list[str] = Field(default_factory=list, max_length=20)
     pending_actions: list[str] = Field(default_factory=list, max_length=20)
+    customer_progress: list[str] = Field(default_factory=list, max_length=10)
+    published_verification_results: list[str] = Field(default_factory=list, max_length=10)
     attachment_summaries: list[str] = Field(default_factory=list, max_length=10)
     unresolved_verifications: list[str] = Field(default_factory=list, max_length=10)
     assistant_mode: Literal["BANK_INTERNAL", "CUSTOMER_SUPPORT"] = "BANK_INTERNAL"

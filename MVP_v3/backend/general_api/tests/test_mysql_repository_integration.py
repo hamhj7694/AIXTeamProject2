@@ -8,12 +8,14 @@ import unittest
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 import pymysql
 
 from ai_api.app.domains.diagnosis import DiagnosisService
+from ai_api.app.domains.diagnosis.extractor import EventExtraction, _local_safety_events, parse_turns
+from contracts.diagnosis import CaseContextFeatures, ContextResult
 from general_api.app.domains.cases.initial_report import InitialReportBuilder
 from general_api.app.domains.cases.mysql_repository import MySqlCaseRepository
 from general_api.app.main import build_repository
@@ -96,7 +98,8 @@ class MySqlCaseRepositoryIntegrationTest(unittest.IsolatedAsyncioTestCase):
                     f"(SELECT report_id FROM case_reports WHERE case_id IN ({placeholders}))",
                     self.case_ids,
                 )
-                for table in ("case_presence", "case_members", "messages", "verification_tasks", "actions", "context_features", "analysis_segments", "case_inputs", "case_events", "case_reports"):
+                cursor.execute(f"DELETE FROM case_context_item_history WHERE item_id IN (SELECT item_id FROM case_context_items WHERE case_id IN ({placeholders}))", self.case_ids)
+                for table in ("case_context_items", "case_context_projections", "personal_notes", "case_facts", "customer_questions", "case_presence", "case_members", "messages", "verification_tasks", "actions", "context_features", "analysis_segments", "case_inputs", "case_events", "case_reports"):
                     cursor.execute(f"DELETE FROM {table} WHERE case_id IN ({placeholders})", self.case_ids)
                 cursor.execute(f"DELETE FROM cases WHERE case_id IN ({placeholders})", self.case_ids)
             connection.commit()
@@ -120,7 +123,8 @@ class MySqlCaseRepositoryIntegrationTest(unittest.IsolatedAsyncioTestCase):
                         "actions", "analysis_segments", "case_attachments", "case_events", "case_facts", "case_inputs",
                         "case_members", "case_presence", "case_report_sections", "case_reports", "cases", "context_features",
                         "customer_questions", "message_attachments", "messages", "personal_notes", "schema_migrations",
-                        "transcript_segments", "verification_tasks", "voice_sessions",
+                        "transcript_segments", "verification_tasks", "voice_sessions", "case_context_items",
+                        "case_context_item_history", "case_context_projections",
                     },
                 )
                 cursor.execute(
@@ -130,11 +134,24 @@ class MySqlCaseRepositoryIntegrationTest(unittest.IsolatedAsyncioTestCase):
                     (self.database,),
                 )
                 self.assertEqual(cursor.fetchone(), (9, 6))
+                cursor.execute("SELECT COLUMN_DEFAULT FROM information_schema.columns WHERE table_schema=%s AND table_name='cases' AND column_name='context_revision'", (self.database,))
+                self.assertEqual(int(cursor.fetchone()[0]), 1)
         finally:
             connection.close()
 
     async def _record(self, *, case_id: str, client_request_id: str) -> dict:
-        diagnosis = await DiagnosisService().analyze("검찰청입니다. 지금 안전계좌로 500만원을 송금하세요.")
+        source = "검찰청입니다. 지금 안전계좌로 500만원을 송금하세요."
+        turns = parse_turns(source)
+        extraction = EventExtraction(turns, _local_safety_events(turns), list(range(1, len(turns) + 1)), "test")
+        # Repository tests must never spend API credits.
+        with patch("ai_api.app.domains.diagnosis.window_ai.service.extract_events", new=AsyncMock(return_value=extraction)), patch(
+            "ai_api.app.domains.diagnosis.service.extract_case_context_features",
+            new=AsyncMock(return_value=CaseContextFeatures(extraction_method="LLM_INDEPENDENT")),
+        ), patch(
+            "ai_api.app.domains.diagnosis.service.FullContextDiagnosisHandler.analyze",
+            new=AsyncMock(return_value=ContextResult(summary="테스트 사건", incident_type="test", confidence=0.8)),
+        ):
+            diagnosis = await DiagnosisService().analyze(source)
         diagnosis = diagnosis.model_copy(update={"case_id": case_id})
         report = InitialReportBuilder().build(case_id, diagnosis)
         now = datetime.now(timezone.utc).isoformat()
@@ -152,6 +169,96 @@ class MySqlCaseRepositoryIntegrationTest(unittest.IsolatedAsyncioTestCase):
             "created_at": now,
             "updated_at": now,
         }
+
+    async def test_context_item_transactions_and_concurrent_edits(self) -> None:
+        from general_api.app.domains.cases.context_item_repository import ContextItemRepository
+        from general_api.app.domains.cases.context_items import ContextItemChange, ContextItemConflictError
+        case_id = f'VP-{uuid4().hex[:12]}'
+        await self.repository.create(await self._record(case_id=case_id, client_request_id=uuid4().hex))
+        self.case_ids.append(case_id)
+        store = ContextItemRepository(self.repository)
+        pool = await self.repository._get_pool()
+        try:
+            proposed = await asyncio.gather(*[
+                store.propose(case_id, 'CLAIM', 'claim:prosecution', '검찰 소속 주장', ['event-1'])
+                for _ in range(2)
+            ])
+            self.assertEqual(proposed[0].item_id, proposed[1].item_id)
+            self.assertEqual(proposed[1].item_version, 1)
+            item = proposed[0]
+            outcomes = await asyncio.gather(*[
+                store.change(case_id, item.item_id, ContextItemChange(expected_version=1, operation='EDIT', text=text), actor)
+                for actor, text in [('staff-1', '담당자 초안 1'), ('staff-2', '담당자 초안 2')]
+            ], return_exceptions=True)
+            self.assertEqual(sum(isinstance(value, ContextItemConflictError) for value in outcomes), 1)
+            edited = (await store.list_items(case_id))[0]
+            deleted = await store.change(case_id, item.item_id, ContextItemChange(expected_version=2, operation='DELETE'), 'staff-1')
+            await store.propose(case_id, 'CLAIM', 'claim:prosecution', 'AI가 다시 작성한 주장', ['event-2'])
+            self.assertEqual(await store.list_items(case_id), [])
+            hidden = (await store.list_items(case_id, include_deleted=True))[0]
+            self.assertEqual(hidden.effective_text, edited.effective_text)
+            self.assertEqual(hidden.deleted_by, deleted.deleted_by)
+            with self.assertRaises(KeyError):
+                await store.change('OTHER-CASE', item.item_id, ContextItemChange(expected_version=4, operation='RESTORE'), 'staff-1')
+            original_save = store._save
+            async def save_then_fail(*args):
+                await original_save(*args)
+                raise RuntimeError('simulated commit failure')
+            with patch.object(store, '_save', side_effect=save_then_fail):
+                with self.assertRaises(RuntimeError):
+                    await store.change(case_id, item.item_id, ContextItemChange(expected_version=4, operation='RESTORE'), 'staff-1')
+            self.assertEqual(await store.list_items(case_id), [])
+            restored = await store.change(case_id, item.item_id, ContextItemChange(expected_version=4, operation='RESTORE'), 'staff-1')
+            self.assertEqual(restored.item_version, 5)
+            async with pool.acquire() as connection, connection.cursor() as cursor:
+                await cursor.execute('SELECT COUNT(*) FROM case_context_item_history WHERE item_id=%s', (item.item_id,))
+                self.assertEqual((await cursor.fetchone())[0], 5)
+                await connection.rollback()
+        finally:
+            async with pool.acquire() as connection, connection.cursor() as cursor:
+                await cursor.execute('DELETE FROM case_context_item_history WHERE item_id IN (SELECT item_id FROM case_context_items WHERE case_id=%s)', (case_id,))
+                await cursor.execute('DELETE FROM case_context_items WHERE case_id=%s', (case_id,))
+                await connection.commit()
+
+    async def test_context_revision_and_projection_lease_are_durable(self) -> None:
+        from general_api.app.domains.cases.context_projection_repository import ContextProjectionRepository
+
+        case_id = f'VP-{uuid4().hex[:12]}'
+        await self.repository.create(await self._record(case_id=case_id, client_request_id=uuid4().hex))
+        self.case_ids.append(case_id)
+        store = ContextProjectionRepository(self.repository)
+
+        self.assertEqual(await store.get_revision(case_id), 1)
+        claims = await asyncio.gather(store.claim(case_id, 1), store.claim(case_id, 1))
+        self.assertEqual({claim.outcome for claim in claims}, {'CLAIMED', 'IN_PROGRESS'})
+        owner = next(claim for claim in claims if claim.outcome == 'CLAIMED')
+        self.assertFalse(await store.complete(case_id, 1, 'not-the-owner', {'value': 'wrong'}))
+        self.assertTrue(await store.complete(case_id, 1, owner.lease_token, {'value': 'first'}))
+        cached = await store.claim(case_id, 1)
+        self.assertEqual(cached.outcome, 'CACHED')
+        self.assertEqual(cached.last_success_payload, {'value': 'first'})
+
+        await self.repository.create_personal_note(case_id, 'staff-1', '개인 메모')
+        self.assertEqual(await store.get_revision(case_id), 1, '개인 메모는 사건 의미 버전을 바꾸지 않는다')
+        await self.repository.create_action(case_id, {'action_type': 'PAYMENT_HOLD_REVIEW', 'actor_type': 'BANK_STAFF', 'note': '지급정지 검토'})
+        self.assertEqual(await store.get_revision(case_id), 2)
+        self.assertEqual((await store.claim(case_id, 1)).outcome, 'STALE')
+
+        revision_two = await store.claim(case_id, 2)
+        self.assertEqual(revision_two.outcome, 'CLAIMED')
+        await self.repository.create_action(case_id, {'action_type': 'CUSTOMER_CONTACT', 'actor_type': 'BANK_STAFF', 'note': '고객 연락'})
+        self.assertEqual(await store.get_revision(case_id), 3)
+        self.assertFalse(await store.complete(case_id, 2, revision_two.lease_token, {'value': 'obsolete'}))
+        state = await store.read(case_id)
+        self.assertEqual(state['last_success_revision'], 1)
+        self.assertEqual(state['last_success_payload'], {'value': 'first'})
+
+        revision_three = await store.claim(case_id, 3)
+        self.assertEqual(revision_three.outcome, 'CLAIMED')
+        self.assertTrue(await store.fail(case_id, 3, revision_three.lease_token, 'AI_CONTEXT_GENERATION_FAILED'))
+        failed = await store.read(case_id)
+        self.assertEqual(failed['generation_status'], 'STALE')
+        self.assertEqual(failed['last_success_payload'], {'value': 'first'})
 
     async def test_create_list_get_and_idempotency_lookup(self) -> None:
         case_id = f"A0-{uuid4().hex[:12].upper()}"
@@ -221,6 +328,31 @@ class MySqlCaseRepositoryIntegrationTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(member["user_id"], "bank-operator")
         self.assertEqual([item["user_id"] for item in members], ["bank-operator"])
+
+
+    async def test_question_candidates_are_unique_across_cases_and_concurrent_writers(self) -> None:
+        question = {"question_id": "q_transfer_status", "target_field": "transfer_status",
+                    "question_text": "이미 송금했나요?", "reason": "피해 확인", "priority": "P0"}
+        for _ in range(2):
+            case_id = f"Q-{uuid4().hex[:12]}"
+            self.case_ids.append(case_id)
+            await self.repository.create(await self._record(case_id=case_id, client_request_id=uuid4().hex))
+        first, second = self.case_ids
+        batches = await asyncio.gather(
+            self.repository.queue_customer_questions(first, [question], "test"),
+            self.repository.queue_customer_questions(first, [question], "test"),
+            self.repository.queue_customer_questions(second, [question], "test"),
+        )
+        ids = [row["question_id"] for batch in batches for row in batch]
+        self.assertEqual(len(ids), 2)
+        self.assertEqual(len(set(ids)), 2)
+        self.assertNotIn("q_transfer_status", ids)
+        self.assertEqual(len(await self.repository.list_customer_questions(first)), 1)
+        delivered = await asyncio.gather(
+            self.repository.dispatch_next_customer_question(first),
+            self.repository.dispatch_next_customer_question(first),
+        )
+        self.assertEqual(sum(item is not None for item in delivered), 1)
 
 
 class RepositorySelectionTest(unittest.TestCase):

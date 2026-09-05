@@ -17,9 +17,14 @@ from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_validator
+from .domains.cases.context_items import Section, ContextItemChange, ContextItemConflictError
+from .domains.cases.context_item_repository import ContextItemRepository, InMemoryContextItemRepository
 
 from contracts.diagnosis import AnalyzeTextRequest
+from contracts.public_api.customer_progress import CustomerProgressItem, ProgressStep, UpdateCustomerProgress
+from .domains.cases.customer_progress import PREFIX as PROGRESS_PREFIX, ProgressConflict, progress_items as build_customer_progress, progress_ai_context, actions_for_ai
+from request_trace import install_request_trace
 from contracts.ai_internal.work_card import CaseWorkCardOutput, WorkCardType
 from contracts.public_api.case_analyze import (
     PublicAnalyzeCaseRequest,
@@ -90,7 +95,9 @@ from contracts.public_api.collaboration import (
 )
 
 from .clients.diagnosis_ai import AiServiceAuthenticationError, AiServiceError, AiServiceQuotaError, HttpDiagnosisAiClient
-from .domains.cases.repository import CaseVersionConflictError, normalize_target_field
+from .domains.cases.repository import CasePersistenceError, CaseVersionConflictError, normalize_target_field
+from .domains.cases.context_projection_repository import ContextProjectionRepository
+from .domains.cases.mysql_repository import MySqlCaseRepository
 from .domains.cases.service import AnalyzeCaseService, InvalidCaseTransitionError, transition_case
 
 
@@ -100,11 +107,11 @@ load_dotenv(Path(__file__).resolve().parents[3] / ".env", override=False)
 def build_repository():
     repository_type = os.getenv("CASE_REPOSITORY", "mysql").lower()
     if repository_type == "mysql":
-        from .domains.cases.mysql_repository import MySqlCaseRepository
         return MySqlCaseRepository()
     raise RuntimeError(f"Unsupported CASE_REPOSITORY: {repository_type}. Use mysql in deployed environments.")
 
 app = FastAPI(title="AI Independent Verification - General API", version="0.1.0")
+install_request_trace(app, "general-api")
 logger = logging.getLogger(__name__)
 
 AUTONOMOUS_P0_QUESTION_FIELDS = {
@@ -305,6 +312,9 @@ async def analyze_case(request: PublicAnalyzeCaseRequest) -> PublicAnalyzeCaseRe
     except AiServiceError as exc:
         failure = public_failed_response("AI_ANALYSIS_FAILED", str(exc), retryable=True)
         return JSONResponse(status_code=503, content=failure.model_dump(mode="json"))
+    except CasePersistenceError:
+        failure = public_failed_response("CASE_SAVE_FAILED", "AI 분석 후 사건 저장을 완료하지 못했습니다.", retryable=True)
+        return JSONResponse(status_code=503, content=failure.model_dump(mode="json"))
     except Exception as exc:
         failure = public_failed_response("AI_ANALYSIS_FAILED", "진단을 완료하지 못했습니다.", retryable=True)
         return JSONResponse(status_code=503, content=failure.model_dump(mode="json"))
@@ -465,7 +475,10 @@ def exclude_handled_question_candidates(
     ]
 
 
-def to_public_case_support_snapshot(case_id: str, payload: dict, *, available: bool) -> PublicCaseSupportSnapshotResponse:
+def to_public_case_support_snapshot(
+    case_id: str, payload: dict, *, available: bool, source_revision: int | None = None,
+    projection_revision: int | None = None, projection_status: str = "UNCACHED",
+) -> PublicCaseSupportSnapshotResponse:
     brief = payload.get("case_brief") or None
     context = payload.get("case_context") or None
     return PublicCaseSupportSnapshotResponse(
@@ -491,10 +504,104 @@ def to_public_case_support_snapshot(case_id: str, payload: dict, *, available: b
         ) for item in payload.get("recommended_questions", [])],
         unresolved_items=[PublicUnresolvedItemResponse.model_validate(item) for item in payload.get("unresolved_items", [])],
         warnings=payload.get("warnings", []),
+        source_revision=source_revision, projection_revision=projection_revision,
+        projection_status=projection_status,
     )
 
 
+async def _read_case_support_source(case_id: str, *, attempts: int = 3) -> tuple[int, dict, list[dict], list[dict], list[dict], list[dict]]:
+    """Read a source set whose semantic revision did not change mid-read."""
+    for _ in range(attempts):
+        case = await repository.get(case_id)
+        if case is None:
+            raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."})
+        before = int(case.get("context_revision", 1))
+        facts, questions, verifications, actions = await asyncio.gather(
+            repository.list_case_facts(case_id), repository.list_customer_questions(case_id),
+            repository.list_verifications(case_id), repository.list_actions(case_id),
+        )
+        latest = await repository.get(case_id)
+        if latest is None:
+            raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."})
+        after = int(latest.get("context_revision", 1))
+        if before == after:
+            return after, latest, facts, questions, verifications, actions
+    raise RuntimeError("CASE_CONTEXT_SOURCE_CHANGED")
+
+
+def _case_support_ai_input(case_id: str, case: dict, facts: list[dict], questions: list[dict], verifications: list[dict], actions: list[dict]) -> dict:
+    actions = actions_for_ai(actions)
+    return {
+        "case_id": case_id, "diagnosis": case.get("diagnosis"),
+        "question_context": build_question_recommendation_context(facts, questions, case),
+        "questions": [{
+            "question_id": item["question_id"],
+            "target_field": normalize_target_field(str(item.get("target_field", ""))),
+            "question_text": item.get("question_text", ""), "priority": item.get("priority", "P1"),
+            "status": item.get("status", "PENDING"), "answer_text": item.get("answer_text"),
+        } for item in questions],
+        "facts": [{
+            "fact_id": item["fact_id"], "field": normalize_target_field(str(item.get("field", item.get("field_name", "")))),
+            "value": str(item.get("value", "")), "status": item.get("status", "UNRESOLVED"),
+        } for item in facts],
+        "verifications": [{
+            "verification_task_id": item["verification_task_id"], "target": item.get("target", ""),
+            "claim": item.get("claim", ""), "status": item.get("status", "PENDING"),
+            "result_summary": item.get("result_summary"),
+        } for item in verifications],
+        "actions": [{
+            "action_id": item["action_id"], "action_type": item.get("action_type", "OTHER"),
+            "status": item.get("status", "PENDING"), "note": item.get("note", ""),
+        } for item in actions],
+    }
+
+
 async def get_case_support_snapshot(case_id: str) -> PublicCaseSupportSnapshotResponse:
+    # Mock/in-memory repositories keep the original uncached path. Production
+    # MySQL uses durable revision + DB lease so multiple workers share one result.
+    if isinstance(repository, MySqlCaseRepository):
+        projections = ContextProjectionRepository(repository)
+        for _ in range(3):
+            try:
+                revision, case, facts, questions, verifications, actions = await _read_case_support_source(case_id)
+            except RuntimeError:
+                continue
+            claim = await projections.claim(case_id, revision)
+            if claim.outcome == "STALE":
+                continue
+            if claim.outcome == "CACHED":
+                return to_public_case_support_snapshot(case_id, claim.last_success_payload or {}, available=True,
+                    source_revision=revision, projection_revision=claim.last_success_revision, projection_status="CURRENT")
+            if claim.outcome == "IN_PROGRESS":
+                if claim.last_success_payload is not None:
+                    cached = {**claim.last_success_payload, "warnings": [
+                        *claim.last_success_payload.get("warnings", []), "최신 변경사항을 반영 중이며 직전 정상 사건 맥락을 표시합니다.",
+                    ]}
+                    return to_public_case_support_snapshot(case_id, cached, available=True,
+                        source_revision=revision, projection_revision=claim.last_success_revision, projection_status="UPDATING")
+                return PublicCaseSupportSnapshotResponse(case_id=case_id, available=False,
+                    warnings=["사건 맥락을 처음 정리하고 있습니다."], source_revision=revision, projection_status="UPDATING")
+            try:
+                payload = await service.ai_client.build_case_support_snapshot(
+                    _case_support_ai_input(case_id, case, facts, questions, verifications, actions)
+                )
+            except AiServiceError as exc:
+                await projections.fail(case_id, revision, claim.lease_token or "", type(exc).__name__)
+                if claim.last_success_payload is not None:
+                    cached = {**claim.last_success_payload, "warnings": [
+                        *claim.last_success_payload.get("warnings", []), str(exc), "최신 반영에 실패해 직전 정상 사건 맥락을 표시합니다.",
+                    ]}
+                    return to_public_case_support_snapshot(case_id, cached, available=True,
+                        source_revision=revision, projection_revision=claim.last_success_revision, projection_status="STALE")
+                return PublicCaseSupportSnapshotResponse(case_id=case_id, available=False, warnings=[str(exc)],
+                    source_revision=revision, projection_status="FAILED")
+            if await projections.complete(case_id, revision, claim.lease_token or "", payload):
+                return to_public_case_support_snapshot(case_id, payload, available=True,
+                    source_revision=revision, projection_revision=revision, projection_status="CURRENT")
+            # Data changed during generation; never publish this obsolete result.
+        return PublicCaseSupportSnapshotResponse(case_id=case_id, available=False,
+            warnings=["사건 정보가 연속으로 변경되어 최신 맥락 반영을 다시 시도합니다."], projection_status="UPDATING")
+
     case = await repository.get(case_id)
     if case is None:
         raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."})
@@ -503,37 +610,9 @@ async def get_case_support_snapshot(case_id: str) -> PublicCaseSupportSnapshotRe
     verifications = await repository.list_verifications(case_id)
     actions = await repository.list_actions(case_id)
     try:
-        payload = await service.ai_client.build_case_support_snapshot({
-            "case_id": case_id, "diagnosis": case.get("diagnosis"),
-            "question_context": build_question_recommendation_context(facts, questions, case),
-            "questions": [{
-                "question_id": item["question_id"],
-                "target_field": normalize_target_field(str(item.get("target_field", ""))),
-                "question_text": item.get("question_text", ""),
-                "priority": item.get("priority", "P1"),
-                "status": item.get("status", "PENDING"),
-                "answer_text": item.get("answer_text"),
-            } for item in questions],
-            "facts": [{
-                "fact_id": item["fact_id"],
-                "field": normalize_target_field(str(item.get("field", item.get("field_name", "")))),
-                "value": str(item.get("value", "")),
-                "status": item.get("status", "UNRESOLVED"),
-            } for item in facts],
-            "verifications": [{
-                "verification_task_id": item["verification_task_id"],
-                "target": item.get("target", ""),
-                "claim": item.get("claim", ""),
-                "status": item.get("status", "PENDING"),
-                "result_summary": item.get("result_summary"),
-            } for item in verifications],
-            "actions": [{
-                "action_id": item["action_id"],
-                "action_type": item.get("action_type", "OTHER"),
-                "status": item.get("status", "PENDING"),
-                "note": item.get("note", ""),
-            } for item in actions],
-        })
+        payload = await service.ai_client.build_case_support_snapshot(
+            _case_support_ai_input(case_id, case, facts, questions, verifications, actions)
+        )
         return to_public_case_support_snapshot(case_id, payload, available=True)
     except AiServiceError as exc:
         return PublicCaseSupportSnapshotResponse(case_id=case_id, available=False, warnings=[str(exc)])
@@ -626,7 +705,7 @@ async def sync_ai_checklist_items(case_id: str, snapshot: PublicCaseSupportSnaps
     """Persist each AI-recommended check once so unfinished staff work accumulates."""
     existing = await repository.list_actions(case_id)
     known_fields = {
-        str(item.get("action_type", "")).split(":")[-1]
+        normalize_target_field(str(item.get("action_type", "")).split(":")[-1])
         for item in existing
         if str(item.get("action_type", "")).startswith(AI_CHECKLIST_ACTION_PREFIX)
     }
@@ -639,7 +718,7 @@ async def sync_ai_checklist_items(case_id: str, snapshot: PublicCaseSupportSnaps
         (
             normalize_target_field(str(item.get("field", ""))),
             "P0" if normalize_target_field(str(item.get("field", ""))) in AUTONOMOUS_P0_QUESTION_FIELDS else "P1",
-            f"{CHECKLIST_FIELD_LABELS.get(normalize_target_field(str(item.get('field', ''))), str(item.get('field', '확인 항목')))}에 대한 고객 답변 “{item.get('value', '')}”을 사실로 확정할지 검토하세요.",
+            f"{CHECKLIST_FIELD_LABELS.get(normalize_target_field(str(item.get('field', ''))), '추가 확인 사항')}에 대한 고객 답변 “{item.get('value', '')}”을 사실로 확정할지 검토하세요.",
         )
         for item in facts
         if item.get("status") == "PROPOSED"
@@ -1060,7 +1139,7 @@ async def generate_case_work_card(case_id: str, request: PublicWorkCardGenerateR
             ],
             "pending_actions": [
                 f"{item.get('action_type')}: {item.get('note') or '상세 내용 없음'} ({item.get('status', 'REQUESTED')})"
-                for item in actions if item.get("status") not in {"COMPLETED", "CANCELLED"}
+                for item in actions_for_ai(actions) if item.get("status") not in {"COMPLETED", "CANCELLED"}
             ][:20],
             "attachment_summaries": [
                 f"{item.get('original_name', '첨부 파일')} ({item.get('mime_type', '형식 미상')}, {item.get('visibility', '공개 범위 미상')})"
@@ -1123,7 +1202,7 @@ async def invoke_case_copilot(case_id: str, request: PublicAiInvocationRequest) 
             ][-20:],
             "pending_actions": [
                 f"{item.get('action_type')}: {item.get('note') or '상세 내용 없음'} ({item.get('status', 'REQUESTED')})"
-                for item in actions if item.get("status") not in {"COMPLETED", "CANCELLED"}
+                for item in actions_for_ai(actions) if item.get("status") not in {"COMPLETED", "CANCELLED"}
             ][:20],
             "attachment_summaries": [
                 f"{item.get('original_name', '첨부 파일')} ({item.get('mime_type', '형식 미상')}, {item.get('visibility', '공개 범위 미상')})"
@@ -1131,6 +1210,7 @@ async def invoke_case_copilot(case_id: str, request: PublicAiInvocationRequest) 
             ],
             "unresolved_verifications": unresolved[:10],
             "assistant_mode": "BANK_INTERNAL",
+            "customer_progress": progress_ai_context(build_customer_progress(actions)),
             "response_style": request.response_style,
         })
     except AiServiceQuotaError as exc:
@@ -1162,6 +1242,11 @@ async def invoke_customer_support_ai(case_id: str, request: PublicCustomerAiRepl
         raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."})
     all_messages = await repository.list_messages(case_id, "CUSTOMER")
     questions = await repository.list_customer_questions(case_id)
+    progress = build_customer_progress(await repository.list_actions(case_id))
+    verifications = await repository.list_verifications(case_id)
+    published_results = [f"{item.get('target')}: {item.get('result_summary')} (공개 확인 결과)"
+                         for item in verifications if item.get('customer_visible') and item.get('status') == 'COMPLETED' and item.get('result_summary')][-10:]
+    attachments = await repository.list_attachments(case_id)
     customer_history = [
         f"{item.get('actor_display_name', '상담 참여자')}: {item.get('content', '')[:500]}"
         for item in all_messages[-20:]
@@ -1183,9 +1268,13 @@ async def invoke_customer_support_ai(case_id: str, request: PublicCustomerAiRepl
             "known_facts": answered,
             "recent_conversation": customer_history,
             "pending_actions": [],
-            "attachment_summaries": [],
             "unresolved_verifications": [],
             "assistant_mode": "CUSTOMER_SUPPORT",
+            "primary_assignee": case.get('primary_assignee'),
+            "customer_progress": progress_ai_context(progress),
+            "published_verification_results": published_results,
+            "attachment_summaries": [str(item.get('original_name', '첨부 자료')) for item in attachments
+                                     if item.get('visibility') == 'CUSTOMER'][-10:],
         })
     except AiServiceQuotaError as exc:
         raise HTTPException(status_code=429, detail={"code": "OPENAI_QUOTA_EXHAUSTED", "message": str(exc)}) from exc
@@ -1219,7 +1308,8 @@ async def run_proactive_case_automation(case_id: str) -> bool:
         if exc.status_code != 404:
             logger.warning("Proactive question reconciliation failed for %s: %s", case_id, exc.detail)
     except Exception as exc:
-        logger.warning("Proactive question reconciliation failed for %s: %s", case_id, type(exc).__name__)
+        error_number = exc.args[0] if exc.args and isinstance(exc.args[0], int) else None
+        logger.warning("Proactive question reconciliation failed for %s: %s errno=%s", case_id, type(exc).__name__, error_number)
     return False
 
 
@@ -1323,12 +1413,73 @@ async def create_case_verification(case_id: str, request: PublicCreateVerificati
 @app.get("/api/cases/{case_id}/actions", response_model=list[PublicActionResponse])
 async def list_case_actions(case_id: str) -> list[PublicActionResponse]:
     await require_case(case_id)
-    return [to_public_action(record) for record in await repository.list_actions(case_id)]
+    return [to_public_action(record) for record in await repository.list_actions(case_id) if not record['action_type'].startswith(PROGRESS_PREFIX)]
+
+
+@app.get('/api/cases/{case_id}/customer-progress', response_model=list[CustomerProgressItem])
+async def get_customer_progress(case_id: str):
+    await require_case(case_id)
+    return build_customer_progress(await repository.list_actions(case_id))
+
+
+class DisplayEditRequest(BaseModel):
+    expected_version: int = Field(ge=0)
+    operation: Literal['EDIT', 'DELETE', 'RESTORE', 'RESET']
+    text: str | None = Field(default=None, max_length=4000)
+
+    @model_validator(mode='after')
+    def validate_change(self):
+        ContextItemChange(expected_version=max(1, self.expected_version), operation=self.operation, text=self.text)
+        return self
+
+
+async def bank_display_repository(case_id, actor_user_id):
+    await require_case(case_id)
+    members = await repository.list_members(case_id)
+    if not any(item.get('user_id') == actor_user_id and item.get('role') in {'CASE_OWNER', 'CHAT_OPERATOR', 'REVIEWER'} for item in members):
+        raise HTTPException(status_code=403, detail='이 사건의 담당자 또는 검토자만 맥락을 편집할 수 있습니다.')
+    return ContextItemRepository(repository) if isinstance(repository, MySqlCaseRepository) else InMemoryContextItemRepository(repository)
+
+
+@app.get('/api/cases/{case_id}/context-display')
+async def read_context_display(case_id: str, actor_user_id: str):
+    store = await bank_display_repository(case_id, actor_user_id)
+    return [item for item in await store.list_items(case_id, include_deleted=True) if item.semantic_key == 'display']
+
+
+@app.patch('/api/cases/{case_id}/context-display/{section}')
+async def edit_context_display(case_id: str, section: Section, actor_user_id: str, request: DisplayEditRequest):
+    store = await bank_display_repository(case_id, actor_user_id)
+    try:
+        return await store.edit_section(case_id, section, request.expected_version, request.operation, request.text, actor_user_id)
+    except ContextItemConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.put('/api/cases/{case_id}/customer-progress/{step}', response_model=list[CustomerProgressItem])
+async def update_customer_progress(case_id: str, step: ProgressStep, request: UpdateCustomerProgress):
+    await require_case(case_id)
+    try:
+        await repository.create_action(case_id, {'_progress_command': {
+            'step': step, 'request_confirmation': False, 'values': request.model_dump(mode='json'),
+        }})
+    except ProgressConflict as exc:
+        raise HTTPException(status_code=409, detail={'code': 'PROGRESS_CONFLICT', 'message': str(exc)}) from exc
+    return build_customer_progress(await repository.list_actions(case_id))
+
+
+@app.post('/api/cases/{case_id}/customer-progress/{step}/confirmation-request', response_model=list[CustomerProgressItem])
+async def request_progress_confirmation(case_id: str, step: ProgressStep):
+    await require_case(case_id)
+    await repository.create_action(case_id, {'_progress_command': {'step': step, 'request_confirmation': True}})
+    return build_customer_progress(await repository.list_actions(case_id))
 
 
 @app.post("/api/cases/{case_id}/actions", response_model=PublicActionResponse, status_code=201)
 async def create_case_action(case_id: str, request: PublicCreateActionRequest) -> PublicActionResponse:
     await require_case(case_id)
+    if request.action_type.startswith(PROGRESS_PREFIX):
+        raise HTTPException(status_code=422, detail='고객 처리 상태는 전용 처리 결과 화면에서 기록해 주세요.')
     try:
         return to_public_action(await repository.create_action(case_id, request.model_dump()))
     except KeyError as exc:
@@ -1338,6 +1489,8 @@ async def create_case_action(case_id: str, request: PublicCreateActionRequest) -
 @app.patch("/api/cases/{case_id}/actions/{action_id}", response_model=PublicActionResponse)
 async def update_case_action(case_id: str, action_id: str, request: PublicUpdateActionRequest) -> PublicActionResponse:
     await require_case(case_id)
+    if any(item['action_id'] == action_id and item['action_type'].startswith(PROGRESS_PREFIX) for item in await repository.list_actions(case_id)):
+        raise HTTPException(status_code=422, detail='고객 처리 상태 이력은 일반 체크리스트로 변경할 수 없습니다.')
     try:
         return to_public_action(await repository.update_action(case_id, action_id, request.status, request.updated_by))
     except KeyError as exc:
@@ -1371,7 +1524,9 @@ async def get_case_bundle(case_id: str, view: Literal["entry", "customer", "bank
     # dedicated messages endpoint applies the same channel constraint.
     visible_channel = "CUSTOMER" if view == "customer" else None
     messages = [to_public_message(item).model_dump(mode="json") for item in await repository.list_messages(case_id, visible_channel)]
-    actions = [to_public_action(item) for item in await repository.list_actions(case_id)]
+    action_records = await repository.list_actions(case_id)
+    customer_progress = build_customer_progress(action_records)
+    actions = [to_public_action(item) for item in action_records if not item['action_type'].startswith(PROGRESS_PREFIX)]
     verifications = [to_public_verification(item) for item in await repository.list_verifications(case_id)]
     question_records = await repository.list_customer_questions(case_id)
     questions = [to_public_customer_question(item).model_dump(mode="json") for item in question_records]
@@ -1400,6 +1555,7 @@ async def get_case_bundle(case_id: str, view: Literal["entry", "customer", "bank
         messages = [item for item in messages if item.get("visibility") == "CUSTOMER"]
         actions, verifications, events, voice = [], [], [], None
     return PublicCaseBundleResponse(
+        customer_progress=customer_progress,
         case=to_public_case_summary_response(record).model_dump(mode="json"),
         live_report=None if view == "customer" else record.get("initial_report"),
         questions=questions, progress_items=progress_items, verification_tasks=verifications,

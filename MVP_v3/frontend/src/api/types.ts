@@ -83,6 +83,11 @@ export interface StoredCase {
     evidence?: DiagnosisEvidence[];
     windows?: DiagnosisWindow[];
     features?: Record<string, number>;
+    case_context_features?: {
+      claimed_actor_types: string[]; claim_codes: string[]; requested_action_codes: string[];
+      manipulation_tactic_codes: string[]; exposure_risk_codes: string[];
+      amount_values_krw: number[]; chronology: string[]; unknown_fields: string[];
+    };
     warnings?: string[];
   };
   initial_report?: InitialReport | null;
@@ -212,6 +217,7 @@ export interface CaseFact {
 }
 
 export interface CaseBundle {
+  customer_progress?: CustomerProgressItem[];
   case: Record<string, unknown>;
   recent_messages: CaseMessage[];
   recent_events: CaseEvent[];
@@ -234,13 +240,46 @@ export interface CaseSupportSnapshot {
     next_checks: string[];
   } | null;
   case_context: {
+    situation_summary: string;
     key_signals: string[];
     offender_claims: string[];
     offender_demands: string[];
+    manipulation_tactics: string[];
+    customer_exposure: string[];
+    next_actions: string[];
   } | null;
   recommended_questions: QuestionCandidate[];
   unresolved_items: Array<{ target_field: string; description: string; priority: 'P0' | 'P1' | 'P2' }>;
   warnings: string[];
+  source_revision: number | null;
+  projection_revision: number | null;
+  projection_status: 'CURRENT' | 'UPDATING' | 'STALE' | 'FAILED' | 'UNCACHED';
+}
+
+export type ProgressStep = 'SAFETY' | 'EVIDENCE' | 'PAYMENT_HOLD' | 'REPORT' | 'RELIEF';
+export type ProgressStatus = 'UNKNOWN' | 'IN_PROGRESS' | 'SUBMITTED' | 'COMPLETED' | 'NOT_APPLICABLE';
+export interface CustomerProgressItem {
+  step: ProgressStep;
+  label: string;
+  status: ProgressStatus;
+  status_label: string;
+  summary: string;
+  next_action: string;
+  reference: string;
+  confirmed_at: string | null;
+  updated_at: string | null;
+  updated_by: string | null;
+  revision: number;
+  confirmation_requested: boolean;
+}
+export interface UpdateCustomerProgress {
+  expected_revision: number;
+  status: ProgressStatus;
+  summary: string;
+  next_action: string;
+  reference: string;
+  confirmed_at: string | null;
+  updated_by: string;
 }
 
 export interface AiInvocationResult {

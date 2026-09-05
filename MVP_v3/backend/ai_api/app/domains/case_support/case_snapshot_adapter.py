@@ -138,6 +138,8 @@ class CaseSnapshotAiAdapter:
             else f"대응 업무 진행: {item.note or item.action_type}"
             for item in ai_input.actions
             if item.status not in {"CANCELLED", "FAILED"}
+            and not item.action_type.startswith("AI_CHECKLIST:")
+            and item.action_type != "AI_CHECKLIST_REVIEW"
         )
 
         summary = CaseSnapshotAiAdapter._synthesize_summary(brief, ai_input, unresolved)
@@ -156,7 +158,9 @@ class CaseSnapshotAiAdapter:
         확정 사실, 기관 확인과 대응 업무의 *현재 상태*를 매번 같은 규칙으로
         다시 투영해 읽는 사람이 지금 상황만 빠르게 파악하게 한다.
         """
-        sentences = [CaseSnapshotAiAdapter._base_summary(brief)]
+        # Rebuild from current structured fields, never carry a historical brief log.
+        claims = [CaseSnapshotAiAdapter._short(value, 55) for value in brief.claims[:2]]
+        sentences = [f"사건: {CaseSnapshotAiAdapter._short(brief.incident_type, 55)}" + (f" · {' / '.join(claims)}" if claims else '')]
 
         field_values = CaseSnapshotAiAdapter._current_field_values(ai_input)
 
@@ -174,7 +178,7 @@ class CaseSnapshotAiAdapter:
             if (statement := CaseSnapshotAiAdapter._field_statement(field, *value))
         ]
         if state_parts:
-            sentences.append(" ".join(state_parts[:3]))
+            sentences.append("고객 상태: " + " ".join(state_parts[:3]))
 
         work_parts: list[str] = []
         completed_verifications = [
@@ -190,40 +194,75 @@ class CaseSnapshotAiAdapter:
             for item in ai_input.actions
             if item.status not in {"COMPLETED", "CANCELLED", "FAILED"}
             and item.action_type not in {"AI_CHECKLIST_REVIEW", "STAFF_JUDGMENT"}
-            and not item.note.startswith("AI_CHECKLIST:")
+            and not item.action_type.startswith("AI_CHECKLIST:")
         ]
         if completed_verifications:
             item = completed_verifications[-1]
             work_parts.append(f"{item.target} 확인 결과 {CaseSnapshotAiAdapter._short(item.result_summary)}")
         elif active_verifications:
-            work_parts.append(f"{CaseSnapshotAiAdapter._join_labels(active_verifications)} 기관 확인 진행 중")
+            work_parts.append(f"{CaseSnapshotAiAdapter._join_labels(active_verifications[:2])} 기관 확인 진행 중")
         if active_actions:
-            work_parts.append(f"{CaseSnapshotAiAdapter._join_labels(active_actions)} 조치 진행 중")
+            work_parts.append(f"{CaseSnapshotAiAdapter._short(active_actions[-1], 65)} 업무 기록 확인 필요")
         if work_parts:
-            sentences.append(f"현재 {'이며, '.join(work_parts)}입니다.")
+            sentences.append(f"진행 업무: {' / '.join(work_parts)}")
 
         if unresolved:
             labels = [CaseSnapshotAiAdapter._field_label(item.target_field.value) for item in unresolved]
             sentences.append(f"다음으로 {CaseSnapshotAiAdapter._join_labels(labels[:2])} 확인이 필요합니다.")
 
-        return " ".join(filter(None, sentences))[:600].strip()
+        # Preserve section boundaries; never cut a statement in the middle.
+        return "\n".join(filter(None, sentences)).strip()
 
     @staticmethod
     def _build_case_context(brief, ai_input: CaseSnapshotAiInput) -> CaseContextProjection:
         """최초 진단과 변경 가능한 Case 상태를 하나의 최신 맥락으로 병합한다."""
         field_values = CaseSnapshotAiAdapter._current_field_values(ai_input)
         diagnosis = ai_input.diagnosis
+        context_features = diagnosis.case_context_features if diagnosis is not None else None
 
         key_signals = [
-            item.text for item in brief.risk_evidence
+            CaseSnapshotAiAdapter._readable_signal(item.text, item.event_family) for item in brief.risk_evidence
             if item.event_family in {"IMPERSONATION", "PSY_STRATEGY", "ACTION_REQUEST", "MONEY_MOVEMENT", "AMOUNT"}
         ]
-        offender_claims = list(brief.claims)
+        offender_claims = [CaseSnapshotAiAdapter._readable_signal(item, "IMPERSONATION") for item in brief.claims]
         offender_demands = [
-            event.evidence_text for event in diagnosis.events
+            CaseSnapshotAiAdapter._readable_signal(event.evidence_text, event.event_family) for event in diagnosis.events
             if event.event_family in {"ACTION_REQUEST", "MONEY_MOVEMENT", "AMOUNT"}
             and event.is_requested is not False
         ] if diagnosis is not None else []
+        if diagnosis is not None:
+            offender_demands.extend(diagnosis.context.demands)
+
+        tactic_labels = {
+            "URGENCY": "시간 제한을 내세운 긴급 처리 압박",
+            "FEAR": "처벌·계좌 동결 등 불안과 공포 조성",
+            "ISOLATION": "가족·은행 직원과의 상의 차단",
+            "TACTIC_URGENCY": "시간 제한을 내세운 긴급 처리 압박",
+            "TACTIC_FEAR": "처벌·계좌 동결 등 불안과 공포 조성",
+            "TACTIC_ISOLATION": "가족·은행 직원과의 상의 차단",
+        }
+        action_labels = {
+            "REQUEST:TRANSFER": "지정 계좌로 송금·이체 요구",
+            "REQUEST:SENSITIVE_INFO": "개인정보 또는 계좌정보 제공 요구",
+            "REQUEST:AUTH_INFO": "비밀번호·OTP·인증번호 제공 요구",
+            "REQUEST:CONTACT_RESTRICTION": "통화 유지 또는 외부 연락 제한 요구",
+            "REQUEST_TRANSFER": "송금·이체 요구",
+            "REQUEST_INSTALL_APP": "앱 설치 요구",
+            "REQUEST_AUTH_INFO": "인증정보 제공 요구",
+            "REQUEST_PERSONAL_INFO": "개인정보 제공 요구",
+            "REQUEST_KEEP_CALL": "통화 유지 요구",
+            "REQUEST_SECRECY": "외부에 알리지 않도록 요구",
+        }
+        manipulation_tactics = list(diagnosis.context.manipulation_tactics) if diagnosis is not None else []
+        manipulation_tactics.extend(
+            tactic_labels.get(code, "추가적인 압박·조작 정황 — 구체적인 수법 확인 필요")
+            for code in (context_features.manipulation_tactic_codes if context_features else [])
+        )
+        offender_demands.extend(
+            action_labels.get(code, "추가 행동 요구 — 구체적인 요구 확인 필요")
+            for code in (context_features.requested_action_codes if context_features else [])
+        )
+        customer_exposure: list[str] = []
 
         positive_signal_labels = {
             "transfer_status": "고객의 실제 송금 발생",
@@ -235,6 +274,7 @@ class CaseSnapshotAiAdapter:
             current = field_values.get(field)
             if current is not None and CaseSnapshotAiAdapter._answer_polarity(current[0]) is True:
                 key_signals.append(label)
+                customer_exposure.append(label)
 
         claimed_organization = field_values.get("claimed_organization")
         if claimed_organization and not CaseSnapshotAiAdapter._is_unknown_answer(claimed_organization[0]):
@@ -260,10 +300,28 @@ class CaseSnapshotAiAdapter:
                 )
 
         return CaseContextProjection(
+            situation_summary=brief.summary,
             key_signals=CaseSnapshotAiAdapter._unique(key_signals)[:8],
             offender_claims=CaseSnapshotAiAdapter._unique(offender_claims)[:6],
             offender_demands=CaseSnapshotAiAdapter._unique(offender_demands)[:6],
+            manipulation_tactics=CaseSnapshotAiAdapter._unique(manipulation_tactics)[:6],
+            customer_exposure=CaseSnapshotAiAdapter._unique(customer_exposure)[:6],
+            next_actions=CaseSnapshotAiAdapter._unique(brief.next_checks)[:8],
         )
+
+    @staticmethod
+    def _readable_signal(text: str, family: str) -> str:
+        # Older stored Cases used English family labels. Reproject only that
+        # exact legacy format; do not rewrite an employee's natural-language text.
+        if text.strip().casefold() != f"{family.replace('_', ' ')} 신호".casefold():
+            return text
+        return {
+            "IMPERSONATION": "기관 또는 다른 사람의 신분을 내세운 정황",
+            "PSY_STRATEGY": "불안이나 긴박함을 이용해 판단을 재촉하는 정황",
+            "ACTION_REQUEST": "상대방이 특정 행동을 요구한 정황",
+            "MONEY_MOVEMENT": "금전 이동을 요구하거나 언급한 정황",
+            "AMOUNT": "금액 언급 — 실제 피해 금액인지는 확인 필요",
+        }.get(family, "추가 확인이 필요한 통화 정황")
 
     @staticmethod
     def _current_field_values(ai_input: CaseSnapshotAiInput) -> dict[str, tuple[str, str]]:
@@ -337,7 +395,10 @@ class CaseSnapshotAiAdapter:
             "incident_claim": "상대방의 사건 주장",
             "personal_information_exposure": "개인정보 제공 여부",
             "authentication_information_exposure": "인증정보 제공 여부",
-        }.get(field, field)
+            "remote_control_app": "원격제어 앱 설치 여부",
+            "requested_account": "요구받은 계좌",
+            "caller_phone": "상대방 전화번호",
+        }.get(field, "추가 확인 사항")
 
     @staticmethod
     def _is_unknown_answer(value: str) -> bool:

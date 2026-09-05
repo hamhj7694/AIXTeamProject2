@@ -1,4 +1,6 @@
-# PRD — CONTEXT-FIRST CASE Customer Frontend V3
+# PRD — CSR | Case Share Room Customer Frontend V3
+
+> 보이스피싱 양방향 상담·대응 플랫폼
 
 문서 버전: 1.0  
 작성일: 2026-09-03  
@@ -8,7 +10,7 @@
 
 ## 0. 문서 목적
 
-이 문서는 CONTEXT-FIRST CASE의 고객용 Frontend V3 제품 요구사항을 정의한다.
+이 문서는 CSR | Case Share Room의 고객용 Frontend V3 제품 요구사항을 정의한다.
 
 은행용 V3가 은행 담당자의 Shared Case Workspace라면, 고객용 V3는 피해자가 현재 상황을 이해하고 필요한 질문에 답하며 즉시 안전조치와 피해구제 절차를 수행하도록 돕는 **Customer Safety Workspace**다.
 

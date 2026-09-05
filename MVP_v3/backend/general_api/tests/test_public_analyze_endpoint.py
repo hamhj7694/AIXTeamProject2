@@ -7,7 +7,8 @@ from fastapi.testclient import TestClient
 
 import general_api.app.main as general_main
 from contracts.diagnosis import AnalyzeCaseResponse, InitialReport, RiskLevel
-from general_api.app.clients.diagnosis_ai import AiServiceError
+from general_api.app.clients.diagnosis_ai import AiServiceError, AiServiceQuotaError, AiServiceAuthenticationError
+from general_api.app.domains.cases.repository import CasePersistenceError
 
 
 class PublicAnalyzeEndpointTest(unittest.TestCase):
@@ -96,6 +97,15 @@ class PublicAnalyzeEndpointTest(unittest.TestCase):
             },
         })
 
+    def test_analyze_request_does_not_accept_an_existing_case_id(self) -> None:
+        response = self.client.post("/api/cases/analyze", json={
+            "text": "분석할 통화",
+            "case_id": "VP-OLD",
+        })
+
+        self.assertEqual(response.status_code, 400)
+        self.service.analyze.assert_not_awaited()
+
     def test_upstream_failure_hides_internal_error_details(self) -> None:
         self.service.analyze.side_effect = AiServiceError("AI API 연결에 실패했습니다.")
 
@@ -108,6 +118,20 @@ class PublicAnalyzeEndpointTest(unittest.TestCase):
             "message": "AI API 연결에 실패했습니다.",
             "retryable": True,
         })
+
+    def test_failure_codes_preserve_stage_and_correlation(self) -> None:
+        for error, status, code in [
+            (CasePersistenceError(), 503, "CASE_SAVE_FAILED"),
+            (AiServiceQuotaError("한도"), 429, "OPENAI_QUOTA_EXHAUSTED"),
+            (AiServiceAuthenticationError("인증"), 401, "OPENAI_AUTHENTICATION_FAILED"),
+        ]:
+            with self.subTest(code=code):
+                self.service.analyze.side_effect = error
+                response = self.client.post("/api/cases/analyze", json={"text": "테스트"},
+                                            headers={"X-Request-ID": "trace-test"})
+                self.assertEqual(response.status_code, status)
+                self.assertEqual(response.json()["error"]["code"], code)
+                self.assertEqual(response.headers["X-Request-ID"], "trace-test")
 
 
 if __name__ == "__main__":

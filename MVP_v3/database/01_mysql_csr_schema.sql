@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS cases (
     mode ENUM('PREVENT', 'RECOVERY', 'CLOSED') NOT NULL DEFAULT 'PREVENT',
     status ENUM('NEW', 'TRIAGE', 'VERIFYING', 'IN_PROGRESS', 'CLOSED') NOT NULL DEFAULT 'TRIAGE',
     version INT NOT NULL DEFAULT 1,
+    context_revision BIGINT NOT NULL DEFAULT 1,
     initial_brief TEXT NOT NULL,
     diagnosis_json JSON NOT NULL,
     victim_transfer_status VARCHAR(30) NULL,
@@ -285,6 +286,65 @@ CREATE TABLE IF NOT EXISTS personal_notes (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 이 단일 초기화 파일이 포함한 기존 migration을 기준선으로 기록한다.
+CREATE TABLE IF NOT EXISTS case_context_items (
+    item_id VARCHAR(64) PRIMARY KEY,
+    case_id VARCHAR(32) NOT NULL,
+    section VARCHAR(32) NOT NULL,
+    semantic_key VARCHAR(160) COLLATE utf8mb4_bin NOT NULL,
+    item_version BIGINT NOT NULL,
+    state_json JSON NOT NULL,
+    updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    UNIQUE KEY uq_context_semantic (case_id, section, semantic_key),
+    CONSTRAINT fk_context_item_case FOREIGN KEY (case_id) REFERENCES cases(case_id)
+);
+
+CREATE TABLE IF NOT EXISTS case_context_item_history (
+    history_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    item_id VARCHAR(64) NOT NULL,
+    item_version BIGINT NOT NULL,
+    operation VARCHAR(24) NOT NULL,
+    actor_id VARCHAR(64) NOT NULL,
+    before_json JSON NULL,
+    after_json JSON NOT NULL,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    UNIQUE KEY uq_context_history_version (item_id, item_version),
+    CONSTRAINT fk_context_history_item FOREIGN KEY (item_id) REFERENCES case_context_items(item_id)
+);
+
+CREATE TABLE IF NOT EXISTS case_context_projections (
+    case_id VARCHAR(32) PRIMARY KEY,
+    generation_status VARCHAR(16) NOT NULL DEFAULT 'EMPTY',
+    generating_revision BIGINT NULL,
+    lease_token VARCHAR(64) NULL,
+    lease_expires_at DATETIME(6) NULL,
+    last_success_revision BIGINT NULL,
+    last_success_payload JSON NULL,
+    schema_version VARCHAR(32) NOT NULL DEFAULT 'case-support.v1',
+    model_version VARCHAR(100) NULL,
+    prompt_version VARCHAR(100) NULL,
+    last_error VARCHAR(500) NULL,
+    generated_at DATETIME(6) NULL,
+    updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    CONSTRAINT fk_context_projection_case FOREIGN KEY (case_id) REFERENCES cases(case_id)
+);
+
+CREATE TRIGGER trg_cases_context_revision_update BEFORE UPDATE ON cases FOR EACH ROW
+SET NEW.context_revision=GREATEST(NEW.context_revision,OLD.context_revision+IF(NOT (OLD.mode <=> NEW.mode) OR NOT (OLD.status <=> NEW.status) OR NOT (OLD.diagnosis_json <=> NEW.diagnosis_json) OR NOT (OLD.victim_transfer_status <=> NEW.victim_transfer_status) OR NOT (OLD.actual_loss_amount_krw <=> NEW.actual_loss_amount_krw),1,0));
+CREATE TRIGGER trg_messages_context_revision_insert AFTER INSERT ON messages FOR EACH ROW UPDATE cases SET context_revision=context_revision+1 WHERE case_id=NEW.case_id;
+CREATE TRIGGER trg_messages_context_revision_delete AFTER DELETE ON messages FOR EACH ROW UPDATE cases SET context_revision=context_revision+1 WHERE case_id=OLD.case_id;
+CREATE TRIGGER trg_questions_context_revision_insert AFTER INSERT ON customer_questions FOR EACH ROW UPDATE cases SET context_revision=context_revision+1 WHERE case_id=NEW.case_id;
+CREATE TRIGGER trg_questions_context_revision_update AFTER UPDATE ON customer_questions FOR EACH ROW UPDATE cases SET context_revision=context_revision+IF(NOT (OLD.target_field <=> NEW.target_field) OR NOT (OLD.question_text <=> NEW.question_text) OR NOT (OLD.reason <=> NEW.reason) OR NOT (OLD.priority <=> NEW.priority) OR NOT (OLD.status <=> NEW.status) OR NOT (OLD.answer_text <=> NEW.answer_text),1,0) WHERE case_id=NEW.case_id;
+CREATE TRIGGER trg_questions_context_revision_delete AFTER DELETE ON customer_questions FOR EACH ROW UPDATE cases SET context_revision=context_revision+1 WHERE case_id=OLD.case_id;
+CREATE TRIGGER trg_facts_context_revision_insert AFTER INSERT ON case_facts FOR EACH ROW UPDATE cases SET context_revision=context_revision+1 WHERE case_id=NEW.case_id;
+CREATE TRIGGER trg_facts_context_revision_update AFTER UPDATE ON case_facts FOR EACH ROW UPDATE cases SET context_revision=context_revision+IF(NOT (OLD.field_name <=> NEW.field_name) OR NOT (OLD.value <=> NEW.value) OR NOT (OLD.source <=> NEW.source) OR NOT (OLD.status <=> NEW.status),1,0) WHERE case_id=NEW.case_id;
+CREATE TRIGGER trg_facts_context_revision_delete AFTER DELETE ON case_facts FOR EACH ROW UPDATE cases SET context_revision=context_revision+1 WHERE case_id=OLD.case_id;
+CREATE TRIGGER trg_verifications_context_revision_insert AFTER INSERT ON verification_tasks FOR EACH ROW UPDATE cases SET context_revision=context_revision+1 WHERE case_id=NEW.case_id;
+CREATE TRIGGER trg_verifications_context_revision_update AFTER UPDATE ON verification_tasks FOR EACH ROW UPDATE cases SET context_revision=context_revision+IF(NOT (OLD.claim <=> NEW.claim) OR NOT (OLD.target <=> NEW.target) OR NOT (OLD.status <=> NEW.status) OR NOT (OLD.result_summary <=> NEW.result_summary),1,0) WHERE case_id=NEW.case_id;
+CREATE TRIGGER trg_verifications_context_revision_delete AFTER DELETE ON verification_tasks FOR EACH ROW UPDATE cases SET context_revision=context_revision+1 WHERE case_id=OLD.case_id;
+CREATE TRIGGER trg_actions_context_revision_insert AFTER INSERT ON actions FOR EACH ROW UPDATE cases SET context_revision=context_revision+1 WHERE case_id=NEW.case_id;
+CREATE TRIGGER trg_actions_context_revision_update AFTER UPDATE ON actions FOR EACH ROW UPDATE cases SET context_revision=context_revision+IF(NOT (OLD.action_type <=> NEW.action_type) OR NOT (OLD.status <=> NEW.status) OR NOT (OLD.note <=> NEW.note),1,0) WHERE case_id=NEW.case_id;
+CREATE TRIGGER trg_actions_context_revision_delete AFTER DELETE ON actions FOR EACH ROW UPDATE cases SET context_revision=context_revision+1 WHERE case_id=OLD.case_id;
+
 -- 업무 데이터가 아니라 Schema version metadata이며, 이후 apply_migrations.py를
 -- 실행했을 때 동일 ALTER 문이 중복 실행되는 것을 방지한다.
 INSERT IGNORE INTO schema_migrations (migration_name) VALUES
@@ -298,4 +358,6 @@ INSERT IGNORE INTO schema_migrations (migration_name) VALUES
     ('008_collaboration_channels.sql'),
     ('009_case_attachments.sql'),
     ('009_mysql_parity_workflow.sql'),
-    ('010_case_fact_question_link.sql');
+    ('010_case_fact_question_link.sql'),
+    ('012_context_items.sql'),
+    ('013_context_projection_revision.sql');

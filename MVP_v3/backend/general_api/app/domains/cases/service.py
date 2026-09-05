@@ -5,8 +5,9 @@ from typing import Any
 
 from contracts.diagnosis import AnalyzeCaseResponse, AnalyzeTextRequest, RiskLevel
 from general_api.app.clients.diagnosis_ai import DiagnosisAiClient
+from request_trace import trace_stage
 
-from .repository import CaseRepository
+from .repository import CaseCreationConflictError, CasePersistenceError, CaseRepository
 from .initial_report import InitialReportBuilder
 from .signal_projection import project_diagnosis_for_case
 
@@ -22,11 +23,13 @@ class AnalyzeCaseService:
         if not text:
             raise ValueError("통화 내용을 입력하세요.")
         if request.client_request_id:
-            existing = await self.repository.find_by_client_request_id(request.client_request_id)
+            with trace_stage("case.idempotency_lookup"):
+                existing = await self.repository.find_by_client_request_id(request.client_request_id)
             if existing:
                 return self._created_response(existing)
 
-        diagnosis = await self.ai_client.analyze(request.model_copy(update={"text": text}))
+        with trace_stage("case.ai_analysis"):
+            diagnosis = await self.ai_client.analyze(request.model_copy(update={"text": text}))
         # Do not let the transient source utterance cross the Case boundary.
         diagnosis = project_diagnosis_for_case(diagnosis)
         if diagnosis.risk_level is RiskLevel.NORMAL:
@@ -36,25 +39,39 @@ class AnalyzeCaseService:
                 diagnosis=diagnosis,
             )
 
-        now = datetime.now(timezone.utc).isoformat()
-        case_id = await self.repository.next_case_id()
-        diagnosis = diagnosis.model_copy(update={"case_id": case_id})
-        initial_report = self.report_builder.build(case_id, diagnosis)
-        stored = await self.repository.create({
-            "case_id": case_id,
-            "client_request_id": request.client_request_id,
-            "input_text": "",
-            "risk": diagnosis.risk_level.value,
-            "risk_score": diagnosis.risk_score,
-            "mode": "PREVENT", "status": "TRIAGE",
-            "initial_brief": diagnosis.context.summary,
-            "diagnosis": diagnosis.model_dump(mode="json"),
-            "initial_report": initial_report.model_dump(mode="json"),
-            "victim_transfer_status": "UNKNOWN",
-            "actual_loss_amount_krw": None,
-            "created_at": now, "updated_at": now,
-        })
-        return self._created_response(stored)
+        # Retry only a rolled-back Case INSERT collision, never repeat paid analysis.
+        for attempt in range(3):
+            try:
+                with trace_stage("case.prepare_report"):
+                    now = datetime.now(timezone.utc).isoformat()
+                    case_id = await self.repository.next_case_id()
+                    diagnosis = diagnosis.model_copy(update={"case_id": case_id})
+                    initial_report = self.report_builder.build(case_id, diagnosis)
+                with trace_stage("case.persist_transaction"):
+                    stored = await self.repository.create({
+                        "case_id": case_id,
+                        "client_request_id": request.client_request_id,
+                        "input_text": "",
+                        "risk": diagnosis.risk_level.value,
+                        "risk_score": diagnosis.risk_score,
+                        "mode": "PREVENT", "status": "TRIAGE",
+                        "initial_brief": diagnosis.context.summary,
+                        "diagnosis": diagnosis.model_dump(mode="json"),
+                        "initial_report": initial_report.model_dump(mode="json"),
+                        "victim_transfer_status": "UNKNOWN",
+                        "actual_loss_amount_krw": None,
+                        "created_at": now, "updated_at": now,
+                    })
+                return self._created_response(stored)
+            except CaseCreationConflictError as exc:
+                if request.client_request_id:
+                    existing = await self.repository.find_by_client_request_id(request.client_request_id)
+                    if existing:
+                        return self._created_response(existing)
+                if attempt == 2:
+                    raise CasePersistenceError() from exc
+            except Exception as exc:
+                raise CasePersistenceError() from exc
 
     @staticmethod
     def _created_response(record: dict) -> AnalyzeCaseResponse:

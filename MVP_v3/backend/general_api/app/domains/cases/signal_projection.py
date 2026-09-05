@@ -30,7 +30,13 @@ _SIGNAL_LABELS: dict[tuple[str, str | None], str] = {
 def _label(event: ExtractedEvent) -> str:
     return _SIGNAL_LABELS.get(
         (event.event_family, event.subtype),
-        f"{event.event_family.replace('_', ' ').title()} 신호",
+        {
+            "IMPERSONATION": "기관 또는 다른 사람의 신분을 내세운 정황",
+            "PSY_STRATEGY": "불안이나 긴박함을 이용해 판단을 재촉하는 정황",
+            "ACTION_REQUEST": "상대방이 특정 행동을 요구한 정황",
+            "MONEY_MOVEMENT": "금전 이동을 요구하거나 언급한 정황",
+            "AMOUNT": "금액 언급 — 실제 피해 금액인지는 확인 필요",
+        }.get(event.event_family, "추가 확인이 필요한 통화 정황"),
     )
 
 
@@ -64,9 +70,12 @@ def project_diagnosis_for_case(diagnosis: DiagnosisResult) -> DiagnosisResult:
         for event in safe_events
     ]
     safe_windows = [_safe_window(window, safe_events) for window in diagnosis.windows]
-    safe_claims = _unique(_label(event) for event in safe_events if event.event_family == "IMPERSONATION")
+    # Context LLM의 privacy-safe claims를 보존한다. 탐지 라벨은 비어 있을 때만 보완한다.
+    safe_claims = diagnosis.context.claims or _unique(
+        _label(event) for event in safe_events if event.event_family == "IMPERSONATION"
+    )
     safe_context = diagnosis.context.model_copy(update={"claims": safe_claims})
-    metadata = {**diagnosis.model_metadata, "source_text_retention": "NONE", "context_input": "STRUCTURED_RISK_SIGNALS_ONLY"}
+    metadata = {**diagnosis.model_metadata, "source_text_retention": "NONE", "context_input": "STRUCTURED_CONTEXT_FEATURES_ONLY"}
     return diagnosis.model_copy(update={
         "context": safe_context,
         "events": safe_events,

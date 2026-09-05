@@ -24,6 +24,7 @@ class TargetField(str, Enum):
     INCIDENT_CLAIM = "incident_claim"
     PERSONAL_INFORMATION_EXPOSURE = "personal_information_exposure"
     AUTHENTICATION_INFORMATION_EXPOSURE = "authentication_information_exposure"
+    REMOTE_CONTROL_APP = "remote_control_app"
 
 
 class ExecutionMode(str, Enum):

@@ -63,8 +63,27 @@ class ContextResult(StrictModel):
     summary: str
     incident_type: str
     claims: list[str] = Field(default_factory=list)
+    demands: list[str] = Field(default_factory=list)
+    manipulation_tactics: list[str] = Field(default_factory=list)
     recommended_next_steps: list[str] = Field(default_factory=list)
     confidence: float = Field(ge=0, le=1)
+
+
+class CaseContextFeatures(StrictModel):
+    """원문 없이 사건 서사를 재구성하기 위한 ML 독립 피처 묶음."""
+
+    claimed_actor_types: list[str] = Field(default_factory=list)
+    claim_codes: list[str] = Field(default_factory=list)
+    requested_action_codes: list[str] = Field(default_factory=list)
+    manipulation_tactic_codes: list[str] = Field(default_factory=list)
+    exposure_risk_codes: list[str] = Field(default_factory=list)
+    amount_values_krw: list[float] = Field(default_factory=list)
+    chronology: list[str] = Field(default_factory=list)
+    unknown_fields: list[str] = Field(default_factory=list)
+    source: Literal["STRUCTURED_CONTEXT_FEATURES_ONLY"] = "STRUCTURED_CONTEXT_FEATURES_ONLY"
+    schema_version: str = "case_context_features.v1"
+    observations: list[dict[str, Any]] = Field(default_factory=list)
+    extraction_method: Literal["EVENT_DERIVED", "LLM_INDEPENDENT"] = "EVENT_DERIVED"
 
 
 class WindowAnalysisResult(StrictModel):
@@ -86,6 +105,7 @@ class DiagnosisResult(StrictModel):
     windows: list[WindowResult]
     evidence: list[Evidence]
     features: dict[str, float]
+    case_context_features: CaseContextFeatures = Field(default_factory=CaseContextFeatures)
     model_metadata: dict[str, Any]
     confidence: float = Field(ge=0, le=1)
     partial_failure: bool = False

@@ -6,6 +6,7 @@ import { actionLabel, formatClock, verificationStatusLabel } from '../presentati
 import { buildTimeline, type TimelineEntry } from '../timeline';
 import type { CaseBundle } from '../api/types';
 import type { BankBookmark } from '../bank/bookmarks';
+import { eventLabel } from '../userText';
 import { SafeMarkdown } from './SafeMarkdown';
 
 interface Props {
@@ -37,7 +38,7 @@ const bookmarkDetails = (entry: TimelineEntry): Pick<BankBookmark, 'label' | 'su
     const action = entry.data as CaseAction;
     return { label: '대응 업무 기록', summary: action.note || actionLabel(action.action_type) };
   }
-  return { label: 'Case 이벤트', summary: (entry.data as CaseEvent).event_type.replace(/_/g, ' ') };
+  return { label: 'Case 이벤트', summary: eventLabel((entry.data as CaseEvent).event_type) };
 };
 
 const EntryBookmark: React.FC<{ entry: TimelineEntry; active: boolean; onToggle: Props['onToggleBookmark'] }> = ({ entry, active, onToggle }) => {
@@ -76,7 +77,7 @@ const EntryCard: React.FC<{ entry: TimelineEntry; bookmark: React.ReactNode; onE
     return <article className="timeline-card action-card"><div className="timeline-card-icon"><ShieldCheck size={17}/></div><div><div className="entry-meta"><b>대응 업무 기록</b>{bookmark}<time>{formatClock(entry.occurredAt)}</time></div><p className="timeline-title">{actionLabel(action.action_type)}</p><p>{action.note}</p><small>업무 기록이며 실제 금융 조치 완료를 의미하지 않습니다.</small></div></article>;
   }
   const event = entry.data as CaseEvent;
-  return <article className="timeline-event"><CircleDot size={13}/><span>{event.event_type.replace(/_/g, ' ')}</span>{bookmark}<time>{formatClock(event.occurred_at)}</time></article>;
+  return <article className="timeline-event"><CircleDot size={13}/><span>{eventLabel(event.event_type)}</span>{bookmark}<time>{formatClock(event.occurred_at)}</time></article>;
 };
 
 export const SharedConversation: React.FC<Props> = ({ caseItem, bundle, view, onEditVerification, bookmarkedIds, onToggleBookmark, onRetryMessage, onDismissMessage }) => {

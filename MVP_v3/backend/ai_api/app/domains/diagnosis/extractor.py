@@ -9,7 +9,7 @@ from typing import Any
 
 from openai import AsyncOpenAI, AuthenticationError, RateLimitError
 
-from contracts.diagnosis import ContextResult, ExtractedEvent
+from contracts.diagnosis import CaseContextFeatures, ContextResult, ExtractedEvent
 
 from .constants import EVENT_OUTPUT_SCHEMA, SYSTEM_INSTRUCTION
 from .budget import active_diagnosis_budget
@@ -55,6 +55,41 @@ def signal_label(event: ExtractedEvent) -> str:
     )
 
 
+def build_case_context_features(events: list[ExtractedEvent]) -> CaseContextFeatures:
+    """위험 모델의 숫자 벡터와 별개인 privacy-safe 사건 맥락 피처를 만든다."""
+    actor_types: list[str] = []
+    claims: list[str] = []
+    actions: list[str] = []
+    tactics: list[str] = []
+    exposures: list[str] = []
+    amounts: list[float] = []
+    chronology: list[str] = []
+    for event in sorted(events, key=lambda item: item.detected_at_turn):
+        code = event.subtype or event.event_family
+        if event.event_family == "IMPERSONATION":
+            actor_types.append(event.impersonation_group or code)
+            claims.append(f"CLAIMED_ROLE:{code}")
+        elif event.event_family == "MONEY_MOVEMENT" and event.is_requested is not False:
+            actions.append(f"REQUEST:{code}")
+        elif event.event_family == "ACTION_REQUEST" and event.is_requested is not False:
+            actions.append(f"REQUEST:{code}")
+            if code in {"SENSITIVE_INFO", "AUTH_INFO"}:
+                exposures.append(code)
+        elif event.event_family == "PSY_STRATEGY":
+            tactics.append(code)
+        if event.amount_krw is not None:
+            amounts.append(event.amount_krw)
+        chronology.append(f"T{event.detected_at_turn}:{event.event_family}:{code}")
+    unique = lambda values: list(dict.fromkeys(values))
+    return CaseContextFeatures(
+        claimed_actor_types=unique(actor_types), claim_codes=unique(claims),
+        requested_action_codes=unique(actions), manipulation_tactic_codes=unique(tactics),
+        exposure_risk_codes=unique(exposures), amount_values_krw=unique(amounts),
+        chronology=unique(chronology),
+        unknown_fields=["transfer_status", "personal_information_exposure", "authentication_information_exposure"],
+    )
+
+
 def signal_context_payload(events: list[ExtractedEvent]) -> dict[str, Any]:
     """Project transient event extraction into the only payload context LLM may see.
 
@@ -77,9 +112,10 @@ def signal_context_payload(events: list[ExtractedEvent]) -> dict[str, Any]:
             item["is_requested"] = event.is_requested
         signals.append(item)
     return {
-        "source": "STRUCTURED_RISK_SIGNALS_ONLY",
+        "source": "STRUCTURED_CONTEXT_FEATURES_ONLY",
         "signal_count": len(signals),
         "signals": signals,
+        "case_context_features": build_case_context_features(events).model_dump(mode="json"),
     }
 
 
@@ -271,6 +307,8 @@ def build_context_from_events(events: list[ExtractedEvent]) -> ContextResult:
     summary = "위험 이벤트가 추출되지 않았습니다." if not signals else f"{', '.join(signals)} 정황이 확인되어 추가 검증이 필요합니다."
     return ContextResult(
         summary=summary, incident_type=incident_type, claims=list(dict.fromkeys(claims)),
+        demands=[signal_label(event) for event in events if event.event_family in {"ACTION_REQUEST", "MONEY_MOVEMENT"}],
+        manipulation_tactics=[signal_label(event) for event in events if event.event_family == "PSY_STRATEGY"],
         recommended_next_steps=["송금과 정보 제공을 중단하고 공식 채널로 사실관계를 확인하세요."],
         confidence=0.9 if signals else 0.65,
     )
@@ -293,6 +331,8 @@ def build_context_from_signal_payload(payload: dict[str, Any]) -> ContextResult:
         summary=summary,
         incident_type=incident_type,
         claims=claims,
+        demands=[label for label in dict.fromkeys(labels) if any(token in label for token in ("요구", "송금", "정보"))],
+        manipulation_tactics=[label for label in dict.fromkeys(labels) if any(token in label for token in ("압박", "불안", "알림 제한"))],
         recommended_next_steps=["송금과 정보 제공을 중단하고 공식 채널로 사실관계를 확인하세요."],
         confidence=0.9 if labels else 0.65,
     )
@@ -303,10 +343,12 @@ CONTEXT_OUTPUT_SCHEMA = {
     "properties": {
         "summary": {"type": "string"}, "incident_type": {"type": "string"},
         "claims": {"type": "array", "items": {"type": "string"}},
+        "demands": {"type": "array", "items": {"type": "string"}},
+        "manipulation_tactics": {"type": "array", "items": {"type": "string"}},
         "recommended_next_steps": {"type": "array", "items": {"type": "string"}},
         "confidence": {"type": "number", "minimum": 0, "maximum": 1},
     },
-    "required": ["summary", "incident_type", "claims", "recommended_next_steps", "confidence"],
+    "required": ["summary", "incident_type", "claims", "demands", "manipulation_tactics", "recommended_next_steps", "confidence"],
 }
 
 
@@ -365,6 +407,7 @@ async def extract_context_from_signal_payload(
         instructions=(
             "You receive only structured anti-fraud signals, never a call transcript. "
             "Write a concise Korean case summary, distinguish claims from verified facts, "
+            "separately describe claims, requested actions, and manipulation tactics, "
             "and recommend safe next checks. Do not invent names, account numbers, quoted "
             "utterances, or a final financial decision."
         ),

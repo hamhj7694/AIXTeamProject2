@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+from .customer_progress import CustomerProgressItem
 
 
 class PublicWorkflowModel(BaseModel):
@@ -35,9 +36,13 @@ class PublicCaseSupportBrief(PublicWorkflowModel):
 class PublicCaseContextProjection(PublicWorkflowModel):
     """AI가 최신 Shared Case 상태로 재구성한 화면용 사건 맥락."""
 
+    situation_summary: str = ""
     key_signals: list[str] = Field(default_factory=list)
     offender_claims: list[str] = Field(default_factory=list)
     offender_demands: list[str] = Field(default_factory=list)
+    manipulation_tactics: list[str] = Field(default_factory=list)
+    customer_exposure: list[str] = Field(default_factory=list)
+    next_actions: list[str] = Field(default_factory=list)
 
 
 class PublicUnresolvedItemResponse(PublicWorkflowModel):
@@ -55,6 +60,9 @@ class PublicCaseSupportSnapshotResponse(PublicWorkflowModel):
     recommended_questions: list[PublicQuestionCandidateResponse] = Field(default_factory=list)
     unresolved_items: list[PublicUnresolvedItemResponse] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    source_revision: int | None = Field(default=None, ge=1)
+    projection_revision: int | None = Field(default=None, ge=1)
+    projection_status: Literal["CURRENT", "UPDATING", "STALE", "FAILED", "UNCACHED"] = "UNCACHED"
 
 
 class PublicQueueCustomerQuestionsRequest(PublicWorkflowModel):
@@ -261,6 +269,7 @@ class PublicActionResponse(PublicWorkflowModel):
 
 
 class PublicCaseBundleResponse(PublicWorkflowModel):
+    customer_progress: list[CustomerProgressItem] = Field(default_factory=list)
     case: dict[str, Any]
     live_report: dict[str, Any] | None
     questions: list[dict[str, Any]]

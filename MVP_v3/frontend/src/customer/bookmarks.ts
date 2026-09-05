@@ -1,3 +1,4 @@
+import { presentResponse } from '../userText';
 export interface CustomerBookmark {
   entryId: string;
   label: string;
@@ -9,7 +10,7 @@ const storageKey = (caseId: string) => `mvp-v3:customer-bookmarks:${caseId}`;
 
 export const readCustomerBookmarks = (caseId: string): CustomerBookmark[] => {
   try {
-    const value = JSON.parse(localStorage.getItem(storageKey(caseId)) || '[]');
+    const value = presentResponse(JSON.parse(localStorage.getItem(storageKey(caseId)) || '[]'));
     return Array.isArray(value) ? value : [];
   } catch { return []; }
 };

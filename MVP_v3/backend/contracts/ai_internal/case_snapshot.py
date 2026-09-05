@@ -61,9 +61,13 @@ class CaseSnapshotAiInput(StrictModel):
 class CaseContextProjection(StrictModel):
     """최신 Shared Case에서 은행 화면에 투영할 사건 맥락."""
 
+    situation_summary: str = ""
     key_signals: list[str] = Field(default_factory=list)
     offender_claims: list[str] = Field(default_factory=list)
     offender_demands: list[str] = Field(default_factory=list)
+    manipulation_tactics: list[str] = Field(default_factory=list)
+    customer_exposure: list[str] = Field(default_factory=list)
+    next_actions: list[str] = Field(default_factory=list)
 
 
 class CaseSnapshotPresentation(StrictModel):

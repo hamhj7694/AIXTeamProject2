@@ -43,10 +43,23 @@ Nginx와 함께 배포하는 기본 구성에서는 Frontend가 같은 origin의
 
 Backend와 AI API는 `MVP_v3/backend`에서 실행한다. 먼저 루트의 `.env.example`을 `.env`로 복사하고, `database/01_mysql_csr_schema.sql`을 `csr` 데이터베이스에 적용한다. 로컬 실행과 Docker Compose 모두 같은 `MVP_v3/.env`를 사용한다.
 
+ML 학습 환경과 맞추기 위해 프로젝트 전용 가상환경(scikit-learn 1.6.1)을 사용한다. 최초 설치:
+
+```powershell
+python -m venv MVP_v3/.venv
+MVP_v3/.venv/Scripts/python.exe -m pip install -r MVP_v3/backend/requirements.txt
+```
+
+각 터미널에서 API 하나씩 실행한다:
+
 ```powershell
 cd MVP_v3/backend
-python -m uvicorn ai_api.app.main:app --host 127.0.0.1 --port 8101
-python -m uvicorn general_api.app.main:app --host 127.0.0.1 --port 8100
+../.venv/Scripts/python.exe -m uvicorn ai_api.app.main:app --host 127.0.0.1 --port 8101
+```
+
+```powershell
+cd MVP_v3/backend
+../.venv/Scripts/python.exe -m uvicorn general_api.app.main:app --host 127.0.0.1 --port 8100
 ```
 
 V3 Frontend:

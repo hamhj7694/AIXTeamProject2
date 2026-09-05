@@ -9,9 +9,11 @@ from uuid import uuid4
 
 _TARGET_FIELD_ALIASES = {
     "PERSONAL_INFO": "personal_information_exposure",
+    "PERSONAL_INFO_SHARED": "personal_information_exposure",
     "PERSONAL_INFORMATION": "personal_information_exposure",
     "AUTHENTICATION_INFO": "authentication_information_exposure",
     "AUTH_INFO": "authentication_information_exposure",
+    "AUTH_INFO_SHARED": "authentication_information_exposure",
     "VICTIM_TRANSFER_STATUS": "transfer_status",
 }
 
@@ -70,6 +72,14 @@ class CaseRepository(Protocol):
     async def delete_personal_note(self, case_id: str, note_id: str, author_id: str) -> None: ...
 
 
+class CaseCreationConflictError(Exception):
+    """The Case INSERT collided with an ID or idempotency key; transaction rolled back."""
+
+
+class CasePersistenceError(Exception):
+    """Initial Case/report persistence failed, distinct from AI analysis."""
+
+
 class CaseVersionConflictError(Exception):
     def __init__(self, current_version: int) -> None:
         self.current_version = current_version
@@ -95,11 +105,13 @@ class InMemoryCaseRepository:
         self._personal_notes: list[dict[str, Any]] = []
         self._lock = asyncio.Lock()
 
-    def _touch_case(self, case_id: str, occurred_at: str) -> None:
+    def _touch_case(self, case_id: str, occurred_at: str, *, semantic: bool = True) -> None:
         case = next((item for item in self._records if item["case_id"] == case_id and not item.get("deleted_at")), None)
         if case is None:
             raise KeyError(case_id)
         case["updated_at"] = occurred_at
+        if semantic:
+            case["context_revision"] = int(case.get("context_revision", 1)) + 1
 
     def _remove_case_records(self, case_id: str) -> None:
         self._records = [item for item in self._records if item.get("case_id") != case_id]
@@ -139,6 +151,7 @@ class InMemoryCaseRepository:
             stored = deepcopy(record)
             stored.setdefault("case_id", f"VP-{len(self._records) + 1}")
             stored.setdefault("version", 1)
+            stored.setdefault("context_revision", 1)
             self._records.append(stored)
             self._events.append({
                 "event_id": len(self._events) + 1, "case_id": stored["case_id"], "event_type": "CASE_CREATED",
@@ -157,6 +170,8 @@ class InMemoryCaseRepository:
                     raise CaseVersionConflictError(current_version)
                 item.update(changes)
                 item["version"] = current_version + 1
+                if {"mode", "status", "diagnosis", "victim_transfer_status", "actual_loss_amount_krw"}.intersection(changes):
+                    item["context_revision"] = int(item.get("context_revision", 1)) + 1
                 item["updated_at"] = datetime.now(timezone.utc).isoformat()
                 self._events.append({
                     "event_id": len(self._events) + 1, "case_id": case_id, "event_type": "CASE_FIELD_UPDATED",
@@ -272,7 +287,7 @@ class InMemoryCaseRepository:
                 "event_id": len(self._events) + 1, "case_id": case_id, "event_type": "CASE_MEMBER_UPDATED",
                 "actor_type": "SYSTEM", "payload": {"user_id": member["user_id"], "role": member["role"]}, "occurred_at": now,
             })
-            self._touch_case(case_id, now)
+            self._touch_case(case_id, now, semantic=False)
             return deepcopy(member)
 
     async def set_primary_assignee(self, case_id: str, display_name: str | None) -> str | None:
@@ -293,7 +308,7 @@ class InMemoryCaseRepository:
                 else:
                     member.update({"role": "CASE_OWNER", "status": "ACTIVE", "updated_at": now})
             self._events.append({"event_id": len(self._events) + 1, "case_id": case_id, "event_type": "CASE_ASSIGNEE_UPDATED", "actor_type": "SYSTEM", "payload": {"display_name": normalized or None}, "occurred_at": now})
-            self._touch_case(case_id, now)
+            self._touch_case(case_id, now, semantic=False)
             return normalized or None
 
     async def list_presence(self, case_id: str) -> list[dict[str, Any]]:
@@ -357,6 +372,12 @@ class InMemoryCaseRepository:
             if not any(item["case_id"] == case_id for item in self._records):
                 raise KeyError(case_id)
             now = datetime.now(timezone.utc).isoformat()
+            if '_progress_command' in record:
+                from .customer_progress import prepare_progress
+                prepared = prepare_progress([item for item in self._actions if item['case_id'] == case_id], record['_progress_command'], now)
+                if prepared is None:
+                    return {}
+                record = prepared
             item = {"action_id": f"act-{uuid4().hex}", "case_id": case_id, **record, "status": "REQUESTED", "created_at": now}
             self._actions.append(item)
             self._events.append({"event_id": len(self._events) + 1, "case_id": case_id, "event_type": "BANK_ACTION_ADDED", "actor_type": item["actor_type"], "payload": {"action_id": item["action_id"]}, "occurred_at": now})
