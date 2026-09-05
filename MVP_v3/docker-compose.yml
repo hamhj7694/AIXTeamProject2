@@ -16,6 +16,7 @@ services:
     volumes:
       - mysql-data:/var/lib/mysql
       - ./database/01_mysql_csr_schema.sql:/docker-entrypoint-initdb.d/01_mysql_csr_schema.sql:ro
+      - ./backend/migrations/014_case_context_v2_foundation.sql:/docker-entrypoint-initdb.d/02_case_context_v2_foundation.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u$${MYSQL_USER} -p$${MYSQL_PASSWORD} --silent"]
       interval: 10s

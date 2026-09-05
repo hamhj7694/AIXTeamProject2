@@ -1,14 +1,14 @@
 import { CURRENT_BANK_USER } from './api/cases';
-import type { CaseAction, CaseBundle, CaseEvent, CaseMessage, CustomerQuestion, StoredCase, VerificationTask } from './api/types';
+import type { CaseAction, CaseBundle, CaseEvent, CaseMessage, CustomerQuestion, InitialReport, StoredCase, VerificationTask } from './api/types';
 
-export type TimelineKind = 'BRIEF' | 'MESSAGE' | 'QUESTION' | 'ANSWER' | 'VERIFICATION_REQUEST' | 'VERIFICATION_RESULT' | 'ACTION' | 'EVENT';
+export type TimelineKind = 'BRIEF' | 'MESSAGE' | 'QUESTION' | 'ANSWER' | 'VERIFICATION_REQUEST' | 'VERIFICATION_RESULT' | 'ACTION' | 'FINAL_REPORT' | 'EVENT';
 
 export interface TimelineEntry {
   id: string;
   kind: TimelineKind;
   occurredAt: string;
   sequence: number;
-  data: StoredCase | CaseMessage | CustomerQuestion | VerificationTask | CaseAction | CaseEvent;
+  data: StoredCase | CaseMessage | CustomerQuestion | VerificationTask | CaseAction | CaseEvent | InitialReport;
 }
 
 export const buildTimeline = (caseItem: StoredCase, bundle: CaseBundle, includeTechnicalEvents: boolean): TimelineEntry[] => {
@@ -25,7 +25,8 @@ export const buildTimeline = (caseItem: StoredCase, bundle: CaseBundle, includeT
     // AI 요청·응답을 대화 흐름에서 확인할 수 있어야 한다.
     const privateAiMessageForAnotherUser = message.visibility === 'AI_PRIVATE'
       && message.private_owner_user_id !== CURRENT_BANK_USER.user_id;
-    if (duplicatedQuestion || duplicatedAnswer || privateAiMessageForAnotherUser) continue;
+    const canonicalFinalReportAvailable = message.message_kind === 'REPORT_CARD' && Boolean(bundle.final_report);
+    if (duplicatedQuestion || duplicatedAnswer || privateAiMessageForAnotherUser || canonicalFinalReportAvailable) continue;
     entries.push({ id: `message-${message.message_id}`, kind: 'MESSAGE', occurredAt: message.created_at, sequence: sequence++, data: message });
   }
 
@@ -42,6 +43,7 @@ export const buildTimeline = (caseItem: StoredCase, bundle: CaseBundle, includeT
   }
 
   for (const action of bundle.recent_actions ?? []) entries.push({ id: `action-${action.action_id}`, kind: 'ACTION', occurredAt: action.created_at, sequence: sequence++, data: action });
+  if (bundle.final_report) entries.push({ id: `final-report-${bundle.final_report.report_id}-${bundle.final_report.report_version}`, kind: 'FINAL_REPORT', occurredAt: bundle.final_report.created_at, sequence: sequence++, data: bundle.final_report });
   if (includeTechnicalEvents) for (const event of bundle.recent_events ?? []) entries.push({ id: `event-${event.event_id}`, kind: 'EVENT', occurredAt: event.occurred_at, sequence: sequence++, data: event });
 
   return entries.sort((left, right) => {

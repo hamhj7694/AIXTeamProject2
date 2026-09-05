@@ -66,7 +66,10 @@ export const relativeTime = (value: string) => {
   if (minutes < 60) return `${minutes}분 전`;
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours}시간 전`;
-  return new Date(value).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' });
+  return new Date(value).toLocaleString('ko-KR', {
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  });
 };
 
 const unique = (items: Array<string | null | undefined>) => Array.from(new Set(items.map((item) => item?.trim()).filter((item): item is string => Boolean(item))));

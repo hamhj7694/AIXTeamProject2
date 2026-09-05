@@ -24,6 +24,7 @@ def connection_options() -> dict[str, object]:
         "charset": "utf8mb4",
         "client_flag": CLIENT.MULTI_STATEMENTS,
         "autocommit": False,
+        "init_command": "SET SESSION lock_wait_timeout=5",
     }
 
 

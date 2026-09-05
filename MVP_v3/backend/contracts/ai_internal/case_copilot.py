@@ -19,6 +19,8 @@ class CaseCopilotInput(StrictModel):
     primary_assignee: str | None = Field(default=None, max_length=160)
     participants: list[str] = Field(default_factory=list, max_length=30)
     known_facts: list[str] = Field(default_factory=list, max_length=30)
+    staff_context: list[str] = Field(default_factory=list, max_length=30)
+    retrieved_context: list[str] = Field(default_factory=list, max_length=6)
     recent_conversation: list[str] = Field(default_factory=list, max_length=20)
     pending_actions: list[str] = Field(default_factory=list, max_length=20)
     customer_progress: list[str] = Field(default_factory=list, max_length=10)

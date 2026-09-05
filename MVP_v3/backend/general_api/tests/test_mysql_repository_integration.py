@@ -12,11 +12,17 @@ from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 import pymysql
+import aiomysql
 
 from ai_api.app.domains.diagnosis import DiagnosisService
 from ai_api.app.domains.diagnosis.extractor import EventExtraction, _local_safety_events, parse_turns
 from contracts.diagnosis import CaseContextFeatures, ContextResult
 from general_api.app.domains.cases.initial_report import InitialReportBuilder
+from general_api.app.domains.cases.case_context_v2_repository import (
+    ContextV2ConflictError,
+    ContextV2TransitionError,
+    MySqlCaseContextV2Repository,
+)
 from general_api.app.domains.cases.mysql_repository import MySqlCaseRepository
 from general_api.app.main import build_repository
 
@@ -99,7 +105,7 @@ class MySqlCaseRepositoryIntegrationTest(unittest.IsolatedAsyncioTestCase):
                     self.case_ids,
                 )
                 cursor.execute(f"DELETE FROM case_context_item_history WHERE item_id IN (SELECT item_id FROM case_context_items WHERE case_id IN ({placeholders}))", self.case_ids)
-                for table in ("case_context_items", "case_context_projections", "personal_notes", "case_facts", "customer_questions", "case_presence", "case_members", "messages", "verification_tasks", "actions", "context_features", "analysis_segments", "case_inputs", "case_events", "case_reports"):
+                for table in ("case_context_v2_history", "case_decisions", "case_tasks", "case_ai_suggestions", "case_gaps", "case_context_facts_v2", "case_context_items", "case_context_projections", "personal_notes", "case_facts", "customer_questions", "case_presence", "case_members", "messages", "verification_tasks", "actions", "context_features", "analysis_segments", "case_inputs", "case_events", "case_reports"):
                     cursor.execute(f"DELETE FROM {table} WHERE case_id IN ({placeholders})", self.case_ids)
                 cursor.execute(f"DELETE FROM cases WHERE case_id IN ({placeholders})", self.case_ids)
             connection.commit()
@@ -124,7 +130,8 @@ class MySqlCaseRepositoryIntegrationTest(unittest.IsolatedAsyncioTestCase):
                         "case_members", "case_presence", "case_report_sections", "case_reports", "cases", "context_features",
                         "customer_questions", "message_attachments", "messages", "personal_notes", "schema_migrations",
                         "transcript_segments", "verification_tasks", "voice_sessions", "case_context_items",
-                        "case_context_item_history", "case_context_projections",
+                        "case_context_item_history", "case_context_projections", "case_context_facts_v2",
+                        "case_gaps", "case_ai_suggestions", "case_tasks", "case_decisions", "case_context_v2_history",
                     },
                 )
                 cursor.execute(
@@ -136,8 +143,137 @@ class MySqlCaseRepositoryIntegrationTest(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(cursor.fetchone(), (9, 6))
                 cursor.execute("SELECT COLUMN_DEFAULT FROM information_schema.columns WHERE table_schema=%s AND table_name='cases' AND column_name='context_revision'", (self.database,))
                 self.assertEqual(int(cursor.fetchone()[0]), 1)
+                cursor.execute(
+                    """SELECT COUNT(*) FROM information_schema.table_constraints
+                       WHERE table_schema=%s AND constraint_type='CHECK'
+                         AND table_name IN ('case_context_facts_v2','case_gaps','case_ai_suggestions','case_tasks','case_decisions')""",
+                    (self.database,),
+                )
+                self.assertGreaterEqual(cursor.fetchone()[0], 16)
         finally:
             connection.close()
+
+    async def test_case_context_v2_database_invariants_and_revision(self) -> None:
+        case_id = f"VP-{uuid4().hex[:12]}"
+        await self.repository.create(await self._record(case_id=case_id, client_request_id=uuid4().hex))
+        self.case_ids.append(case_id)
+        pool = await self.repository._get_pool()
+        async with pool.acquire() as connection:
+            try:
+                async with connection.cursor(aiomysql.DictCursor) as cursor:
+                    await cursor.execute("SELECT context_revision FROM cases WHERE case_id=%s", (case_id,))
+                    initial_revision = int((await cursor.fetchone())["context_revision"])
+
+                    with self.assertRaises(pymysql.err.OperationalError):
+                        await cursor.execute(
+                            """INSERT INTO case_context_facts_v2
+                               (fact_id,case_id,semantic_key,display_label,value_json,display_value,source_kind,status,
+                                evidence_refs_json,visibility,version)
+                               VALUES (%s,%s,%s,%s,%s,%s,'CUSTOMER_STATEMENT','CONFIRMED','[]','BANK_INTERNAL',1)""",
+                            (f"fact-invalid-{uuid4().hex}", case_id, "transfer.actual.status", "실제 송금 여부", "{}", "송금했다고 답변"),
+                        )
+
+                    fact_id = f"fact-{uuid4().hex}"
+                    await cursor.execute(
+                        """INSERT INTO case_context_facts_v2
+                           (fact_id,case_id,semantic_key,display_label,value_json,display_value,source_kind,status,
+                            evidence_refs_json,visibility,version)
+                           VALUES (%s,%s,%s,%s,%s,%s,'CUSTOMER_STATEMENT','PROPOSED','[]','BANK_INTERNAL',1)""",
+                        (fact_id, case_id, "transfer.actual.status", "실제 송금 여부", "{}", "송금했다고 답변"),
+                    )
+                    gap_id = f"gap-{uuid4().hex}"
+                    await cursor.execute(
+                        """INSERT INTO case_gaps
+                           (gap_id,case_id,semantic_key,title,reason,priority,status,source,evidence_refs_json,
+                            related_question_ids_json,related_verification_ids_json,visibility,source_revision,version)
+                           VALUES (%s,%s,%s,%s,%s,'URGENT','OPEN','AI','[]','[]','[]','BANK_INTERNAL',1,1)""",
+                        (gap_id, case_id, "transfer.actual.status", "실제 송금 여부", "피해 상태 판단에 필요"),
+                    )
+                    with self.assertRaises(pymysql.err.IntegrityError):
+                        await cursor.execute(
+                            """INSERT INTO case_gaps
+                               (gap_id,case_id,semantic_key,title,reason,priority,status,source,evidence_refs_json,
+                                related_question_ids_json,related_verification_ids_json,visibility,source_revision,version)
+                               VALUES (%s,%s,%s,%s,%s,'URGENT','OPEN','AI','[]','[]','[]','BANK_INTERNAL',1,1)""",
+                            (f"gap-{uuid4().hex}", case_id, "transfer.actual.status", "중복 항목", "중복 생성 방지"),
+                        )
+                    await connection.commit()
+
+                    await cursor.execute("SELECT context_revision FROM cases WHERE case_id=%s", (case_id,))
+                    self.assertEqual(int((await cursor.fetchone())["context_revision"]), initial_revision + 2)
+            except BaseException:
+                await connection.rollback()
+                raise
+
+    async def test_case_context_v2_repository_preserves_human_decision_boundaries(self) -> None:
+        case_id = f"VP-{uuid4().hex[:12]}"
+        await self.repository.create(await self._record(case_id=case_id, client_request_id=uuid4().hex))
+        self.case_ids.append(case_id)
+        store = MySqlCaseContextV2Repository(self.repository)
+
+        fact = await store.create_fact(case_id, {
+            "client_request_id": f"fact-{uuid4().hex}",
+            "semantic_key": "transfer.actual.status",
+            "display_label": "실제 송금 여부",
+            "value": {"status": "YES"},
+            "display_value": "고객이 송금했다고 진술함",
+            "evidence_refs": [{"type": "MESSAGE", "id": "msg-test"}],
+        }, "operator")
+        self.assertEqual(fact.status, "PROPOSED")
+
+        gap = await store.create_gap(case_id, {
+            "client_request_id": f"gap-{uuid4().hex}",
+            "semantic_key": "transfer.actual.status",
+            "title": "실제 송금 여부 확인",
+            "reason": "피해 발생 여부 판단에 필요",
+            "priority": "URGENT",
+        }, "operator")
+        with self.assertRaises(ContextV2TransitionError):
+            await store.update_gap(case_id, gap.gap_id, 1, "RESOLVED", None, fact.fact_id, "operator")
+
+        fact = await store.review_fact(case_id, fact.fact_id, 1, "CONFIRM", "거래 내역 확인", "owner")
+        gap = await store.update_gap(case_id, gap.gap_id, 1, "RESOLVED", None, fact.fact_id, "operator")
+        self.assertEqual(gap.status, "RESOLVED")
+
+        suggestion = await store.propose_suggestion(case_id, {
+            "suggestion_type": "TRANSACTION_REVIEW",
+            "title": "거래 원장 확인",
+            "rationale": "피해 금액 확인이 필요합니다.",
+            "priority": "URGENT",
+            "dedupe_key": "transaction-review:actual-transfer",
+        })
+        suggestion, task = await store.review_suggestion(case_id, suggestion.suggestion_id, {
+            "expected_version": 1, "decision": "ACCEPT",
+            "edited_title": None, "edited_description": None, "reason": None,
+        }, "owner")
+        self.assertEqual(suggestion.accepted_task_id, task.task_id)
+        with self.assertRaises(ContextV2ConflictError):
+            await store.review_suggestion(case_id, suggestion.suggestion_id, {
+                "expected_version": 1, "decision": "ACCEPT",
+                "edited_title": None, "edited_description": None, "reason": None,
+            }, "owner")
+
+        task = await store.complete_task(case_id, task.task_id, {
+            "expected_version": 1,
+            "result_summary": "거래 원장에서 송금 사실을 확인함",
+            "result_code": "TRANSFER_CONFIRMED",
+            "evidence_refs": [{"type": "BANK_TRANSACTION", "id": "txn-test"}],
+        }, "owner")
+        self.assertEqual(task.status, "COMPLETED")
+
+        decision = await store.create_decision(case_id, {
+            "client_request_id": f"decision-{uuid4().hex}",
+            "decision_type": "TASK_DECISION",
+            "title": "피해구제 절차 검토",
+            "rationale": "송금 사실이 공식 거래 원장에서 확인됨",
+            "related_entity_type": "TASK",
+            "related_entity_id": task.task_id,
+            "visibility": "BANK_INTERNAL",
+        }, "owner")
+        resources = await store.list_resources(case_id)
+        self.assertEqual(resources.decisions[0].decision_id, decision.decision_id)
+        self.assertEqual(resources.tasks[0].status, "COMPLETED")
+        self.assertGreater(resources.context_revision, 1)
 
     async def _record(self, *, case_id: str, client_request_id: str) -> dict:
         source = "검찰청입니다. 지금 안전계좌로 500만원을 송금하세요."

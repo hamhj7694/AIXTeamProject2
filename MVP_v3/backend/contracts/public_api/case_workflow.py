@@ -282,6 +282,7 @@ class PublicCaseBundleResponse(PublicWorkflowModel):
     customer_progress: list[CustomerProgressItem] = Field(default_factory=list)
     case: dict[str, Any]
     live_report: dict[str, Any] | None
+    final_report: PublicReportResponse | None = None
     questions: list[dict[str, Any]]
     progress_items: list[dict[str, Any]]
     verification_tasks: list[PublicVerificationResponse]

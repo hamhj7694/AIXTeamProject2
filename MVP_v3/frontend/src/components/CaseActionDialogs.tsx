@@ -1,6 +1,6 @@
 import { priorityLabel } from '../userText';
 import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, Check, ListChecks, Loader2, Plus, Sparkles, Trash2, X } from 'lucide-react';
+import { AlertCircle, Check, ListChecks, Loader2, Pencil, Plus, Sparkles, Trash2, X } from 'lucide-react';
 import { casesApi } from '../api/cases';
 import type { QuestionCandidate, VerificationTask } from '../api/types';
 import { actionLabel } from '../presentation';
@@ -20,21 +20,52 @@ const DialogShell: React.FC<{ title: string; description: string; children: Reac
 
 const DialogError = ({ message }: { message: string }) => message ? <p className="dialog-error"><AlertCircle size={15}/>{message}</p> : null;
 
+type QuestionDraftState = { items: QuestionCandidate[]; selected: string[] };
+const questionDraftKey = (caseId: string) => `csr:question-drafts:${caseId}`;
+const readQuestionDraft = (caseId: string): QuestionDraftState | null => {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(questionDraftKey(caseId)) || 'null') as QuestionDraftState | null;
+    return parsed && Array.isArray(parsed.items) && Array.isArray(parsed.selected) ? parsed : null;
+  } catch { return null; }
+};
+const writeQuestionDraft = (caseId: string, value: QuestionDraftState) => {
+  window.localStorage.setItem(questionDraftKey(caseId), JSON.stringify(value));
+};
+const clearQuestionDraft = (caseId: string) => window.localStorage.removeItem(questionDraftKey(caseId));
+
 export const QuestionDialog: React.FC<{ caseId: string; initial: QuestionCandidate[]; onDone: () => Promise<void>; onClose: () => void }> = ({ caseId, initial, onDone, onClose }) => {
-  const [items, setItems] = useState<QuestionCandidate[]>(initial);
-  const [selected, setSelected] = useState<string[]>(initial.filter((item) => item.priority === 'P0').map((item) => item.question_id));
+  const savedDraft = useMemo(() => readQuestionDraft(caseId), [caseId]);
+  const [items, setItems] = useState<QuestionCandidate[]>(savedDraft?.items ?? initial);
+  const [selected, setSelected] = useState<string[]>(savedDraft?.selected ?? initial.filter((item) => item.priority === 'P0').map((item) => item.question_id));
   const [custom, setCustom] = useState('');
-  const [loading, setLoading] = useState(initial.length === 0);
+  const [loading, setLoading] = useState(initial.length === 0 && !savedDraft);
   const [recommending, setRecommending] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [aiNote, setAiNote] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState('');
   useEffect(() => {
-    if (initial.length) return;
+    if (initial.length || savedDraft) return;
     let active = true;
     casesApi.questionCandidates(caseId).then((next) => { if (active) { setItems(next); setSelected(next.filter((item) => item.priority === 'P0').map((item) => item.question_id)); } }).catch((reason) => active && setError(reason instanceof Error ? reason.message : '질문 후보를 불러오지 못했습니다.')).finally(() => active && setLoading(false));
     return () => { active = false; };
-  }, [caseId, initial.length]);
+  }, [caseId, initial.length, savedDraft]);
+  useEffect(() => {
+    if (!loading) writeQuestionDraft(caseId, { items, selected });
+  }, [caseId, items, loading, selected]);
+  const removeQuestion = (questionId: string) => {
+    setItems((current) => current.filter((item) => item.question_id !== questionId));
+    setSelected((current) => current.filter((id) => id !== questionId));
+    if (editingId === questionId) { setEditingId(null); setEditingText(''); }
+  };
+  const startEditing = (item: QuestionCandidate) => { setEditingId(item.question_id); setEditingText(item.question_text); };
+  const saveEditing = (questionId: string) => {
+    const value = editingText.trim();
+    if (!value) return;
+    setItems((current) => current.map((item) => item.question_id === questionId ? { ...item, question_text: value } : item));
+    setEditingId(null); setEditingText('');
+  };
   const addCustom = () => {
     const value = custom.trim(); if (!value) return;
     const id = `staff-${crypto.randomUUID()}`;
@@ -60,7 +91,7 @@ export const QuestionDialog: React.FC<{ caseId: string; initial: QuestionCandida
   const submit = async () => {
     if (!chosen.length || saving) return;
     setSaving(true); setError('');
-    try { await casesApi.queueQuestions(caseId, chosen); await onDone(); onClose(); }
+    try { await casesApi.queueQuestions(caseId, chosen); clearQuestionDraft(caseId); await onDone(); onClose(); }
     catch (reason) { setError(reason instanceof Error ? reason.message : '질문을 고객 대기열에 등록하지 못했습니다.'); }
     finally { setSaving(false); }
   };
@@ -68,7 +99,7 @@ export const QuestionDialog: React.FC<{ caseId: string; initial: QuestionCandida
     <div className="dialog-body">
       <div className="ai-dialog-action"><div><Sparkles size={16}/><span><b>AI 질문 추천</b><small>현재 Case의 대화·답변·확인 이력을 읽고 중복되지 않는 질문을 제안합니다.</small></span></div><button type="button" onClick={() => void recommendQuestions()} disabled={recommending || saving}>{recommending ? <Loader2 className="spin" size={15}/> : <Sparkles size={15}/>}AI에게 질문 추천 받기</button></div>
       {aiNote && <p className="ai-recommendation-note">{aiNote}</p>}
-      {loading ? <div className="dialog-loading"><Loader2 className="spin" size={18}/>현재 Case에서 필요한 질문을 정리하고 있습니다.</div> : <div className="question-options">{items.length ? items.map((item) => <label key={item.question_id}><input type="checkbox" checked={selected.includes(item.question_id)} onChange={() => setSelected((current) => current.includes(item.question_id) ? current.filter((id) => id !== item.question_id) : [...current, item.question_id])}/><span><b>{item.question_text}</b><small><em>{priorityLabel(item.priority)}</em>{item.reason}</small></span></label>) : <p className="dialog-empty">추가로 추천할 질문이 없습니다. 필요한 질문을 직접 추가할 수 있습니다.</p>}</div>}
+      {loading ? <div className="dialog-loading"><Loader2 className="spin" size={18}/>현재 Case에서 필요한 질문을 정리하고 있습니다.</div> : <div className="question-options">{items.length ? items.map((item) => <article className="question-option-card" key={item.question_id}><label><input type="checkbox" checked={selected.includes(item.question_id)} onChange={() => setSelected((current) => current.includes(item.question_id) ? current.filter((id) => id !== item.question_id) : [...current, item.question_id])}/><span>{editingId === item.question_id ? <input className="question-edit-input" value={editingText} autoFocus onChange={(event) => setEditingText(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); saveEditing(item.question_id); } if (event.key === 'Escape') { setEditingId(null); setEditingText(''); } }}/>: <b>{item.question_text}</b>}<small><em>{priorityLabel(item.priority)}</em>{item.reason}</small></span></label><div className="question-card-actions">{editingId === item.question_id ? <><button type="button" onClick={() => saveEditing(item.question_id)} disabled={!editingText.trim()} aria-label="질문 수정 저장"><Check size={14}/></button><button type="button" onClick={() => { setEditingId(null); setEditingText(''); }} aria-label="질문 수정 취소"><X size={14}/></button></> : <button type="button" onClick={() => startEditing(item)} aria-label="질문 편집"><Pencil size={14}/></button>}<button type="button" onClick={() => removeQuestion(item.question_id)} aria-label="질문 삭제"><Trash2 size={14}/></button></div></article>) : <p className="dialog-empty">추가로 추천할 질문이 없습니다. 필요한 질문을 직접 추가할 수 있습니다.</p>}</div>}
       <div className="inline-add"><input value={custom} onChange={(event) => setCustom(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addCustom(); } }} placeholder="직접 질문 추가"/><button type="button" onClick={addCustom} disabled={!custom.trim()}><Plus size={15}/>추가</button></div>
       <DialogError message={error}/>
     </div>

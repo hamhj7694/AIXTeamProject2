@@ -17,6 +17,7 @@ class FinalCaseReportInput(StrictModel):
     verification_results: list[str] = Field(default_factory=list, max_length=30)
     action_results: list[str] = Field(default_factory=list, max_length=30)
     customer_answers: list[str] = Field(default_factory=list, max_length=30)
+    staff_context: list[str] = Field(default_factory=list, max_length=30)
     closure_note: str = Field(default="", max_length=10_000)
 
 
@@ -24,8 +25,12 @@ class FinalCaseReportOutput(StrictModel):
     title: str
     executive_summary: str
     incident_summary: str
+    customer_impact_summary: str
     verified_facts: list[str] = Field(default_factory=list, max_length=20)
+    verification_results: list[str] = Field(default_factory=list, max_length=20)
     actions_taken: list[str] = Field(default_factory=list, max_length=20)
+    unresolved_items: list[str] = Field(default_factory=list, max_length=12)
+    decision_basis: list[str] = Field(default_factory=list, max_length=12)
     resolution: str
     follow_up: list[str] = Field(default_factory=list, max_length=12)
     cautions: list[str] = Field(default_factory=list, max_length=12)

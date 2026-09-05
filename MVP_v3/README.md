@@ -24,7 +24,7 @@ migration 스크립트와 Docker Compose가 모두 이 파일을 기준으로 �
 | `OPENAI_API_KEY` | 실제 OpenAI API 키 |
 | `MYSQL_PASSWORD` | `MYSQL_USER` 계정의 실제 비밀번호 |
 | `MYSQL_ROOT_PASSWORD` | 포함된 MySQL 컨테이너를 사용할 때 설정할 별도 비밀번호 |
-| `CASE_ADMIN_DELETE_PASSWORD` | 사건 삭제·휴지통 관리용 긴 관리자 비밀번호 |
+| `CASE_ADMIN_DELETE_PASSWORD` | 사건 종결·휴지통·복구·영구 삭제용 긴 관리자 비밀번호 |
 | `MYSQL_HOST` | 로컬 MySQL은 `127.0.0.1`, RDS 직접 실행은 RDS endpoint |
 | `DEPLOY_MYSQL_HOST` | Docker Compose는 내장 DB면 `mysql`, 외부 RDS면 RDS endpoint |
 | `CORS_ALLOWED_ORIGINS` | Frontend와 API를 서로 다른 도메인으로 배포할 때 Frontend origin |
@@ -121,9 +121,11 @@ npm.cmd run build
 
 - 제품 요구사항: `PRD.md`
 - 고객용 제품 요구사항: `CUSTOMER_PRD.md`
+- **작업 시작 시 반드시 먼저 읽는 단일 기준 문서**: `docs/03_IMPLEMENTATION_STATUS.md`
 - 개발 매핑: `docs/01_WORK_MAPPING.md`
-- 실시간 초세밀 TODO: `docs/02_DETAILED_TODO.md`
-- 구현·검증·인수인계 현황: `docs/03_IMPLEMENTATION_STATUS.md`
+- 세부 이력·장기 백로그: `docs/02_DETAILED_TODO.md`
+- 사건 맥락 v2 승인 데이터 계약과 단계별 구현 경계: `docs/09_CASE_CONTEXT_DATA_CONTRACT.md`
+- 사건 종결 AI 보고서 형식·저장·공개 계약: `docs/10_FINAL_CASE_REPORT_CONTRACT.md`
 
 ## 안전 경계
 

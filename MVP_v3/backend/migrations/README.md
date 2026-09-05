@@ -28,6 +28,18 @@ verification results and actions. Presence, private notes, bookmarks and context
 wording overlays are excluded. Apply this migration before enabling projection
 caching in an application process.
 
+`014_case_context_v2_foundation.sql` adds the approved, separated storage
+foundation for facts, gaps, AI suggestions, staff tasks, decision records and
+their audit history. It is additive and does not connect the existing v1 UI or
+API to the new tables. The rollback SQL is isolated under `migrations/rollback/`
+so the normal migration runner cannot apply it accidentally. Destructive
+rollback is allowed only before v2 data is written or after a verified export;
+after writes, disable the feature and use a reviewed data migration instead.
+The migration deliberately avoids a cyclic foreign key between suggestions and
+tasks so a partially applied MySQL DDL batch can be safely rerun before the
+schema-migration marker is written. The application transaction must keep
+`accepted_task_id` and `source_suggestion_id` consistent.
+
 For a database whose tables predate `schema_migrations`, verify its schema and
 apply a reviewed subset with repeated `--only FILENAME` options. This avoids
 blindly replaying old non-idempotent `ALTER TABLE` files. The option is not a

@@ -45,6 +45,7 @@ export interface InitialReport {
   status: string;
   sections: InitialReportSection[];
   created_at: string;
+  note?: string | null;
 }
 
 export interface AnalyzeCaseResponse {
@@ -93,6 +94,8 @@ export interface StoredCase {
   initial_report?: InitialReport | null;
   created_at: string;
   updated_at: string;
+  deleted_at?: string | null;
+  trash_expires_at?: string | null;
 }
 
 export interface Attachment {
@@ -121,7 +124,7 @@ export interface CaseMessage {
   channel: MessageChannel;
   audience: 'BANK_INTERNAL' | 'CUSTOMER';
   visibility: MessageVisibility;
-  message_kind: 'CHAT' | 'AI_REQUEST' | 'AI_RESPONSE' | 'SYSTEM_EVENT';
+  message_kind: 'CHAT' | 'AI_REQUEST' | 'AI_RESPONSE' | 'SYSTEM_EVENT' | 'REPORT_CARD';
   private_owner_user_id: string | null;
   mentions: string[];
   reply_to_message_id: string | null;
@@ -219,6 +222,7 @@ export interface CaseFact {
 export interface CaseBundle {
   customer_progress?: CustomerProgressItem[];
   case: Record<string, unknown>;
+  final_report?: InitialReport | null;
   recent_messages: CaseMessage[];
   recent_events: CaseEvent[];
   recent_actions: CaseAction[];

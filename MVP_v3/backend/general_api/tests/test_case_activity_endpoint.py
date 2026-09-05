@@ -21,8 +21,12 @@ FINAL_AI_REPORT = {
     "title": "보이스피싱 대응 최종 결과 보고서",
     "executive_summary": "기관 사칭 의심 사건의 확인 및 대응 결과를 정리했습니다.",
     "incident_summary": "고객에게 기관을 사칭한 연락과 송금 요구가 있었습니다.",
+    "customer_impact_summary": "송금 여부는 확인되지 않았고 개인정보 노출 여부를 검토 중입니다.",
     "verified_facts": ["고객 진술을 접수했습니다."],
+    "verification_results": ["등록된 기관 확인 결과가 없습니다."],
     "actions_taken": ["추가 송금 중단을 안내했습니다."],
+    "unresolved_items": ["실제 송금 여부 확인"],
+    "decision_basis": ["담당자의 종결 메모"],
     "resolution": "담당자 검토를 거쳐 사건 대응을 종결했습니다.",
     "follow_up": ["추가 연락이 오면 공식 채널로 재확인합니다."],
     "cautions": ["실제 금융 조치 완료 여부는 별도로 확인해야 합니다."],
@@ -37,6 +41,8 @@ class CaseActivityEndpointTest(unittest.TestCase):
         self.client = TestClient(general_main.app)
         self.original_repository = general_main.repository
         self.repository = AsyncMock()
+        for name in ("facts", "gaps", "suggestions", "tasks", "decisions", "requests"):
+            setattr(self.repository, f"_context_v2_{name}", {})
         self.repository.get.return_value = CASE
         self.repository.get_voice_session.return_value = None
         self.repository.list_case_facts.return_value = []
@@ -203,6 +209,36 @@ class CaseActivityEndpointTest(unittest.TestCase):
         finalize_args = self.repository.finalize_report.await_args.args
         self.assertEqual(finalize_args[:3], ("VP-ACTIVITY", 1, "종료"))
         self.assertEqual(finalize_args[4]["title"], FINAL_AI_REPORT["title"])
+        self.assertEqual(
+            [item["section_key"] for item in finalize_args[3]],
+            [
+                "title", "executive_summary", "incident_summary", "customer_impact_summary",
+                "verified_facts", "verification_results", "actions_taken", "unresolved_items",
+                "decision_basis", "resolution", "follow_up", "cautions",
+            ],
+        )
+
+    def test_closed_bank_bundle_includes_canonical_final_report(self) -> None:
+        self.repository.get.return_value = {**BUNDLE_CASE, "status": "CLOSED", "mode": "CLOSED"}
+        self.repository.list_messages.return_value = []
+        self.repository.list_actions.return_value = []
+        self.repository.list_verifications.return_value = []
+        self.repository.list_customer_questions.return_value = []
+        self.repository.list_events.return_value = []
+        self.repository.get_voice_session.return_value = None
+        self.repository.get_final_report.return_value = {
+            "report_id": "final-VP-ACTIVITY", "case_id": "VP-ACTIVITY", "report_version": 1,
+            "status": "FINAL", "created_at": "2026-09-02T01:02:00+00:00", "sections": [
+                {"section_key": "executive_summary", "content": {"text": "종결 보고서 요약"}, "version": 1},
+            ],
+        }
+
+        bank = self.client.get("/api/cases/VP-ACTIVITY/bundle?view=bank")
+        customer = self.client.get("/api/cases/VP-ACTIVITY/bundle?view=customer")
+
+        self.assertEqual(bank.status_code, 200, bank.text)
+        self.assertEqual(bank.json()["final_report"]["report_id"], "final-VP-ACTIVITY")
+        self.assertIsNone(customer.json()["final_report"])
 
     def test_closed_case_can_be_reopened_with_admin_password(self) -> None:
         self.repository.reopen_case.return_value = {

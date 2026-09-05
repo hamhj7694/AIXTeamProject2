@@ -17,6 +17,8 @@ class CaseSupportSnapshotEndpointTest(unittest.TestCase):
         self.original_repository = general_main.repository
         self.original_ai_client = general_main.service.ai_client
         self.repository = AsyncMock()
+        for name in ("facts", "gaps", "suggestions", "tasks", "decisions", "requests"):
+            setattr(self.repository, f"_context_v2_{name}", {})
         fixture = Path(__file__).resolve().parents[2] / "contracts" / "ai_internal" / "fixtures" / "diagnosis.high.v1.json"
         diagnosis = json.loads(fixture.read_text(encoding="utf-8"))["response"]
         # 실제 신규 Case는 송금 여부를 UNKNOWN으로 생성한다. 이 상태에서만

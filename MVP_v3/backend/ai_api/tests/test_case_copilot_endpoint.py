@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 
 from ai_api.app.main import app
 from ai_api.app.domains.case_support.copilot_service import CaseCopilotQuotaError, CustomerSupportCallBudget
+from ai_api.app.domains.case_support.final_report_service import FINAL_REPORT_SCHEMA
 
 
 class CaseCopilotEndpointTest(unittest.TestCase):
@@ -56,6 +57,16 @@ class CaseCopilotEndpointTest(unittest.TestCase):
         self.assertEqual(response.status_code, 401)
         self.assertEqual(response.json()["detail"]["code"], "OPENAI_AUTHENTICATION_FAILED")
         self.assertIn("최종 결과 보고서", response.json()["detail"]["message"])
+
+    def test_final_report_schema_has_document_sections(self) -> None:
+        self.assertEqual(
+            set(FINAL_REPORT_SCHEMA["required"]),
+            {
+                "title", "executive_summary", "incident_summary", "customer_impact_summary",
+                "verified_facts", "verification_results", "actions_taken", "unresolved_items",
+                "decision_basis", "resolution", "follow_up", "cautions",
+            },
+        )
 
     def test_every_work_card_type_refuses_to_make_fake_content_without_provider(self) -> None:
         card_types = (

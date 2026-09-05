@@ -32,6 +32,8 @@ class CaseWorkCardInput(StrictModel):
     case_mode: str = "PREVENT"
     fraud_type: str | None = None
     known_facts: list[str] = Field(default_factory=list, max_length=30)
+    staff_context: list[str] = Field(default_factory=list, max_length=30)
+    retrieved_context: list[str] = Field(default_factory=list, max_length=6)
     recent_conversation: list[str] = Field(default_factory=list, max_length=20)
     pending_actions: list[str] = Field(default_factory=list, max_length=20)
     attachment_summaries: list[str] = Field(default_factory=list, max_length=10)
