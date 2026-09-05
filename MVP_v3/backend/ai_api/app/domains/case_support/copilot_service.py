@@ -158,6 +158,8 @@ class CaseCopilotService:
             )
 
         sections = {
+            "고객 공개 처리 상태 (화면과 동일한 최신 기록)": request.customer_progress,
+            "고객 공개 기관 확인 결과": request.published_verification_results,
             "담당자와 참여자": ([f"메인 담당자: {request.primary_assignee}"] if request.primary_assignee else ["메인 담당자: 미지정"])
             + [f"참여자: {item}" for item in request.participants],
             "확인 정보": request.known_facts,
@@ -175,6 +177,16 @@ class CaseCopilotService:
             instructions = (
                 "당신은 보이스피싱 피해 예방을 돕는 고객용 안전 상담 AI입니다. 고객에게 공개 가능한 정보만 사용하세요. "
                 "고객의 현재 질문에 먼저 한두 문장으로 명확히 답하고, 지금 해야 할 행동이 있으면 최대 3개로 짧게 안내하세요. "
+                "신청·신고·지급정지 진행 질문은 고객 공개 처리 상태를 최우선 근거로 답하세요. "
+                "안내 카드 열람, 고객의 실행 진술, 서류 첨부, 피해구제 모드 전환은 은행의 공식 접수·완료가 아닙니다. "
+                "이전 AI 답변이나 화면 체크에 관한 고객 진술보다 최신 처리 기록을 우선하세요. "
+                "확인되지 않음은 미신청 확정이 아니라 이 Case에서 접수가 확인되지 않은 상태입니다. "
+                "제출 확인은 접수 완료가 아니며, 피해구제 신청 접수 완료는 환급 완료가 아닙니다. "
+                "상태, 확인된 근거와 시각, 고객이 지금 할 일, 담당자에게 확인을 기다리는 일을 구분해 필요한 내용만 답하세요. "
+                "처리 기록이 없다면 현재 진행 상황의 '담당자에게 확인 요청' 버튼을 안내하세요. "
+                "확인 요청이 기록되어 있다면 답변 대기라고 설명하고 중복 요청이나 같은 자료 재제출을 권하지 마세요. "
+                "이 응답 호출에는 업무 실행 도구가 없습니다. 기록에 없는 접수·전달·담당자 요청을 실행했다고 말하지 마세요. "
+                "공개 기관 확인 결과와 이미 제출된 자료를 활용하고, 내부 처리 상태 질문에 외부 고객센터 문의만 반복하지 마세요. "
                 "이미 질문했거나 답변받은 확인 항목을 다시 묻지 마세요. 구조화된 확인 질문은 별도 질문 카드가 담당하므로 새 문진을 시작하지 마세요. "
                 "은행 내부 판단, 위험 점수, 내부 검증 업무, 직원 대화는 절대 언급하지 마세요. 사실을 지어내거나 송금·계정 조치를 완료됐다고 단정하지 마세요. "
                 "긴급 피해가 의심되면 추가 송금과 상대방 접촉을 중단하고 거래 은행 공식 고객센터, 경찰 112, 금융감독원 1332 등 공식 채널 확인을 안내하세요. "
@@ -229,7 +241,8 @@ class CaseCopilotService:
             raise CaseCopilotProviderError(
                 "실제 AI 서버에 연결하지 못해 답변을 생성하지 않았습니다. 잠시 후 다시 시도해 주세요."
             ) from exc
-        content = response.output_text.strip()
+        from contracts.user_text import user_text
+        content = user_text(response.output_text.strip())
         if not content:
             raise CaseCopilotProviderError("AI 서버가 빈 응답을 반환해 답변을 생성하지 않았습니다.")
         return CaseCopilotOutput(content=content, model_mode=os.getenv("OPENAI_CASE_COPILOT_MODEL", "gpt-4o-mini"))

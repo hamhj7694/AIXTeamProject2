@@ -10,6 +10,7 @@ COPY requirements.txt ./requirements.txt
 RUN python -m pip install --upgrade pip && python -m pip install -r requirements.txt
 
 COPY contracts ./contracts
+COPY request_trace.py ./request_trace.py
 COPY general_api ./general_api
 
 RUN useradd --create-home --uid 10001 appuser \

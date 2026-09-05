@@ -8,6 +8,7 @@ from typing import Any
 
 import joblib
 import pandas as pd
+import sklearn
 
 
 MODEL_FILENAME = "WINDOW_LOGISTIC_DASHBOARD_EXPERIMENTAL_SAMPLE_v1.pkl"
@@ -23,6 +24,8 @@ def model_path() -> Path:
 
 @lru_cache(maxsize=1)
 def load_model_bundle() -> dict[str, Any]:
+    if sklearn.__version__ != "1.6.1":
+        raise RuntimeError("ML 모델은 scikit-learn 1.6.1이 필요합니다. MVP_v3/.venv의 Python으로 서버를 실행하세요.")
     path = model_path()
     if not path.exists():
         raise FileNotFoundError(f"Window 모델을 찾을 수 없습니다: {path}")
@@ -37,12 +40,6 @@ def load_model_bundle() -> dict[str, Any]:
     missing = sorted(required - set(bundle))
     if missing:
         raise KeyError(f"Window 모델 bundle 필수 항목 누락: {missing}")
-    named_steps = getattr(bundle["model"], "named_steps", {})
-    imputer = named_steps.get("imputer")
-    if imputer is not None and not hasattr(imputer, "_fill_dtype"):
-        fit_dtype = getattr(imputer, "_fit_dtype", None)
-        if fit_dtype is not None:
-            imputer._fill_dtype = fit_dtype
     return bundle
 
 

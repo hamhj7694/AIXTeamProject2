@@ -52,8 +52,21 @@ export const SafeMarkdown: React.FC<Props> = ({ content, className = '' }) => {
       const items: string[] = [];
       while (lineIndex < lines.length) {
         const item = lines[lineIndex].match(orderedPattern);
-        if (!item) break;
-        items.push(item[1]); lineIndex += 1;
+        if (item) {
+          items.push(item[1]); lineIndex += 1;
+          continue;
+        }
+        // LLM은 번호 항목 사이에 빈 줄을 자주 넣는다. 다음 내용도 번호
+        // 항목이면 같은 <ol>로 유지해 번호가 1부터 다시 시작되지 않게 한다.
+        if (!lines[lineIndex].trim()) {
+          let nextIndex = lineIndex + 1;
+          while (nextIndex < lines.length && !lines[nextIndex].trim()) nextIndex += 1;
+          if (nextIndex < lines.length && orderedPattern.test(lines[nextIndex])) {
+            lineIndex = nextIndex;
+            continue;
+          }
+        }
+        break;
       }
       blocks.push(<ol key={`ordered-${lineIndex}`}>{items.map((item, index) => <li key={`ordered-item-${index}`}>{renderInline(item, `ordered-${index}`)}</li>)}</ol>);
       continue;

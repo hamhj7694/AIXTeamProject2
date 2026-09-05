@@ -20,7 +20,7 @@ from ai_api.app.domains.diagnosis.extractor import (
     parse_turns,
 )
 from ai_api.app.domains.diagnosis.model_adapter import load_model_bundle, predict
-from contracts.diagnosis import ContextResult
+from contracts.diagnosis import ContextResult, CaseContextFeatures
 
 
 class _FailingFullContext:
@@ -48,6 +48,11 @@ class _RecordingFullContext:
 
 
 class DiagnosisFailureTest(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        mock = patch("ai_api.app.domains.diagnosis.service.extract_case_context_features", new=AsyncMock(return_value=CaseContextFeatures()))
+        mock.start()
+        self.addCleanup(mock.stop)
+
     @staticmethod
     def _extraction(text: str) -> EventExtraction:
         turns = parse_turns(text)
@@ -56,21 +61,15 @@ class DiagnosisFailureTest(unittest.IsolatedAsyncioTestCase):
     def tearDown(self) -> None:
         load_model_bundle.cache_clear()
 
-    async def test_full_context_failure_preserves_event_fallback(self) -> None:
+    async def test_full_context_failure_is_not_replaced_by_fake_summary(self) -> None:
         for error in (asyncio.TimeoutError(), RuntimeError("OpenAI API error")):
             source = "검찰입니다. 지금 500만원을 송금하세요."
             with self.subTest(error=type(error).__name__), patch(
                 "ai_api.app.domains.diagnosis.window_ai.service.extract_events",
                 new=AsyncMock(return_value=self._extraction(source)),
             ):
-                result = await DiagnosisService(
-                    full_context_llm=_FailingFullContext(error),
-                ).analyze(source)
-
-            self.assertTrue(result.partial_failure)
-            self.assertTrue(result.evidence)
-            self.assertEqual(result.risk_level.value, "HIGH")
-            self.assertTrue(any("이벤트 기반 요약" in warning for warning in result.warnings))
+                with self.assertRaises(type(error)):
+                    await DiagnosisService(full_context_llm=_FailingFullContext(error)).analyze(source)
 
     async def test_partial_turn_failure_is_exposed_in_diagnosis_result(self) -> None:
         extraction = EventExtraction(
@@ -99,7 +98,8 @@ class DiagnosisFailureTest(unittest.IsolatedAsyncioTestCase):
             await DiagnosisService(full_context_llm=handler).analyze(source)
 
         self.assertIsInstance(handler.payload, dict)
-        self.assertEqual(handler.payload["source"], "STRUCTURED_RISK_SIGNALS_ONLY")
+        self.assertEqual(handler.payload["source"], "STRUCTURED_CONTEXT_FEATURES_ONLY")
+        self.assertIn("case_context_features", handler.payload)
         self.assertNotIn(source, json.dumps(handler.payload, ensure_ascii=False))
         self.assertNotIn("evidence_text", json.dumps(handler.payload, ensure_ascii=False))
 

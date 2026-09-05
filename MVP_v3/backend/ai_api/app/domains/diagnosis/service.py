@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from contracts.diagnosis import ContextResult, DiagnosisResult, WindowAnalysisResult
+from request_trace import trace_stage
 
-from .extractor import build_context_from_events, signal_context_payload
+from .extractor import signal_context_payload
 from .budget import diagnosis_budget_scope
 from .full_context_llm import FullContextDiagnosisHandler
 from .risk_fusion import DiagnosisFusion
 from .window_ai import WindowAiAdapter
+from .context_features import extract_case_context_features
 
 
 class DiagnosisService:
@@ -22,22 +24,17 @@ class DiagnosisService:
 
     async def analyze(self, text: str, case_id: str | None = None) -> DiagnosisResult:
         with diagnosis_budget_scope():
-            # Source text is transient: only the extraction/window stage sees it.
-            window_result: WindowAnalysisResult = await self.window_ai.analyze(text)
-            try:
-                # The context LLM receives feature signals, never raw utterances.
-                context_raw = await self.full_context_llm.analyze(signal_context_payload(window_result.events))
-            except BaseException as exc:
-                context_raw = exc
-
-        fallback_warnings: list[str] = []
-        if isinstance(context_raw, BaseException):
-            context: ContextResult = build_context_from_events(window_result.events)
-            fallback_warnings.append(
-                f"전체 맥락 LLM 실패로 이벤트 기반 요약을 사용했습니다: {type(context_raw).__name__}"
-            )
-        else:
-            context = context_raw
-        return self.fusion.merge(
-            window_result, context, case_id=case_id, additional_warnings=fallback_warnings,
+            # Source text is transient: only the two extraction stages see it.
+            with trace_stage("ai.events_and_ml"):
+                window_result: WindowAnalysisResult = await self.window_ai.analyze(text)
+            with trace_stage("ai.context_features"):
+                context_features = await extract_case_context_features(text)
+            # The context LLM receives codes and references, never raw utterances.
+            payload = signal_context_payload(window_result.events)
+            payload["case_context_features"] = context_features.model_dump(mode="json")
+            with trace_stage("ai.context_summary"):
+                context: ContextResult = await self.full_context_llm.analyze(payload)
+        result = self.fusion.merge(
+            window_result, context, case_id=case_id,
         )
+        return result.model_copy(update={"case_context_features": context_features})

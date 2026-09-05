@@ -6,6 +6,7 @@ from typing import Protocol
 import httpx
 
 from contracts.diagnosis import AnalyzeTextRequest, DiagnosisResult
+from request_trace import request_id
 
 
 class DiagnosisAiClient(Protocol):
@@ -32,7 +33,8 @@ class HttpDiagnosisAiClient:
     async def analyze(self, request: AnalyzeTextRequest) -> DiagnosisResult:
         try:
             async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
-                response = await client.post(f"{self.base_url}/ai/analyze/text", json=request.model_dump(mode="json"))
+                response = await client.post(f"{self.base_url}/ai/analyze/text", json=request.model_dump(mode="json"),
+                                             headers={"X-Request-ID": request_id.get()})
                 if not response.is_success:
                     payload = response.json()
                     detail = payload.get("detail", {})

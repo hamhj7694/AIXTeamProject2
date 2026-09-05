@@ -23,7 +23,7 @@ export const statusLabel = (status: string, mode?: string) => {
 
 export const verificationStatusLabel = (status: string) => ({
   PENDING: '확인 대기', IN_PROGRESS: '확인 중', COMPLETED: '확인 완료', ON_HOLD: '보류', FAILED: '확인 불가',
-}[status] ?? status);
+}[status] ?? '확인 필요');
 
 export const actionLabel = (type: string) => {
   if (type.startsWith('AI_CHECKLIST:')) return 'AI 추가 확인 체크리스트';
@@ -37,16 +37,20 @@ export const actionLabel = (type: string) => {
   RESUME_AI: 'AI 지원 재개',
   STAFF_JUDGMENT: '담당자 판단·조치 기록',
   OTHER: '기타 대응 업무',
-  }[type] ?? type.replace(/_/g, ' '));
+  }[type] ?? '추가 대응 업무');
 };
 
 export const fieldLabel = (field: string) => ({
   transfer_status: '실제 송금 여부', VICTIM_TRANSFER_STATUS: '실제 송금 여부',
   personal_information_exposure: '개인정보 제공 여부', PERSONAL_INFO: '개인정보 제공 여부',
+  personal_info_shared: '개인정보 제공 여부', PERSONAL_INFO_SHARED: '개인정보 제공 여부',
+  PERSONAL_INFORMATION: '개인정보 제공 여부',
   authentication_information_exposure: '인증정보 제공 여부', AUTHENTICATION_INFO: '인증정보 제공 여부',
+  auth_info_shared: '인증정보 제공 여부', AUTH_INFO_SHARED: '인증정보 제공 여부', AUTH_INFO: '인증정보 제공 여부',
+  transfer_purpose: '송금 요구 이유', claimed_organization: '사칭 기관', incident_claim: '상대방의 사건 주장',
   requested_account: '요구받은 계좌', caller_phone: '상대방 전화번호', institution_name: '사칭 기관',
   remote_control_app: '원격제어 앱 설치 여부', actual_loss_amount_krw: '실제 피해 금액',
-}[field] ?? field.replace(/_/g, ' '));
+}[field] ?? '추가 확인 사항');
 
 export const formatClock = (value: string) => {
   const date = new Date(value);

@@ -7,9 +7,19 @@ from ai_api.app.domains.diagnosis import DiagnosisService
 from ai_api.app.domains.diagnosis.extractor import EventExtraction, _local_safety_events, parse_turns
 from ai_api.app.domains.diagnosis.features import deterministic_amount
 from ai_api.app.domains.diagnosis.model_adapter import EXPECTED_SHA256, metadata
+from contracts.diagnosis import CaseContextFeatures, ContextResult
 
 
 class DiagnosisServiceTest(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        for target, result in [
+            ("extract_case_context_features", CaseContextFeatures()),
+            ("FullContextDiagnosisHandler.analyze", ContextResult(summary="테스트 요약", incident_type="test", confidence=0.8)),
+        ]:
+            mock = patch("ai_api.app.domains.diagnosis.service." + target, new=AsyncMock(return_value=result))
+            mock.start()
+            self.addCleanup(mock.stop)
+
     @staticmethod
     def _extraction(text: str) -> EventExtraction:
         turns = parse_turns(text)

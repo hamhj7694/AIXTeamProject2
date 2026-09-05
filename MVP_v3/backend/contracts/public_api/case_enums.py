@@ -13,4 +13,7 @@ CaseStatus: TypeAlias = Literal["NEW", "TRIAGE", "VERIFYING", "IN_PROGRESS", "CL
 InitialCaseMode: TypeAlias = Literal["PREVENT"]
 InitialCaseStatus: TypeAlias = Literal["TRIAGE"]
 AnalyzeDisposition: TypeAlias = Literal["CASE_CREATED", "NO_CASE", "FAILED"]
-PublicAnalyzeErrorCode: TypeAlias = Literal["INVALID_INPUT", "AI_ANALYSIS_FAILED"]
+PublicAnalyzeErrorCode: TypeAlias = Literal[
+    "INVALID_INPUT", "AI_ANALYSIS_FAILED", "CASE_SAVE_FAILED",
+    "OPENAI_QUOTA_EXHAUSTED", "OPENAI_AUTHENTICATION_FAILED",
+]

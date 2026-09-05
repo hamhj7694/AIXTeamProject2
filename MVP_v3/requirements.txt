@@ -1,0 +1,2 @@
+# MVP_v3 Python dependencies are maintained in the backend package.
+-r backend/requirements.txt

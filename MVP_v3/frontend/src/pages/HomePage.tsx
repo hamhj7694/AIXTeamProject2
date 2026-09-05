@@ -90,7 +90,12 @@ export const HomePage: React.FC = () => {
       // The source transcript is intentionally transient in this screen too.
       setText('');
       setResult(response);
-      if (response.disposition === 'CASE_CREATED' && response.case_id) { setCaseItem(await casesApi.get(response.case_id)); setState('CREATED'); }
+      if (response.disposition === 'CASE_CREATED' && response.case_id) {
+        // Creation has succeeded. A failed follow-up read must not invite another analysis.
+        setState('CREATED');
+        try { setCaseItem(await casesApi.get(response.case_id)); }
+        catch { setCaseItem(undefined); }
+      }
       else if (response.disposition === 'NO_CASE') setState('NO_CASE');
       else { setState('ERROR'); setError(response.error?.message || '통화 내용을 분석하지 못했습니다.'); }
     } catch (reason) { setState('ERROR'); setError(reason instanceof Error ? reason.message : '통화 내용을 분석하지 못했습니다.'); }

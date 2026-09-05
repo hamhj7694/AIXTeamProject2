@@ -8,8 +8,10 @@ from datetime import datetime, timedelta
 from typing import Any
 
 import aiomysql
+from pymysql.err import IntegrityError
+from request_trace import trace_stage
 
-from .repository import CaseVersionConflictError, normalize_target_field
+from .repository import CaseCreationConflictError, CaseVersionConflictError, normalize_target_field
 
 
 class MySqlCaseRepository:
@@ -92,7 +94,7 @@ class MySqlCaseRepository:
                     for row in await cursor.fetchall()
                 ]
         return {
-            "case_id": case_row["case_id"], "version": case_row.get("version", 1), "client_request_id": case_row["client_request_id"],
+            "case_id": case_row["case_id"], "version": case_row.get("version", 1), "context_revision": int(case_row.get("context_revision", 1)), "client_request_id": case_row["client_request_id"],
             "input_text": case_row["input_text"], "risk": case_row["risk_level"],
             "risk_score": float(case_row["risk_score"]), "mode": case_row["mode"], "status": case_row["status"],
             "initial_brief": case_row["initial_brief"], "diagnosis": self._json(case_row["diagnosis_json"]),
@@ -113,6 +115,7 @@ class MySqlCaseRepository:
         updated_at = datetime.fromisoformat(record["updated_at"]).replace(tzinfo=None)
         diagnosis = record["diagnosis"]
         report = record["initial_report"]
+        case_inserted = False
         async with pool.acquire() as connection:
             try:
                 async with connection.cursor() as cursor:
@@ -124,6 +127,7 @@ class MySqlCaseRepository:
                          record["mode"], record["status"], record.get("version", 1), record["initial_brief"], json.dumps(diagnosis, ensure_ascii=False),
                          created_at, updated_at),
                     )
+                    case_inserted = True
                     await cursor.execute(
                         "INSERT INTO case_inputs (case_id, input_type, input_text, created_at) VALUES (%s,'TEXT',%s,%s)",
                         (record["case_id"], record["input_text"], created_at),
@@ -154,9 +158,12 @@ class MySqlCaseRepository:
                         "INSERT INTO case_events (case_id, event_type, actor_type, payload_json, occurred_at) VALUES (%s,'CASE_CREATED','SYSTEM',%s,%s)",
                         (record["case_id"], json.dumps({"report_id": report["report_id"]}), created_at),
                     )
-                await connection.commit()
-            except Exception:
+                with trace_stage("db.case_and_report_commit"):
+                    await connection.commit()
+            except Exception as exc:
                 await connection.rollback()
+                if not case_inserted and isinstance(exc, IntegrityError) and exc.args[0] == 1062:
+                    raise CaseCreationConflictError() from exc
                 raise
         return deepcopy(record)
 
@@ -571,6 +578,15 @@ class MySqlCaseRepository:
                     await cursor.execute("SELECT case_id FROM cases WHERE case_id=%s FOR UPDATE", (case_id,))
                     if not await cursor.fetchone():
                         raise KeyError(case_id)
+                    if '_progress_command' in record:
+                        from .customer_progress import prepare_progress
+                        await cursor.execute("SELECT action_type, note FROM actions WHERE case_id=%s AND action_type LIKE 'CUSTOMER_PROGRESS:%%'", (case_id,))
+                        rows = [{'action_type': row[0], 'note': row[1]} for row in await cursor.fetchall()]
+                        prepared = prepare_progress(rows, record['_progress_command'], now.isoformat())
+                        if prepared is None:
+                            await connection.rollback()
+                            return {}
+                        record = prepared
                     await cursor.execute(
                         "INSERT INTO actions (action_id, case_id, action_type, status, actor_type, note, created_at) VALUES (%s,%s,%s,'REQUESTED',%s,%s,%s)",
                         (action_id, case_id, record["action_type"], record["actor_type"], record["note"], now),
@@ -736,6 +752,10 @@ class MySqlCaseRepository:
         async with pool.acquire() as connection:
             try:
                 async with connection.cursor() as cursor:
+                    # Serialize queue writers for this Case, including an initially empty queue.
+                    await cursor.execute("SELECT case_id FROM cases WHERE case_id=%s AND deleted_at IS NULL FOR UPDATE", (case_id,))
+                    if not await cursor.fetchone():
+                        raise KeyError(case_id)
                     await cursor.execute("SELECT COALESCE(MAX(sequence),0) FROM customer_questions WHERE case_id=%s", (case_id,)); sequence = int((await cursor.fetchone())[0])
                     await cursor.execute("SELECT target_field,question_text FROM customer_questions WHERE case_id=%s AND status IN ('PENDING','ASKED','ANSWERED')", (case_id,)); handled = await cursor.fetchall()
                     active_fields = {normalize_target_field(row[0]) for row in handled}
@@ -745,7 +765,8 @@ class MySqlCaseRepository:
                         normalized_text = " ".join(str(question["question_text"]).split()).casefold()
                         if target_field in active_fields or normalized_text in active_texts:
                             continue
-                        sequence += 1; qid = question.get("question_id") or f"question-{uuid.uuid4().hex}"
+                        # Candidate IDs are shared across Cases; persisted instances need unique IDs.
+                        sequence += 1; qid = f"question-{uuid.uuid4().hex}"
                         created_ids.append(qid)
                         active_fields.add(target_field)
                         active_texts.add(normalized_text)
@@ -763,6 +784,9 @@ class MySqlCaseRepository:
         async with pool.acquire() as connection:
             try:
                 async with connection.cursor(aiomysql.DictCursor) as cursor:
+                    await cursor.execute("SELECT case_id FROM cases WHERE case_id=%s AND deleted_at IS NULL FOR UPDATE", (case_id,))
+                    if not await cursor.fetchone():
+                        raise KeyError(case_id)
                     await cursor.execute("SELECT question_id FROM customer_questions WHERE case_id=%s AND status='ASKED' LIMIT 1 FOR UPDATE", (case_id,)); active = await cursor.fetchone()
                     if active: await connection.commit(); return None
                     await cursor.execute("SELECT * FROM customer_questions WHERE case_id=%s AND status='PENDING' ORDER BY sequence LIMIT 1 FOR UPDATE", (case_id,)); row = await cursor.fetchone()

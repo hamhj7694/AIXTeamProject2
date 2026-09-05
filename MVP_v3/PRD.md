@@ -1,8 +1,10 @@
-# PRD — CONTEXT-FIRST CASE Frontend V3
+# PRD — CSR | Case Share Room Frontend V3
+
+> 보이스피싱 양방향 상담·대응 플랫폼
 
 ## 0. Document Purpose
 
-이 문서는 CONTEXT-FIRST CASE 서비스의 Frontend V3를 구축하기 위한
+이 문서는 CSR | Case Share Room 서비스의 Frontend V3를 구축하기 위한
 제품 요구사항과 UX 원칙을 정의한다.
 
 V3는 기존 V2를 단순 수정하거나 디자인만 변경하는 프로젝트가 아니다.
@@ -32,7 +34,7 @@ V3는 기존 V2를 단순 수정하거나 디자인만 변경하는 프로젝트
 범죄자는 피해자의 판단을 흔들고,
 탐지 이후에는 은행 직원이 그 사건을 다시 파악·확인·설득해야 한다.
 
-CONTEXT-FIRST CASE는
+CSR | Case Share Room은
 
 통화 맥락을 하나의 사건으로 연결해,
 은행의 대응 업무와 고객 상담을 양방향으로 지원하는
@@ -134,7 +136,7 @@ Financial Protect
 Recovery Channel
 
 
-### CONTEXT-FIRST CASE
+### CSR | Case Share Room
 
 핵심 질문:
 

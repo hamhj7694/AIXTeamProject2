@@ -3,6 +3,7 @@ from __future__ import annotations
 from contracts.diagnosis import ContextResult, DiagnosisResult, Evidence, RiskLevel, WindowAnalysisResult
 
 from ..model_adapter import metadata
+from ..extractor import build_case_context_features
 
 
 class DiagnosisFusion:
@@ -38,7 +39,8 @@ class DiagnosisFusion:
             risk_level=risk_level,
             risk_score=risk_score, model_label=model_label,
             context=context, events=window_result.events, windows=window_result.windows,
-            evidence=evidence, features=representative.features, model_metadata=model_meta,
+            evidence=evidence, features=representative.features,
+            case_context_features=build_case_context_features(window_result.events), model_metadata=model_meta,
             confidence=min(context.confidence, max(0.5, risk_score / 100)),
             partial_failure=bool(window_result.warnings or additional_warnings), warnings=warnings,
         )

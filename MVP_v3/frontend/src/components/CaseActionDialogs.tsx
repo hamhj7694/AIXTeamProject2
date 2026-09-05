@@ -1,3 +1,4 @@
+import { priorityLabel } from '../userText';
 import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, Check, ListChecks, Loader2, Plus, Sparkles, Trash2, X } from 'lucide-react';
 import { casesApi } from '../api/cases';
@@ -67,7 +68,7 @@ export const QuestionDialog: React.FC<{ caseId: string; initial: QuestionCandida
     <div className="dialog-body">
       <div className="ai-dialog-action"><div><Sparkles size={16}/><span><b>AI 질문 추천</b><small>현재 Case의 대화·답변·확인 이력을 읽고 중복되지 않는 질문을 제안합니다.</small></span></div><button type="button" onClick={() => void recommendQuestions()} disabled={recommending || saving}>{recommending ? <Loader2 className="spin" size={15}/> : <Sparkles size={15}/>}AI에게 질문 추천 받기</button></div>
       {aiNote && <p className="ai-recommendation-note">{aiNote}</p>}
-      {loading ? <div className="dialog-loading"><Loader2 className="spin" size={18}/>현재 Case에서 필요한 질문을 정리하고 있습니다.</div> : <div className="question-options">{items.length ? items.map((item) => <label key={item.question_id}><input type="checkbox" checked={selected.includes(item.question_id)} onChange={() => setSelected((current) => current.includes(item.question_id) ? current.filter((id) => id !== item.question_id) : [...current, item.question_id])}/><span><b>{item.question_text}</b><small><em>{item.priority}</em>{item.reason}</small></span></label>) : <p className="dialog-empty">추가로 추천할 질문이 없습니다. 필요한 질문을 직접 추가할 수 있습니다.</p>}</div>}
+      {loading ? <div className="dialog-loading"><Loader2 className="spin" size={18}/>현재 Case에서 필요한 질문을 정리하고 있습니다.</div> : <div className="question-options">{items.length ? items.map((item) => <label key={item.question_id}><input type="checkbox" checked={selected.includes(item.question_id)} onChange={() => setSelected((current) => current.includes(item.question_id) ? current.filter((id) => id !== item.question_id) : [...current, item.question_id])}/><span><b>{item.question_text}</b><small><em>{priorityLabel(item.priority)}</em>{item.reason}</small></span></label>) : <p className="dialog-empty">추가로 추천할 질문이 없습니다. 필요한 질문을 직접 추가할 수 있습니다.</p>}</div>}
       <div className="inline-add"><input value={custom} onChange={(event) => setCustom(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addCustom(); } }} placeholder="직접 질문 추가"/><button type="button" onClick={addCustom} disabled={!custom.trim()}><Plus size={15}/>추가</button></div>
       <DialogError message={error}/>
     </div>

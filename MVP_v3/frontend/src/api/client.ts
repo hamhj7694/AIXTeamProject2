@@ -1,3 +1,4 @@
+import { presentResponse, userText } from '../userText';
 const baseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 
 export const apiUrl = (path: string) => `${baseUrl}${path}`;
@@ -5,9 +6,9 @@ export const apiUrl = (path: string) => `${baseUrl}${path}`;
 const errorMessage = (payload: unknown, status: number) => {
   if (payload && typeof payload === 'object') {
     const body = payload as { error?: { message?: unknown }; detail?: string | { message?: unknown } };
-    if (typeof body.error?.message === 'string') return body.error.message;
-    if (typeof body.detail === 'string') return body.detail;
-    if (body.detail && typeof body.detail === 'object' && typeof body.detail.message === 'string') return body.detail.message;
+    if (typeof body.error?.message === 'string') return userText(body.error.message);
+    if (typeof body.detail === 'string') return userText(body.detail);
+    if (body.detail && typeof body.detail === 'object' && typeof body.detail.message === 'string') return userText(body.detail.message);
   }
   if (status === 404) return '요청한 Case 또는 기능을 찾을 수 없습니다.';
   if (status === 401) return 'AI 서버 인증에 실패했습니다. 관리자에게 연결 설정을 확인해 달라고 요청해 주세요.';
@@ -24,7 +25,7 @@ export const request = async <T>(path: string, init?: RequestInit): Promise<T> =
   if (response.status === 204) return undefined as T;
   const payload: unknown = await response.json().catch(() => null);
   if (!response.ok) throw new Error(errorMessage(payload, response.status));
-  return payload as T;
+  return presentResponse(payload) as T;
 };
 
 export const readUploadError = async (response: Response) => {

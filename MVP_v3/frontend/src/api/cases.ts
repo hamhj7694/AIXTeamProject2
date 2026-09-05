@@ -1,5 +1,6 @@
 import { apiUrl, readUploadError, request } from './client';
 import type {
+  CustomerProgressItem, ProgressStep, UpdateCustomerProgress,
   AiInvocationResult, AnalyzeCaseResponse, Attachment, CaseAction, CaseBundle, CaseFact, CaseMember, CaseMessage, CasePresence, CaseWorkCard,
   CaseSupportSnapshot, CustomerQuestion, MessageChannel, MessageVisibility,
   PersonalNote, QuestionCandidate, StoredCase, VerificationTask, WorkCardType,
@@ -88,6 +89,10 @@ export const casesApi = {
   createAction: (caseId: string, actionType: string, note: string) => request<CaseAction>(`/api/cases/${encodeURIComponent(caseId)}/actions`, {
     method: 'POST', body: JSON.stringify({ action_type: actionType, actor_type: 'BANK_STAFF', note }),
   }),
+  updateCustomerProgress: (caseId: string, step: ProgressStep, values: UpdateCustomerProgress) => request<CustomerProgressItem[]>(`/api/cases/${encodeURIComponent(caseId)}/customer-progress/${step}`, {
+    method: 'PUT', body: JSON.stringify(values),
+  }),
+  requestProgressConfirmation: (caseId: string, step: ProgressStep) => request<CustomerProgressItem[]>(`/api/cases/${encodeURIComponent(caseId)}/customer-progress/${step}/confirmation-request`, { method: 'POST' }),
   updateAction: (caseId: string, actionId: string, status: 'REQUESTED' | 'COMPLETED') => request<CaseAction>(`/api/cases/${encodeURIComponent(caseId)}/actions/${encodeURIComponent(actionId)}`, {
     method: 'PATCH', body: JSON.stringify({ status, updated_by: CURRENT_BANK_USER.display_name }),
   }),
