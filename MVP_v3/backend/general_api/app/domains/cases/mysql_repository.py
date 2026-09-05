@@ -4,7 +4,7 @@ import json
 import os
 import uuid
 from copy import deepcopy
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import aiomysql
@@ -12,6 +12,21 @@ from pymysql.err import IntegrityError
 from request_trace import trace_stage
 
 from .repository import CaseCreationConflictError, CaseVersionConflictError, normalize_target_field
+
+
+def _utc_naive(value: str) -> datetime:
+    """Normalize an incoming instant before storing it in MySQL DATETIME."""
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        return parsed
+    return parsed.astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def _utc_iso(value: datetime) -> str:
+    """MySQL stores Case creation instants as naive UTC; restore the offset for clients."""
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc).isoformat()
 
 
 class MySqlCaseRepository:
@@ -69,14 +84,15 @@ class MySqlCaseRepository:
             values = [int(str(row[0]).removeprefix("VP-")) for row in await cursor.fetchall()]
         return f"VP-{max(values, default=0) + 1}"
 
-    async def get(self, case_id: str) -> dict[str, Any] | None:
+    async def get(self, case_id: str, *, include_deleted: bool = False) -> dict[str, Any] | None:
         pool = await self._get_pool()
         async with pool.acquire() as connection, connection.cursor(aiomysql.DictCursor) as cursor:
             await cursor.execute(
                 """SELECT c.*, i.input_text FROM cases c
                    LEFT JOIN case_inputs i ON i.case_id=c.case_id
-                   WHERE c.case_id=%s ORDER BY i.input_id LIMIT 1""",
-                (case_id,),
+                   WHERE c.case_id=%s AND (%s OR c.deleted_at IS NULL)
+                   ORDER BY i.input_id LIMIT 1""",
+                (case_id, include_deleted),
             )
             case_row = await cursor.fetchone()
             if not case_row:
@@ -103,16 +119,17 @@ class MySqlCaseRepository:
             "initial_report": {
                 "report_id": report_row["report_id"], "case_id": case_id,
                 "report_version": report_row["report_version"], "status": report_row["report_type"],
-                "sections": sections, "created_at": report_row["created_at"].isoformat(),
+                "sections": sections, "created_at": _utc_iso(report_row["created_at"]),
             } if report_row else None,
-            "created_at": case_row["created_at"].isoformat(), "updated_at": case_row["updated_at"].isoformat(),
+            "created_at": _utc_iso(case_row["created_at"]), "updated_at": _utc_iso(case_row["updated_at"]),
+            "deleted_at": _utc_iso(case_row["deleted_at"]) if case_row.get("deleted_at") else None,
         }
 
     async def create(self, record: dict[str, Any]) -> dict[str, Any]:
         pool = await self._get_pool()
         # MySQL DATETIME은 timezone 정보를 저장하지 않으므로 UTC offset을 제거한다.
-        created_at = datetime.fromisoformat(record["created_at"]).replace(tzinfo=None)
-        updated_at = datetime.fromisoformat(record["updated_at"]).replace(tzinfo=None)
+        created_at = _utc_naive(record["created_at"])
+        updated_at = _utc_naive(record["updated_at"])
         diagnosis = record["diagnosis"]
         report = record["initial_report"]
         case_inserted = False
@@ -197,9 +214,10 @@ class MySqlCaseRepository:
         return updated
 
     async def list(self) -> list[dict[str, Any]]:
+        await self.purge_expired_trash()
         pool = await self._get_pool()
         async with pool.acquire() as connection, connection.cursor() as cursor:
-            await cursor.execute("SELECT case_id FROM cases ORDER BY created_at DESC")
+            await cursor.execute("SELECT case_id FROM cases WHERE deleted_at IS NULL ORDER BY created_at DESC")
             ids = [row[0] for row in await cursor.fetchall()]
         return [record for case_id in ids if (record := await self.get(case_id)) is not None]
 
@@ -211,11 +229,12 @@ class MySqlCaseRepository:
             await connection.commit()
 
     async def list_trashed_cases(self) -> list[dict[str, Any]]:
+        await self.purge_expired_trash()
         pool = await self._get_pool()
         async with pool.acquire() as connection, connection.cursor() as cursor:
             await cursor.execute("SELECT case_id FROM cases WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC")
             ids = [row[0] for row in await cursor.fetchall()]
-        return [record for case_id in ids if (record := await self.get(case_id)) is not None]
+        return [record for case_id in ids if (record := await self.get(case_id, include_deleted=True)) is not None]
 
     async def restore_case(self, case_id: str) -> None:
         pool = await self._get_pool(); now = datetime.now()
@@ -223,6 +242,44 @@ class MySqlCaseRepository:
             await cursor.execute("UPDATE cases SET deleted_at=NULL, updated_at=%s WHERE case_id=%s AND deleted_at IS NOT NULL", (now, case_id))
             if cursor.rowcount == 0: raise KeyError(case_id)
             await connection.commit()
+
+    async def purge_case(self, case_id: str) -> None:
+        """Permanently remove a trashed Case and every dependent database row."""
+        pool = await self._get_pool()
+        async with pool.acquire() as connection:
+            try:
+                async with connection.cursor() as cursor:
+                    await cursor.execute("SELECT case_id FROM cases WHERE case_id=%s AND deleted_at IS NOT NULL FOR UPDATE", (case_id,))
+                    if not await cursor.fetchone():
+                        raise KeyError(case_id)
+
+                    await cursor.execute("DELETE FROM message_attachments WHERE message_id IN (SELECT message_id FROM messages WHERE case_id=%s) OR attachment_id IN (SELECT attachment_id FROM case_attachments WHERE case_id=%s)", (case_id, case_id))
+                    await cursor.execute("DELETE FROM case_context_item_history WHERE item_id IN (SELECT item_id FROM case_context_items WHERE case_id=%s)", (case_id,))
+                    await cursor.execute("DELETE FROM case_report_sections WHERE report_id IN (SELECT report_id FROM case_reports WHERE case_id=%s)", (case_id,))
+                    for table in (
+                        "transcript_segments", "voice_sessions", "case_context_projections", "case_context_items",
+                        "personal_notes", "case_facts", "customer_questions", "case_attachments", "actions",
+                        "verification_tasks", "case_presence", "case_members", "messages", "case_events",
+                        "context_features", "analysis_segments", "case_inputs", "case_reports",
+                    ):
+                        await cursor.execute(f"DELETE FROM {table} WHERE case_id=%s", (case_id,))
+                    await cursor.execute("DELETE FROM cases WHERE case_id=%s AND deleted_at IS NOT NULL", (case_id,))
+                    if cursor.rowcount == 0:
+                        raise KeyError(case_id)
+                await connection.commit()
+            except Exception:
+                await connection.rollback()
+                raise
+
+    async def purge_expired_trash(self, retention_days: int = 30) -> list[str]:
+        pool = await self._get_pool()
+        cutoff = datetime.now() - timedelta(days=retention_days)
+        async with pool.acquire() as connection, connection.cursor() as cursor:
+            await cursor.execute("SELECT case_id FROM cases WHERE deleted_at IS NOT NULL AND deleted_at<=%s", (cutoff,))
+            expired = [row[0] for row in await cursor.fetchall()]
+        for case_id in expired:
+            await self.purge_case(case_id)
+        return expired
 
     async def append_message(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]:
         client_request_id = record.get("client_request_id")
@@ -608,7 +665,7 @@ class MySqlCaseRepository:
             await cursor.execute("SELECT action_id, case_id, action_type, status, actor_type, note, created_at FROM actions WHERE case_id=%s ORDER BY created_at, action_id", (case_id,))
             return [{**row, "created_at": row["created_at"].isoformat()} for row in await cursor.fetchall()]
 
-    async def update_action(self, case_id: str, action_id: str, status: str, updated_by: str) -> dict[str, Any]:
+    async def update_action(self, case_id: str, action_id: str, status: str, updated_by: str, note: str | None = None) -> dict[str, Any]:
         pool = await self._get_pool()
         now = datetime.now()
         async with pool.acquire() as connection:
@@ -621,12 +678,12 @@ class MySqlCaseRepository:
                     if not await cursor.fetchone():
                         raise KeyError(action_id)
                     await cursor.execute(
-                        "UPDATE actions SET status=%s WHERE case_id=%s AND action_id=%s",
-                        (status, case_id, action_id),
+                        "UPDATE actions SET status=%s, note=COALESCE(%s, note) WHERE case_id=%s AND action_id=%s",
+                        (status, note.strip() if note is not None else None, case_id, action_id),
                     )
                     await cursor.execute(
                         "INSERT INTO case_events (case_id, event_type, actor_type, payload_json, occurred_at) VALUES (%s,'CASE_CHECKLIST_UPDATED','BANK_STAFF',%s,%s)",
-                        (case_id, json.dumps({"action_id": action_id, "status": status, "updated_by": updated_by}), now),
+                        (case_id, json.dumps({"action_id": action_id, "status": status, "updated_by": updated_by, "note_changed": note is not None}), now),
                     )
                     await cursor.execute("UPDATE cases SET updated_at=%s WHERE case_id=%s", (now, case_id))
                 await connection.commit()
@@ -708,30 +765,73 @@ class MySqlCaseRepository:
             await cursor.execute("SELECT * FROM transcript_segments WHERE case_id=%s AND session_id=%s ORDER BY created_at, segment_id", (case_id, session_id)); rows = await cursor.fetchall()
         return [{"segment_id": row["segment_id"], "session_id": row["session_id"], "case_id": row["case_id"], "speaker": row["speaker"], "content": row["content"], "started_at": row["started_at"].isoformat() if row["started_at"] else None, "created_at": row["created_at"].isoformat()} for row in rows]
 
-    async def finalize_report(self, case_id: str, expected_version: int, note: str) -> dict[str, Any]:
+    async def finalize_report(self, case_id: str, expected_version: int, note: str, sections: list[dict[str, Any]], report_card: dict[str, Any]) -> dict[str, Any]:
         pool = await self._get_pool()
         now = datetime.now()
         report_id = f"final-{case_id}"
         async with pool.acquire() as connection:
             try:
                 async with connection.cursor(aiomysql.DictCursor) as cursor:
-                    await cursor.execute("SELECT version FROM cases WHERE case_id=%s FOR UPDATE", (case_id,)); case_row = await cursor.fetchone()
+                    await cursor.execute("SELECT version, mode, status FROM cases WHERE case_id=%s AND deleted_at IS NULL FOR UPDATE", (case_id,)); case_row = await cursor.fetchone()
                     if not case_row: raise KeyError(case_id)
                     current_version = int(case_row["version"])
                     if current_version != expected_version: raise CaseVersionConflictError(current_version)
-                    await cursor.execute("SELECT report_id, report_version FROM case_reports WHERE case_id=%s AND report_type='LIVE'", (case_id,)); live = await cursor.fetchone()
-                    if not live: raise KeyError(case_id)
-                    await cursor.execute("SELECT section_key, content_json, section_version FROM case_report_sections WHERE report_id=%s ORDER BY section_key", (live["report_id"],)); sections = await cursor.fetchall()
-                    await cursor.execute("INSERT INTO case_reports (report_id, case_id, report_type, report_version, created_at, updated_at) VALUES (%s,%s,'FINAL',%s,%s,%s)", (report_id, case_id, live["report_version"], now, now))
+                    if case_row["status"] == "CLOSED" or case_row["mode"] == "CLOSED": raise ValueError("CASE_ALREADY_CLOSED")
+                    await cursor.execute("SELECT report_version FROM case_reports WHERE case_id=%s AND report_type='FINAL' FOR UPDATE", (case_id,)); previous_report = await cursor.fetchone()
+                    report_version = int(previous_report["report_version"]) + 1 if previous_report else 1
+                    if previous_report:
+                        await cursor.execute("DELETE FROM case_report_sections WHERE report_id=%s", (report_id,))
+                        await cursor.execute("UPDATE case_reports SET report_version=%s, created_at=%s, updated_at=%s WHERE report_id=%s", (report_version, now, now, report_id))
+                    else:
+                        await cursor.execute("INSERT INTO case_reports (report_id, case_id, report_type, report_version, created_at, updated_at) VALUES (%s,%s,'FINAL',%s,%s,%s)", (report_id, case_id, report_version, now, now))
                     for section in sections:
-                        await cursor.execute("INSERT INTO case_report_sections (report_id, section_key, content_json, section_version, updated_at) VALUES (%s,%s,%s,%s,%s)", (report_id, section["section_key"], section["content_json"], section["section_version"], now))
+                        await cursor.execute("INSERT INTO case_report_sections (report_id, section_key, content_json, section_version, updated_at) VALUES (%s,%s,%s,%s,%s)", (report_id, section["section_key"], json.dumps(section.get("content", {}), ensure_ascii=False), section.get("version", report_version), now))
                     next_version = current_version + 1
                     await cursor.execute("UPDATE cases SET mode='CLOSED', status='CLOSED', version=%s, updated_at=%s WHERE case_id=%s", (next_version, now, case_id))
-                    await cursor.execute("INSERT INTO case_events (case_id, event_type, actor_type, payload_json, occurred_at) VALUES (%s,'CASE_REPORT_FINALIZED','BANK_STAFF',%s,%s)", (case_id, json.dumps({"report_id": report_id, "version": next_version, "note": note}), now))
+                    message_id = f"msg-{uuid.uuid4().hex}"
+                    card_content = json.dumps({**report_card, "report_id": report_id, "report_version": report_version, "created_at": _utc_iso(now)}, ensure_ascii=False)
+                    await cursor.execute(
+                        """INSERT INTO messages
+                           (message_id, case_id, actor_type, actor_user_id, actor_display_name, actor_role, content, channel, audience, visibility, message_kind, private_owner_user_id, mentions_json, reply_to_message_id, client_request_id, attachments_json, created_at)
+                           VALUES (%s,%s,'BANK_AGENT','final-report-agent','최종 결과 보고서 AI','BANK_AGENT',%s,'TEAM','BANK_INTERNAL','BANK_INTERNAL','REPORT_CARD',NULL,'[]',NULL,%s,'[]',%s)""",
+                        (message_id, case_id, card_content, f"final-report-{case_id}-{report_version}", now),
+                    )
+                    await cursor.execute("INSERT INTO case_events (case_id, event_type, actor_type, payload_json, occurred_at) VALUES (%s,'CASE_REPORT_FINALIZED','BANK_STAFF',%s,%s)", (case_id, json.dumps({"report_id": report_id, "version": next_version, "note": note, "previous_mode": case_row["mode"], "previous_status": case_row["status"]}, ensure_ascii=False), now))
                 await connection.commit()
             except Exception:
                 await connection.rollback(); raise
-        return await self.get_final_report(case_id) or {"report_id": report_id, "case_id": case_id, "report_version": live["report_version"], "status": "FINAL", "sections": [], "created_at": now.isoformat()}
+        return await self.get_final_report(case_id) or {"report_id": report_id, "case_id": case_id, "report_version": report_version, "status": "FINAL", "sections": [], "created_at": _utc_iso(now)}
+
+    async def reopen_case(self, case_id: str, expected_version: int) -> dict[str, Any]:
+        pool = await self._get_pool(); now = datetime.now()
+        async with pool.acquire() as connection:
+            try:
+                async with connection.cursor(aiomysql.DictCursor) as cursor:
+                    await cursor.execute("SELECT version, mode, status FROM cases WHERE case_id=%s AND deleted_at IS NULL FOR UPDATE", (case_id,)); case_row = await cursor.fetchone()
+                    if not case_row: raise KeyError(case_id)
+                    current_version = int(case_row["version"])
+                    if current_version != expected_version: raise CaseVersionConflictError(current_version)
+                    if case_row["status"] != "CLOSED" and case_row["mode"] != "CLOSED": raise ValueError("CASE_NOT_CLOSED")
+                    await cursor.execute("SELECT payload_json FROM case_events WHERE case_id=%s AND event_type='CASE_REPORT_FINALIZED' ORDER BY event_id DESC LIMIT 1", (case_id,)); event_row = await cursor.fetchone()
+                    payload = self._json(event_row["payload_json"]) if event_row else {}
+                    mode = payload.get("previous_mode") or "PREVENT"
+                    status = payload.get("previous_status") or "TRIAGE"
+                    next_version = current_version + 1
+                    await cursor.execute("UPDATE cases SET mode=%s, status=%s, version=%s, updated_at=%s WHERE case_id=%s", (mode, status, next_version, now, case_id))
+                    message_id = f"msg-{uuid.uuid4().hex}"
+                    await cursor.execute(
+                        """INSERT INTO messages
+                           (message_id, case_id, actor_type, actor_user_id, actor_display_name, actor_role, content, channel, audience, visibility, message_kind, private_owner_user_id, mentions_json, reply_to_message_id, client_request_id, attachments_json, created_at)
+                           VALUES (%s,%s,'SYSTEM','system','Case 업데이트','SYSTEM',%s,'TEAM','BANK_INTERNAL','BANK_INTERNAL','SYSTEM_EVENT',NULL,'[]',NULL,NULL,'[]',%s)""",
+                        (message_id, case_id, "관리자 인증 후 사건이 종결 직전의 진행 상태로 복구되었습니다.", now),
+                    )
+                    await cursor.execute("INSERT INTO case_events (case_id, event_type, actor_type, payload_json, occurred_at) VALUES (%s,'CASE_REOPENED','BANK_STAFF',%s,%s)", (case_id, json.dumps({"version": next_version, "mode": mode, "status": status}, ensure_ascii=False), now))
+                await connection.commit()
+            except Exception:
+                await connection.rollback(); raise
+        updated = await self.get(case_id)
+        if updated is None: raise KeyError(case_id)
+        return updated
 
     async def get_final_report(self, case_id: str) -> dict[str, Any] | None:
         pool = await self._get_pool()

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, AlertTriangle, ArrowLeft, Bookmark, CheckCircle2, Loader2, RefreshCw, ShieldCheck, Wifi, X } from 'lucide-react';
+import { AlertCircle, AlertTriangle, ArrowLeft, Bookmark, CheckCircle2, Loader2, PanelRightClose, PanelRightOpen, RefreshCw, ShieldCheck, Wifi, X } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { casesApi, CURRENT_CUSTOMER_USER } from '../api/cases';
 import type { CaseBundle, CaseMessage, CustomerQuestion, ProgressStep } from '../api/types';
@@ -31,6 +31,7 @@ export const CustomerCaseRoomPage: React.FC = () => {
   const [notice, setNotice] = useState('');
   const [confirmRecovery, setConfirmRecovery] = useState(false);
   const [bookmarkOpen, setBookmarkOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [bookmarks, setBookmarks] = useState<CustomerBookmark[]>([]);
   const aiQueueRef = useRef<Promise<void>>(Promise.resolve());
   const aiGenerationRef = useRef(0);
@@ -249,14 +250,15 @@ export const CustomerCaseRoomPage: React.FC = () => {
   if (!bundle) return <div className="customer-page"><section className="customer-room-state error"><AlertCircle size={25}/><strong>안전 상담을 열지 못했습니다.</strong><span>{error || '잠시 후 다시 시도해 주세요.'}</span><button onClick={() => void load()}>다시 시도</button></section></div>;
 
   return <div className={`customer-page ${recovery ? 'is-recovery' : ''}`}>
-    <header className="customer-header"><Link to={`/cases/${encodeURIComponent(caseId)}`} aria-label="은행 화면으로"><ArrowLeft size={17}/>은행 화면으로</Link><div><span><ShieldCheck size={18}/></span><b>CSR | Case Share Room</b><small>{caseId} · 고객 안전 상담</small></div><div className="customer-header-actions"><span><Wifi size={13}/>안전하게 연결됨</span><button type="button" onClick={() => setBookmarkOpen(true)}><Bookmark size={16}/>북마크{bookmarks.length > 0 && <b>{bookmarks.length}</b>}</button><button type="button" onClick={() => void load(true)} aria-label="상담 내용 새로고침"><RefreshCw size={16} className={refreshing ? 'spin' : ''}/></button></div></header>
+    <header className="customer-header"><Link to={`/cases/${encodeURIComponent(caseId)}`} aria-label="은행 화면으로"><ArrowLeft size={17}/>은행 화면으로</Link><div><span><ShieldCheck size={18}/></span><b>CSR | Case Share Room</b><small>{caseId} · 고객 안전 상담</small></div><div className="customer-header-actions"><span><Wifi size={13}/>안전하게 연결됨</span><button type="button" className="customer-details-toggle" onClick={() => setDetailsOpen((value) => !value)} aria-expanded={detailsOpen} aria-controls="customer-side-panel" aria-label={detailsOpen ? '진행 상황 닫기' : '진행 상황 열기'}>{detailsOpen ? <PanelRightClose size={16}/> : <PanelRightOpen size={16}/>}진행 상황</button><button type="button" onClick={() => setBookmarkOpen(true)}><Bookmark size={16}/>북마크{bookmarks.length > 0 && <b>{bookmarks.length}</b>}</button><button type="button" onClick={() => void load(true)} aria-label="상담 내용 새로고침"><RefreshCw size={16} className={refreshing ? 'spin' : ''}/></button></div></header>
     <main className="customer-main">
       <section className={`customer-safety-banner ${closed ? 'closed' : recovery ? 'recovery' : ''}`}><div>{closed ? <CheckCircle2 size={20}/> : <AlertTriangle size={20}/>}<span><strong>{closed ? '상담이 마무리되었습니다.' : recovery ? '피해 대응 안내를 확인하고 있습니다.' : '지금은 송금·인증정보 제공을 멈춰주세요.'}</strong><small>{closed ? '추가 피해가 의심되면 공식 은행 고객센터로 다시 상담을 요청해 주세요.' : recovery ? '실제 신청·처리 여부는 현재 진행 상황에서 확인하세요.' : '상대방이 알려준 연락처가 아닌 공식 채널로만 확인해 주세요.'}</small></span></div>{!closed && <button type="button" disabled={recovery || busy} onClick={() => setConfirmRecovery(true)}>{recovery ? '피해 대응 안내 중' : '이미 사기 당했어요'}</button>}</section>
       {error && <div className="customer-global-message danger"><AlertCircle size={16}/><span>{error}</span><button type="button" onClick={() => setError('')} aria-label="오류 닫기"><X size={15}/></button></div>}
       {notice && <div className="customer-global-message"><AlertCircle size={16}/><span>{notice}</span><button type="button" onClick={() => setNotice('')} aria-label="안내 닫기"><X size={15}/></button></div>}
       <div className="customer-room-grid">
         <section className="customer-chat-panel"><header><div><h1>보이스피싱 대응 AI 상담</h1><p>필요한 내용을 한 가지씩 확인하고 은행 담당자와 연결합니다.</p></div><span>고객 공개 채널</span></header><CustomerConversation bundle={bundle} busy={busy} bookmarkedIds={new Set(bookmarks.map((item) => item.entryId))} onAnswer={answer} onRecoveryRequest={requestRecoveryHelp} onToggleBookmark={toggleBookmark} onRetryMessage={retryMessage} onDismissMessage={dismissMessage}/><CustomerComposer busy={busy} aiBusy={aiPendingCount > 0} disabled={closed} onSend={send}/></section>
-        <aside className="customer-side-panel"><CustomerProgressPanel key={caseId} bundle={bundle} recovery={recovery} onRequestConfirmation={requestProgressConfirmation}/>{recovery ? <RecoveryNavigator selected={selectedStep} busy={busy} onSelect={selectRecoveryStep}/> : <CustomerSafetyGuide/>}</aside>
+        {detailsOpen && <button type="button" className="customer-side-scrim" onClick={() => setDetailsOpen(false)} aria-label="진행 상황 닫기"/>}
+        <aside id="customer-side-panel" className={`customer-side-panel ${detailsOpen ? 'is-open' : ''}`}><header className="customer-side-panel-header"><div><b>진행 상황과 안전 안내</b><small>현재 사건의 처리 상태를 확인하세요.</small></div><button type="button" onClick={() => setDetailsOpen(false)} aria-label="진행 상황 닫기"><X size={18}/></button></header><CustomerProgressPanel key={caseId} bundle={bundle} recovery={recovery} onRequestConfirmation={requestProgressConfirmation}/>{recovery ? <RecoveryNavigator selected={selectedStep} busy={busy} onSelect={selectRecoveryStep}/> : <CustomerSafetyGuide/>}</aside>
       </div>
     </main>
     <CustomerBookmarks open={bookmarkOpen} items={bookmarks} onClose={() => setBookmarkOpen(false)}/>

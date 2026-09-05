@@ -99,3 +99,21 @@ class HttpDiagnosisAiClient:
             raise AiServiceError(f"AI 업무 카드 생성 시간이 {self.timeout_seconds:.0f}초를 초과했습니다.") from exc
         except httpx.RequestError as exc:
             raise AiServiceError("AI 업무 카드 서버에 연결할 수 없습니다.") from exc
+
+    async def generate_final_report(self, payload: dict) -> dict:
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+                response = await client.post(f"{self.base_url}/ai/final-reports/generate", json=payload)
+                if not response.is_success:
+                    detail = response.json().get("detail", {})
+                    message = detail.get("message", "AI 최종 결과 보고서를 만들지 못했습니다.")
+                    if response.status_code == 429:
+                        raise AiServiceQuotaError(message)
+                    if response.status_code == 401:
+                        raise AiServiceAuthenticationError(message)
+                    raise AiServiceError(message)
+                return response.json()
+        except httpx.TimeoutException as exc:
+            raise AiServiceError(f"AI 최종 결과 보고서 생성 시간이 {self.timeout_seconds:.0f}초를 초과했습니다.") from exc
+        except httpx.RequestError as exc:
+            raise AiServiceError("AI 최종 결과 보고서 서버에 연결할 수 없습니다.") from exc

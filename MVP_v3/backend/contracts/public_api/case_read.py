@@ -34,12 +34,15 @@ class PublicCaseReadResponse(PublicCaseReadModel):
     actual_loss_amount_krw: float | None = None
     created_at: str
     updated_at: str
+    deleted_at: str | None = None
+    trash_expires_at: str | None = None
 
 
 class PublicCaseSummaryResponse(PublicCaseReadModel):
     """Screen-safe Case context shared by customer, bank, and verification views."""
     case_id: str
     version: int = 1
+    context_revision: int = 1
     risk: CaseRisk
     mode: CaseMode
     status: CaseStatus
@@ -70,6 +73,8 @@ def to_public_case_read_response(record: dict[str, Any]) -> PublicCaseReadRespon
         "actual_loss_amount_krw": record.get("actual_loss_amount_krw"),
         "created_at": record["created_at"],
         "updated_at": record["updated_at"],
+        "deleted_at": record.get("deleted_at"),
+        "trash_expires_at": record.get("trash_expires_at"),
     })
 
 
@@ -77,6 +82,7 @@ def to_public_case_summary_response(record: dict[str, Any]) -> PublicCaseSummary
     """Do not include original call text, diagnosis payload, or internal report in chat bundles."""
     return PublicCaseSummaryResponse.model_validate({
         "case_id": record["case_id"], "version": record.get("version", 1),
+        "context_revision": record.get("context_revision", 1),
         "risk": record["risk"], "mode": record["mode"], "status": record["status"],
         "initial_brief": record["initial_brief"], "primary_assignee": record.get("primary_assignee"),
         "victim_transfer_status": record.get("victim_transfer_status", "UNKNOWN"),

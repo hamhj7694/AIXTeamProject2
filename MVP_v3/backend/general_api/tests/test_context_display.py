@@ -41,10 +41,22 @@ class ContextDisplayTest(unittest.TestCase):
         self.assertEqual(self.repo._actions, [])
 
     def test_member_scope_and_input_validation(self):
-        self.assertEqual(self.client.get(self.url + '?actor_user_id=outsider').status_code, 403)
-        self.assertEqual(self.client.get('/api/cases/VP-2/context-display?actor_user_id=staff').status_code, 403)
+        # 새 Case 화면은 참여자 자동 등록과 편집본 조회가 동시에 실행될 수 있다.
+        # 조회는 빈 목록으로 열리고, 실제 변경만 담당자 역할을 요구해야 한다.
+        self.assertEqual(self.client.get(self.url + '?actor_user_id=outsider').json(), [])
+        self.assertEqual(self.client.get('/api/cases/VP-2/context-display?actor_user_id=staff').json(), [])
+        self.assertEqual(self.client.patch(self.url + '/SUMMARY?actor_user_id=outsider', json={
+            'expected_version': 0, 'operation': 'EDIT', 'text': '권한 없는 변경'}).status_code, 403)
+        self.assertEqual(self.client.patch('/api/cases/VP-2/context-display/SUMMARY?actor_user_id=staff', json={
+            'expected_version': 0, 'operation': 'EDIT', 'text': '다른 사건 변경'}).status_code, 403)
         self.assertEqual(self.change(0, 'EDIT', '   ').status_code, 422)
         self.assertEqual(self.client.patch(self.url + '/FACT?actor_user_id=staff', json={'expected_version': 0, 'operation': 'DELETE'}).status_code, 422)
+
+    def test_unregistered_viewer_cannot_read_staff_override(self):
+        self.assertEqual(self.change(0, 'EDIT', '직원 전용 사건 정리').status_code, 200)
+        self.assertEqual(self.client.get(self.url + '?actor_user_id=outsider').json(), [])
+        visible = self.client.get(self.url + '?actor_user_id=staff').json()
+        self.assertEqual(visible[0]['staff_text'], '직원 전용 사건 정리')
 
     def test_generated_labels_preserve_urls_and_do_not_translate_substrings(self):
         self.assertEqual(user_text('personal_info_shared: 예 / Impersonation'), '개인정보 제공 여부: 예 / 기관·신분 사칭')

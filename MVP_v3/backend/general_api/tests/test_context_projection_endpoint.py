@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, patch
 import general_api.app.main as general_main
 from general_api.app.domains.cases.context_projection_repository import ProjectionClaim
 from general_api.app.domains.cases.mysql_repository import MySqlCaseRepository
+from contracts.public_api.case_context_v2 import PublicCaseContextResourcesV2
 
 
 class ContextProjectionEndpointTest(unittest.IsolatedAsyncioTestCase):
@@ -25,6 +26,11 @@ class ContextProjectionEndpointTest(unittest.IsolatedAsyncioTestCase):
         self.repository.list_verifications = AsyncMock(return_value=[])
         self.repository.list_actions = AsyncMock(return_value=[])
         general_main.repository = self.repository
+        resources = AsyncMock()
+        resources.list_resources.return_value = PublicCaseContextResourcesV2(case_id='VP-CACHE', context_revision=7)
+        resource_patch = patch.object(general_main, 'case_context_v2_repository', return_value=resources)
+        resource_patch.start()
+        self.addCleanup(resource_patch.stop)
         self.ai = AsyncMock()
         general_main.service.ai_client = self.ai
         self.payload = {

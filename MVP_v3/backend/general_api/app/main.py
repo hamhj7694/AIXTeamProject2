@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import os
 import hashlib
 import logging
 import mimetypes
 import re
-from datetime import datetime, timezone
+import secrets
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 from pathlib import Path
 from typing import Literal
@@ -17,6 +19,7 @@ from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, model_validator
 from .domains.cases.context_items import Section, ContextItemChange, ContextItemConflictError
 from .domains.cases.context_item_repository import ContextItemRepository, InMemoryContextItemRepository
@@ -26,6 +29,9 @@ from contracts.public_api.customer_progress import CustomerProgressItem, Progres
 from .domains.cases.customer_progress import PREFIX as PROGRESS_PREFIX, ProgressConflict, progress_items as build_customer_progress, progress_ai_context, actions_for_ai
 from request_trace import install_request_trace
 from contracts.ai_internal.work_card import CaseWorkCardOutput, WorkCardType
+from contracts.user_text import user_text
+from .domains.cases.context_workspace import build_workspace
+from .domains.cases.case_retrieval import collect_records, retrieve_context, similar_question, staff_context, workspace_records, merge_support_records
 from contracts.public_api.case_analyze import (
     PublicAnalyzeCaseRequest,
     PublicAnalyzeCaseResponse,
@@ -34,6 +40,25 @@ from contracts.public_api.case_analyze import (
 )
 from contracts.public_api.case_read import PublicCaseReadResponse, to_public_case_read_response, to_public_case_summary_response
 from contracts.public_api.case_transition import PublicCasePatchRequest
+from contracts.public_api.case_context_v2 import (
+    PublicAiSuggestionV2,
+    PublicCancelTaskV2Request,
+    PublicCaseContextResourcesV2,
+    PublicCaseFactV2,
+    PublicCaseGapV2,
+    PublicCaseTaskV2,
+    PublicCompleteTaskV2Request,
+    PublicCreateDecisionV2Request,
+    PublicCreateFactV2Request,
+    PublicCreateGapV2Request,
+    PublicCreateTaskV2Request,
+    PublicDecisionRecordV2,
+    PublicReviewFactV2Request,
+    PublicReviewSuggestionV2Request,
+    PublicSuggestionReviewResultV2,
+    PublicUpdateGapV2Request,
+    PublicUpdateTaskV2Request,
+)
 from contracts.public_api.case_activity import (
     PublicCaseEventResponse,
     PublicAttachmentResponse,
@@ -61,7 +86,6 @@ from contracts.public_api.case_workflow import (
     PublicVoiceSessionResponse,
     PublicCreateTranscriptRequest,
     PublicTranscriptResponse,
-    PublicFinalizeReportRequest,
     PublicReportResponse,
     PublicCreateVerificationRequest,
     PublicCustomerQuestionResponse,
@@ -97,6 +121,12 @@ from contracts.public_api.collaboration import (
 from .clients.diagnosis_ai import AiServiceAuthenticationError, AiServiceError, AiServiceQuotaError, HttpDiagnosisAiClient
 from .domains.cases.repository import CasePersistenceError, CaseVersionConflictError, normalize_target_field
 from .domains.cases.context_projection_repository import ContextProjectionRepository
+from .domains.cases.case_context_v2_repository import (
+    ContextV2ConflictError,
+    ContextV2TransitionError,
+    InMemoryCaseContextV2Repository,
+    MySqlCaseContextV2Repository,
+)
 from .domains.cases.mysql_repository import MySqlCaseRepository
 from .domains.cases.service import AnalyzeCaseService, InvalidCaseTransitionError, transition_case
 
@@ -137,6 +167,17 @@ _proactive_worker_task: asyncio.Task | None = None
 
 
 class AdminCaseDeleteRequest(BaseModel):
+    password: str
+
+
+class AdminCaseFinalizeRequest(BaseModel):
+    expected_version: int = Field(ge=1)
+    password: str
+    note: str = Field(default="", max_length=10_000)
+
+
+class AdminCaseReopenRequest(BaseModel):
+    expected_version: int = Field(ge=1)
     password: str
 
 
@@ -323,7 +364,18 @@ async def analyze_case(request: PublicAnalyzeCaseRequest) -> PublicAnalyzeCaseRe
 async def to_case_read(record: dict) -> PublicCaseReadResponse:
     members = await repository.list_members(record["case_id"])
     primary = next((item.get("display_name") for item in members if item.get("role") == "CASE_OWNER"), None)
-    return to_public_case_read_response({**record, "primary_assignee": primary})
+    deleted_at = record.get("deleted_at")
+    trash_expires_at = None
+    if deleted_at:
+        deleted_instant = datetime.fromisoformat(str(deleted_at).replace("Z", "+00:00"))
+        if deleted_instant.tzinfo is None:
+            deleted_instant = deleted_instant.replace(tzinfo=timezone.utc)
+        trash_expires_at = (deleted_instant + timedelta(days=30)).isoformat()
+    return to_public_case_read_response({
+        **record,
+        "primary_assignee": primary,
+        "trash_expires_at": trash_expires_at,
+    })
 
 
 @app.get("/api/cases", response_model=list[PublicCaseReadResponse], response_model_exclude_none=True)
@@ -335,7 +387,7 @@ def require_admin_password(password: str) -> None:
     configured_password = os.getenv("CASE_ADMIN_DELETE_PASSWORD")
     if not configured_password:
         raise HTTPException(status_code=503, detail={"code": "ADMIN_AUTH_NOT_CONFIGURED", "message": "관리자 인증 설정이 필요합니다."})
-    if password != configured_password:
+    if not secrets.compare_digest(password, configured_password):
         raise HTTPException(status_code=403, detail={"code": "ADMIN_AUTH_FAILED", "message": "관리자 비밀번호가 올바르지 않습니다."})
 
 
@@ -349,9 +401,9 @@ async def list_trashed_cases() -> list[PublicCaseReadResponse]:
     return [await to_case_read(record) for record in await repository.list_trashed_cases()]
 
 
-@app.delete("/api/cases/{case_id}", status_code=204)
-async def permanently_delete_case(case_id: str, request: AdminCaseDeleteRequest) -> None:
-    """Move the Case to the local recycle bin after administrator verification."""
+@app.post("/api/cases/{case_id}/trash", status_code=204)
+async def move_case_to_trash(case_id: str, request: AdminCaseDeleteRequest) -> None:
+    """Keep a Case in trash for 30 days after administrator verification."""
     require_admin_password(request.password)
     try:
         await repository.delete_case(case_id)
@@ -359,12 +411,38 @@ async def permanently_delete_case(case_id: str, request: AdminCaseDeleteRequest)
         raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case not found."}) from exc
 
 
+@app.delete("/api/cases/{case_id}", status_code=204)
+async def move_case_to_trash_legacy(case_id: str, request: AdminCaseDeleteRequest) -> None:
+    """Backward-compatible alias for moving a Case to trash."""
+    await move_case_to_trash(case_id, request)
+
+
 @app.post("/api/cases/{case_id}/restore", status_code=204)
-async def restore_case_from_trash(case_id: str) -> None:
+async def restore_case_from_trash(case_id: str, request: AdminCaseDeleteRequest) -> None:
+    require_admin_password(request.password)
     try:
         await repository.restore_case(case_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case not found in trash."}) from exc
+
+
+@app.delete("/api/cases/trash/{case_id}", status_code=204)
+async def permanently_delete_trashed_case(case_id: str, request: AdminCaseDeleteRequest) -> None:
+    require_admin_password(request.password)
+    attachments = await repository.list_attachments(case_id)
+    try:
+        await repository.purge_case(case_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case not found in trash."}) from exc
+    for attachment in attachments:
+        stored_path = (ATTACHMENT_STORAGE_ROOT / attachment["storage_path"]).resolve()
+        if ATTACHMENT_STORAGE_ROOT not in stored_path.parents:
+            logger.error("Skipped unsafe attachment path during Case purge: %s", stored_path)
+            continue
+        try:
+            stored_path.unlink(missing_ok=True)
+        except OSError:
+            logger.exception("Failed to remove attachment after Case purge: %s", stored_path)
 
 
 @app.get("/api/cases/{case_id}", response_model=PublicCaseReadResponse, response_model_exclude_none=True)
@@ -472,6 +550,8 @@ def exclude_handled_question_candidates(
         candidate for candidate in candidates
         if normalize_target_field(candidate.target_field) not in handled_fields
         and normalize_question_text(candidate.question_text) not in handled_texts
+        and not any(similar_question(candidate.question_text, str(q.get("question_text", ""))) for q in handled
+                    if not q.get("target_field") or normalize_target_field(q["target_field"]) == normalize_target_field(candidate.target_field))
     ]
 
 
@@ -520,6 +600,8 @@ async def _read_case_support_source(case_id: str, *, attempts: int = 3) -> tuple
             repository.list_case_facts(case_id), repository.list_customer_questions(case_id),
             repository.list_verifications(case_id), repository.list_actions(case_id),
         )
+        resources = await case_context_v2_repository().list_resources(case_id)
+        facts, actions = merge_support_records(resources, facts, actions)
         latest = await repository.get(case_id)
         if latest is None:
             raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."})
@@ -610,6 +692,8 @@ async def get_case_support_snapshot(case_id: str) -> PublicCaseSupportSnapshotRe
     verifications = await repository.list_verifications(case_id)
     actions = await repository.list_actions(case_id)
     try:
+        resources = await case_context_v2_repository().list_resources(case_id)
+        facts, actions = merge_support_records(resources, facts, actions)
         payload = await service.ai_client.build_case_support_snapshot(
             _case_support_ai_input(case_id, case, facts, questions, verifications, actions)
         )
@@ -633,7 +717,12 @@ async def list_customer_question_candidates(case_id: str) -> list[PublicQuestion
     # AI 장애 시에도 기존 deterministic 후보로 고객 확인 흐름을 멈추지 않는다.
     candidates = snapshot.recommended_questions if snapshot.available else build_customer_question_candidates(case, queued)
     # AI 결과를 그대로 신뢰하지 않는다. 질문 이력 기반 최종 중복 방지는 General API가 담당한다.
-    return exclude_handled_question_candidates(candidates, queued)
+    facts = await repository.list_case_facts(case_id)
+    resources = await case_context_v2_repository().list_resources(case_id)
+    facts, _ = merge_support_records(resources, facts, [])
+    confirmed = set(build_question_recommendation_context(facts, queued, case)["confirmed_fields"])
+    return [candidate for candidate in exclude_handled_question_candidates(candidates, queued)
+            if normalize_target_field(candidate.target_field) not in confirmed]
 
 
 @app.get("/api/cases/{case_id}/customer-questions", response_model=list[PublicCustomerQuestionResponse | PublicCustomerQuestionView])
@@ -669,6 +758,8 @@ async def _ensure_ai_customer_questions(
     existing = await repository.list_customer_questions(case_id)
     handled_fields = {normalize_target_field(item["target_field"]) for item in existing if item.get("status") in {"PENDING", "ASKED", "ANSWERED"}}
     facts = await repository.list_case_facts(case_id)
+    resources = await case_context_v2_repository().list_resources(case_id)
+    facts, _ = merge_support_records(resources, facts, [])
     handled_fields.update(
         normalize_target_field(str(item.get("field", "")))
         for item in facts
@@ -681,6 +772,7 @@ async def _ensure_ai_customer_questions(
         return []
     snapshot = snapshot or await get_case_support_snapshot(case_id)
     candidates = snapshot.recommended_questions if snapshot.available else build_customer_question_candidates(case, existing)
+    candidates = exclude_handled_question_candidates(candidates, existing)
     p0_questions = [
         {**candidate.model_dump(mode="python"), "source": "CUSTOMER_AGENT"}
         for candidate in candidates
@@ -1123,10 +1215,18 @@ async def generate_case_work_card(case_id: str, request: PublicWorkCardGenerateR
     messages = await repository.list_messages(case_id)
     attachments = await repository.list_attachments(case_id)
     support = await get_case_support_snapshot(case_id)
+    staff = await read_staff_context_records(case_id)
+    previous_questions = await repository.list_customer_questions(case_id)
+    candidates = await list_customer_question_candidates(case_id)
+    retrieved = retrieve_context(case_id, " ".join(q.question_text for q in candidates[:6]) or "기관 확인 담당자 다음 업무", collect_records(
+        case_id, messages=messages, questions=previous_questions, facts=facts, verifications=verifications, staff=staff,
+    ))
     try:
         payload = await service.ai_client.generate_work_card({
             "case_id": case_id,
             "card_type": request.card_type,
+            "staff_context": staff_context(staff),
+            "retrieved_context": retrieved,
             "case_summary": case.get("initial_brief", ""),
             "workflow_status": case.get("status", "TRIAGE"),
             "case_mode": case.get("mode", "PREVENT"),
@@ -1147,9 +1247,14 @@ async def generate_case_work_card(case_id: str, request: PublicWorkCardGenerateR
             ],
             "unresolved_items": [f"{item.priority}: {item.description}" for item in support.unresolved_items[:20]],
             "pending_verifications": [f"{item.get('target')}: {item.get('claim')}" for item in verifications if item.get("status") != "COMPLETED"][:20],
-            "question_candidates": [item.model_dump(mode="python") for item in support.recommended_questions[:10]],
+            "question_candidates": [item.model_dump(mode="python") for item in candidates[:10]],
         })
-        return CaseWorkCardOutput.model_validate(payload)
+        card = CaseWorkCardOutput.model_validate(payload)
+        # The LLM may select supplied candidates, but cannot bypass the current DB guard.
+        allowed = {normalize_target_field(c.target_field) for c in candidates}
+        card.questions = [q for q in card.questions if normalize_target_field(q.target_field) in allowed
+                          and exclude_handled_question_candidates([PublicQuestionCandidateResponse.model_validate(q.model_dump())], previous_questions)]
+        return card
     except AiServiceQuotaError as exc:
         raise HTTPException(status_code=429, detail={"code": "OPENAI_QUOTA_EXHAUSTED", "message": str(exc)}) from exc
     except AiServiceAuthenticationError as exc:
@@ -1180,6 +1285,11 @@ async def invoke_case_copilot(case_id: str, request: PublicAiInvocationRequest) 
         "VIEWER": "열람자",
     }
     unresolved = [item.get("claim", "추가 확인 항목") for item in verifications if item.get("status") != "COMPLETED"]
+    staff = await read_staff_context_records(case_id)
+    questions = await repository.list_customer_questions(case_id)
+    retrieved = retrieve_context(case_id, request.prompt, collect_records(
+        case_id, messages=all_messages, questions=questions, facts=facts, verifications=verifications, staff=staff,
+    ))
     try:
         ai_reply = await service.ai_client.generate_case_copilot_reply({
             "case_id": case_id,
@@ -1193,12 +1303,14 @@ async def invoke_case_copilot(case_id: str, request: PublicAiInvocationRequest) 
                 f"{item.get('display_name', '이름 미상')} ({member_role_labels.get(item.get('role'), item.get('role', '역할 미상'))})"
                 for item in members
             ][:30],
+            "staff_context": staff_context(staff),
+            "retrieved_context": retrieved,
             "known_facts": [f"{item.get('field')}: {item.get('value')} ({item.get('status')})" for item in facts[:30]],
             "recent_conversation": [
                 f"{item.get('actor_display_name', item.get('actor_type', '작성자'))}: {item.get('content', '')[:500]}"
                 for item in all_messages[-30:]
                 if item.get("channel") in {"TEAM", "CUSTOMER"}
-                or (item.get("channel") == "AI_INTERNAL" and item.get("private_owner_user_id") in {None, request.requester_user_id})
+                or (request.channel != "TEAM" and item.get("channel") == "AI_INTERNAL" and item.get("private_owner_user_id") == request.requester_user_id)
             ][-20:],
             "pending_actions": [
                 f"{item.get('action_type')}: {item.get('note') or '상세 내용 없음'} ({item.get('status', 'REQUESTED')})"
@@ -1257,6 +1369,9 @@ async def invoke_customer_support_ai(case_id: str, request: PublicCustomerAiRepl
         for item in questions
         if item.get("status") == "ANSWERED" and item.get("answer_text")
     ][-10:]
+    retrieved = retrieve_context(case_id, request.prompt, collect_records(
+        case_id, messages=all_messages, questions=questions, verifications=verifications, customer=True,
+    ), customer=True)
     try:
         ai_reply = await service.ai_client.generate_case_copilot_reply({
             "case_id": case_id,
@@ -1266,6 +1381,7 @@ async def invoke_customer_support_ai(case_id: str, request: PublicCustomerAiRepl
             "fraud_type": case.get("fraud_type"),
             "transfer_status": case.get("victim_transfer_status"),
             "known_facts": answered,
+            "retrieved_context": retrieved,
             "recent_conversation": customer_history,
             "pending_actions": [],
             "unresolved_verifications": [],
@@ -1433,17 +1549,228 @@ class DisplayEditRequest(BaseModel):
         return self
 
 
-async def bank_display_repository(case_id, actor_user_id):
+async def context_display_repository(case_id):
     await require_case(case_id)
+    return ContextItemRepository(repository) if isinstance(repository, MySqlCaseRepository) else InMemoryContextItemRepository(repository)
+
+
+async def bank_display_repository(case_id, actor_user_id):
+    store = await context_display_repository(case_id)
     members = await repository.list_members(case_id)
     if not any(item.get('user_id') == actor_user_id and item.get('role') in {'CASE_OWNER', 'CHAT_OPERATOR', 'REVIEWER'} for item in members):
         raise HTTPException(status_code=403, detail='이 사건의 담당자 또는 검토자만 맥락을 편집할 수 있습니다.')
-    return ContextItemRepository(repository) if isinstance(repository, MySqlCaseRepository) else InMemoryContextItemRepository(repository)
+    return store
+
+
+def case_context_v2_repository():
+    if isinstance(repository, MySqlCaseRepository):
+        return MySqlCaseContextV2Repository(repository)
+    return InMemoryCaseContextV2Repository(repository)
+
+
+async def read_staff_context_records(case_id: str):
+    # Internal call only: never put these records in a customer response/prompt.
+    resources = await case_context_v2_repository().list_resources(case_id)
+    return workspace_records(case_id, resources)
+
+
+async def require_context_v2_member(
+    case_id: str,
+    actor_user_id: str,
+    *,
+    access: Literal["READ", "WRITE", "REVIEW"] = "WRITE",
+):
+    """Temporary MVP authorization until authenticated sessions replace actor_user_id."""
+    await require_case(case_id)
+    allowed_roles = {
+        "READ": {"CASE_OWNER", "CHAT_OPERATOR", "REVIEWER", "VIEWER"},
+        "WRITE": {"CASE_OWNER", "CHAT_OPERATOR", "REVIEWER"},
+        "REVIEW": {"CASE_OWNER", "REVIEWER"},
+    }[access]
+    members = await repository.list_members(case_id)
+    if not any(
+        item.get("user_id") == actor_user_id
+        and item.get("status", "ACTIVE") == "ACTIVE"
+        and item.get("role") in allowed_roles
+        for item in members
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "CASE_CONTEXT_FORBIDDEN", "message": "이 사건에 대한 작업 권한이 없습니다."},
+        )
+    return case_context_v2_repository()
+
+
+def raise_context_v2_error(exc: Exception) -> None:
+    if isinstance(exc, ContextV2ConflictError):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "CONTEXT_VERSION_CONFLICT",
+                "message": "다른 사용자가 먼저 변경했습니다. 최신 내용을 다시 확인해 주세요.",
+                "current_version": exc.current_version,
+            },
+        ) from exc
+    if isinstance(exc, ContextV2TransitionError):
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "INVALID_CONTEXT_TRANSITION", "message": str(exc)},
+        ) from exc
+    if isinstance(exc, KeyError):
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "CONTEXT_RESOURCE_NOT_FOUND", "message": "요청한 사건 맥락 항목을 찾을 수 없습니다."},
+        ) from exc
+    raise exc
+
+
+@app.get("/api/cases/{case_id}/context-v2/resources", response_model=PublicCaseContextResourcesV2)
+async def read_case_context_v2_resources(case_id: str, actor_user_id: str) -> PublicCaseContextResourcesV2:
+    store = await require_context_v2_member(case_id, actor_user_id, access="READ")
+    try:
+        return await store.list_resources(case_id)
+    except (KeyError, ContextV2TransitionError, ContextV2ConflictError) as exc:
+        raise_context_v2_error(exc)
+
+
+@app.get("/api/cases/{case_id}/context-v2/workspace")
+async def read_context_workspace(case_id: str, actor_user_id: str):
+    store = await require_context_v2_member(case_id, actor_user_id, access="READ")
+    resources = await store.list_resources(case_id)
+    facts, actions, questions, members = await asyncio.gather(
+        repository.list_case_facts(case_id), repository.list_actions(case_id),
+        repository.list_customer_questions(case_id), repository.list_members(case_id),
+    )
+    result = build_workspace(resources, facts, actions, questions)
+    role = next((m.get("role") for m in members if m.get("user_id") == actor_user_id and m.get("status", "ACTIVE") == "ACTIVE"), None)
+    result["can_write"] = role in {"CASE_OWNER", "CHAT_OPERATOR", "REVIEWER"}
+    result["can_review"] = role in {"CASE_OWNER", "REVIEWER"}
+    return result
+
+
+@app.post("/api/cases/{case_id}/context-v2/legacy-suggestions/{action_id}/review", response_model=PublicSuggestionReviewResultV2)
+async def review_legacy_context_suggestion(case_id: str, action_id: str, actor_user_id: str, request: PublicReviewSuggestionV2Request):
+    store = await require_context_v2_member(case_id, actor_user_id, access="REVIEW")
+    try:
+        action = next((a for a in await repository.list_actions(case_id) if a["action_id"] == action_id), None)
+        if not action or not action.get("action_type", "").startswith("AI_CHECKLIST:"):
+            raise KeyError(action_id)
+        if action.get("status") in {"COMPLETED", "CANCELLED"}:
+            raise ContextV2TransitionError("이미 완료하거나 제외한 기존 제안입니다. 최신 상태를 확인해 주세요.")
+        suggestion = await store.propose_suggestion(case_id, {
+            "suggestion_type": "STAFF_REVIEW", "title": user_text(action.get("note") or "기존 확인 항목 검토")[:300],
+            "rationale": "기존 AI 확인 항목을 직원이 검토했습니다. 업무 채택은 사실 확정이나 고객 질문 발송을 의미하지 않습니다.",
+            "priority": "HIGH", "dedupe_key": f"legacy-checklist:{action_id}",
+            "evidence_refs": [{"type": "STAFF_RECORD", "id": action_id}],
+        })
+        reviewed, task = await store.review_suggestion(case_id, suggestion.suggestion_id, request.model_dump(mode="json"), actor_user_id)
+        return PublicSuggestionReviewResultV2(suggestion=reviewed, created_task=task)
+    except (KeyError, ContextV2TransitionError, ContextV2ConflictError) as exc:
+        raise_context_v2_error(exc)
+
+
+@app.post("/api/cases/{case_id}/context-v2/facts", response_model=PublicCaseFactV2, status_code=201)
+async def create_case_context_v2_fact(case_id: str, actor_user_id: str, request: PublicCreateFactV2Request) -> PublicCaseFactV2:
+    store = await require_context_v2_member(case_id, actor_user_id)
+    try:
+        # A staff entry is still a proposal until an owner/reviewer confirms it.
+        return await store.create_fact(case_id, request.model_dump(mode="json"), actor_user_id)
+    except (KeyError, ContextV2TransitionError, ContextV2ConflictError) as exc:
+        raise_context_v2_error(exc)
+
+
+@app.patch("/api/cases/{case_id}/context-v2/facts/{fact_id}/review", response_model=PublicCaseFactV2)
+async def review_case_context_v2_fact(case_id: str, fact_id: str, actor_user_id: str, request: PublicReviewFactV2Request) -> PublicCaseFactV2:
+    store = await require_context_v2_member(case_id, actor_user_id, access="REVIEW")
+    try:
+        return await store.review_fact(case_id, fact_id, request.expected_version, request.decision, request.reason, actor_user_id)
+    except (KeyError, ContextV2TransitionError, ContextV2ConflictError) as exc:
+        raise_context_v2_error(exc)
+
+
+@app.post("/api/cases/{case_id}/context-v2/gaps", response_model=PublicCaseGapV2, status_code=201)
+async def create_case_context_v2_gap(case_id: str, actor_user_id: str, request: PublicCreateGapV2Request) -> PublicCaseGapV2:
+    store = await require_context_v2_member(case_id, actor_user_id)
+    try:
+        return await store.create_gap(case_id, request.model_dump(mode="json"), actor_user_id)
+    except (KeyError, ContextV2TransitionError, ContextV2ConflictError) as exc:
+        raise_context_v2_error(exc)
+
+
+@app.patch("/api/cases/{case_id}/context-v2/gaps/{gap_id}", response_model=PublicCaseGapV2)
+async def update_case_context_v2_gap(case_id: str, gap_id: str, actor_user_id: str, request: PublicUpdateGapV2Request) -> PublicCaseGapV2:
+    store = await require_context_v2_member(case_id, actor_user_id)
+    try:
+        return await store.update_gap(case_id, gap_id, request.expected_version, request.status, request.reason, request.resolution_fact_id, actor_user_id)
+    except (KeyError, ContextV2TransitionError, ContextV2ConflictError) as exc:
+        raise_context_v2_error(exc)
+
+
+@app.patch("/api/cases/{case_id}/context-v2/suggestions/{suggestion_id}/review", response_model=PublicSuggestionReviewResultV2)
+async def review_case_context_v2_suggestion(case_id: str, suggestion_id: str, actor_user_id: str, request: PublicReviewSuggestionV2Request) -> PublicSuggestionReviewResultV2:
+    store = await require_context_v2_member(case_id, actor_user_id, access="REVIEW")
+    try:
+        suggestion, task = await store.review_suggestion(case_id, suggestion_id, request.model_dump(mode="json"), actor_user_id)
+        return PublicSuggestionReviewResultV2(suggestion=suggestion, created_task=task)
+    except (KeyError, ContextV2TransitionError, ContextV2ConflictError) as exc:
+        raise_context_v2_error(exc)
+
+
+@app.post("/api/cases/{case_id}/context-v2/tasks", response_model=PublicCaseTaskV2, status_code=201)
+async def create_case_context_v2_task(case_id: str, actor_user_id: str, request: PublicCreateTaskV2Request) -> PublicCaseTaskV2:
+    store = await require_context_v2_member(case_id, actor_user_id)
+    try:
+        return await store.create_task(case_id, request.model_dump(), actor_user_id)
+    except (KeyError, ContextV2TransitionError, ContextV2ConflictError) as exc:
+        raise_context_v2_error(exc)
+
+
+@app.patch("/api/cases/{case_id}/context-v2/tasks/{task_id}", response_model=PublicCaseTaskV2)
+async def update_case_context_v2_task(case_id: str, task_id: str, actor_user_id: str, request: PublicUpdateTaskV2Request) -> PublicCaseTaskV2:
+    store = await require_context_v2_member(case_id, actor_user_id)
+    try:
+        return await store.update_task(case_id, task_id, request.model_dump(), actor_user_id)
+    except (KeyError, ContextV2TransitionError, ContextV2ConflictError) as exc:
+        raise_context_v2_error(exc)
+
+
+@app.post("/api/cases/{case_id}/context-v2/tasks/{task_id}/complete", response_model=PublicCaseTaskV2)
+async def complete_case_context_v2_task(case_id: str, task_id: str, actor_user_id: str, request: PublicCompleteTaskV2Request) -> PublicCaseTaskV2:
+    store = await require_context_v2_member(case_id, actor_user_id, access="REVIEW")
+    try:
+        return await store.complete_task(case_id, task_id, request.model_dump(mode="json"), actor_user_id)
+    except (KeyError, ContextV2TransitionError, ContextV2ConflictError) as exc:
+        raise_context_v2_error(exc)
+
+
+@app.post("/api/cases/{case_id}/context-v2/tasks/{task_id}/cancel", response_model=PublicCaseTaskV2)
+async def cancel_case_context_v2_task(case_id: str, task_id: str, actor_user_id: str, request: PublicCancelTaskV2Request) -> PublicCaseTaskV2:
+    store = await require_context_v2_member(case_id, actor_user_id, access="REVIEW")
+    try:
+        return await store.cancel_task(case_id, task_id, request.model_dump(mode="json"), actor_user_id)
+    except (KeyError, ContextV2TransitionError, ContextV2ConflictError) as exc:
+        raise_context_v2_error(exc)
+
+
+@app.post("/api/cases/{case_id}/context-v2/decisions", response_model=PublicDecisionRecordV2, status_code=201)
+async def create_case_context_v2_decision(case_id: str, actor_user_id: str, request: PublicCreateDecisionV2Request) -> PublicDecisionRecordV2:
+    store = await require_context_v2_member(case_id, actor_user_id, access="REVIEW")
+    try:
+        return await store.create_decision(case_id, request.model_dump(mode="json"), actor_user_id)
+    except (KeyError, ContextV2TransitionError, ContextV2ConflictError) as exc:
+        raise_context_v2_error(exc)
 
 
 @app.get('/api/cases/{case_id}/context-display')
 async def read_context_display(case_id: str, actor_user_id: str):
-    store = await bank_display_repository(case_id, actor_user_id)
+    # 사건 화면을 여는 순간 프론트가 현재 직원을 참여자로 등록한다. 새 Case에서는
+    # 그 등록과 이 조회가 동시에 도착할 수 있다. 아직 역할이 준비되지 않았다면
+    # 오류나 다른 직원의 수정본을 내보내지 않고 빈 편집본으로 응답한다.
+    # 실제 변경(PATCH)은 아래에서 계속 역할을 검증한다.
+    store = await context_display_repository(case_id)
+    members = await repository.list_members(case_id)
+    if not any(item.get('user_id') == actor_user_id and item.get('role') in {'CASE_OWNER', 'CHAT_OPERATOR', 'REVIEWER'} for item in members):
+        return []
     return [item for item in await store.list_items(case_id, include_deleted=True) if item.semantic_key == 'display']
 
 
@@ -1489,10 +1816,19 @@ async def create_case_action(case_id: str, request: PublicCreateActionRequest) -
 @app.patch("/api/cases/{case_id}/actions/{action_id}", response_model=PublicActionResponse)
 async def update_case_action(case_id: str, action_id: str, request: PublicUpdateActionRequest) -> PublicActionResponse:
     await require_case(case_id)
-    if any(item['action_id'] == action_id and item['action_type'].startswith(PROGRESS_PREFIX) for item in await repository.list_actions(case_id)):
+    actions = await repository.list_actions(case_id)
+    current = next((item for item in actions if item['action_id'] == action_id), None)
+    if current and current['action_type'].startswith(PROGRESS_PREFIX):
         raise HTTPException(status_code=422, detail='고객 처리 상태 이력은 일반 체크리스트로 변경할 수 없습니다.')
     try:
-        return to_public_action(await repository.update_action(case_id, action_id, request.status, request.updated_by))
+        if current is None and request.status is None:
+            raise KeyError(action_id)
+        next_status = request.status or current.get('status', 'REQUESTED')
+        if request.note is None:
+            updated = await repository.update_action(case_id, action_id, next_status, request.updated_by)
+        else:
+            updated = await repository.update_action(case_id, action_id, next_status, request.updated_by, request.note)
+        return to_public_action(updated)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail={"code": "CASE_ACTION_NOT_FOUND", "message": "체크리스트 항목을 찾을 수 없습니다."}) from exc
 
@@ -1540,6 +1876,11 @@ async def get_case_bundle(case_id: str, view: Literal["entry", "customer", "bank
     # to identify the latest synchronized state.
     cursor = str(events[-1]["event_id"]) if events else None
     voice = await repository.get_voice_session(case_id)
+    final_report = None
+    if view != "customer" and (record.get("status") == "CLOSED" or record.get("mode") == "CLOSED"):
+        stored_final_report = await repository.get_final_report(case_id)
+        if stored_final_report:
+            final_report = PublicReportResponse.model_validate(stored_final_report)
     if view == "customer":
         questions = [to_public_customer_question_view(item).model_dump(mode="json") for item in question_records]
         customer_verification_results = [
@@ -1561,7 +1902,9 @@ async def get_case_bundle(case_id: str, view: Literal["entry", "customer", "bank
         questions=questions, progress_items=progress_items, verification_tasks=verifications,
         customer_verification_results=customer_verification_results,
         recent_messages=messages[-50:], recent_actions=actions if view == "bank" else actions[-50:], recent_events=events[-50:],
-        voice_session=PublicVoiceSessionResponse.model_validate(voice) if voice else None, cursor=cursor,
+        voice_session=PublicVoiceSessionResponse.model_validate(voice) if voice else None,
+        final_report=final_report,
+        cursor=cursor,
     )
 
 
@@ -1607,14 +1950,102 @@ async def get_live_report(case_id: str) -> dict:
 
 
 @app.post("/api/cases/{case_id}/reports/finalize", response_model=PublicReportResponse)
-async def finalize_case_report(case_id: str, request: PublicFinalizeReportRequest) -> PublicReportResponse:
+async def finalize_case_report(case_id: str, request: AdminCaseFinalizeRequest) -> PublicReportResponse:
+    require_admin_password(request.password)
     try:
-        report = await repository.finalize_report(case_id, request.expected_version, request.note)
+        case = await repository.get(case_id)
+        if case is None:
+            raise KeyError(case_id)
+        facts, verifications, actions, messages, questions = await asyncio.gather(
+            repository.list_case_facts(case_id),
+            repository.list_verifications(case_id),
+            repository.list_actions(case_id),
+            repository.list_messages(case_id),
+            repository.list_customer_questions(case_id),
+        )
+        staff = await read_staff_context_records(case_id)
+        ai_report = await service.ai_client.generate_final_report({
+            "case_id": case_id,
+            "case_summary": case.get("initial_brief", ""),
+            "workflow_status": case.get("status", "TRIAGE"),
+            "case_mode": case.get("mode", "PREVENT"),
+            "staff_context": staff_context(staff),
+            "known_facts": [user_text(f"{item.get('field')}: {item.get('value')} ({item.get('status')})") for item in facts[:40]],
+            "recent_conversation": [
+                f"{item.get('actor_display_name', item.get('actor_type', '작성자'))}: {item.get('content', '')[:500]}"
+                for item in messages[-30:] if item.get("message_kind") != "REPORT_CARD" and item.get("visibility") != "AI_PRIVATE"
+            ],
+            "verification_results": [
+                f"{item.get('target')}: {item.get('result_summary') or item.get('claim')} ({item.get('status')})"
+                for item in verifications[:30]
+            ],
+            "action_results": [
+                user_text(f"{item.get('action_type')}: {item.get('note') or '상세 내용 없음'} ({item.get('status')})")
+                for item in actions_for_ai(actions)[:30]
+            ],
+            "customer_answers": [
+                f"질문: {item.get('question_text')} / 고객 답변: {item.get('answer_text')}"
+                for item in questions if item.get("answer_text")
+            ][:30],
+            "closure_note": request.note,
+        })
+        report_card = {
+            "title": ai_report["title"],
+            "executive_summary": ai_report["executive_summary"],
+            "incident_summary": ai_report["incident_summary"],
+            "customer_impact_summary": ai_report.get("customer_impact_summary", "확인된 고객 피해·노출 정보가 없습니다."),
+            "verified_facts": ai_report.get("verified_facts", []),
+            "verification_results": ai_report.get("verification_results", []),
+            "actions_taken": ai_report.get("actions_taken", []),
+            "unresolved_items": ai_report.get("unresolved_items", []),
+            "decision_basis": ai_report.get("decision_basis", []),
+            "resolution": ai_report["resolution"],
+            "follow_up": ai_report.get("follow_up", []),
+            "cautions": ai_report.get("cautions", []),
+            "model_mode": ai_report.get("model_mode", "AI"),
+        }
+        sections = [
+            {"section_key": "title", "content": {"text": report_card["title"]}},
+            {"section_key": "executive_summary", "content": {"text": report_card["executive_summary"]}},
+            {"section_key": "incident_summary", "content": {"text": report_card["incident_summary"]}},
+            {"section_key": "customer_impact_summary", "content": {"text": report_card["customer_impact_summary"]}},
+            {"section_key": "verified_facts", "content": {"items": report_card["verified_facts"]}},
+            {"section_key": "verification_results", "content": {"items": report_card["verification_results"]}},
+            {"section_key": "actions_taken", "content": {"items": report_card["actions_taken"]}},
+            {"section_key": "unresolved_items", "content": {"items": report_card["unresolved_items"]}},
+            {"section_key": "decision_basis", "content": {"items": report_card["decision_basis"]}},
+            {"section_key": "resolution", "content": {"text": report_card["resolution"], "closure_note": request.note}},
+            {"section_key": "follow_up", "content": {"items": report_card["follow_up"]}},
+            {"section_key": "cautions", "content": {"items": report_card["cautions"]}},
+        ]
+        report = await repository.finalize_report(case_id, request.expected_version, request.note, sections, report_card)
+    except AiServiceQuotaError as exc:
+        raise HTTPException(status_code=429, detail={"code": "OPENAI_QUOTA_EXHAUSTED", "message": str(exc)}) from exc
+    except AiServiceAuthenticationError as exc:
+        raise HTTPException(status_code=401, detail={"code": "OPENAI_AUTHENTICATION_FAILED", "message": str(exc)}) from exc
+    except AiServiceError as exc:
+        raise HTTPException(status_code=503, detail={"code": "AI_FINAL_REPORT_FAILED", "message": str(exc)}) from exc
     except CaseVersionConflictError as exc:
         raise HTTPException(status_code=409, detail={"code": "VERSION_CONFLICT", "message": "Case has changed.", "current_version": exc.current_version}) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail={"code": str(exc), "message": "현재 사건 상태에서는 요청한 변경을 수행할 수 없습니다."}) from exc
     except KeyError as exc:
         raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case not found."}) from exc
     return PublicReportResponse.model_validate(report)
+
+
+@app.post("/api/cases/{case_id}/reopen", response_model=PublicCaseReadResponse, response_model_exclude_none=True)
+async def reopen_closed_case(case_id: str, request: AdminCaseReopenRequest) -> PublicCaseReadResponse:
+    require_admin_password(request.password)
+    try:
+        record = await repository.reopen_case(case_id, request.expected_version)
+    except CaseVersionConflictError as exc:
+        raise HTTPException(status_code=409, detail={"code": "VERSION_CONFLICT", "message": "Case has changed.", "current_version": exc.current_version}) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail={"code": str(exc), "message": "종결된 사건만 다시 진행할 수 있습니다."}) from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case not found."}) from exc
+    return await to_case_read(record)
 
 
 @app.get("/api/cases/{case_id}/reports/final", response_model=PublicReportResponse)
@@ -1624,3 +2055,76 @@ async def get_final_case_report(case_id: str) -> PublicReportResponse:
     if report is None:
         raise HTTPException(status_code=404, detail={"code": "FINAL_REPORT_NOT_FOUND", "message": "Final report not found."})
     return PublicReportResponse.model_validate(report)
+
+
+def _report_export_lines(case_id: str, report: dict) -> list[tuple[str, list[str]]]:
+    labels = {
+        "title": "보고서 제목", "executive_summary": "종합 요약", "incident_summary": "사건 개요",
+        "customer_impact_summary": "고객 피해·노출 상태", "verified_facts": "확인된 사실",
+        "verification_results": "기관 확인 결과", "actions_taken": "대응 및 처리 내역",
+        "unresolved_items": "남은 미확인 사항", "decision_basis": "종결 판단 근거",
+        "resolution": "최종 처리 결과", "follow_up": "후속 업무", "cautions": "유의사항",
+    }
+    blocks: list[tuple[str, list[str]]] = [("보고서 정보", [f"Case ID: {case_id}", f"보고서 버전: {report.get('report_version', 1)}", f"생성 시각: {report.get('created_at', '')}"])]
+    for section in report.get("sections", []):
+        content = section.get("content") or {}
+        lines: list[str] = []
+        if content.get("text"):
+            lines.append(str(content["text"]))
+        lines.extend(str(item) for item in content.get("items", []) if str(item).strip())
+        if content.get("closure_note"):
+            lines.append(f"담당자 종결 메모: {content['closure_note']}")
+        if lines:
+            blocks.append((labels.get(section.get("section_key"), section.get("section_key", "내용")), lines))
+    return blocks
+
+
+@app.get("/api/cases/{case_id}/reports/final/export")
+async def export_final_case_report(case_id: str, format: Literal["pdf", "docx"] = "pdf") -> StreamingResponse:
+    await require_case(case_id)
+    report = await repository.get_final_report(case_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail={"code": "FINAL_REPORT_NOT_FOUND", "message": "Final report not found."})
+    blocks = _report_export_lines(case_id, report)
+    output = io.BytesIO()
+    if format == "docx":
+        from docx import Document
+
+        document = Document()
+        document.add_heading("CSR | Case Share Room 최종 결과 보고서", 0)
+        for heading, lines in blocks:
+            document.add_heading(heading, level=1)
+            for line in lines:
+                document.add_paragraph(line, style="List Bullet" if len(lines) > 1 else None)
+        document.save(output)
+        media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    else:
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.cidfonts import UnicodeCIDFont
+        from reportlab.pdfgen import canvas
+
+        pdfmetrics.registerFont(UnicodeCIDFont("HYSMyeongJo-Medium"))
+        page = canvas.Canvas(output)
+        page.setTitle(f"CSR {case_id} 최종 결과 보고서")
+        width, height = page._pagesize
+        y = height - 48
+        page.setFont("HYSMyeongJo-Medium", 16)
+        page.drawString(44, y, "CSR | Case Share Room 최종 결과 보고서")
+        y -= 30
+        for heading, lines in blocks:
+            if y < 90:
+                page.showPage(); y = height - 48
+            page.setFont("HYSMyeongJo-Medium", 12); page.drawString(44, y, heading); y -= 20
+            page.setFont("HYSMyeongJo-Medium", 9)
+            for line in lines:
+                chunks = [line[index:index + 64] for index in range(0, len(line), 64)] or [""]
+                for chunk in chunks:
+                    if y < 58:
+                        page.showPage(); page.setFont("HYSMyeongJo-Medium", 9); y = height - 48
+                    page.drawString(54, y, f"• {chunk}"); y -= 15
+            y -= 8
+        page.save()
+        media_type = "application/pdf"
+    output.seek(0)
+    file_name = f"CSR-{case_id}-final-report.{format}"
+    return StreamingResponse(output, media_type=media_type, headers={"Content-Disposition": f'attachment; filename="{file_name}"'})

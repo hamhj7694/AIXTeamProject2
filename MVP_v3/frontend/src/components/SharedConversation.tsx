@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef } from 'react';
-import { Bookmark, Bot, CheckCircle2, CircleDot, FileText, Landmark, MessageCircleQuestion, ShieldCheck, UserRound } from 'lucide-react';
+import { Bookmark, Bot, CheckCircle2, CircleDot, Download, FileText, Landmark, MessageCircleQuestion, ShieldCheck, UserRound } from 'lucide-react';
 import { casesApi, CURRENT_BANK_USER } from '../api/cases';
-import type { CaseAction, CaseEvent, CaseMessage, CustomerQuestion, StoredCase, VerificationTask } from '../api/types';
+import type { CaseAction, CaseEvent, CaseMessage, CustomerQuestion, InitialReport, InitialReportSection, StoredCase, VerificationTask } from '../api/types';
 import { actionLabel, formatClock, verificationStatusLabel } from '../presentation';
 import { buildTimeline, type TimelineEntry } from '../timeline';
 import type { CaseBundle } from '../api/types';
@@ -24,6 +24,7 @@ const bookmarkDetails = (entry: TimelineEntry): Pick<BankBookmark, 'label' | 'su
   if (entry.kind === 'BRIEF') return { label: 'AI 사건 정리', summary: (entry.data as StoredCase).initial_brief };
   if (entry.kind === 'MESSAGE') {
     const message = entry.data as CaseMessage;
+    if (message.message_kind === 'REPORT_CARD') return { label: 'AI 최종 결과 보고서', summary: '사건 종결 시점의 최종 결과 보고서' };
     return { label: message.channel === 'CUSTOMER' ? '고객 대화' : '은행 내부 대화', summary: message.content || '첨부파일' };
   }
   if (entry.kind === 'QUESTION' || entry.kind === 'ANSWER') {
@@ -38,7 +39,88 @@ const bookmarkDetails = (entry: TimelineEntry): Pick<BankBookmark, 'label' | 'su
     const action = entry.data as CaseAction;
     return { label: '대응 업무 기록', summary: action.note || actionLabel(action.action_type) };
   }
+  if (entry.kind === 'FINAL_REPORT') return { label: 'AI 최종 결과 보고서', summary: '사건 종결 시점의 최종 결과 보고서' };
   return { label: 'Case 이벤트', summary: eventLabel((entry.data as CaseEvent).event_type) };
+};
+
+interface FinalReportCardPayload {
+  report_id: string;
+  report_version: number;
+  title: string;
+  executive_summary: string;
+  incident_summary: string;
+  customer_impact_summary?: string;
+  verified_facts: string[];
+  verification_results?: string[];
+  actions_taken: string[];
+  unresolved_items?: string[];
+  decision_basis?: string[];
+  resolution: string;
+  follow_up: string[];
+  cautions: string[];
+}
+
+const parseFinalReport = (content: string): FinalReportCardPayload | null => {
+  try {
+    const parsed = JSON.parse(content) as FinalReportCardPayload | { report_card?: FinalReportCardPayload } | string;
+    const value = typeof parsed === 'string' ? JSON.parse(parsed) as FinalReportCardPayload : 'report_card' in parsed && parsed.report_card ? parsed.report_card : parsed as FinalReportCardPayload;
+    return value?.report_id && value?.title ? value : null;
+  } catch {
+    return null;
+  }
+};
+
+const section = (report: InitialReport, key: string): InitialReportSection | undefined => report.sections.find((item) => item.section_key === key);
+const sectionText = (report: InitialReport, ...keys: string[]): string => {
+  for (const key of keys) {
+    const value = section(report, key)?.content.text;
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return '';
+};
+const sectionItems = (report: InitialReport, ...keys: string[]): string[] => {
+  for (const key of keys) {
+    const value = section(report, key)?.content.items;
+    if (Array.isArray(value)) return value.filter((item): item is string => typeof item === 'string' && Boolean(item.trim()));
+  }
+  return [];
+};
+const storedReportPayload = (stored: InitialReport): FinalReportCardPayload => ({
+  report_id: stored.report_id,
+  report_version: stored.report_version,
+  title: sectionText(stored, 'title') || '보이스피싱 대응 최종 결과 보고서',
+  executive_summary: sectionText(stored, 'executive_summary', 'summary') || '담당자가 사건 종결을 승인했습니다.',
+  incident_summary: sectionText(stored, 'incident_summary', 'summary') || '저장된 사건 기록과 처리 결과를 기준으로 작성된 최종 보고서입니다.',
+  customer_impact_summary: sectionText(stored, 'customer_impact_summary'),
+  verified_facts: sectionItems(stored, 'verified_facts'),
+  verification_results: sectionItems(stored, 'verification_results', 'verification_status'),
+  actions_taken: sectionItems(stored, 'actions_taken', 'current_actions'),
+  unresolved_items: sectionItems(stored, 'unresolved_items', 'next_checks'),
+  decision_basis: sectionItems(stored, 'decision_basis'),
+  resolution: sectionText(stored, 'resolution') || stored.note || '담당자 승인에 따라 사건을 종결했습니다. 실제 금융 조치 결과는 기록된 근거를 기준으로 확인해야 합니다.',
+  follow_up: sectionItems(stored, 'follow_up'),
+  cautions: sectionItems(stored, 'cautions'),
+});
+
+const FinalReportCard: React.FC<{ report: FinalReportCardPayload; caseId: string; createdAt: string; bookmark: React.ReactNode }> = ({ report, caseId, createdAt, bookmark }) => {
+  const list = (title: string, items: string[]) => items.length > 0 && <section><h4>{title}</h4><ul>{items.map((item, index) => <li key={`${title}-${index}`}>{item}</li>)}</ul></section>;
+  return <article className="final-report-card">
+    <header><span><FileText size={18}/></span><div><small>AI FINAL REPORT · v{report.report_version}</small><h3>{report.title}</h3></div>{bookmark}</header>
+    <p className="final-report-summary">{report.executive_summary}</p>
+    <div className="final-report-sections">
+      <section><h4>사건 개요</h4><p>{report.incident_summary}</p></section>
+      {report.customer_impact_summary && <section><h4>고객 피해·노출 상태</h4><p>{report.customer_impact_summary}</p></section>}
+      {list('확인된 사실', report.verified_facts ?? [])}
+      {list('기관 확인 결과', report.verification_results ?? [])}
+      {list('대응 및 처리 내역', report.actions_taken ?? [])}
+      {list('남은 미확인 사항', report.unresolved_items ?? [])}
+      {list('종결 판단 근거', report.decision_basis ?? [])}
+      <section className="final-report-resolution"><h4>최종 처리 결과</h4><p>{report.resolution}</p></section>
+      {list('후속 업무', report.follow_up ?? [])}
+      {list('유의사항', report.cautions ?? [])}
+    </div>
+    <footer><a href={casesApi.finalReportDownloadUrl(caseId, 'pdf')}><Download size={14}/>PDF 다운로드</a><a href={casesApi.finalReportDownloadUrl(caseId, 'docx')}><Download size={14}/>Word 다운로드</a><time>{formatClock(createdAt)}</time></footer>
+  </article>;
 };
 
 const EntryBookmark: React.FC<{ entry: TimelineEntry; active: boolean; onToggle: Props['onToggleBookmark'] }> = ({ entry, active, onToggle }) => {
@@ -47,6 +129,21 @@ const EntryBookmark: React.FC<{ entry: TimelineEntry; active: boolean; onToggle:
 };
 
 const MessageEntry: React.FC<{ message: CaseMessage; bookmark: React.ReactNode; onRetry: Props['onRetryMessage']; onDismiss: Props['onDismissMessage'] }> = ({ message, bookmark, onRetry, onDismiss }) => {
+  if (message.message_kind === 'REPORT_CARD') {
+    const report = parseFinalReport(message.content);
+    if (report) return <FinalReportCard report={report} caseId={message.case_id} createdAt={message.created_at} bookmark={bookmark}/>;
+    const readableLegacyText = message.content.trim() && !message.content.trim().startsWith('{') ? message.content.trim() : '저장된 종결 기록을 문서 형식으로 정리했습니다.';
+    return <FinalReportCard report={{
+      report_id: message.message_id,
+      report_version: 1,
+      title: '보이스피싱 대응 최종 결과 보고서',
+      executive_summary: readableLegacyText,
+      incident_summary: '사건 종결 시점까지 Shared Case에 저장된 내용을 기준으로 한 기록입니다.',
+      verified_facts: [], actions_taken: [],
+      resolution: '담당자가 사건 종결을 승인했습니다. 실제 금융 조치 결과는 별도 기록과 근거를 확인해야 합니다.',
+      follow_up: [], cautions: ['이전 보고서 형식으로 저장된 기록은 세부 항목이 제한될 수 있습니다.'],
+    }} caseId={message.case_id} createdAt={message.created_at} bookmark={bookmark}/>;
+  }
   const mine = message.actor_user_id === CURRENT_BANK_USER.user_id;
   const system = message.message_kind === 'SYSTEM_EVENT';
   if (system) return <article className="timeline-system"><Bot size={15}/><div><div className="entry-meta"><b>{message.actor_display_name || 'Case 업데이트'}</b>{bookmark}<time>{formatClock(message.created_at)}</time></div><SafeMarkdown content={message.content}/></div></article>;
@@ -65,7 +162,12 @@ const EntryCard: React.FC<{ entry: TimelineEntry; bookmark: React.ReactNode; onE
   }
   if (entry.kind === 'QUESTION' || entry.kind === 'ANSWER') {
     const question = entry.data as CustomerQuestion;
-    return <article className={`timeline-card question-card ${entry.kind === 'ANSWER' ? 'is-complete' : ''}`}><div className="timeline-card-icon">{entry.kind === 'ANSWER' ? <CheckCircle2 size={17}/> : <MessageCircleQuestion size={17}/>}</div><div><div className="entry-meta"><b>{entry.kind === 'ANSWER' ? '고객 답변' : '고객 확인 질문'}</b>{bookmark}<time>{formatClock(entry.occurredAt)}</time></div><p className="timeline-title">{question.question_text}</p>{entry.kind === 'ANSWER' && <p className="timeline-result">{question.answer_text}</p>}<small>{entry.kind === 'ANSWER' ? '담당자 확인 전 고객 진술입니다.' : '고객 답변을 기다리고 있습니다.'}</small></div></article>;
+    if (entry.kind === 'QUESTION') return <article className="question-dispatch-card"><MessageCircleQuestion size={15}/><div><div className="entry-meta"><b>고객에게 확인 질문 발송</b>{bookmark}<time>{formatClock(entry.occurredAt)}</time></div><p>{question.question_text}</p></div><span>{question.status === 'ANSWERED' ? '답변 수신' : '답변 대기'}</span></article>;
+    return <article className="timeline-card question-card is-complete"><div className="timeline-card-icon"><CheckCircle2 size={17}/></div><div><div className="entry-meta"><b>고객 답변</b>{bookmark}<time>{formatClock(entry.occurredAt)}</time></div><p className="timeline-title">{question.question_text}</p><p className="timeline-result">{question.answer_text}</p><small>담당자 확인 전 고객 진술입니다.</small></div></article>;
+  }
+  if (entry.kind === 'FINAL_REPORT') {
+    const stored = entry.data as InitialReport;
+    return <FinalReportCard report={storedReportPayload(stored)} caseId={stored.case_id} createdAt={stored.created_at} bookmark={bookmark}/>;
   }
   if (entry.kind === 'VERIFICATION_REQUEST' || entry.kind === 'VERIFICATION_RESULT') {
     const task = entry.data as VerificationTask;

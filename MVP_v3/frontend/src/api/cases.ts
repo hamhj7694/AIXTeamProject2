@@ -1,7 +1,7 @@
 import { apiUrl, readUploadError, request } from './client';
 import type {
   CustomerProgressItem, ProgressStep, UpdateCustomerProgress,
-  AiInvocationResult, AnalyzeCaseResponse, Attachment, CaseAction, CaseBundle, CaseFact, CaseMember, CaseMessage, CasePresence, CaseWorkCard,
+  AiInvocationResult, AnalyzeCaseResponse, Attachment, CaseAction, CaseBundle, CaseFact, CaseMember, CaseMessage, CasePresence, CaseWorkCard, InitialReport,
   CaseSupportSnapshot, CustomerQuestion, MessageChannel, MessageVisibility,
   PersonalNote, QuestionCandidate, StoredCase, VerificationTask, WorkCardType,
 } from './types';
@@ -20,6 +20,23 @@ export const CURRENT_CUSTOMER_USER = {
 
 export const casesApi = {
   list: () => request<StoredCase[]>('/api/cases'),
+  listTrash: () => request<StoredCase[]>('/api/cases/trash'),
+  trash: (caseId: string, password: string) => request<void>(`/api/cases/${encodeURIComponent(caseId)}/trash`, {
+    method: 'POST', body: JSON.stringify({ password }),
+  }),
+  restore: (caseId: string, password: string) => request<void>(`/api/cases/${encodeURIComponent(caseId)}/restore`, {
+    method: 'POST', body: JSON.stringify({ password }),
+  }),
+  purge: (caseId: string, password: string) => request<void>(`/api/cases/trash/${encodeURIComponent(caseId)}`, {
+    method: 'DELETE', body: JSON.stringify({ password }),
+  }),
+  finalize: (caseId: string, expectedVersion: number, password: string, note = '') => request<InitialReport>(`/api/cases/${encodeURIComponent(caseId)}/reports/finalize`, {
+    method: 'POST', body: JSON.stringify({ expected_version: expectedVersion, password, note }),
+  }),
+  reopen: (caseId: string, expectedVersion: number, password: string) => request<StoredCase>(`/api/cases/${encodeURIComponent(caseId)}/reopen`, {
+    method: 'POST', body: JSON.stringify({ expected_version: expectedVersion, password }),
+  }),
+  finalReportDownloadUrl: (caseId: string, format: 'pdf' | 'docx') => apiUrl(`/api/cases/${encodeURIComponent(caseId)}/reports/final/export?format=${format}`),
   analyze: (text: string) => request<AnalyzeCaseResponse>('/api/cases/analyze', {
     method: 'POST', body: JSON.stringify({ text, client_request_id: crypto.randomUUID() }),
   }),
@@ -93,8 +110,8 @@ export const casesApi = {
     method: 'PUT', body: JSON.stringify(values),
   }),
   requestProgressConfirmation: (caseId: string, step: ProgressStep) => request<CustomerProgressItem[]>(`/api/cases/${encodeURIComponent(caseId)}/customer-progress/${step}/confirmation-request`, { method: 'POST' }),
-  updateAction: (caseId: string, actionId: string, status: 'REQUESTED' | 'COMPLETED') => request<CaseAction>(`/api/cases/${encodeURIComponent(caseId)}/actions/${encodeURIComponent(actionId)}`, {
-    method: 'PATCH', body: JSON.stringify({ status, updated_by: CURRENT_BANK_USER.display_name }),
+  updateAction: (caseId: string, actionId: string, values: { status?: 'REQUESTED' | 'COMPLETED' | 'CANCELLED'; note?: string }) => request<CaseAction>(`/api/cases/${encodeURIComponent(caseId)}/actions/${encodeURIComponent(actionId)}`, {
+    method: 'PATCH', body: JSON.stringify({ ...values, updated_by: CURRENT_BANK_USER.display_name }),
   }),
   uploadAttachment: async (caseId: string, file: File, visibility: MessageVisibility): Promise<Attachment> => {
     const path = `/api/cases/${encodeURIComponent(caseId)}/attachments?file_name=${encodeURIComponent(file.name)}&uploaded_by=${encodeURIComponent(CURRENT_BANK_USER.display_name)}&visibility=${encodeURIComponent(visibility)}`;

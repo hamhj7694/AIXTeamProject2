@@ -10,7 +10,7 @@ from .collaboration import MessageAudience, MessageChannel
 
 
 MessageActor = Literal["CUSTOMER", "BANK_STAFF", "CUSTOMER_AGENT", "BANK_AGENT", "VERIFICATION", "SYSTEM"]
-MessageKind = Literal["CHAT", "AI_REQUEST", "AI_RESPONSE", "SYSTEM_EVENT"]
+MessageKind = Literal["CHAT", "AI_REQUEST", "AI_RESPONSE", "SYSTEM_EVENT", "REPORT_CARD"]
 MessageVisibility = Literal["BANK_INTERNAL", "CUSTOMER", "AI_PRIVATE"]
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from typing import Any, Protocol
@@ -32,6 +33,8 @@ class CaseRepository(Protocol):
     async def delete_case(self, case_id: str) -> None: ...
     async def list_trashed_cases(self) -> list[dict[str, Any]]: ...
     async def restore_case(self, case_id: str) -> None: ...
+    async def purge_case(self, case_id: str) -> None: ...
+    async def purge_expired_trash(self, retention_days: int = 30) -> list[str]: ...
     async def append_message(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]: ...
     async def find_message_by_client_request_id(self, case_id: str, client_request_id: str) -> dict[str, Any] | None: ...
     async def list_messages(self, case_id: str, channel: str | None = None) -> list[dict[str, Any]]: ...
@@ -49,14 +52,15 @@ class CaseRepository(Protocol):
     async def update_verification(self, case_id: str, verification_task_id: str, expected_version: int, status: str, details: dict[str, Any] | None = None) -> dict[str, Any]: ...
     async def create_action(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]: ...
     async def list_actions(self, case_id: str) -> list[dict[str, Any]]: ...
-    async def update_action(self, case_id: str, action_id: str, status: str, updated_by: str) -> dict[str, Any]: ...
+    async def update_action(self, case_id: str, action_id: str, status: str, updated_by: str, note: str | None = None) -> dict[str, Any]: ...
     async def update_case(self, case_id: str, expected_version: int, changes: dict[str, Any]) -> dict[str, Any]: ...
     async def create_voice_session(self, case_id: str, participants: list[str]) -> dict[str, Any]: ...
     async def update_voice_session(self, case_id: str, session_id: str, status: str) -> dict[str, Any]: ...
     async def get_voice_session(self, case_id: str, session_id: str | None = None) -> dict[str, Any] | None: ...
     async def append_transcript(self, case_id: str, session_id: str, record: dict[str, Any]) -> dict[str, Any]: ...
     async def list_transcript(self, case_id: str, session_id: str) -> list[dict[str, Any]]: ...
-    async def finalize_report(self, case_id: str, expected_version: int, note: str) -> dict[str, Any]: ...
+    async def finalize_report(self, case_id: str, expected_version: int, note: str, sections: list[dict[str, Any]], report_card: dict[str, Any]) -> dict[str, Any]: ...
+    async def reopen_case(self, case_id: str, expected_version: int) -> dict[str, Any]: ...
     async def get_final_report(self, case_id: str) -> dict[str, Any] | None: ...
     async def list_customer_questions(self, case_id: str) -> list[dict[str, Any]]: ...
     async def queue_customer_questions(self, case_id: str, questions: list[dict[str, Any]], requested_by: str) -> list[dict[str, Any]]: ...
@@ -202,6 +206,24 @@ class InMemoryCaseRepository:
             if item is None: raise KeyError(case_id)
             item.pop("deleted_at", None)
             item["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+    async def purge_case(self, case_id: str) -> None:
+        """Permanently remove a Case only after it has entered the trash."""
+        async with self._lock:
+            if not any(row.get("case_id") == case_id and row.get("deleted_at") for row in self._records):
+                raise KeyError(case_id)
+            self._remove_case_records(case_id)
+
+    async def purge_expired_trash(self, retention_days: int = 30) -> list[str]:
+        async with self._lock:
+            cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
+            expired = [
+                item["case_id"] for item in self._records
+                if item.get("deleted_at") and datetime.fromisoformat(item["deleted_at"]) <= cutoff
+            ]
+            for case_id in expired:
+                self._remove_case_records(case_id)
+            return expired
 
     async def append_message(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]:
         async with self._lock:
@@ -387,13 +409,15 @@ class InMemoryCaseRepository:
     async def list_actions(self, case_id: str) -> list[dict[str, Any]]:
         return [deepcopy(item) for item in self._actions if item["case_id"] == case_id]
 
-    async def update_action(self, case_id: str, action_id: str, status: str, updated_by: str) -> dict[str, Any]:
+    async def update_action(self, case_id: str, action_id: str, status: str, updated_by: str, note: str | None = None) -> dict[str, Any]:
         async with self._lock:
             item = next((row for row in self._actions if row["case_id"] == case_id and row["action_id"] == action_id), None)
             if item is None:
                 raise KeyError(action_id)
             now = datetime.now(timezone.utc).isoformat()
             item["status"] = status
+            if note is not None:
+                item["note"] = note.strip()
             item["updated_at"] = now
             item["updated_by"] = updated_by
             self._events.append({
@@ -401,7 +425,7 @@ class InMemoryCaseRepository:
                 "case_id": case_id,
                 "event_type": "CASE_CHECKLIST_UPDATED",
                 "actor_type": "BANK_STAFF",
-                "payload": {"action_id": action_id, "status": status},
+                "payload": {"action_id": action_id, "status": status, "note_changed": note is not None},
                 "occurred_at": now,
             })
             self._touch_case(case_id, now)
@@ -446,19 +470,55 @@ class InMemoryCaseRepository:
     async def list_transcript(self, case_id: str, session_id: str) -> list[dict[str, Any]]:
         return [deepcopy(item) for item in self._transcripts if item["case_id"] == case_id and item["session_id"] == session_id]
 
-    async def finalize_report(self, case_id: str, expected_version: int, note: str) -> dict[str, Any]:
+    async def finalize_report(self, case_id: str, expected_version: int, note: str, sections: list[dict[str, Any]], report_card: dict[str, Any]) -> dict[str, Any]:
         async with self._lock:
             case = next((item for item in self._records if item["case_id"] == case_id), None)
             if case is None: raise KeyError(case_id)
             current_version = int(case.get("version", 1))
             if current_version != expected_version: raise CaseVersionConflictError(current_version)
+            if case.get("status") == "CLOSED" or case.get("mode") == "CLOSED": raise ValueError("CASE_ALREADY_CLOSED")
             now = datetime.now(timezone.utc).isoformat()
-            live = deepcopy(case.get("initial_report")) or {"sections": []}
-            report = {"report_id": f"final-{case_id}", "case_id": case_id, "report_version": int(live.get("report_version", 1)), "status": "FINAL", "sections": live.get("sections", []), "created_at": now, "note": note}
+            previous_mode, previous_status = case.get("mode", "PREVENT"), case.get("status", "TRIAGE")
+            previous_report = case.get("final_report") or {}
+            report = {"report_id": f"final-{case_id}", "case_id": case_id, "report_version": int(previous_report.get("report_version", 0)) + 1, "status": "FINAL", "sections": deepcopy(sections), "created_at": now, "note": note}
             case["final_report"] = report
             case["mode"] = "CLOSED"; case["status"] = "CLOSED"; case["version"] = current_version + 1; case["updated_at"] = now
-            self._events.append({"event_id": len(self._events) + 1, "case_id": case_id, "event_type": "CASE_REPORT_FINALIZED", "actor_type": "BANK_STAFF", "payload": {"report_id": report["report_id"], "version": case["version"]}, "occurred_at": now})
+            self._messages.append({
+                "message_id": f"msg-{uuid4().hex}", "case_id": case_id, "actor_type": "BANK_AGENT",
+                "actor_user_id": "final-report-agent", "actor_display_name": "최종 결과 보고서 AI", "actor_role": "BANK_AGENT",
+                "content": json.dumps({**report_card, "report_id": report["report_id"], "report_version": report["report_version"], "created_at": now}, ensure_ascii=False),
+                "channel": "TEAM", "audience": "BANK_INTERNAL", "visibility": "BANK_INTERNAL",
+                "message_kind": "REPORT_CARD", "private_owner_user_id": None, "mentions": [],
+                "reply_to_message_id": None, "client_request_id": f"final-report-{case_id}-{report['report_version']}",
+                "attachment_ids": [], "attachments": [], "created_at": now,
+            })
+            self._events.append({"event_id": len(self._events) + 1, "case_id": case_id, "event_type": "CASE_REPORT_FINALIZED", "actor_type": "BANK_STAFF", "payload": {"report_id": report["report_id"], "version": case["version"], "previous_mode": previous_mode, "previous_status": previous_status}, "occurred_at": now})
             return deepcopy(report)
+
+    async def reopen_case(self, case_id: str, expected_version: int) -> dict[str, Any]:
+        async with self._lock:
+            case = next((item for item in self._records if item["case_id"] == case_id and not item.get("deleted_at")), None)
+            if case is None: raise KeyError(case_id)
+            current_version = int(case.get("version", 1))
+            if current_version != expected_version: raise CaseVersionConflictError(current_version)
+            if case.get("status") != "CLOSED" and case.get("mode") != "CLOSED": raise ValueError("CASE_NOT_CLOSED")
+            finalized = next((item for item in reversed(self._events) if item["case_id"] == case_id and item["event_type"] == "CASE_REPORT_FINALIZED"), None)
+            payload = (finalized or {}).get("payload", {})
+            now = datetime.now(timezone.utc).isoformat()
+            case["mode"] = payload.get("previous_mode") or "PREVENT"
+            case["status"] = payload.get("previous_status") or "TRIAGE"
+            case["version"] = current_version + 1
+            case["updated_at"] = now
+            self._messages.append({
+                "message_id": f"msg-{uuid4().hex}", "case_id": case_id, "actor_type": "SYSTEM",
+                "actor_user_id": "system", "actor_display_name": "Case 업데이트", "actor_role": "SYSTEM",
+                "content": "관리자 인증 후 사건이 종결 직전의 진행 상태로 복구되었습니다.",
+                "channel": "TEAM", "audience": "BANK_INTERNAL", "visibility": "BANK_INTERNAL", "message_kind": "SYSTEM_EVENT",
+                "private_owner_user_id": None, "mentions": [], "reply_to_message_id": None, "client_request_id": None,
+                "attachment_ids": [], "attachments": [], "created_at": now,
+            })
+            self._events.append({"event_id": len(self._events) + 1, "case_id": case_id, "event_type": "CASE_REOPENED", "actor_type": "BANK_STAFF", "payload": {"version": case["version"], "mode": case["mode"], "status": case["status"]}, "occurred_at": now})
+            return deepcopy(case)
 
     async def get_final_report(self, case_id: str) -> dict[str, Any] | None:
         case = await self.get(case_id)
