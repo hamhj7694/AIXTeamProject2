@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { getBankCaseWorkspace, getCaseDelta, getCaseList, type BankCaseWorkspace, type CaseListItem } from '../api/cases.ts';
+import { getBankCaseWorkspace, getCaseDelta, type BankCaseWorkspace } from '../api/cases.ts';
 import { mergeCaseDelta, type CaseEntityState } from '../shared/caseDelta.ts';
 import { caseFromEntityState, latestRisk, timelineFromEntityState, workspaceEntityState } from '../shared/workspace.ts';
+
+import { CaseList } from './CaseList.tsx';
 
 const POLL_INTERVAL_MS = 5_000;
 
@@ -22,30 +24,13 @@ function errorText(error: unknown): string {
 }
 
 export function App() {
-  const [cases, setCases] = useState<CaseListItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [workspace, setWorkspace] = useState<BankCaseWorkspace | null>(null);
   const [entityState, setEntityState] = useState<CaseEntityState | null>(null);
-  const [listState, setListState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [workspaceState, setWorkspaceState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
   const entityStateRef = useRef<CaseEntityState | null>(null);
   const localEditIds = useRef<ReadonlySet<string>>(new Set());
-
-  const refreshList = () => {
-    setListState('loading');
-    setError(null);
-    getCaseList().then((next) => {
-      setCases(next);
-      setListState('ready');
-      setSelectedId((current) => current && next.some((item) => item.id === current) ? current : (next[0]?.id ?? null));
-    }).catch((reason: unknown) => {
-      setListState('error');
-      setError(errorText(reason));
-    });
-  };
-
-  useEffect(() => { refreshList(); }, []);
 
   useEffect(() => {
     if (!selectedId) {
@@ -78,7 +63,6 @@ export function App() {
         const next = mergeCaseDelta(current, delta, localEditIds.current);
         entityStateRef.current = next;
         setEntityState(next);
-        setCases((items) => items.map((item) => item.id === selectedId ? { ...item, revision: next.revision } : item));
       } catch (reason) { if (active) setError(errorText(reason)); }
     };
     const interval = window.setInterval(poll, POLL_INTERVAL_MS);
@@ -92,15 +76,7 @@ export function App() {
   return <div className="bank-workspace">
     <header className="app-header"><div><strong>CSR</strong><span>Case Share Room</span></div><small>Bank Case Workspace · revision polling</small></header>
     <main className="case-layout">
-      <aside className="case-list" aria-label="사건 목록">
-        <div className="panel-heading"><h1>사건</h1><button type="button" onClick={refreshList}>새로고침</button></div>
-        {listState === 'loading' && <p className="state">사건 목록을 불러오는 중입니다.</p>}
-        {listState === 'error' && <p className="state error">{error}</p>}
-        {listState === 'ready' && cases.length === 0 && <p className="state">배정된 사건이 없습니다.</p>}
-        <ul className="case-items">{cases.map((item) => <li key={item.id}><button type="button" className={item.id === selectedId ? 'case-item selected' : 'case-item'} onClick={() => setSelectedId(item.id)}>
-          <strong>{item.case_number}</strong><span>{item.latest_event_type ?? '기록 없음'}</span><span className="risk">{riskLabel(item.risk_score, item.risk_classification)}</span><small>{item.status} · {displayTime(item.updated_at)}</small>
-        </button></li>)}</ul>
-      </aside>
+      <CaseList selectedId={selectedId} onSelect={setSelectedId} />
       <section className="timeline-panel" aria-label="공유 사건 타임라인">
         {!selectedId && <p className="state">왼쪽에서 사건을 선택해 주세요.</p>}
         {selectedId && workspaceState === 'loading' && <p className="state">공유 사건을 불러오는 중입니다.</p>}

@@ -32,6 +32,7 @@ class Settings:
     database_url: str = field(default="", repr=False)
     ai_api_base_url: str = "http://127.0.0.1:8101"
     ai_timeout_seconds: float = 5.0
+    admin_case_password: str = field(default="", repr=False)
     attachment_storage_root: Path = ROOT / "backend/data/uploads"
     vector_store_path: Path = ROOT / "backend/data/vector_db"
 
@@ -42,6 +43,7 @@ class Settings:
             database_url=os.getenv("DATABASE_URL", ""),
             ai_api_base_url=os.getenv("AI_API_BASE_URL", "http://127.0.0.1:8101"),
             ai_timeout_seconds=float(os.getenv("AI_TIMEOUT_SECONDS", "5")),
+            admin_case_password=os.getenv("ADMIN_CASE_PASSWORD", ""),
             attachment_storage_root=internal_path(os.getenv("ATTACHMENT_STORAGE_ROOT", "backend/data/uploads")),
             vector_store_path=internal_path(os.getenv("VECTOR_STORE_PATH", "backend/data/vector_db")),
         )

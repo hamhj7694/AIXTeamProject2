@@ -10,6 +10,8 @@ from backend.general_api.app.clients.ai import AiClient
 from backend.general_api.app.domains.cases.repository import (
     CaseAccessDenied, CaseNotFound, CaseRepository, IdempotencyConflict, VersionConflict,
 )
+from backend.contracts.case import CaseTrashRequest
+from backend.general_api.app.domains.cases.workspace_repository import WorkspaceRepository, AdminCredentialRejected, AdminCredentialUnavailable
 
 
 def get_settings() -> Settings:
@@ -25,6 +27,10 @@ def require_server_actor(request: Request) -> ActorContext:
 
 
 def _case_error(error: Exception) -> None:
+    if isinstance(error, AdminCredentialRejected):
+        raise HTTPException(status_code=403, detail={"code": "ADMIN_PASSWORD_INVALID"}) from None
+    if isinstance(error, AdminCredentialUnavailable):
+        raise HTTPException(status_code=503, detail={"code": "ADMIN_PASSWORD_NOT_CONFIGURED"}) from None
     if isinstance(error, CaseNotFound):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "CASE_NOT_FOUND"}) from None
     if isinstance(error, CaseAccessDenied):
@@ -38,6 +44,15 @@ def _case_error(error: Exception) -> None:
 
 def create_app() -> FastAPI:
     app = FastAPI(title="CSR General API", version="4.0.0")
+
+    from fastapi.exceptions import RequestValidationError
+    from fastapi.exception_handlers import request_validation_exception_handler
+
+    @app.exception_handler(RequestValidationError)
+    async def safe_validation(request: Request, error: RequestValidationError):
+        if request.url.path.endswith("/trash"):
+            return JSONResponse(status_code=422, content={"detail": {"code": "INVALID_TRASH_REQUEST"}})
+        return await request_validation_exception_handler(request, error)
 
     @app.middleware("http")
     async def test_actor_only(request: Request, call_next):
@@ -79,11 +94,11 @@ def create_app() -> FastAPI:
         return JSONResponse(status_code=status.HTTP_201_CREATED, content=projection.model_dump(mode="json"))
 
     @app.get("/api/v4/cases", response_model=list[CaseListItem])
-    def list_cases(actor: ActorContext = Depends(require_server_actor),
+    def list_cases(deleted: bool = False, actor: ActorContext = Depends(require_server_actor),
                    settings: Settings = Depends(get_settings)) -> list[CaseListItem]:
         repository = CaseRepository(settings)
         try:
-            return repository.list_bank_cases(actor)
+            return repository.list_bank_cases(actor, deleted)
         except Exception as error:
             _case_error(error)
             raise
@@ -209,6 +224,22 @@ def create_app() -> FastAPI:
         except Exception as error:
             _case_error(error)
             raise
+        finally:
+            repository.close()
+
+    @app.post("/api/v4/cases/{case_id}/trash")
+    def trash_case(case_id: str, request: CaseTrashRequest, actor: ActorContext = Depends(require_server_actor),
+                   settings: Settings = Depends(get_settings)):
+        from uuid import UUID
+        try:
+            parsed = UUID(case_id)
+        except ValueError:
+            raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND"}) from None
+        repository = WorkspaceRepository(settings)
+        try:
+            return repository.set_trash(parsed, actor, request)
+        except Exception as error:
+            _case_error(error)
         finally:
             repository.close()
 

@@ -2,10 +2,11 @@
 
 LAST_UPDATED: 2026-09-06
 CURRENT_PHASE: 3
-CURRENT_TASK: P3-002
-CURRENT_STATUS: NOT_STARTED
+CURRENT_TASK: P3-001A-1
+CURRENT_STATUS: VERIFIED
 
 ## LAST_COMPLETED
+- P3-001A-1: compact Case list and administrator-validated reversible trash verified. User taxonomy derives from loss_status/CLOSED, never ML. 68 backend + 14 frontend/typecheck/build PASS; migration 003/repeat on MySQL PASS; real Chrome controls/delete/restore PASS.
 - P1-001 VERIFIED: Shared Case data contracts and V4-only migration 002. SQLite/MySQL migration repeat, 49 tests, audit/env PASS.
 - P1-002 VERIFIED: V4 Case create/read/event/projection API. Trusted server actor context, participant authorization, visibility projection, event audit, idempotency/409 all verified on SQLite and disposable MySQL.
 - P1-003 VERIFIED: revision/fingerprint delta API and ID merge helper protect no-op polling, stale responses and local drafts without SSE or full Case replacement.
@@ -22,6 +23,7 @@ CURRENT_STATUS: NOT_STARTED
 - 승인된 네 문서를 START → SOURCE → PRD → MASTER 순서로 읽음.
 
 ## FILES_CHANGED
+- P3-001A-1: migration 003, config/admin credential example, Case metadata/trash contracts, workspace_repository.py, General API, CaseList.tsx/caseList.ts, App list integration/CSS, backend+browser+frontend tests, canonical UX/PRD/continuity.
 - P0-001: AGENTS.md, .gitignore, README.md, docs/00–09, docs/source 및 docs/evidence.
 - P0-002: docs/AI_REUSE_MAP.md.
 - P0-003: backend/config.py, database.py, contracts/health.py, 두 API app/main.py, General clients/ai.py, migration 001, scripts/migrate.py 및 phase0_smoke.py, requirements.txt, .env.example, pytest.ini, tests/backend 및 tests/contracts.
@@ -37,6 +39,7 @@ CURRENT_STATUS: NOT_STARTED
 - P3-001 post-commit smoke artifacts: ignored `backend/data/p3_browser.db`, process logs and headless Chrome DOM/screenshot/profile only. These are not deployment assets or tracked source.
 
 ## COMMANDS_RUN
+- P3-001A-1: pytest tests -q (68 PASS); frontend typecheck/test (14 PASS)/build; phase0_smoke --general-port 18300 --ai-port 18301 (fresh MySQL 003/repeat PASS); node tests/browser/workspace-smoke.mjs (real Chrome PASS, results/screenshot .cache/browser-ux). Earlier browser failures: DOM serialization and duplicate fixture title corrected; not product failures.
 - P0-006 requirements ML install: sandbox FAIL → 승인 실행 PASS; pip check PASS.
 - model_preflight --record PASS: 23 features, threshold 95, zero final20/NORMAL, signal final97.600355/PHISHING; 유료 호출 0.
 - pytest tests -q: 39 PASS, AnyIO warning 1. static source audit 42 files PASS.
@@ -70,6 +73,7 @@ CURRENT_STATUS: NOT_STARTED
 - P3-001 post-commit: migrated V4-only `backend/data/p3_browser.db`; started test-only AI 18101, General 18100 and Vite 15173. `/ready/ml` 200, General health 200, frontend 200; General `/ready` 503 by intended Conversational Core readiness contract. Created Case → test-text feature intake → approved ML result 97.28208066915009/PHISHING → Case list/workspace → changed delta then fingerprint no-op → Vite `/api` proxy → headless Chrome DOM/screenshot PASS. No raw source text persisted.
 
 ## KNOWN_GOOD_STATE
+- Current migration head 003. V4 General restarted: parent PID 12044 / child 14448; port 18100. Vite 15173 and AI 18101 preserved. Test-only administrator credential supplied as process environment, no actual env file opened.
 - P0-006 모델: SHA-256 662db2a9351dc4ca2c453776ae6f45750e465234cc9abcecc65b58a6b047c5fc, scikit-learn 1.6.1, 23 features, threshold 95.0, guardrail 유지.
 - V4 actual local preflight: zero signal final 20/NORMAL; 91 synthetic signal features final 97.60035508086297/PHISHING. 유료 API 호출 0.
 - `/ready/ml` 200; General → AI actual HTTP smoke PASS; 전체 `/ready`는 conversational/text_intake가 NOT_IMPLEMENTED이므로 의도된 503.
@@ -85,11 +89,14 @@ CURRENT_STATUS: NOT_STARTED
 - V4 test-harness servers are intentionally still running: AI `http://127.0.0.1:18101`, General `http://127.0.0.1:18100`, Frontend `http://127.0.0.1:15173`. They use the ignored V4-only SQLite smoke DB and must be stopped only when the V4 work is finished or a replacement V4 harness is required.
 
 ## INCOMPLETE_CHANGES
+- P3-001A-2/3 NOT_STARTED. No partial code for either; P3-001A-1 ready for commit.
 - P0-001~006/P1-001/P1-002/P1-003/P2-001/P2-002/P2-003/P3-001 are verified. P3-002 is next.
 - 의도된 미구현: Case/Chat/Intake/Conversational/RAG/Tool/Agent 제품 경로. AI 전체 `/ready`는 conversational/text_intake 미구현을 명시하며 503.
 - 최종 full standalone copy/frontend build/new DB migration/full API readiness/E2E 및 Ubuntu 실행 NOT_RUN.
 
 ## NEXT_EXACT_STEPS
+- P3-001A-1 verified; next implement P3-001A-2 Conversation natural-language projection and honest composer/UI shells, leaving RIGHT unchanged.
+0. Latest direct request: complete P3-001A-1/2/3 per docs/10_BANK_WORKSPACE_UX.md, test/browser smoke/commit each, then resume P3-002. RIGHT unchanged.
 1. Read the approved P3-002 acceptance criteria, then implement Task/suggestion approval flow without creating a second bank-work source. Reuse the running V4 test harness only if it fits the focused smoke.
 2. Preserve P3-001 server ownership and ports; never terminate unrelated processes or V3 services.
 

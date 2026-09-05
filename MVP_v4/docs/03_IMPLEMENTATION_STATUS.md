@@ -6,6 +6,7 @@ PHASE_GATE: PASS — Phase 2 structured-feature intake and privacy boundary comp
 
 | Task | 상태 | 증거/남은 일 |
 |---|---|---|
+| P3-001A-1 | VERIFIED | 68 backend tests, 14 frontend tests/typecheck/build; MySQL migration 003/repeat + real HTTP PASS; real Chrome search/filter/sort/selection/admin failure+success/trash/restore PASS |
 | P0-001 | VERIFIED | 필수 문서 13개, Source/PRD exact copy PASS; V3 267개 non-env tracked hash 기준 저장 |
 | P0-002 | VERIFIED | AI_REUSE_MAP 코드 경계/계약/비용 조사. GAP-AI-001 기록 |
 | P0-003 | VERIFIED | 11 tests PASS; fresh disposable MySQL migration 001/repeat PASS; 실제 AI/General HTTP liveness + readiness 실패 계약 PASS (18101/18100) |

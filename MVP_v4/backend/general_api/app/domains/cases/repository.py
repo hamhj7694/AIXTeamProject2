@@ -78,6 +78,7 @@ class CaseRepository:
         fingerprint = _canonical_hash({
             "actor_id": actor.actor_id, "actor_role": actor.role.value, "customer_id": customer_id,
             "mode": request.mode.value, "loss_status": request.loss_status.value,
+            "title": request.title, "summary": request.summary,
         })
         with self.engine.begin() as connection:
             existing = self._idempotency(connection, case_id, request.client_request_id, operation)
@@ -89,12 +90,13 @@ class CaseRepository:
                 raise IdempotencyConflict()
             case_fingerprint = self._case_fingerprint(case_id, request.mode.value, request.loss_status.value, 1, 1)
             connection.execute(text("""
-                INSERT INTO cases (id, case_number, status, mode, loss_status, revision, fingerprint, version, created_by, updated_by)
-                VALUES (:id, :case_number, :status, :mode, :loss_status, 1, :fingerprint, 1, :actor_id, :actor_id)
+                INSERT INTO cases (id, case_number, status, mode, loss_status, revision, fingerprint, version, created_by, updated_by, title, summary)
+                VALUES (:id, :case_number, :status, :mode, :loss_status, 1, :fingerprint, 1, :actor_id, :actor_id, :title, :summary)
             """), {
                 "id": str(case_id), "case_number": f"CSR-{case_id.hex[:12].upper()}", "status": CaseStatus.TRIAGE.value,
                 "mode": request.mode.value, "loss_status": request.loss_status.value, "fingerprint": case_fingerprint,
                 "actor_id": actor.actor_id,
+                "title": request.title, "summary": request.summary,
             })
             self._insert_participant(connection, case_id, customer_id, ActorRole.CUSTOMER, actor.actor_id)
             if actor.role == ActorRole.BANK_STAFF:
@@ -147,18 +149,19 @@ class CaseRepository:
             self._require_participant(connection, case_id, actor)
             return self._projection(connection, case_id, actor)
 
-    def list_bank_cases(self, actor: ActorContext) -> list[CaseListItem]:
+    def list_bank_cases(self, actor: ActorContext, deleted: bool = False) -> list[CaseListItem]:
         if actor.role != ActorRole.BANK_STAFF:
             raise CaseAccessDenied()
         with self.engine.connect() as connection:
             rows = connection.execute(text("""
                 SELECT cases.id, cases.case_number, cases.status, cases.mode, cases.loss_status, cases.revision,
-                    cases.version, cases.updated_at
+                    cases.version, cases.updated_at, cases.created_at, cases.title, cases.summary, cases.deleted_at
                 FROM cases JOIN case_participants ON case_participants.case_id = cases.id
                 WHERE case_participants.participant_id = :actor_id
                     AND case_participants.role = :role AND case_participants.deleted_at IS NULL
+                    AND ((:deleted = 0 AND cases.deleted_at IS NULL) OR (:deleted = 1 AND cases.deleted_at IS NOT NULL))
                 ORDER BY cases.updated_at DESC, cases.id DESC
-            """), {"actor_id": actor.actor_id, "role": ActorRole.BANK_STAFF.value}).mappings()
+            """), {"actor_id": actor.actor_id, "role": ActorRole.BANK_STAFF.value, "deleted": int(deleted)}).mappings().all()
             return [self._case_list_item(connection, dict(row)) for row in rows]
 
     def bank_workspace(self, case_id: UUID, actor: ActorContext) -> BankCaseWorkspace:
@@ -285,7 +288,7 @@ class CaseRepository:
         """), {"case_id": str(case_id)}).mappings().first()
         return dict(row) if row else None
 
-    def _require_participant(self, connection: Connection, case_id: UUID, actor: ActorContext) -> None:
+    def _require_participant(self, connection: Connection, case_id: UUID, actor: ActorContext, *, include_deleted: bool = False) -> None:
         if actor.role not in {ActorRole.CUSTOMER, ActorRole.BANK_STAFF}:
             raise CaseAccessDenied()
         participant = connection.execute(text("""
@@ -293,6 +296,8 @@ class CaseRepository:
             WHERE case_id = :case_id AND participant_id = :actor_id AND role = :role AND deleted_at IS NULL
         """), {"case_id": str(case_id), "actor_id": actor.actor_id, "role": actor.role.value}).first()
         if not participant:
+            raise CaseNotFound()
+        if not include_deleted and connection.execute(text("SELECT deleted_at FROM cases WHERE id=:id"), {"id": str(case_id)}).scalar() is not None:
             raise CaseNotFound()
 
     @staticmethod

@@ -1,5 +1,7 @@
 # CSR | Case Share Room V4 Rebuild PRD
 
+> 2026-09-06 P3-001A user update: [Bank Workspace canonical UX](10_BANK_WORKSPACE_UX.md) supersedes earlier LEFT/CENTER presentation. User states are 의심/피해 발생/해결 및 종결, never ML classifications. RIGHT redesign is deferred. Original approved source remains preserved under docs/source.
+
 **제품:** CSR | Case Share Room  
 **문서 버전:** V4 Rebuild Baseline 1.5 — Conversational Agent Engine / Change-aware Shared Case  
 **기준일:** 2026-09-06  

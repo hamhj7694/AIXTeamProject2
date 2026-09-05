@@ -1,5 +1,10 @@
 # TODO
 
+- [x] P3-001A-1 compact list/search/filter/sort/admin trash/restore
+- [ ] P3-001A-2 natural-language Conversation and channel/AI participation UI shells
+- [ ] P3-001A-3 actor-private notes/bookmarks and navigation
+- [ ] RIGHT-UX: natural-language Context without internal developer terminology (outside P3-001A)
+
 - [x] P0-001 기준/연속성 문서 검증
 - [x] P0-002 AI 재사용 인벤토리
 - [ ] GAP-AI-001 공식지식 RAG 원본/자료 확인 및 새 계약(P5-002)

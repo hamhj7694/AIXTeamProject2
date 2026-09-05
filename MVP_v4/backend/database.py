@@ -3,7 +3,7 @@ from sqlalchemy.engine import Engine
 
 from backend.config import Settings
 
-CURRENT_SCHEMA_REVISION = "002"
+CURRENT_SCHEMA_REVISION = "003"
 
 
 def database_engine(settings: Settings) -> Engine:

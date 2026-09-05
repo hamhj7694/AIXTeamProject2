@@ -1,5 +1,7 @@
 # 작업 매핑
 
+P3-001A-1 VERIFIED: migration 003, Case metadata/list/trash contracts and repository/API, frontend compact list, focused tests. Canonical UX: docs/10_BANK_WORKSPACE_UX.md.
+
 | Task | 파일 | API | DB | 테스트 | 의존 |
 |---|---|---|---|---|---|
 | P0-001 | AGENTS.md, docs/00–09, docs/source/*, docs/evidence/*, README.md, .gitignore | 없음 | 없음 | 문서/원본 hash 검증 | 승인 V1.5 |

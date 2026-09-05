@@ -146,3 +146,7 @@ V3 및 과거 문서는 참고자료다. 과거 문서의 설명만으로 V4 구
 - Agent를 사용자에게 직접 노출하거나 선택시키는 설계
 
 문서와 V4 코드가 충돌하면 임의로 과거 상태로 복구하지 말고 Conflict를 기록하고 이 Source of Truth 기준으로 정합화한다.
+
+## P3-001A direct user UX update ? 2026-09-06
+
+[Bank Workspace UX](10_BANK_WORKSPACE_UX.md) is canonical for LEFT/CENTER: user status derives from actual confirmed loss and Case closure, never ML. Compact list/search/filter/sort/trash and Shared Conversation with actor-private notes/bookmarks; provider-dependent functionality remains explicit UI shells until backend contracts exist. RIGHT redesign deferred. Existing Shared Case/visibility/version/idempotency/delta contracts retained.

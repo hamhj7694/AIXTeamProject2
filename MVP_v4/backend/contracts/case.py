@@ -4,7 +4,7 @@ from enum import StrEnum
 from typing import Annotated, Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 
 
 class Visibility(StrEnum):
@@ -127,6 +127,8 @@ class ActorContext(StrictCaseModel):
 
 class CreateCaseRequest(StrictCaseModel):
     client_request_id: UUID
+    title: str = Field(default="", max_length=200)
+    summary: str = Field(default="", max_length=1000)
     mode: CaseMode = CaseMode.PREVENT
     loss_status: LossStatus = LossStatus.UNKNOWN
     # A bank employee needs the customer identity to open a case on the customer's behalf.
@@ -163,6 +165,10 @@ class CaseListItem(StrictCaseModel):
     revision: Revision
     version: Version
     updated_at: datetime
+    created_at: datetime
+    title: str = ""
+    summary: str = ""
+    deleted_at: datetime | None = None
     latest_event_type: EventType | None = None
     risk_score: float | None = Field(default=None, ge=0, le=100)
     risk_classification: str | None = Field(default=None, max_length=40)
@@ -183,6 +189,13 @@ class CaseContextFeature(StrictCaseModel):
     def forbid_source_text(cls, value: dict[str, Any]) -> dict[str, Any]:
         StructuredFeaturePayload(schema_version="workspace-context", values=value)
         return value
+
+
+class CaseTrashRequest(StrictCaseModel):
+    client_request_id: UUID
+    expected_version: Version
+    admin_password: SecretStr = Field(min_length=1, max_length=128)
+    deleted: bool
 
 
 class CaseFact(StrictCaseModel):

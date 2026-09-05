@@ -10,6 +10,10 @@ export interface CaseListItem {
   revision: number;
   version: number;
   updated_at: string;
+  created_at: string;
+  title: string;
+  summary: string;
+  deleted_at: string | null;
   latest_event_type: string | null;
   risk_score: number | null;
   risk_classification: string | null;
@@ -65,11 +69,13 @@ export interface BankCaseWorkspace {
   verifications: CaseVerification[];
 }
 
-async function readJson(path: string, signal?: AbortSignal): Promise<unknown> {
+export async function readJson(path: string, signal?: AbortSignal, body?: unknown): Promise<unknown> {
   const response = await fetch(path, {
     signal,
     credentials: 'same-origin',
-    headers: { 'X-Request-ID': createUuid() },
+    method: body === undefined ? 'GET' : 'POST',
+    headers: { 'X-Request-ID': createUuid(), ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
+    body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!response.ok) {
     const body: unknown = await response.json().catch(() => null);
@@ -85,8 +91,8 @@ function object(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-export async function getCaseList(signal?: AbortSignal): Promise<CaseListItem[]> {
-  const value = await readJson('/api/v4/cases', signal);
+export async function getCaseList(signal?: AbortSignal, deleted = false): Promise<CaseListItem[]> {
+  const value = await readJson(`/api/v4/cases?deleted=${deleted}`, signal);
   if (!Array.isArray(value) || value.some((item) => typeof object(item).id !== 'string')) throw new Error('CASE_API_INVALID_RESPONSE');
   return value as CaseListItem[];
 }

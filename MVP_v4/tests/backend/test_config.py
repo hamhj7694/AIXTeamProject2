@@ -43,5 +43,5 @@ def test_migration_is_repeatable():
         engine = database_engine(settings)
         with engine.connect() as connection:
             assert connection.execute(text("SELECT value FROM application_metadata")).scalar_one() == "csr_v4"
-            assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "002"
+            assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "003"
         engine.dispose()
