@@ -10,6 +10,8 @@ from contracts.public_api.case_context_v2 import (
     PublicCaseTaskV2,
     PublicContextBulletV2,
     PublicCaseContextViewV2,
+    PublicCreateFactV2Request,
+    PublicCreateGapV2Request,
     PublicUpdateGapV2Request,
 )
 
@@ -68,6 +70,67 @@ class CaseContextV2PublicContractTest(unittest.TestCase):
         )
         self.assertEqual(request.reason, "확정 사실 연결")
         self.assertIsNone(request.edited_reason)
+
+    def test_create_requests_accept_canonical_semantic_keys(self):
+        semantic_keys = (
+            "exposure.personal_information",
+            "exposure.authentication_information",
+            "device.remote_control_app",
+            "offender.claimed_organization",
+            "offender.incident_claim",
+            "transfer.actual.status",
+        )
+        for request_model in (PublicCreateFactV2Request, PublicCreateGapV2Request):
+            for semantic_key in semantic_keys:
+                with self.subTest(request_model=request_model.__name__, semantic_key=semantic_key):
+                    payload = {
+                        "client_request_id": "canonical-key-test",
+                        "semantic_key": semantic_key,
+                    }
+                    if request_model is PublicCreateFactV2Request:
+                        payload.update({
+                            "display_label": "확인 항목",
+                            "value": {"status": "UNKNOWN"},
+                            "display_value": "확인 필요",
+                        })
+                    else:
+                        payload.update({
+                            "title": "확인 항목",
+                            "reason": "사건 확인에 필요",
+                            "priority": "HIGH",
+                        })
+                    self.assertEqual(request_model.model_validate(payload).semantic_key, semantic_key)
+
+    def test_create_requests_reject_invalid_semantic_keys(self):
+        semantic_keys = (
+            "Exposure.personal_information",
+            "exposure.personal information",
+            "exposure..personal_information",
+            ".exposure.personal_information",
+            "exposure.personal_information.",
+            "exposure/personal_information",
+        )
+        for request_model in (PublicCreateFactV2Request, PublicCreateGapV2Request):
+            for semantic_key in semantic_keys:
+                with self.subTest(request_model=request_model.__name__, semantic_key=semantic_key):
+                    payload = {
+                        "client_request_id": "invalid-key-test",
+                        "semantic_key": semantic_key,
+                    }
+                    if request_model is PublicCreateFactV2Request:
+                        payload.update({
+                            "display_label": "확인 항목",
+                            "value": {"status": "UNKNOWN"},
+                            "display_value": "확인 필요",
+                        })
+                    else:
+                        payload.update({
+                            "title": "확인 항목",
+                            "reason": "사건 확인에 필요",
+                            "priority": "HIGH",
+                        })
+                    with self.assertRaises(ValidationError):
+                        request_model.model_validate(payload)
 
     def test_reviewed_ai_suggestion_requires_human_review_metadata(self):
         base = {

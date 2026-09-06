@@ -246,7 +246,7 @@ class PublicReviewFactV2Request(CaseContextV2Model):
 
 class PublicCreateFactV2Request(CaseContextV2Model):
     client_request_id: str = Field(min_length=8, max_length=100)
-    semantic_key: str = Field(min_length=3, max_length=160, pattern=r"^[a-z0-9]+(?:\.[a-z0-9]+)+$")
+    semantic_key: str = Field(min_length=3, max_length=160, pattern=r"^[a-z0-9_]+(?:\.[a-z0-9_]+)+$")
     display_label: str = Field(min_length=1, max_length=255)
     value: dict[str, Any]
     display_value: str = Field(min_length=1, max_length=3000)
@@ -256,7 +256,7 @@ class PublicCreateFactV2Request(CaseContextV2Model):
 
 class PublicCreateGapV2Request(CaseContextV2Model):
     client_request_id: str = Field(min_length=8, max_length=100)
-    semantic_key: str = Field(min_length=3, max_length=160, pattern=r"^[a-z0-9]+(?:\.[a-z0-9]+)+$")
+    semantic_key: str = Field(min_length=3, max_length=160, pattern=r"^[a-z0-9_]+(?:\.[a-z0-9_]+)+$")
     title: str = Field(min_length=1, max_length=300)
     reason: str = Field(min_length=1, max_length=3000)
     priority: Priority
