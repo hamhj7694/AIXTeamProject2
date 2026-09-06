@@ -184,7 +184,7 @@ class CaseSupportSnapshotEndpointTest(unittest.TestCase):
         self.assertEqual(response.json(), [])
         self.repository.queue_customer_questions.assert_not_awaited()
 
-    def test_revision_scan_runs_without_a_frontend_question_request(self) -> None:
+    def test_revision_scan_preserves_checklist_without_creating_customer_questions(self) -> None:
         self.repository.list.return_value = [{
             "case_id": "CASE-AI-1", "status": "TRIAGE", "mode": "PREVENT",
             "updated_at": "2026-09-04T00:00:00+00:00",
@@ -193,7 +193,8 @@ class CaseSupportSnapshotEndpointTest(unittest.TestCase):
         reconciled = asyncio.run(general_main.reconcile_changed_cases_once())
 
         self.assertEqual(reconciled, 1)
-        self.repository.queue_customer_questions.assert_awaited_once()
+        self.repository.queue_customer_questions.assert_not_awaited()
+        self.repository.create_action.assert_awaited_once()
         self.assertIn("CASE-AI-1", general_main._proactive_case_revisions)
 
     def test_ai_checklist_is_persisted_once_even_after_it_is_completed(self) -> None:

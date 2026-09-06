@@ -150,6 +150,7 @@ AUTONOMOUS_P0_QUESTION_FIELDS = {
     "authentication_information_exposure",
     "remote_control_app",
 }
+BASELINE_QUESTION_FIELDS = AUTONOMOUS_P0_QUESTION_FIELDS | {"impersonated_institution"}
 AI_CHECKLIST_ACTION_PREFIX = "AI_CHECKLIST:"
 STAFF_JUDGMENT_ACTION_TYPE = "STAFF_JUDGMENT"
 CHECKLIST_FIELD_LABELS = {
@@ -189,6 +190,9 @@ class CaseOutcomeRequest(BaseModel):
 
 class PublicWorkCardGenerateRequest(BaseModel):
     card_type: WorkCardType
+    question_drafts: list[PublicQuestionCandidateResponse] = Field(default_factory=list, max_length=20)
+
+
 default_cors_origins = (
     "http://localhost:5173,http://127.0.0.1:5173,"
     "http://localhost:5174,http://127.0.0.1:5174,"
@@ -540,6 +544,74 @@ def normalize_question_text(value: str) -> str:
     return " ".join(value.split()).casefold()
 
 
+CONTEXTUAL_QUESTION_PREFIX = "ai-context-"
+
+
+def _same_question(left: str, right: str) -> bool:
+    return normalize_question_text(left) == normalize_question_text(right) or similar_question(left, right)
+
+
+def _unsafe_contextual_question(question_text: str) -> bool:
+    """Reject obvious requests for secrets or customer actions before a draft reaches staff."""
+    compact = re.sub(r"\s+", "", question_text).casefold()
+    sensitive = ("비밀번호", "패스워드", "pin", "otp", "인증번호", "보안코드", "주민등록번호")
+    value_requests = ("입력", "적어", "써", "말해", "알려", "보내", "무엇", "뭔가", "몇번")
+    if any(term in compact for term in sensitive) and any(term in compact for term in value_requests):
+        return True
+    money_actions = ("송금", "이체", "결제", "입금")
+    action_requests = ("하세요", "해주", "진행하", "보내세요", "실행하", "설치하")
+    return any(term in compact for term in money_actions) and any(term in compact for term in action_requests)
+
+
+def _contextual_target_field(question_text: str) -> str:
+    digest = hashlib.sha256(normalize_question_text(question_text).encode("utf-8")).hexdigest()[:20]
+    return f"{CONTEXTUAL_QUESTION_PREFIX}{digest}"
+
+
+def filter_contextual_questions(
+    generated: list,
+    baseline: list[PublicQuestionCandidateResponse],
+    persisted: list[dict],
+    drafts: list[PublicQuestionCandidateResponse],
+) -> list:
+    """Keep only safe, novel QUESTION_PLAN drafts and assign non-canonical fields."""
+    baseline_fields = BASELINE_QUESTION_FIELDS | {normalize_target_field(item.target_field) for item in baseline}
+    covered = [*baseline, *drafts]
+    covered.extend(
+        PublicQuestionCandidateResponse(
+            question_id=str(item.get("question_id", "persisted")),
+            target_field=str(item.get("target_field", "")),
+            question_text=str(item.get("question_text", "")),
+            reason=str(item.get("reason") or "이미 처리된 고객 질문"),
+            priority=item.get("priority", "P1"),
+        )
+        for item in persisted
+        if item.get("status") in {"PENDING", "ASKED", "ANSWERED"}
+    )
+    covered_fields = {normalize_target_field(item.target_field) for item in covered}
+    accepted = []
+    for question in generated:
+        text = question.question_text.strip()
+        reason = question.reason.strip()
+        source_field = normalize_target_field(question.target_field)
+        if not text or not reason or _unsafe_contextual_question(text):
+            continue
+        if source_field in baseline_fields or source_field in covered_fields:
+            continue
+        if any(_same_question(text, item.question_text) for item in covered):
+            continue
+        if any(_same_question(text, item.question_text) for item in accepted):
+            continue
+        target_field = _contextual_target_field(text)
+        accepted.append(question.model_copy(update={
+            "question_id": target_field,
+            "target_field": target_field,
+        }))
+        if len(accepted) == 3:
+            break
+    return accepted
+
+
 def exclude_handled_question_candidates(
     candidates: list[PublicQuestionCandidateResponse], questions: list[dict]
 ) -> list[PublicQuestionCandidateResponse]:
@@ -715,7 +787,10 @@ async def list_customer_question_candidates(case_id: str) -> list[PublicQuestion
     queued = await repository.list_customer_questions(case_id)
     snapshot = await get_case_support_snapshot(case_id)
     # AI 장애 시에도 기존 deterministic 후보로 고객 확인 흐름을 멈추지 않는다.
-    candidates = snapshot.recommended_questions if snapshot.available else build_customer_question_candidates(case, queued)
+    fallback_candidates = build_customer_question_candidates(case, queued)
+    candidates = list(snapshot.recommended_questions) if snapshot.available else []
+    represented = {normalize_target_field(item.target_field) for item in candidates}
+    candidates.extend(item for item in fallback_candidates if normalize_target_field(item.target_field) not in represented)
     # AI 결과를 그대로 신뢰하지 않는다. 질문 이력 기반 최종 중복 방지는 General API가 담당한다.
     facts = await repository.list_case_facts(case_id)
     resources = await case_context_v2_repository().list_resources(case_id)
@@ -1204,6 +1279,21 @@ async def generate_case_work_card(case_id: str, request: PublicWorkCardGenerateR
         case_id, messages=messages, questions=previous_questions, facts=facts, verifications=verifications, staff=staff,
     ))
     try:
+        case_context = support.case_context.model_dump(mode="python") if support.case_context else {}
+        contextual_facts = [
+            f"사건 맥락 {key}: {value}"
+            for key, value in case_context.items()
+            if value
+        ]
+        question_state = [
+            f"기존 고객 질문 [{item.get('status', 'PENDING')}] {item.get('target_field', '')}: {item.get('question_text', '')}"
+            + (f" / 답변: {item.get('answer_text')}" if item.get("answer_text") else "")
+            for item in previous_questions[-10:]
+        ]
+        draft_state = [
+            f"현재 미발송 직원 검토 초안 {item.target_field}: {item.question_text}"
+            for item in request.question_drafts[:10]
+        ]
         payload = await service.ai_client.generate_work_card({
             "case_id": case_id,
             "card_type": request.card_type,
@@ -1213,7 +1303,9 @@ async def generate_case_work_card(case_id: str, request: PublicWorkCardGenerateR
             "workflow_status": case.get("status", "TRIAGE"),
             "case_mode": case.get("mode", "PREVENT"),
             "fraud_type": case.get("fraud_type"),
-            "known_facts": [f"{item.get('field')}: {item.get('value')} ({item.get('status')})" for item in facts[:30]],
+            "known_facts": ([
+                f"{item.get('field')}: {item.get('value')} ({item.get('status')})" for item in facts[:15]
+            ] + contextual_facts + question_state + draft_state)[:30],
             "recent_conversation": [
                 f"{item.get('actor_display_name', item.get('actor_type', '작성자'))}: {item.get('content', '')[:500]}"
                 for item in messages[-20:]
@@ -1232,10 +1324,10 @@ async def generate_case_work_card(case_id: str, request: PublicWorkCardGenerateR
             "question_candidates": [item.model_dump(mode="python") for item in candidates[:10]],
         })
         card = CaseWorkCardOutput.model_validate(payload)
-        # The LLM may select supplied candidates, but cannot bypass the current DB guard.
-        allowed = {normalize_target_field(c.target_field) for c in candidates}
-        card.questions = [q for q in card.questions if normalize_target_field(q.target_field) in allowed
-                          and exclude_handled_question_candidates([PublicQuestionCandidateResponse.model_validate(q.model_dump())], previous_questions)]
+        if request.card_type == "QUESTION_PLAN":
+            card.questions = filter_contextual_questions(
+                card.questions, candidates, previous_questions, request.question_drafts
+            )
         return card
     except AiServiceQuotaError as exc:
         raise HTTPException(status_code=429, detail={"code": "OPENAI_QUOTA_EXHAUSTED", "message": str(exc)}) from exc
@@ -1405,14 +1497,13 @@ async def invoke_customer_support_ai(case_id: str, request: PublicCustomerAiRepl
 
 
 async def run_proactive_case_automation(case_id: str) -> bool:
-    """Reconcile safety-critical AI questions without a frontend request.
+    """Refresh AI support and staff checklist without contacting the customer.
 
     The automation is deliberately fail-open for the rest of the Case API:
     an AI outage must not prevent staff or customer messages from being saved.
     """
     try:
         snapshot = await get_case_support_snapshot(case_id)
-        await _ensure_ai_customer_questions(case_id, snapshot)
         await sync_ai_checklist_items(case_id, snapshot)
         return True
     except HTTPException as exc:
