@@ -10,6 +10,7 @@ from contracts.public_api.case_context_v2 import (
     PublicCaseTaskV2,
     PublicContextBulletV2,
     PublicCaseContextViewV2,
+    PublicUpdateGapV2Request,
 )
 
 
@@ -52,6 +53,21 @@ class CaseContextV2PublicContractTest(unittest.TestCase):
             PublicCaseGapV2.model_validate({**base, "status": "DISMISSED"})
         resolved = PublicCaseGapV2.model_validate({**base, "status": "RESOLVED", "resolution_fact_id": "FACT-1"})
         self.assertEqual(resolved.resolution_fact_id, "FACT-1")
+
+    def test_gap_update_request_preserves_resolved_reason_compatibility(self):
+        with self.assertRaises(ValidationError):
+            PublicUpdateGapV2Request(expected_version=1, status="DISMISSED")
+        with self.assertRaises(ValidationError):
+            PublicUpdateGapV2Request(expected_version=1, status="RESOLVED")
+
+        request = PublicUpdateGapV2Request(
+            expected_version=1,
+            status="RESOLVED",
+            resolution_fact_id="FACT-1",
+            reason="확정 사실 연결",
+        )
+        self.assertEqual(request.reason, "확정 사실 연결")
+        self.assertIsNone(request.edited_reason)
 
     def test_reviewed_ai_suggestion_requires_human_review_metadata(self):
         base = {

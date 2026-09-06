@@ -160,10 +160,16 @@ class CaseContextV2EndpointTest(unittest.TestCase):
         )
         resolved = self.client.patch(
             f"{self.base}/gaps/{gap.json()['gap_id']}?actor_user_id=operator",
-            json={"expected_version": 1, "status": "RESOLVED", "resolution_fact_id": fact["fact_id"]},
+            json={
+                "expected_version": 1,
+                "status": "RESOLVED",
+                "resolution_fact_id": fact["fact_id"],
+                "reason": "확정 사실 연결",
+            },
         )
         self.assertEqual(resolved.status_code, 200, resolved.text)
         self.assertEqual(resolved.json()["status"], "RESOLVED")
+        self.assertIsNone(resolved.json()["dismissal_reason"])
 
     def test_gap_edit_and_dismiss_keep_row_and_expose_audit_history(self):
         created = self.client.post(f"{self.base}/gaps?actor_user_id=operator", json={
@@ -219,6 +225,55 @@ class CaseContextV2EndpointTest(unittest.TestCase):
         self.assertEqual(repeated.status_code, 409)
         resources = self.client.get(f"{self.base}/resources?actor_user_id=operator").json()
         self.assertEqual(len(resources["gaps"]), 1)
+
+    def test_legacy_gap_promotion_uses_canonical_semantic_keys(self):
+        mappings = {
+            "transfer_status": "transfer.actual.status",
+            "personal_information_exposure": "exposure.personal_information",
+            "authentication_information_exposure": "exposure.authentication_information",
+            "remote_control_app": "device.remote_control_app",
+        }
+        for index, (target_field, semantic_key) in enumerate(mappings.items()):
+            with self.subTest(target_field=target_field):
+                action_id = f"canonical-gap-{index}"
+                self.repository._actions = [{
+                    "case_id": "VP-V2", "action_id": action_id,
+                    "action_type": f"AI_CHECKLIST:P1:{target_field}",
+                    "status": "REQUESTED", "note": f"{target_field} 확인",
+                }]
+                promoted = self.client.post(
+                    f"{self.base}/legacy-gaps/{action_id}?actor_user_id=operator",
+                    json={"expected_version": 1, "edited_title": f"{target_field} 검토"},
+                )
+                self.assertEqual(promoted.status_code, 200, promoted.text)
+                self.assertEqual(promoted.json()["semantic_key"], semantic_key)
+
+    def test_legacy_gap_promotion_reuses_existing_canonical_gap(self):
+        existing = self.client.post(f"{self.base}/gaps?actor_user_id=operator", json={
+            "client_request_id": "canonical-gap-reuse",
+            "semantic_key": "exposure.personal_information",
+            "title": "개인정보 제공 여부",
+            "reason": "개인정보 제공 여부 확인 필요",
+            "priority": "HIGH",
+        })
+        self.assertEqual(existing.status_code, 201, existing.text)
+        self.repository._actions = [{
+            "case_id": "VP-V2", "action_id": "old-personal-gap",
+            "action_type": "AI_CHECKLIST:P1:personal_info_shared",
+            "status": "REQUESTED", "note": "개인정보 제공 여부 검토",
+        }]
+
+        promoted = self.client.post(
+            f"{self.base}/legacy-gaps/old-personal-gap?actor_user_id=operator",
+            json={"expected_version": 1, "edited_title": "개인정보 노출 여부"},
+        )
+        self.assertEqual(promoted.status_code, 200, promoted.text)
+        self.assertEqual(promoted.json()["gap_id"], existing.json()["gap_id"])
+        resources = self.client.get(f"{self.base}/resources?actor_user_id=operator").json()
+        matching = [gap for gap in resources["gaps"] if gap["semantic_key"] == "exposure.personal_information"]
+        self.assertEqual(len(matching), 1)
+        workspace = self.client.get(f"{self.base}/workspace?actor_user_id=operator").json()
+        self.assertEqual(workspace["legacy_gaps"], [])
 
     def test_legacy_gap_can_be_soft_excluded(self):
         self.repository._actions = [{

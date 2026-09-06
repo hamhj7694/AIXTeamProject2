@@ -279,8 +279,6 @@ class PublicUpdateGapV2Request(CaseContextV2Model):
             raise ValueError("미확인 사항 제외에는 사유가 필요합니다.")
         if self.status == "RESOLVED" and not self.resolution_fact_id:
             raise ValueError("미확인 사항 해소에는 확정 사실 연결이 필요합니다.")
-        if self.status not in {None, "DISMISSED"} and self.reason is not None:
-            raise ValueError("처리 사유는 확인 항목 제외에만 사용할 수 있습니다.")
         return self
 
 

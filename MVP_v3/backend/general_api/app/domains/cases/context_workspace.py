@@ -5,8 +5,12 @@ from .repository import normalize_target_field
 
 _LEGACY_GAP_KEYS = {
     "transfer_status": "transfer.actual.status",
-    "personal_information_exposure": "exposure.personal.information",
-    "authentication_information_exposure": "exposure.authentication.information",
+    "transfer_purpose": "transfer.purpose",
+    "personal_information_exposure": "exposure.personal_information",
+    "authentication_information_exposure": "exposure.authentication_information",
+    "remote_control_app": "device.remote_control_app",
+    "claimed_organization": "offender.claimed_organization",
+    "incident_claim": "offender.incident_claim",
 }
 
 
