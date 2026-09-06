@@ -822,52 +822,6 @@ async def queue_customer_questions(case_id: str, request: PublicQueueCustomerQue
     return [to_public_customer_question(item) for item in items]
 
 
-async def _ensure_ai_customer_questions(
-    case_id: str,
-    snapshot: PublicCaseSupportSnapshotResponse | None = None,
-) -> list[PublicCustomerQuestionResponse]:
-    """Queue only allowlisted P0 safety questions and deliver one card at a time."""
-    case = await repository.get(case_id)
-    if case is None:
-        raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."})
-    existing = await repository.list_customer_questions(case_id)
-    handled_fields = {normalize_target_field(item["target_field"]) for item in existing if item.get("status") in {"PENDING", "ASKED", "ANSWERED"}}
-    facts = await repository.list_case_facts(case_id)
-    resources = await case_context_v2_repository().list_resources(case_id)
-    facts, _ = merge_support_records(resources, facts, [])
-    handled_fields.update(
-        normalize_target_field(str(item.get("field", "")))
-        for item in facts
-        if item.get("status") == "CONFIRMED"
-    )
-    if case.get("victim_transfer_status") in {"YES", "NO"}:
-        handled_fields.add("transfer_status")
-    if AUTONOMOUS_P0_QUESTION_FIELDS.issubset(handled_fields):
-        await dispatch_next_customer_question_message(case_id)
-        return []
-    snapshot = snapshot or await get_case_support_snapshot(case_id)
-    candidates = snapshot.recommended_questions if snapshot.available else build_customer_question_candidates(case, existing)
-    candidates = exclude_handled_question_candidates(candidates, existing)
-    p0_questions = [
-        {**candidate.model_dump(mode="python"), "source": "CUSTOMER_AGENT"}
-        for candidate in candidates
-        if candidate.priority == "P0"
-        and normalize_target_field(candidate.target_field) in AUTONOMOUS_P0_QUESTION_FIELDS
-        and normalize_target_field(candidate.target_field) not in handled_fields
-    ]
-    if not p0_questions:
-        await dispatch_next_customer_question_message(case_id)
-        return []
-    created = await repository.queue_customer_questions(case_id, p0_questions, "customer-agent")
-    await dispatch_next_customer_question_message(case_id)
-    return [to_public_customer_question(item) for item in created]
-
-
-@app.post("/api/cases/{case_id}/ai/customer-questions/ensure", response_model=list[PublicCustomerQuestionResponse])
-async def ensure_ai_customer_questions(case_id: str) -> list[PublicCustomerQuestionResponse]:
-    return await _ensure_ai_customer_questions(case_id)
-
-
 async def sync_ai_checklist_items(case_id: str, snapshot: PublicCaseSupportSnapshotResponse) -> list[dict]:
     """Persist each AI-recommended check once so unfinished staff work accumulates."""
     existing = await repository.list_actions(case_id)
@@ -1279,21 +1233,26 @@ async def generate_case_work_card(case_id: str, request: PublicWorkCardGenerateR
         case_id, messages=messages, questions=previous_questions, facts=facts, verifications=verifications, staff=staff,
     ))
     try:
-        case_context = support.case_context.model_dump(mode="python") if support.case_context else {}
-        contextual_facts = [
-            f"사건 맥락 {key}: {value}"
-            for key, value in case_context.items()
-            if value
+        known_facts = [
+            f"{item.get('field')}: {item.get('value')} ({item.get('status')})" for item in facts[:30]
         ]
-        question_state = [
-            f"기존 고객 질문 [{item.get('status', 'PENDING')}] {item.get('target_field', '')}: {item.get('question_text', '')}"
-            + (f" / 답변: {item.get('answer_text')}" if item.get("answer_text") else "")
-            for item in previous_questions[-10:]
-        ]
-        draft_state = [
-            f"현재 미발송 직원 검토 초안 {item.target_field}: {item.question_text}"
-            for item in request.question_drafts[:10]
-        ]
+        if request.card_type == "QUESTION_PLAN":
+            case_context = support.case_context.model_dump(mode="python") if support.case_context else {}
+            contextual_facts = [
+                f"사건 맥락 {key}: {value}"
+                for key, value in case_context.items()
+                if value
+            ]
+            question_state = [
+                f"기존 고객 질문 [{item.get('status', 'PENDING')}] {item.get('target_field', '')}: {item.get('question_text', '')}"
+                + (f" / 답변: {item.get('answer_text')}" if item.get("answer_text") else "")
+                for item in previous_questions[-10:]
+            ]
+            draft_state = [
+                f"현재 미발송 직원 검토 초안 {item.target_field}: {item.question_text}"
+                for item in request.question_drafts[:10]
+            ]
+            known_facts = (known_facts[:15] + contextual_facts + question_state + draft_state)[:30]
         payload = await service.ai_client.generate_work_card({
             "case_id": case_id,
             "card_type": request.card_type,
@@ -1303,9 +1262,7 @@ async def generate_case_work_card(case_id: str, request: PublicWorkCardGenerateR
             "workflow_status": case.get("status", "TRIAGE"),
             "case_mode": case.get("mode", "PREVENT"),
             "fraud_type": case.get("fraud_type"),
-            "known_facts": ([
-                f"{item.get('field')}: {item.get('value')} ({item.get('status')})" for item in facts[:15]
-            ] + contextual_facts + question_state + draft_state)[:30],
+            "known_facts": known_facts,
             "recent_conversation": [
                 f"{item.get('actor_display_name', item.get('actor_type', '작성자'))}: {item.get('content', '')[:500]}"
                 for item in messages[-20:]

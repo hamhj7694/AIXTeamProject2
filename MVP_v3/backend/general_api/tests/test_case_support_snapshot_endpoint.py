@@ -121,68 +121,31 @@ class CaseSupportSnapshotEndpointTest(unittest.TestCase):
         self.assertEqual(sent["verifications"][0]["status"], "IN_PROGRESS")
         self.assertEqual(sent["actions"][0]["action_type"], "PAYMENT_HOLD_REVIEW")
 
-    def test_autonomous_agent_queues_only_allowlisted_p0_questions(self) -> None:
-        general_main.service.ai_client.build_case_support_snapshot.return_value = {
-            "case_id": "CASE-AI-1",
-            "case_brief": {"summary": "AI 요약", "incident_type": "기관 사칭", "risk_level": "HIGH", "risk_score": 92.0, "next_checks": []},
-            "recommended_questions": [
-                {"question_id": "q-transfer", "target_field": "transfer_status", "question": "송금하셨나요?", "reason": "긴급 피해 확인", "priority": "P0"},
-                {"question_id": "q-org", "target_field": "claimed_organization", "question": "어느 기관인가요?", "reason": "기관 확인", "priority": "P0"},
-                {"question_id": "q-purpose", "target_field": "transfer_purpose", "question": "송금 목적은 무엇인가요?", "reason": "맥락 확인", "priority": "P1"},
-            ],
-            "unresolved_items": [], "warnings": [],
-        }
-
+    def test_legacy_ai_ensure_route_cannot_create_or_send_questions(self) -> None:
         response = self.client.post("/api/cases/CASE-AI-1/ai/customer-questions/ensure")
 
-        self.assertEqual(response.status_code, 200)
-        queued = self.repository.queue_customer_questions.await_args.args[1]
-        self.assertEqual([item["target_field"] for item in queued], ["transfer_status"])
-        self.assertEqual(queued[0]["source"], "CUSTOMER_AGENT")
-
-    def test_autonomous_agent_skips_ai_when_all_safety_fields_are_already_handled(self) -> None:
-        self.repository.list_customer_questions.return_value = [
-            {
-                "question_id": f"q-{field}", "target_field": field,
-                "question_text": field, "status": "ANSWERED",
-            }
-            for field in general_main.AUTONOMOUS_P0_QUESTION_FIELDS
-        ]
-
-        response = self.client.post("/api/cases/CASE-AI-1/ai/customer-questions/ensure")
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), [])
-        general_main.service.ai_client.build_case_support_snapshot.assert_not_awaited()
+        self.assertEqual(response.status_code, 404)
         self.repository.queue_customer_questions.assert_not_awaited()
+        self.repository.dispatch_next_customer_question.assert_not_awaited()
 
-    def test_autonomous_agent_does_not_queue_a_confirmed_database_fact(self) -> None:
-        self.repository.list_case_facts.return_value = [{
-            "fact_id": "fact-personal-info", "field": "personal_information_exposure",
-            "value": "YES", "status": "CONFIRMED",
-        }]
-        general_main.service.ai_client.build_case_support_snapshot.return_value["recommended_questions"] = [{
-            "question_id": "q-personal-info",
-            "target_field": "personal_information_exposure",
-            "question": "Was personal information shared?",
-            "reason": "Safety check",
-            "priority": "P0",
-        }]
+    def test_staff_approved_customer_question_submit_path_is_preserved(self) -> None:
+        response = self.client.post("/api/cases/CASE-AI-1/customer-questions", json={
+            "questions": [{
+                "question_id": "staff-question",
+                "target_field": "ai-context-contact-time",
+                "question_text": "상대방이 다시 연락하라고 지정한 시간이 있나요?",
+                "reason": "담당자가 사건 맥락을 검토한 뒤 선택했습니다.",
+                "priority": "P1",
+            }],
+            "requested_by": "은행 담당자",
+        })
 
-        response = self.client.post("/api/cases/CASE-AI-1/ai/customer-questions/ensure")
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), [])
-        self.repository.queue_customer_questions.assert_not_awaited()
-
-    def test_autonomous_agent_does_not_reask_known_case_transfer_status(self) -> None:
-        self.repository.get.return_value["victim_transfer_status"] = "YES"
-
-        response = self.client.post("/api/cases/CASE-AI-1/ai/customer-questions/ensure")
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), [])
-        self.repository.queue_customer_questions.assert_not_awaited()
+        self.assertEqual(response.status_code, 201)
+        queued = self.repository.queue_customer_questions.await_args.args
+        self.assertEqual(queued[0], "CASE-AI-1")
+        self.assertEqual(queued[1][0]["question_id"], "staff-question")
+        self.assertEqual(queued[2], "은행 담당자")
+        self.repository.dispatch_next_customer_question.assert_awaited_once_with("CASE-AI-1")
 
     def test_revision_scan_preserves_checklist_without_creating_customer_questions(self) -> None:
         self.repository.list.return_value = [{

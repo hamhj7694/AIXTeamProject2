@@ -126,6 +126,51 @@ class ContextualQuestionEndpointTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(any("ANSWERED" in item and "답변: 아니요" in item for item in sent["known_facts"]))
         self.assertTrue(any("현재 미발송 직원 검토 초안" in item for item in sent["known_facts"]))
 
+    async def test_non_question_plan_keeps_original_first_thirty_known_facts(self) -> None:
+        repository = AsyncMock()
+        repository.get.return_value = {
+            "case_id": "CASE-FACTS", "initial_brief": "기관을 사칭한 연락을 받음",
+            "status": "TRIAGE", "mode": "PREVENT", "fraud_type": "IMPERSONATION",
+        }
+        facts = [
+            {"field": f"field_{index}", "value": f"value_{index}", "status": "CONFIRMED"}
+            for index in range(35)
+        ]
+        repository.list_case_facts.return_value = facts
+        repository.list_verifications.return_value = []
+        repository.list_actions.return_value = []
+        repository.list_messages.return_value = []
+        repository.list_attachments.return_value = []
+        repository.list_customer_questions.return_value = []
+        support = main.PublicCaseSupportSnapshotResponse(
+            case_id="CASE-FACTS", available=True,
+            case_context=main.PublicCaseContextProjection(offender_claims=["수사기관 소속 주장"]),
+        )
+        ai_payload = CaseWorkCardOutput(
+            card_type="FACT_REVIEW", title="사실 검토", summary="사실 확인", context_sources=[],
+            rationale=[], next_action="담당자 검토", questions=[], warnings=[], model_mode="TEST",
+        ).model_dump(mode="python")
+        original_repository = main.repository
+        original_generate = main.service.ai_client.generate_work_card
+        generate_work_card = AsyncMock(return_value=ai_payload)
+        main.repository = repository
+        main.service.ai_client.generate_work_card = generate_work_card
+        try:
+            with patch.object(main, "get_case_support_snapshot", AsyncMock(return_value=support)), \
+                 patch.object(main, "list_customer_question_candidates", AsyncMock(return_value=[])), \
+                 patch.object(main, "read_staff_context_records", AsyncMock(return_value=[])):
+                await main.generate_case_work_card(
+                    "CASE-FACTS", main.PublicWorkCardGenerateRequest(card_type="FACT_REVIEW")
+                )
+        finally:
+            main.repository = original_repository
+            main.service.ai_client.generate_work_card = original_generate
+
+        sent = generate_work_card.await_args.args[0]
+        self.assertEqual(sent["known_facts"], [
+            f"field_{index}: value_{index} (CONFIRMED)" for index in range(30)
+        ])
+
 
 class CustomQuestionQueueTest(unittest.IsolatedAsyncioTestCase):
     async def test_explicit_submit_and_answer_reuse_existing_queue_for_custom_target(self) -> None:

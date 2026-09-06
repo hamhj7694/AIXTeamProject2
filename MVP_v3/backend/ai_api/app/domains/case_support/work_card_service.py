@@ -23,7 +23,7 @@ WORK_CARD_SCHEMA = {
         "context_sources": {"type": "array", "items": {"type": "string"}, "maxItems": 6},
         "rationale": {"type": "array", "items": {"type": "string"}, "maxItems": 8},
         "next_action": {"type": "string"},
-        "questions": {"type": "array", "maxItems": 3, "items": {
+        "questions": {"type": "array", "maxItems": 10, "items": {
             "type": "object", "additionalProperties": False,
             "properties": {
                 "question_id": {"type": "string"}, "target_field": {"type": "string"}, "question_text": {"type": "string"},

@@ -62,7 +62,7 @@ class ContextualQuestionPlanTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(len(result.questions), 3)
         self.assertEqual(result.questions[0].target_field, "contextual_topic_0")
-        self.assertEqual(WORK_CARD_SCHEMA["properties"]["questions"]["maxItems"], 3)
+        self.assertEqual(WORK_CARD_SCHEMA["properties"]["questions"]["maxItems"], 10)
         instructions = create.await_args.kwargs["instructions"]
         self.assertIn("question_candidates에 없는 내용", instructions)
         self.assertIn("최대 3개", instructions)
