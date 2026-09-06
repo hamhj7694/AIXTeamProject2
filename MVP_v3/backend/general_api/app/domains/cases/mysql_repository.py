@@ -344,7 +344,7 @@ class MySqlCaseRepository:
             "channel": record.get("channel", "CUSTOMER"), "audience": record.get("audience", "CUSTOMER"),
             "mentions": record.get("mentions", []), "reply_to_message_id": record.get("reply_to_message_id"),
             "attachment_ids": attachment_ids, "attachments": attachments,
-            "created_at": created_at.isoformat(),
+            "created_at": _utc_iso(created_at),
         }
 
     async def find_message_by_client_request_id(self, case_id: str, client_request_id: str) -> dict[str, Any] | None:
@@ -358,7 +358,7 @@ class MySqlCaseRepository:
             row = await cursor.fetchone()
             if row is None:
                 return None
-            message = {**row, "mentions": self._json(row["mentions_json"]) or [], "created_at": row["created_at"].isoformat()}
+            message = {**row, "mentions": self._json(row["mentions_json"]) or [], "created_at": _utc_iso(row["created_at"])}
             await cursor.execute(
                 """SELECT a.* FROM case_attachments a
                    INNER JOIN message_attachments ma ON ma.attachment_id=a.attachment_id
@@ -383,7 +383,7 @@ class MySqlCaseRepository:
         async with pool.acquire() as connection, connection.cursor(aiomysql.DictCursor) as cursor:
             await cursor.execute(query, values)
             messages = [
-                {**row, "mentions": self._json(row["mentions_json"]) or [], "created_at": row["created_at"].isoformat()}
+                {**row, "mentions": self._json(row["mentions_json"]) or [], "created_at": _utc_iso(row["created_at"])}
                 for row in await cursor.fetchall()
             ]
             for message in messages:
@@ -562,7 +562,7 @@ class MySqlCaseRepository:
             await cursor.execute(query, values)
             return [
                 {"event_id": row["event_id"], "case_id": row["case_id"], "event_type": row["event_type"],
-                 "actor_type": row["actor_type"], "payload": self._json(row["payload_json"]), "occurred_at": row["occurred_at"].isoformat()}
+                 "actor_type": row["actor_type"], "payload": self._json(row["payload_json"]), "occurred_at": _utc_iso(row["occurred_at"])}
                 for row in await cursor.fetchall()
             ]
 
@@ -589,13 +589,13 @@ class MySqlCaseRepository:
             except Exception:
                 await connection.rollback()
                 raise
-        return {"verification_task_id": verification_task_id, "case_id": case_id, **record, "status": "PENDING", "version": 1, "created_at": now.isoformat(), "updated_at": now.isoformat()}
+        return {"verification_task_id": verification_task_id, "case_id": case_id, **record, "status": "PENDING", "version": 1, "created_at": _utc_iso(now), "updated_at": _utc_iso(now)}
 
     async def list_verifications(self, case_id: str) -> list[dict[str, Any]]:
         pool = await self._get_pool()
         async with pool.acquire() as connection, connection.cursor(aiomysql.DictCursor) as cursor:
             await cursor.execute("SELECT verification_task_id, case_id, claim, target, status, version, result_summary, evidence_url, verified_by, rag_source, customer_visible, created_at, updated_at FROM verification_tasks WHERE case_id=%s ORDER BY created_at, verification_task_id", (case_id,))
-            return [{**row, "created_at": row["created_at"].isoformat(), "updated_at": row["updated_at"].isoformat()} for row in await cursor.fetchall()]
+            return [{**row, "created_at": _utc_iso(row["created_at"]), "updated_at": _utc_iso(row["updated_at"])} for row in await cursor.fetchall()]
 
     async def update_verification(self, case_id: str, verification_task_id: str, expected_version: int, status: str, details: dict[str, Any] | None = None) -> dict[str, Any]:
         pool = await self._get_pool()
@@ -657,13 +657,13 @@ class MySqlCaseRepository:
             except Exception:
                 await connection.rollback()
                 raise
-        return {"action_id": action_id, "case_id": case_id, **record, "status": "REQUESTED", "created_at": now.isoformat()}
+        return {"action_id": action_id, "case_id": case_id, **record, "status": "REQUESTED", "created_at": _utc_iso(now)}
 
     async def list_actions(self, case_id: str) -> list[dict[str, Any]]:
         pool = await self._get_pool()
         async with pool.acquire() as connection, connection.cursor(aiomysql.DictCursor) as cursor:
             await cursor.execute("SELECT action_id, case_id, action_type, status, actor_type, note, created_at FROM actions WHERE case_id=%s ORDER BY created_at, action_id", (case_id,))
-            return [{**row, "created_at": row["created_at"].isoformat()} for row in await cursor.fetchall()]
+            return [{**row, "created_at": _utc_iso(row["created_at"])} for row in await cursor.fetchall()]
 
     async def update_action(self, case_id: str, action_id: str, status: str, updated_by: str, note: str | None = None) -> dict[str, Any]:
         pool = await self._get_pool()
@@ -839,7 +839,7 @@ class MySqlCaseRepository:
             await cursor.execute("SELECT report_id, case_id, report_version, created_at FROM case_reports WHERE case_id=%s AND report_type='FINAL'", (case_id,)); report = await cursor.fetchone()
             if not report: return None
             await cursor.execute("SELECT section_key, content_json, section_version FROM case_report_sections WHERE report_id=%s ORDER BY section_key", (report["report_id"],)); sections = await cursor.fetchall()
-        return {"report_id": report["report_id"], "case_id": report["case_id"], "report_version": report["report_version"], "status": "FINAL", "sections": [{"section_key": item["section_key"], "content": self._json(item["content_json"]), "version": item["section_version"]} for item in sections], "created_at": report["created_at"].isoformat()}
+        return {"report_id": report["report_id"], "case_id": report["case_id"], "report_version": report["report_version"], "status": "FINAL", "sections": [{"section_key": item["section_key"], "content": self._json(item["content_json"]), "version": item["section_version"]} for item in sections], "created_at": _utc_iso(report["created_at"])}
 
     async def list_customer_questions(self, case_id: str) -> list[dict[str, Any]]:
         pool = await self._get_pool()
@@ -1055,7 +1055,7 @@ class MySqlCaseRepository:
             await connection.commit()
 
     def _question_row(self, row: dict[str, Any]) -> dict[str, Any]:
-        return {"question_id": row["question_id"], "case_id": row["case_id"], "source": row["source"], "target_field": row["target_field"], "question_text": row["question_text"], "reason": row["reason"], "priority": row["priority"], "status": row["status"], "sequence": row["sequence"], "requested_by": row.get("requested_by"), "asked_at": row["asked_at"].isoformat() if row.get("asked_at") else None, "answered_at": row["answered_at"].isoformat() if row.get("answered_at") else None, "answer_text": row.get("answer_text"), "options": self._json(row.get("options_json")) or [], "question_message_id": row.get("question_message_id"), "answer_message_id": row.get("answer_message_id")}
+        return {"question_id": row["question_id"], "case_id": row["case_id"], "source": row["source"], "target_field": row["target_field"], "question_text": row["question_text"], "reason": row["reason"], "priority": row["priority"], "status": row["status"], "sequence": row["sequence"], "requested_by": row.get("requested_by"), "asked_at": _utc_iso(row["asked_at"]) if row.get("asked_at") else None, "answered_at": _utc_iso(row["answered_at"]) if row.get("answered_at") else None, "answer_text": row.get("answer_text"), "options": self._json(row.get("options_json")) or [], "question_message_id": row.get("question_message_id"), "answer_message_id": row.get("answer_message_id")}
 
     def _fact_row(self, row: dict[str, Any]) -> dict[str, Any]:
         return {"fact_id": row["fact_id"], "case_id": row["case_id"], "field": normalize_target_field(row.get("field", row.get("field_name"))), "value": row["value"], "source": row["source"], "status": row["status"], "confidence": float(row["confidence"]), "evidence_message_id": row.get("evidence_message_id"), "source_question_id": row.get("source_question_id"), "confirmed_by": row.get("confirmed_by"), "confirmed_at": row["confirmed_at"].isoformat() if row.get("confirmed_at") else None, "created_at": row["created_at"].isoformat() if hasattr(row.get("created_at"), "isoformat") else row["created_at"]}

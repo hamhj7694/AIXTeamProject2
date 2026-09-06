@@ -1,19 +1,19 @@
 import { CURRENT_BANK_USER } from './api/cases';
-import type { CaseAction, CaseBundle, CaseEvent, CaseMessage, CustomerQuestion, InitialReport, StoredCase, VerificationTask } from './api/types';
+import type { CaseAction, CaseBundle, CaseEvent, CaseMessage, CustomerQuestion, InitialReport, VerificationTask } from './api/types';
 
-export type TimelineKind = 'BRIEF' | 'MESSAGE' | 'QUESTION' | 'ANSWER' | 'VERIFICATION_REQUEST' | 'VERIFICATION_RESULT' | 'ACTION' | 'FINAL_REPORT' | 'EVENT';
+export type TimelineKind = 'MESSAGE' | 'QUESTION' | 'ANSWER' | 'VERIFICATION_REQUEST' | 'VERIFICATION_RESULT' | 'ACTION' | 'FINAL_REPORT' | 'EVENT';
 
 export interface TimelineEntry {
   id: string;
   kind: TimelineKind;
   occurredAt: string;
   sequence: number;
-  data: StoredCase | CaseMessage | CustomerQuestion | VerificationTask | CaseAction | CaseEvent | InitialReport;
+  data: CaseMessage | CustomerQuestion | VerificationTask | CaseAction | CaseEvent | InitialReport;
 }
 
-export const buildTimeline = (caseItem: StoredCase, bundle: CaseBundle, includeTechnicalEvents: boolean): TimelineEntry[] => {
+export const buildTimeline = (bundle: CaseBundle, includeTechnicalEvents: boolean): TimelineEntry[] => {
   let sequence = 0;
-  const entries: TimelineEntry[] = [{ id: `brief-${caseItem.case_id}`, kind: 'BRIEF', occurredAt: caseItem.created_at, sequence: sequence++, data: caseItem }];
+  const entries: TimelineEntry[] = [];
   const questions = bundle.questions ?? [];
   const questionTexts = new Set(questions.map((question) => question.question_text.trim()));
   const answerMessageIds = new Set(questions.map((question) => question.answer_message_id).filter((value): value is string => Boolean(value)));

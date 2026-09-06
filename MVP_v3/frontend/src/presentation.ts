@@ -54,7 +54,7 @@ export const fieldLabel = (field: string) => ({
 
 export const formatClock = (value: string) => {
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? '시간 미상' : date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+  return Number.isNaN(date.getTime()) ? '시간 미상' : date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Seoul' });
 };
 
 export const relativeTime = (value: string) => {

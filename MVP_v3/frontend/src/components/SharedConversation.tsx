@@ -21,7 +21,6 @@ interface Props {
 }
 
 const bookmarkDetails = (entry: TimelineEntry): Pick<BankBookmark, 'label' | 'summary'> => {
-  if (entry.kind === 'BRIEF') return { label: 'AI 사건 정리', summary: (entry.data as StoredCase).initial_brief };
   if (entry.kind === 'MESSAGE') {
     const message = entry.data as CaseMessage;
     if (message.message_kind === 'REPORT_CARD') return { label: 'AI 최종 결과 보고서', summary: '사건 종결 시점의 최종 결과 보고서' };
@@ -162,10 +161,6 @@ const MessageEntry: React.FC<{ message: CaseMessage; bookmark: React.ReactNode; 
 
 const EntryCard: React.FC<{ entry: TimelineEntry; bookmark: React.ReactNode; onEditVerification: (task: VerificationTask) => void; onRetryMessage: Props['onRetryMessage']; onDismissMessage: Props['onDismissMessage'] }> = ({ entry, bookmark, onEditVerification, onRetryMessage, onDismissMessage }) => {
   if (entry.kind === 'MESSAGE') return <MessageEntry message={entry.data as CaseMessage} bookmark={bookmark} onRetry={onRetryMessage} onDismiss={onDismissMessage}/>;
-  if (entry.kind === 'BRIEF') {
-    const item = entry.data as StoredCase;
-    return <article className="timeline-brief"><div className="entry-kicker"><Bot size={15}/>AI BRIEF{bookmark}</div><p>{item.initial_brief}</p><time>{formatClock(entry.occurredAt)}</time></article>;
-  }
   if (entry.kind === 'QUESTION' || entry.kind === 'ANSWER') {
     const question = entry.data as CustomerQuestion;
     if (entry.kind === 'QUESTION') return <article className="question-dispatch-card"><MessageCircleQuestion size={15}/><div><div className="entry-meta"><b>고객에게 확인 질문 발송</b>{bookmark}<time>{formatClock(entry.occurredAt)}</time></div><p>{question.question_text}</p></div><span>{question.status === 'ANSWERED' ? '답변 수신' : '답변 대기'}</span></article>;
@@ -192,7 +187,7 @@ export const SharedConversation: React.FC<Props> = ({ caseItem, bundle, view, on
   const scrollRef = useRef<HTMLDivElement>(null);
   const initialized = useRef(false);
   const followLatest = useRef(true);
-  const entries = useMemo(() => buildTimeline(caseItem, bundle, view === 'timeline'), [bundle, caseItem, view]);
+  const entries = useMemo(() => buildTimeline(bundle, view === 'timeline'), [bundle, view]);
   const latestEntry = entries[entries.length - 1];
   const latestEntryKey = latestEntry ? `${latestEntry.id}:${latestEntry.occurredAt}` : 'empty';
   useEffect(() => {
@@ -201,7 +196,10 @@ export const SharedConversation: React.FC<Props> = ({ caseItem, bundle, view, on
     if (!initialized.current || followLatest.current) node.scrollTop = node.scrollHeight;
     initialized.current = true;
   }, [latestEntryKey]);
+  const briefId = `brief-${caseItem.case_id}`;
+  const briefBookmark = <button type="button" className={`bank-entry-bookmark ${bookmarkedIds.has(briefId) ? 'active' : ''}`} aria-label={bookmarkedIds.has(briefId) ? '북마크 해제' : '북마크 추가'} aria-pressed={bookmarkedIds.has(briefId)} onClick={() => onToggleBookmark({ entryId: briefId, label: 'AI 사건 정리', summary: caseItem.initial_brief, createdAt: caseItem.created_at })}><Bookmark size={14} fill={bookmarkedIds.has(briefId) ? 'currentColor' : 'none'}/></button>;
   return <div ref={scrollRef} onScroll={(event) => { const node = event.currentTarget; followLatest.current = node.scrollHeight - node.scrollTop - node.clientHeight < 80; }} className="conversation-scroll" aria-live="polite">
+    <div id={briefId} className="bank-initial-brief"><article className="timeline-brief"><div className="entry-kicker"><Bot size={15}/>AI BRIEF{briefBookmark}</div><p>{caseItem.initial_brief}</p><time>{formatClock(caseItem.created_at)}</time></article></div>
     {entries.length === 0 ? <div className="conversation-empty">아직 Case 기록이 없습니다.</div> : entries.map((entry) => <div id={entry.id} className="bank-timeline-entry" key={entry.id}><EntryCard entry={entry} bookmark={<EntryBookmark entry={entry} active={bookmarkedIds.has(entry.id)} onToggle={onToggleBookmark}/>} onEditVerification={onEditVerification} onRetryMessage={onRetryMessage} onDismissMessage={onDismissMessage}/></div>) }
   </div>;
 };
