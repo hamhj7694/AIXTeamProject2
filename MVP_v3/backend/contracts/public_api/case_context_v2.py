@@ -265,16 +265,22 @@ class PublicCreateGapV2Request(CaseContextV2Model):
 
 class PublicUpdateGapV2Request(CaseContextV2Model):
     expected_version: int = Field(ge=1)
-    status: GapStatus
+    status: GapStatus | None = None
     reason: str | None = Field(default=None, max_length=1000)
     resolution_fact_id: str | None = Field(default=None, max_length=64)
+    edited_title: str | None = Field(default=None, min_length=1, max_length=300)
+    edited_reason: str | None = Field(default=None, min_length=1, max_length=3000)
 
     @model_validator(mode="after")
     def require_manual_reason(self):
+        if self.status is None and self.edited_title is None and self.edited_reason is None:
+            raise ValueError("하나 이상의 확인 항목 필드를 변경해야 합니다.")
         if self.status == "DISMISSED" and not self.reason:
             raise ValueError("미확인 사항 제외에는 사유가 필요합니다.")
         if self.status == "RESOLVED" and not self.resolution_fact_id:
             raise ValueError("미확인 사항 해소에는 확정 사실 연결이 필요합니다.")
+        if self.status not in {None, "DISMISSED"} and self.reason is not None:
+            raise ValueError("처리 사유는 확인 항목 제외에만 사용할 수 있습니다.")
         return self
 
 

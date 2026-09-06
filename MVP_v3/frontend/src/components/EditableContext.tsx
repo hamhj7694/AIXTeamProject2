@@ -137,14 +137,14 @@ export const EditableContext: React.FC<{section: Section; title: string; lines: 
     <ul className="context-lines">{visible.map((line, index) => <li className="context-line" key={index}>
       {draft?.index === index ? editor : <><span className="context-line-text">{line}</span><span className="context-line-tools">
         <button type="button" className="context-icon" disabled={disabled || draft !== null} title="수정" aria-label={`${title} ${index + 1}번째 항목 수정`} onClick={() => begin(index)}><Pencil size={13}/></button>
-        <button type="button" className="context-icon" disabled={disabled || draft !== null} title={summary ? '숨기기' : '삭제'} aria-label={`${title} ${index + 1}번째 항목 삭제`} onClick={() => remove(index)}><X size={14}/></button>
+        <button type="button" className="context-icon" disabled={disabled || draft !== null} title={summary ? '숨기기' : '제외'} aria-label={`${title} ${index + 1}번째 항목 제외`} onClick={() => remove(index)}><X size={14}/></button>
       </span></>}
     </li>)}</ul>
     {overflow && <button type="button" className="context-more" onClick={() => setExpanded(!expanded)}>{expanded ? '간단히 보기' : '전체 내용 보기'}</button>}
     {draft?.index === null && editor}
-    {archiveRows.length > 0 && <details className="context-quiet-details"><summary>완료·삭제</summary><ul className="context-lines">{archiveRows.map((archive) => <li className="context-line is-archived" key={`archive-${archive.item_id}`}>
+    {archiveRows.length > 0 && <details className="context-quiet-details"><summary>완료·제외</summary><ul className="context-lines">{archiveRows.map((archive) => <li className="context-line is-archived" key={`archive-${archive.item_id}`}>
       <span className="context-line-text">{archive.staff_text?.split('\n').filter(Boolean).join(' · ')}</span>
-      <span className="context-line-tools"><button type="button" className="context-icon" title="복원" aria-label={`${title} 삭제 항목 복원`} disabled={disabled || draft !== null} onClick={() => restore(archive)}><RotateCcw size={14}/></button></span>
+      <span className="context-line-tools"><button type="button" className="context-icon" title="복원" aria-label={`${title} 제외 항목 복원`} disabled={disabled || draft !== null} onClick={() => restore(archive)}><RotateCcw size={14}/></button></span>
     </li>)}</ul></details>}
     {error && <p className="context-edit-error" role="alert">{error}</p>}
   </section>;

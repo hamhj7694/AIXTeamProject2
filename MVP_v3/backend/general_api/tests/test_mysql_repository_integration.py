@@ -235,6 +235,24 @@ class MySqlCaseRepositoryIntegrationTest(unittest.IsolatedAsyncioTestCase):
         gap = await store.update_gap(case_id, gap.gap_id, 1, "RESOLVED", None, fact.fact_id, "operator")
         self.assertEqual(gap.status, "RESOLVED")
 
+        dismissible = await store.create_gap(case_id, {
+            "client_request_id": f"gap-{uuid4().hex}",
+            "semantic_key": "exposure.personal.information",
+            "title": "개인정보 제공 여부",
+            "reason": "노출 범위 확인 필요",
+            "priority": "HIGH",
+        }, "operator")
+        dismissible = await store.update_gap(
+            case_id, dismissible.gap_id, 1, None, None, None, "operator",
+            "개인정보 제공 범위", "제공한 정보 종류 확인",
+        )
+        self.assertEqual(dismissible.title, "개인정보 제공 범위")
+        dismissed = await store.update_gap(case_id, dismissible.gap_id, 2, "DISMISSED", "확인 범위에서 제외", None, "operator")
+        self.assertEqual(dismissed.status, "DISMISSED")
+        self.assertEqual(dismissed.dismissal_reason, "확인 범위에서 제외")
+        history = await store.list_gap_history(case_id)
+        self.assertEqual([item["operation"] for item in history if item["entity_id"] == dismissible.gap_id], ["CREATE", "EDIT", "SET_DISMISSED"])
+
         suggestion = await store.propose_suggestion(case_id, {
             "suggestion_type": "TRANSACTION_REVIEW",
             "title": "거래 원장 확인",

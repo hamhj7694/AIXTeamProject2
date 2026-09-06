@@ -283,6 +283,16 @@ p, h1, h2, h3 { margin: 0; }
 .context-panel .context-summary-points li { font-size: 11px; line-height: 1.65; }
 .context-panel .context-edit-tools { flex-shrink: 0; gap: 4px; }
 .context-panel .context-edit-tools button { width: 28px; height: 28px; border-radius: 7px; }
+.context-panel .context-lines { min-width: 0; padding-left: 0; list-style: none; }
+.context-panel .context-line { display: flex; min-width: 0; align-items: flex-start; justify-content: space-between; gap: 6px; }
+.context-panel .context-line-text { min-width: 0; flex: 1; overflow-wrap: anywhere; }
+.context-panel .context-line-tools { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 4px; }
+.context-panel .context-line-editor { display: flex; min-width: 0; flex: 1; align-items: flex-start; gap: 6px; }
+.context-panel .context-line-editor textarea { min-height: 58px; flex: 1; }
+.context-panel .context-icon { display: inline-grid; width: 28px; min-width: 28px; height: 28px; min-height: 28px; place-items: center; flex: 0 0 28px; border: 1px solid #d0d5dd; border-radius: 7px; padding: 0; color: #475467; background: #fff; }
+.context-panel .context-icon:not(:disabled):hover { border-color: #84adff; color: #175cd3; background: #eff4ff; }
+.context-panel .context-icon:focus-visible { outline: 2px solid #84adff; outline-offset: 2px; }
+.context-panel .context-icon:disabled { color: #98a2b3; background: #f2f4f7; cursor: not-allowed; }
 
 .context-panel .context-resource { min-width: 0; margin: 8px 0; border: 1px solid var(--line); border-radius: 9px; padding: 11px; color: #344054; background: #fff; overflow-wrap: anywhere; font-size: 11px; line-height: 1.6; }
 .context-panel .context-resource.ai { border-left: 3px solid var(--blue); background: #f5f8ff; }

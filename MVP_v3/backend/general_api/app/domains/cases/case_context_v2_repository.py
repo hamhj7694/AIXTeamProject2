@@ -12,6 +12,7 @@ from typing import Any
 from uuid import uuid4
 
 import aiomysql
+from pymysql.err import IntegrityError
 
 from contracts.public_api.case_context_v2 import (
     PublicAiSuggestionV2,
@@ -173,7 +174,7 @@ class InMemoryCaseContextV2Repository:
         self.cases._context_v2_history.append({
             "case_id": case_id, "entity_type": entity_type, "entity_id": entity_id,
             "entity_version": version, "operation": operation, "actor_user_id": actor,
-            "before": deepcopy(before), "after": deepcopy(after),
+            "before": deepcopy(before), "after": deepcopy(after), "created_at": _now(),
         })
 
     async def list_resources(self, case_id: str) -> PublicCaseContextResourcesV2:
@@ -186,6 +187,11 @@ class InMemoryCaseContextV2Repository:
             tasks=[deepcopy(v) for (cid, _), v in self.cases._context_v2_tasks.items() if cid == case_id],
             decisions=[deepcopy(v) for (cid, _), v in self.cases._context_v2_decisions.items() if cid == case_id],
         )
+
+    async def list_gap_history(self, case_id: str) -> list[dict[str, Any]]:
+        await self._case(case_id)
+        return [deepcopy(item) for item in self.cases._context_v2_history
+                if item["case_id"] == case_id and item["entity_type"] == "GAP"]
 
     async def create_fact(self, case_id: str, data: dict[str, Any], actor: str, *, source_kind: str = "STAFF_OBSERVATION") -> PublicCaseFactV2:
         await self._case(case_id)
@@ -250,7 +256,7 @@ class InMemoryCaseContextV2Repository:
             self._touch(case_id, now)
             return deepcopy(item)
 
-    async def update_gap(self, case_id: str, gap_id: str, expected_version: int, status: str, reason: str | None, resolution_fact_id: str | None, actor: str) -> PublicCaseGapV2:
+    async def update_gap(self, case_id: str, gap_id: str, expected_version: int, status: str | None, reason: str | None, resolution_fact_id: str | None, actor: str, edited_title: str | None = None, edited_reason: str | None = None) -> PublicCaseGapV2:
         async with self.cases._lock:
             before = self.cases._context_v2_gaps.get((case_id, gap_id))
             if before is None:
@@ -264,13 +270,20 @@ class InMemoryCaseContextV2Repository:
                 if fact is None or fact.status != "CONFIRMED" or fact.semantic_key != before.semantic_key:
                     raise ContextV2TransitionError("확정된 사실을 연결해야 확인 항목을 완료할 수 있습니다.")
             now = _now()
-            after = before.model_copy(update={
-                "status": status, "resolution_fact_id": resolution_fact_id if status == "RESOLVED" else None,
-                "dismissal_reason": reason if status == "DISMISSED" else None,
-                "version": before.version + 1, "updated_at": now,
-            })
+            changes = {"version": before.version + 1, "updated_at": now}
+            if edited_title is not None:
+                changes["title"] = edited_title
+            if edited_reason is not None:
+                changes["reason"] = edited_reason
+            if status is not None:
+                changes.update(
+                    status=status, resolution_fact_id=resolution_fact_id if status == "RESOLVED" else None,
+                    dismissal_reason=reason if status == "DISMISSED" else None,
+                )
+            after = before.model_copy(update=changes)
             self.cases._context_v2_gaps[(case_id, gap_id)] = after
-            self._history(case_id, "GAP", gap_id, after.version, f"SET_{status}", actor, before, after)
+            operation = f"SET_{status}" if status is not None else "EDIT"
+            self._history(case_id, "GAP", gap_id, after.version, operation, actor, before, after)
             self._touch(case_id, now)
             return deepcopy(after)
 
@@ -462,6 +475,24 @@ class MySqlCaseContextV2Repository:
             await connection.rollback()  # Release the read snapshot before returning to the pool.
         return PublicCaseContextResourcesV2(case_id=case_id, context_revision=revision, facts=facts, gaps=gaps, ai_suggestions=suggestions, tasks=tasks, decisions=decisions)
 
+    async def list_gap_history(self, case_id: str) -> list[dict[str, Any]]:
+        pool = await self.cases._get_pool()
+        async with pool.acquire() as connection, connection.cursor(aiomysql.DictCursor) as cursor:
+            await self._case_revision(cursor, case_id)
+            await cursor.execute(
+                "SELECT entity_id,entity_version,operation,actor_user_id,before_json,after_json,created_at "
+                "FROM case_context_v2_history WHERE case_id=%s AND entity_type='GAP' ORDER BY created_at,history_id",
+                (case_id,),
+            )
+            rows = await cursor.fetchall()
+            await connection.rollback()
+        return [{
+            "case_id": case_id, "entity_type": "GAP", "entity_id": row["entity_id"],
+            "entity_version": int(row["entity_version"]), "operation": row["operation"],
+            "actor_user_id": row["actor_user_id"], "before": _json_load(row.get("before_json"), None),
+            "after": _json_load(row.get("after_json"), {}), "created_at": _aware(row.get("created_at")),
+        } for row in rows]
+
     async def create_fact(self, case_id: str, data: dict[str, Any], actor: str, *, source_kind: str = "STAFF_OBSERVATION") -> PublicCaseFactV2:
         pool = await self.cases._get_pool()
         async with pool.acquire() as connection:
@@ -546,11 +577,19 @@ class MySqlCaseContextV2Repository:
                     await self._history(cursor, case_id, "GAP", gap_id, 1, "CREATE", actor, None, item)
                 await connection.commit()
                 return item
+            except IntegrityError:
+                await connection.rollback()
+                async with connection.cursor(aiomysql.DictCursor) as cursor:
+                    await cursor.execute("SELECT * FROM case_gaps WHERE case_id=%s AND client_request_id=%s", (case_id, data["client_request_id"]))
+                    existing = await cursor.fetchone()
+                if existing:
+                    return _gap(existing)
+                raise
             except BaseException:
                 await connection.rollback()
                 raise
 
-    async def update_gap(self, case_id: str, gap_id: str, expected_version: int, status: str, reason: str | None, resolution_fact_id: str | None, actor: str) -> PublicCaseGapV2:
+    async def update_gap(self, case_id: str, gap_id: str, expected_version: int, status: str | None, reason: str | None, resolution_fact_id: str | None, actor: str, edited_title: str | None = None, edited_reason: str | None = None) -> PublicCaseGapV2:
         pool = await self.cases._get_pool()
         async with pool.acquire() as connection:
             try:
@@ -566,15 +605,23 @@ class MySqlCaseContextV2Repository:
                         raise ContextV2TransitionError("종료된 확인 항목은 다시 변경할 수 없습니다.")
                     if status == "RESOLVED":
                         fact_row = await self._one(cursor, "case_context_facts_v2", "fact_id", case_id, resolution_fact_id or "", lock=True)
-                    if not fact_row or fact_row["status"] != "CONFIRMED" or fact_row["semantic_key"] != before.semantic_key:
+                        if not fact_row or fact_row["status"] != "CONFIRMED" or fact_row["semantic_key"] != before.semantic_key:
                             raise ContextV2TransitionError("확정된 사실을 연결해야 확인 항목을 완료할 수 있습니다.")
                     now = _now()
-                    await cursor.execute(
-                        "UPDATE case_gaps SET status=%s,resolution_fact_id=%s,dismissal_reason=%s,version=version+1,updated_at=%s WHERE gap_id=%s",
-                        (status, resolution_fact_id if status == "RESOLVED" else None, reason if status == "DISMISSED" else None, _naive_utc(now), gap_id),
-                    )
+                    assignments, values = [], []
+                    if edited_title is not None:
+                        assignments.append("title=%s"); values.append(edited_title)
+                    if edited_reason is not None:
+                        assignments.append("reason=%s"); values.append(edited_reason)
+                    if status is not None:
+                        assignments.extend(["status=%s", "resolution_fact_id=%s", "dismissal_reason=%s"])
+                        values.extend([status, resolution_fact_id if status == "RESOLVED" else None, reason if status == "DISMISSED" else None])
+                    assignments.extend(["version=version+1", "updated_at=%s"])
+                    values.extend([_naive_utc(now), gap_id])
+                    await cursor.execute(f"UPDATE case_gaps SET {','.join(assignments)} WHERE gap_id=%s", tuple(values))
                     after = _gap(await self._one(cursor, "case_gaps", "gap_id", case_id, gap_id))
-                    await self._history(cursor, case_id, "GAP", gap_id, after.version, f"SET_{status}", actor, before, after)
+                    operation = f"SET_{status}" if status is not None else "EDIT"
+                    await self._history(cursor, case_id, "GAP", gap_id, after.version, operation, actor, before, after)
                 await connection.commit()
                 return after
             except BaseException:

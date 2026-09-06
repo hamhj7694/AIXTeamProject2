@@ -42,7 +42,7 @@ const button = (tree, label) => {
 const flush = () => new Promise(resolve => setImmediate(resolve));
 const empty = {
   case_id:'TEST',context_revision:1,permissions_mode:'MVP_OPEN',can_write:true,can_review:true,
-  confirmed_facts:[],proposed_facts:[],open_gaps:[],archived_gaps:[],ai_suggestions:[],reviewed_suggestions:[],
+  confirmed_facts:[],proposed_facts:[],open_gaps:[],archived_gaps:[],gap_history:[],ai_suggestions:[],reviewed_suggestions:[],
   active_tasks:[],archived_tasks:[],recent_decisions:[],legacy_facts:[],legacy_suggestions:[],legacy_gaps:[],
   legacy_records:[],legacy_archived_suggestions:[],
 };
@@ -73,7 +73,7 @@ const empty = {
     context.items = [...context.items.filter(entry => entry.item_id !== current.item_id && entry.item_id !== archive.item_id),display];
   }};
   const edit = component('EditableContext.tsx','EditableContext',{section:'SUMMARY',title:'요약',lines:['첫째','둘째','셋째']},[],{},context);
-  button(edit.render(),'요약 2번째 항목 삭제').props.onClick(); await flush();
+  button(edit.render(),'요약 2번째 항목 제외').props.onClick(); await flush();
   assert.deepEqual(writes.at(-1), {section:'SUMMARY',operation:'ARCHIVE',version:0,text:'첫째\n셋째',archivedText:'둘째',archiveIndex:1});
   const remount = component('EditableContext.tsx','EditableContext',{section:'SUMMARY',title:'요약',lines:['새 AI 내용']},[],{},context);
   assert.equal(find(remount.render(), node => node.props?.className === 'context-line-text').props.children, '첫째');
@@ -81,8 +81,8 @@ const empty = {
   find(edit.render(), node => node.type === 'textarea').props.onChange({target:{value:'직원 수정'}});
   find(edit.render(), node => node.type === 'form').props.onSubmit({preventDefault(){}}); await flush();
   assert.equal(writes.at(-1).text,'직원 수정\n셋째');
-  button(edit.render(),'요약 2번째 항목 삭제').props.onClick(); await flush();
-  button(edit.render(),'요약 1번째 항목 삭제').props.onClick(); await flush();
+  button(edit.render(),'요약 2번째 항목 제외').props.onClick(); await flush();
+  button(edit.render(),'요약 1번째 항목 제외').props.onClick(); await flush();
   assert.equal(writes.at(-1).operation,'ARCHIVE');
   assert.equal(find(edit.render(), node => node.type === 'li' && node.props?.className === 'context-line'), undefined);
   for (const [section, title] of [['SUMMARY','사건 요약'],['EXPOSURE','피해·노출'],['CLAIM','상대방 주장'],['DEMAND','상대방 요구']]) {
@@ -91,9 +91,9 @@ const empty = {
       {item_id:`archive-${section}`,section,semantic_key:`display-archive:${section}`,item_version:1,staff_text:'삭제된 내용',deleted_by:'staff',archive_index:0},
     ],save:context.save,archiveLine:context.archiveLine,restoreArchive:context.restoreArchive};
     const hidden = component('EditableContext.tsx','EditableContext',{section,title,lines:[]},[],{},hiddenContext);
-    assert.equal(find(hidden.render(), node => node.type === 'button' && node.props['aria-label'] === `${title} 삭제 취소`), undefined);
-    assert.ok(find(hidden.render(), node => node.type === 'summary' && node.props.children === '완료·삭제'));
-    assert.ok(find(hidden.render(), node => node.type === 'button' && node.props['aria-label'] === `${title} 삭제 항목 복원`));
+    assert.equal(find(hidden.render(), node => node.type === 'button' && node.props['aria-label'] === `${title} 제외 취소`), undefined);
+    assert.ok(find(hidden.render(), node => node.type === 'summary' && node.props.children === '완료·제외'));
+    assert.ok(find(hidden.render(), node => node.type === 'button' && node.props['aria-label'] === `${title} 제외 항목 복원`));
   }
   button(edit.render(),'요약 추가').props.onClick();
   find(edit.render(), node => node.type === 'textarea').props.onChange({target:{value:'새 기록'}});
@@ -102,9 +102,9 @@ const empty = {
   assert.equal(writes.at(-1).text,'새 기록');
   assert.equal(context.items.find(item => item.semantic_key === 'display').deleted_by,null);
   while (context.items.some(item => item.semantic_key.startsWith('display-archive:') && item.deleted_by)) {
-    button(edit.render(),'요약 삭제 항목 복원').props.onClick(); await flush();
+    button(edit.render(),'요약 제외 항목 복원').props.onClick(); await flush();
   }
-  assert.equal(find(edit.render(), node => node.type === 'summary' && node.props.children === '완료·삭제'), undefined);
+  assert.equal(find(edit.render(), node => node.type === 'summary' && node.props.children === '완료·제외'), undefined);
 
   button(edit.render(),'요약 1번째 항목 수정').props.onClick();
   const previousSave = context.save;
@@ -148,6 +148,25 @@ const empty = {
   assert.equal(commands.at(-1)[3].title,'새 업무');
   assert.equal(commands.at(-1)[3].description,'새 업무 상세');
   assert.ok(commands.at(-1)[3].client_request_id);
+
+  workspace.open_gaps = [{gap_id:'gap-1',semantic_key:'transfer.actual.status',title:'송금 여부',reason:'확인 필요',status:'OPEN',version:2}];
+  button(tasks.render(),'수정').props.onClick();
+  find(tasks.render(), node => node.type === 'input').props.onChange({target:{value:'실제 송금 여부'}});
+  find(tasks.render(), node => node.type === 'textarea').props.onChange({target:{value:'거래 원장 확인 필요'}});
+  find(tasks.render(), node => node.type === 'form').props.onSubmit({preventDefault(){}}); await flush();
+  assert.equal(commands.at(-1)[1],'gaps/gap-1');
+  assert.equal(commands.at(-1)[3].expected_version,2);
+  assert.equal(commands.at(-1)[3].edited_title,'실제 송금 여부');
+  assert.equal(commands.at(-1)[3].edited_reason,'거래 원장 확인 필요');
+
+  workspace.open_gaps = [];
+  workspace.legacy_gaps = [{id:'old-gap',semantic_key:'transfer.actual.status',title:'송금 여부',reason:'확인 필요',status:'OPEN',version:1}];
+  button(tasks.render(),'제외').props.onClick();
+  find(tasks.render(), node => node.type === 'textarea').props.onChange({target:{value:'확인 범위에서 제외'}});
+  find(tasks.render(), node => node.type === 'form').props.onSubmit({preventDefault(){}}); await flush();
+  assert.equal(commands.at(-1)[1],'legacy-gaps/old-gap');
+  assert.equal(commands.at(-1)[2],'POST');
+  assert.equal(commands.at(-1)[3].status,'DISMISSED');
 
   const composerWrites = [];
   let attempt = 0, done = 0, closed = 0;

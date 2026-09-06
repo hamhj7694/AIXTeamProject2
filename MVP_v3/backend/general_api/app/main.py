@@ -30,7 +30,7 @@ from .domains.cases.customer_progress import PREFIX as PROGRESS_PREFIX, Progress
 from request_trace import install_request_trace
 from contracts.ai_internal.work_card import CaseWorkCardOutput, WorkCardType
 from contracts.user_text import user_text
-from .domains.cases.context_workspace import build_workspace
+from .domains.cases.context_workspace import build_workspace, legacy_gap_details
 from .domains.cases.case_retrieval import collect_records, retrieve_context, similar_question, staff_context, workspace_records, merge_support_records
 from contracts.public_api.case_analyze import (
     PublicAnalyzeCaseRequest,
@@ -1672,11 +1672,11 @@ async def read_case_context_v2_resources(case_id: str, actor_user_id: str) -> Pu
 async def read_context_workspace(case_id: str, actor_user_id: str):
     store = await require_context_v2_member(case_id, actor_user_id, access="READ")
     resources = await store.list_resources(case_id)
-    facts, actions, questions, members = await asyncio.gather(
+    facts, actions, questions, members, gap_history = await asyncio.gather(
         repository.list_case_facts(case_id), repository.list_actions(case_id),
-        repository.list_customer_questions(case_id), repository.list_members(case_id),
+        repository.list_customer_questions(case_id), repository.list_members(case_id), store.list_gap_history(case_id),
     )
-    result = build_workspace(resources, facts, actions, questions)
+    result = build_workspace(resources, facts, actions, questions, gap_history)
     role = next((m.get("role") for m in members if m.get("user_id") == actor_user_id and m.get("status", "ACTIVE") == "ACTIVE"), None)
     allow_all = mvp_context_permissions(actor_user_id)
     result["permissions_mode"] = "MVP_OPEN" if allow_all else "ROLE_BASED"
@@ -1738,7 +1738,29 @@ async def create_case_context_v2_gap(case_id: str, actor_user_id: str, request: 
 async def update_case_context_v2_gap(case_id: str, gap_id: str, actor_user_id: str, request: PublicUpdateGapV2Request) -> PublicCaseGapV2:
     store = await require_context_v2_member(case_id, actor_user_id)
     try:
-        return await store.update_gap(case_id, gap_id, request.expected_version, request.status, request.reason, request.resolution_fact_id, actor_user_id)
+        return await store.update_gap(case_id, gap_id, request.expected_version, request.status, request.reason, request.resolution_fact_id, actor_user_id, request.edited_title, request.edited_reason)
+    except (KeyError, ContextV2TransitionError, ContextV2ConflictError) as exc:
+        raise_context_v2_error(exc)
+
+
+@app.post("/api/cases/{case_id}/context-v2/legacy-gaps/{action_id}", response_model=PublicCaseGapV2)
+async def update_legacy_context_gap(case_id: str, action_id: str, actor_user_id: str, request: PublicUpdateGapV2Request) -> PublicCaseGapV2:
+    store = await require_context_v2_member(case_id, actor_user_id)
+    try:
+        action = next((item for item in await repository.list_actions(case_id) if item["action_id"] == action_id), None)
+        if not action or not action.get("action_type", "").startswith("AI_CHECKLIST:"):
+            raise KeyError(action_id)
+        if action.get("status") in {"COMPLETED", "CANCELLED"}:
+            raise ContextV2TransitionError("이미 완료하거나 제외한 기존 확인 항목입니다. 최신 상태를 확인해 주세요.")
+        details = legacy_gap_details(action)
+        resources = await store.list_resources(case_id)
+        gap = next((item for item in resources.gaps if item.semantic_key == details["semantic_key"]), None)
+        if gap is None:
+            gap = await store.create_gap(case_id, {
+                "client_request_id": f"legacy-gap-{action_id}", **details,
+                "evidence_refs": [{"type": "STAFF_RECORD", "id": action_id}],
+            }, actor_user_id, source="AI")
+        return await store.update_gap(case_id, gap.gap_id, request.expected_version, request.status, request.reason, request.resolution_fact_id, actor_user_id, request.edited_title, request.edited_reason)
     except (KeyError, ContextV2TransitionError, ContextV2ConflictError) as exc:
         raise_context_v2_error(exc)
 

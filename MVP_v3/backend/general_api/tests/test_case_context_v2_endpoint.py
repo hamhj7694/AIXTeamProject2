@@ -164,6 +164,77 @@ class CaseContextV2EndpointTest(unittest.TestCase):
         self.assertEqual(resolved.status_code, 200, resolved.text)
         self.assertEqual(resolved.json()["status"], "RESOLVED")
 
+    def test_gap_edit_and_dismiss_keep_row_and_expose_audit_history(self):
+        created = self.client.post(f"{self.base}/gaps?actor_user_id=operator", json={
+            "client_request_id": "request-gap-edit-01", "semantic_key": "transfer.actual.status",
+            "title": "송금 여부", "reason": "피해 여부 확인", "priority": "URGENT",
+        }).json()
+        edited = self.client.patch(
+            f"{self.base}/gaps/{created['gap_id']}?actor_user_id=operator",
+            json={"expected_version": 1, "edited_title": "실제 송금 여부", "edited_reason": "거래 원장 확인 필요"},
+        )
+        self.assertEqual(edited.status_code, 200, edited.text)
+        self.assertEqual(edited.json()["version"], 2)
+        self.assertEqual(edited.json()["title"], "실제 송금 여부")
+        stale = self.client.patch(
+            f"{self.base}/gaps/{created['gap_id']}?actor_user_id=operator",
+            json={"expected_version": 1, "status": "DISMISSED", "reason": "중복"},
+        )
+        self.assertEqual(stale.status_code, 409)
+        dismissed = self.client.patch(
+            f"{self.base}/gaps/{created['gap_id']}?actor_user_id=operator",
+            json={"expected_version": 2, "status": "DISMISSED", "reason": "확인 대상 아님"},
+        )
+        self.assertEqual(dismissed.status_code, 200, dismissed.text)
+        workspace = self.client.get(f"{self.base}/workspace?actor_user_id=operator").json()
+        self.assertEqual(workspace["open_gaps"], [])
+        self.assertEqual(len(workspace["archived_gaps"]), 1)
+        self.assertEqual([item["operation"] for item in workspace["gap_history"]], ["EDIT", "SET_DISMISSED"])
+        self.assertEqual(workspace["gap_history"][0]["before"]["title"], "송금 여부")
+
+    def test_legacy_gap_is_promoted_once_only_when_staff_mutates_it(self):
+        self.repository._actions = [{
+            "case_id": "VP-V2", "action_id": "old-gap", "action_type": "AI_CHECKLIST:P0:transfer_status",
+            "status": "REQUESTED", "note": "송금 여부 검토",
+        }]
+        before = self.client.get(f"{self.base}/workspace?actor_user_id=operator").json()
+        self.assertEqual(len(before["legacy_gaps"]), 1)
+        self.assertEqual(before["open_gaps"], [])
+        edited = self.client.post(
+            f"{self.base}/legacy-gaps/old-gap?actor_user_id=operator",
+            json={"expected_version": 1, "edited_title": "실제 송금 여부", "edited_reason": "입출금 내역 확인"},
+        )
+        self.assertEqual(edited.status_code, 200, edited.text)
+        self.assertEqual(edited.json()["version"], 2)
+        after = self.client.get(f"{self.base}/workspace?actor_user_id=operator").json()
+        self.assertEqual(after["legacy_gaps"], [])
+        self.assertEqual(len(after["open_gaps"]), 1)
+        self.assertEqual(after["open_gaps"][0]["title"], "실제 송금 여부")
+        self.assertEqual([item["operation"] for item in after["gap_history"]], ["EDIT"])
+        repeated = self.client.post(
+            f"{self.base}/legacy-gaps/old-gap?actor_user_id=operator",
+            json={"expected_version": 1, "edited_title": "중복 생성 금지"},
+        )
+        self.assertEqual(repeated.status_code, 409)
+        resources = self.client.get(f"{self.base}/resources?actor_user_id=operator").json()
+        self.assertEqual(len(resources["gaps"]), 1)
+
+    def test_legacy_gap_can_be_soft_excluded(self):
+        self.repository._actions = [{
+            "case_id": "VP-V2", "action_id": "old-gap", "action_type": "AI_CHECKLIST:P1:personal_info_shared",
+            "status": "REQUESTED", "note": "개인정보 제공 여부 검토",
+        }]
+        dismissed = self.client.post(
+            f"{self.base}/legacy-gaps/old-gap?actor_user_id=operator",
+            json={"expected_version": 1, "status": "DISMISSED", "reason": "확인 범위에서 제외"},
+        )
+        self.assertEqual(dismissed.status_code, 200, dismissed.text)
+        self.assertEqual(dismissed.json()["status"], "DISMISSED")
+        workspace = self.client.get(f"{self.base}/workspace?actor_user_id=operator").json()
+        self.assertEqual(workspace["legacy_gaps"], [])
+        self.assertEqual(len(workspace["archived_gaps"]), 1)
+        self.assertEqual(workspace["gap_history"][0]["operation"], "SET_DISMISSED")
+
     def test_accepting_ai_suggestion_atomically_creates_staff_task(self):
         store = InMemoryCaseContextV2Repository(self.repository)
         suggestion = asyncio.run(store.propose_suggestion("VP-V2", {
