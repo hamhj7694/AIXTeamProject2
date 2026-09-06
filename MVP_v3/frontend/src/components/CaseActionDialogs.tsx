@@ -28,11 +28,14 @@ const questionTargetKey = (value: string) => ({
   VICTIM_TRANSFER_STATUS: 'transfer_status',
 }[value.trim().toUpperCase()] ?? value.trim().toLowerCase());
 const questionTextKey = (value: string) => value.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+const isPersistentQuestionDraft = (item: QuestionCandidate) => item.question_id.startsWith('staff-')
+  || item.question_id.startsWith('ai-context-')
+  || item.target_field.startsWith('ai-context-');
 
 export const reconcileQuestionDraft = (items: QuestionCandidate[], selected: string[], authoritative: QuestionCandidate[]): QuestionDraftState => {
   const validTargets = new Set(authoritative.map((item) => questionTargetKey(item.target_field)));
-  const preserved = items.filter((item) => item.question_id.startsWith('staff-') || validTargets.has(questionTargetKey(item.target_field)));
-  const usedTargets = new Set(preserved.filter((item) => !item.question_id.startsWith('staff-')).map((item) => questionTargetKey(item.target_field)));
+  const preserved = items.filter((item) => isPersistentQuestionDraft(item) || validTargets.has(questionTargetKey(item.target_field)));
+  const usedTargets = new Set(preserved.map((item) => questionTargetKey(item.target_field)));
   const usedTexts = new Set(preserved.map((item) => questionTextKey(item.question_text)));
   const added = authoritative.filter((item) => !usedTargets.has(questionTargetKey(item.target_field)) && !usedTexts.has(questionTextKey(item.question_text)));
   const nextItems = [...preserved, ...added];
@@ -106,10 +109,11 @@ export const QuestionDialog: React.FC<{ caseId: string; initial: QuestionCandida
     if (recommending) return;
     setRecommending(true); setError(''); setAiNote('');
     try {
-      const card = await casesApi.generateWorkCard(caseId, 'QUESTION_PLAN');
+      const card = await casesApi.generateWorkCard(caseId, 'QUESTION_PLAN', itemsRef.current);
       const recommended = card.questions ?? [];
-      const keys = new Set(itemsRef.current.map((item) => `${questionTargetKey(item.target_field)}|${questionTextKey(item.question_text)}`));
-      const additions = recommended.filter((item) => !keys.has(`${questionTargetKey(item.target_field)}|${questionTextKey(item.question_text)}`));
+      const targets = new Set(itemsRef.current.map((item) => questionTargetKey(item.target_field)));
+      const texts = new Set(itemsRef.current.map((item) => questionTextKey(item.question_text)));
+      const additions = recommended.filter((item) => !targets.has(questionTargetKey(item.target_field)) && !texts.has(questionTextKey(item.question_text)));
       const combined = [...itemsRef.current, ...additions];
       const latest = await casesApi.questionCandidates(caseId);
       const next = reconcileQuestionDraft(combined, [...selectedRef.current, ...additions.map((item) => item.question_id)], latest);

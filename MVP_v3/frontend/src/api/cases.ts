@@ -85,8 +85,8 @@ export const casesApi = {
       requester_display_name: CURRENT_BANK_USER.display_name, client_request_id: generateUuid(),
     }),
   }),
-  generateWorkCard: (caseId: string, cardType: WorkCardType) => request<CaseWorkCard>(`/api/cases/${encodeURIComponent(caseId)}/ai/work-cards`, {
-    method: 'POST', body: JSON.stringify({ card_type: cardType }),
+  generateWorkCard: (caseId: string, cardType: WorkCardType, questionDrafts: QuestionCandidate[] = []) => request<CaseWorkCard>(`/api/cases/${encodeURIComponent(caseId)}/ai/work-cards`, {
+    method: 'POST', body: JSON.stringify({ card_type: cardType, question_drafts: questionDrafts }),
   }),
   questionCandidates: (caseId: string) => request<QuestionCandidate[]>(`/api/cases/${encodeURIComponent(caseId)}/customer-question-candidates`),
   queueQuestions: (caseId: string, questions: QuestionCandidate[]) => request<CustomerQuestion[]>(`/api/cases/${encodeURIComponent(caseId)}/customer-questions`, {
