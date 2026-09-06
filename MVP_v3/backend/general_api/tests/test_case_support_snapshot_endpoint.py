@@ -80,7 +80,12 @@ class CaseSupportSnapshotEndpointTest(unittest.TestCase):
         response = self.client.get("/api/cases/CASE-AI-1/customer-question-candidates")
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), [])
+        payload = response.json()
+        self.assertTrue(payload)
+        self.assertNotIn(
+            "transfer_status",
+            {item["target_field"] for item in payload},
+        )
         sent_context = general_main.service.ai_client.build_case_support_snapshot.await_args.args[0]["question_context"]
         self.assertEqual(sent_context["answered_question_fields"], ["transfer_status"])
 
