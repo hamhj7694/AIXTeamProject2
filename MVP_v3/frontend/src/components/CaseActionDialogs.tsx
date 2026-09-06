@@ -4,6 +4,7 @@ import { AlertCircle, Check, ListChecks, Loader2, Pencil, Plus, Sparkles, Trash2
 import { casesApi } from '../api/cases';
 import type { QuestionCandidate, VerificationTask } from '../api/types';
 import { actionLabel } from '../presentation';
+import { generateUuid } from '../uuid';
 
 const DialogShell: React.FC<{ title: string; description: string; children: React.ReactNode; onClose: () => void }> = ({ title, description, children, onClose }) => {
   const dialogRef = useRef<HTMLElement>(null);
@@ -68,7 +69,7 @@ export const QuestionDialog: React.FC<{ caseId: string; initial: QuestionCandida
   };
   const addCustom = () => {
     const value = custom.trim(); if (!value) return;
-    const id = `staff-${crypto.randomUUID()}`;
+    const id = `staff-${generateUuid()}`;
     setItems((current) => [...current, { question_id: id, target_field: id, question_text: value, reason: '은행 담당자가 현재 Case 맥락에 따라 직접 추가했습니다.', priority: 'P1', options: [], answer_mode: 'TEXT', allow_free_text: true }]);
     setSelected((current) => [...current, id]); setCustom('');
   };
@@ -109,7 +110,7 @@ export const QuestionDialog: React.FC<{ caseId: string; initial: QuestionCandida
 
 type VerificationDraft = { id: string; claim: string; target: string };
 
-const emptyVerificationDraft = (): VerificationDraft => ({ id: crypto.randomUUID(), claim: '', target: '' });
+const emptyVerificationDraft = (): VerificationDraft => ({ id: generateUuid(), claim: '', target: '' });
 
 export const VerificationDialog: React.FC<{ caseId: string; task?: VerificationTask | null; onDone: () => Promise<void>; onClose: () => void }> = ({ caseId, task, onDone, onClose }) => {
   const [drafts, setDrafts] = useState<VerificationDraft[]>(() => task ? [] : [emptyVerificationDraft()]);
@@ -140,7 +141,7 @@ export const VerificationDialog: React.FC<{ caseId: string; task?: VerificationT
           const duplicate = current.some((item) => item.claim.trim() === proposed.claim && item.target.trim() === proposed.target);
           if (duplicate) return current;
           const blankIndex = current.findIndex((item) => !item.claim.trim() && !item.target.trim());
-          if (blankIndex < 0) return [...current, { id: crypto.randomUUID(), ...proposed }];
+          if (blankIndex < 0) return [...current, { id: generateUuid(), ...proposed }];
           return current.map((item, index) => index === blankIndex ? { ...item, ...proposed } : item);
         });
         setAiNote('AI가 사칭 주장과 공식 확인 대상을 초안으로 작성했습니다. 기관 공식 대표번호나 담당자 연락처를 확인해 수정할 수 있습니다.');
@@ -176,18 +177,86 @@ export const VerificationDialog: React.FC<{ caseId: string; task?: VerificationT
 
 const actionTypes = ['PAYMENT_HOLD_REVIEW', 'ACCOUNT_REPORT_GUIDANCE', 'EVIDENCE_PRESERVATION', 'DEVICE_SECURITY_GUIDANCE', 'CUSTOMER_CALLBACK', 'OTHER'];
 
+type ActionRecommendation = { type: string; note: string };
+
+const normalizeRecommendedActionType = (value?: string | null) =>
+  value && actionTypes.includes(value) ? value : 'OTHER';
+
 export const ActionDialog: React.FC<{ caseId: string; recovery: boolean; onDone: () => Promise<void>; onClose: () => void }> = ({ caseId, recovery, onDone, onClose }) => {
   const [type, setType] = useState(recovery ? 'PAYMENT_HOLD_REVIEW' : 'CUSTOMER_CALLBACK');
   const [note, setNote] = useState('');
+  const [recommendation, setRecommendation] = useState<ActionRecommendation | null>(null);
+  const [recommending, setRecommending] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [aiError, setAiError] = useState('');
+  const [aiNote, setAiNote] = useState('');
+  const draftTouched = useRef(false);
+  const recommendationRequest = useRef(0);
+  const activeCaseId = useRef(caseId);
+  activeCaseId.current = caseId;
+  useEffect(() => () => { recommendationRequest.current += 1; }, []);
+  useEffect(() => {
+    recommendationRequest.current += 1;
+    draftTouched.current = false;
+    setType(recovery ? 'PAYMENT_HOLD_REVIEW' : 'CUSTOMER_CALLBACK');
+    setNote(''); setRecommendation(null); setRecommending(false); setAiError(''); setAiNote('');
+  }, [caseId, recovery]);
+
+  const recommendAction = async () => {
+    if (recommending || saving) return;
+    const currentRequest = ++recommendationRequest.current;
+    const targetCaseId = caseId;
+    setRecommending(true); setAiError(''); setAiNote('');
+    try {
+      const card = await casesApi.generateWorkCard(targetCaseId, 'BANK_ACTION');
+      if (currentRequest !== recommendationRequest.current || activeCaseId.current !== targetCaseId) return;
+      const proposed = {
+        type: normalizeRecommendedActionType(card.suggested_action_type),
+        note: card.suggested_action_note?.trim().slice(0, 3000) ?? '',
+      };
+      if (!proposed.note) {
+        setAiNote('현재 사건에서 구체적인 대응 업무 초안을 만들지 못했습니다. 직접 입력하거나 다시 추천받아 주세요.');
+      } else if (!draftTouched.current && !note.trim()) {
+        setType(proposed.type); setNote(proposed.note); setRecommendation(null);
+        draftTouched.current = true;
+        setAiNote('AI 추천을 업무 유형과 내용에 반영했습니다. 검토 후 업무 기록을 눌러 주세요.');
+      } else {
+        setRecommendation(proposed);
+        setAiNote('작성 중인 내용을 보호하기 위해 추천을 미리보기로 표시했습니다.');
+      }
+    } catch (reason) {
+      if (currentRequest === recommendationRequest.current && activeCaseId.current === targetCaseId) {
+        setAiError(reason instanceof Error ? reason.message : 'AI 대응 업무 추천을 만들지 못했습니다. 다시 시도해 주세요.');
+      }
+    } finally {
+      if (currentRequest === recommendationRequest.current && activeCaseId.current === targetCaseId) setRecommending(false);
+    }
+  };
+  const applyRecommendation = () => {
+    if (!recommendation) return;
+    setType(recommendation.type); setNote(recommendation.note); setRecommendation(null);
+    draftTouched.current = true;
+    setAiNote('AI 추천을 반영했습니다. 검토 후 업무 기록을 눌러 주세요.');
+  };
   const submit = async (event: FormEvent) => {
-    event.preventDefault(); if (!note.trim() || saving) return; setSaving(true); setError('');
-    try { await casesApi.createAction(caseId, type, note.trim()); await onDone(); onClose(); }
+    event.preventDefault(); if (!note.trim() || saving || recommending) return; setSaving(true); setError('');
+    try {
+      await casesApi.createAction(caseId, type, note.trim());
+      await onDone(); onClose();
+    }
     catch (reason) { setError(reason instanceof Error ? reason.message : '대응 업무를 기록하지 못했습니다.'); }
     finally { setSaving(false); }
   };
   return <DialogShell title="대응 업무 기록" description="권장 조치를 검토한 뒤 담당자가 수행하거나 확인할 업무를 기록합니다." onClose={onClose}>
-    <form onSubmit={submit}><div className="dialog-body form-grid"><label>업무 유형<select value={type} onChange={(event) => setType(event.target.value)}>{actionTypes.map((value) => <option key={value} value={value}>{actionLabel(value)}</option>)}</select></label><label>업무 내용<textarea value={note} onChange={(event) => setNote(event.target.value)} rows={4} placeholder="확인 대상, 수행할 조치, 인수인계할 내용을 구체적으로 적어주세요." required/></label><p className="safety-notice">이 기록은 실제 지급정지나 신고를 자동 실행하지 않습니다. 은행 권한과 공식 승인 절차를 별도로 진행해야 합니다.</p><DialogError message={error}/></div><footer className="dialog-footer"><button type="button" className="secondary-action" onClick={onClose}>취소</button><button className="primary-action" disabled={saving || !note.trim()}>{saving ? <Loader2 className="spin" size={15}/> : <Check size={15}/>}업무 기록</button></footer></form>
+    <form onSubmit={submit}><div className="dialog-body form-grid">
+      <div className="ai-dialog-action"><div><Sparkles size={16}/><span><b>AI 대응 업무 추천</b><small>현재 Case의 맥락과 기존 대응 이력을 바탕으로 업무 유형과 내용을 제안합니다.</small></span></div><button type="button" onClick={() => void recommendAction()} disabled={recommending || saving}>{recommending ? <Loader2 className="spin" size={15}/> : <Sparkles size={15}/>}AI에게 추천 받기</button></div>
+      {aiNote && <p className="ai-recommendation-note">{aiNote}</p>}
+      {recommendation && <section className="action-recommendation-preview"><div><span>추천 업무 유형</span><b>{actionLabel(recommendation.type)}</b><p>{recommendation.note}</p></div><button type="button" onClick={applyRecommendation} disabled={saving}>추천 적용</button></section>}
+      <DialogError message={aiError}/>
+      <label>업무 유형<select value={type} onChange={(event) => { draftTouched.current = true; setType(event.target.value); }}>{actionTypes.map((value) => <option key={value} value={value}>{actionLabel(value)}</option>)}</select></label>
+      <label>업무 내용<textarea value={note} onChange={(event) => { draftTouched.current = true; setNote(event.target.value); }} rows={4} maxLength={3000} placeholder="확인 대상, 수행할 조치, 인수인계할 내용을 구체적으로 적어주세요." required/></label>
+      <p className="safety-notice">이 기록은 실제 지급정지나 신고를 자동 실행하지 않습니다. 은행 권한과 공식 승인 절차를 별도로 진행해야 합니다.</p><DialogError message={error}/>
+    </div><footer className="dialog-footer"><button type="button" className="secondary-action" onClick={onClose}>취소</button><button className="primary-action" disabled={saving || recommending || !note.trim()}>{saving ? <Loader2 className="spin" size={15}/> : <Check size={15}/>}업무 기록</button></footer></form>
   </DialogShell>;
 };

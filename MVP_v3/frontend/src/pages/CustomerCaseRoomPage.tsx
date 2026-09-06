@@ -11,6 +11,7 @@ import { CustomerProgressPanel, CustomerSafetyGuide } from '../customer/Customer
 import { RecoveryNavigator } from '../customer/RecoveryCards';
 import { RECOVERY_MESSAGE_PREFIX, recoveryStepFromMessage, type RecoveryStep, type RecoveryStepId } from '../customer/recovery';
 import { mergePendingMessages, removeMessage, upsertMessage } from '../api/messageState';
+import { generateUuid } from '../uuid';
 
 type CustomerOutboxItem = {
   message: CaseMessage;
@@ -158,7 +159,7 @@ export const CustomerCaseRoomPage: React.FC = () => {
     } finally { if (isCurrent()) setBusy(false); }
   };
   const send = (content: string, files: File[], requestAi: boolean): Promise<void> => {
-    const clientRequestId = crypto.randomUUID();
+    const clientRequestId = generateUuid();
     const message: CaseMessage = {
       message_id: `pending-${clientRequestId}`,
       client_request_id: clientRequestId,

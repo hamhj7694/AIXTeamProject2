@@ -8,7 +8,10 @@ from uuid import uuid4
 
 import aiomysql
 
-from .context_items import ContextItem, ContextItemChange, ContextItemConflictError, apply_staff_change, merge_ai_proposal
+from .context_items import (
+    ContextItem, ContextItemChange, ContextItemConflictError, apply_staff_change,
+    archive_display_line, archive_position, merge_ai_proposal, restore_display_line,
+)
 
 
 class ContextItemRepository:
@@ -45,6 +48,64 @@ class ContextItemRepository:
                 return [item for item in items if include_deleted or item.deleted_by is None]
             finally:
                 await connection.rollback()
+
+    async def archive_line(self, case_id, section, expected_version, remaining_text, archived_text, archive_index, actor_id):
+        pool = await self.cases._get_pool()
+        async with pool.acquire() as connection:
+            try:
+                await connection.begin()
+                async with connection.cursor() as cursor:
+                    await cursor.execute('SELECT case_id FROM cases WHERE case_id=%s FOR UPDATE', (case_id,))
+                    if not await cursor.fetchone():
+                        raise KeyError(case_id)
+                    await cursor.execute("SELECT state_json FROM case_context_items WHERE case_id=%s AND section=%s AND semantic_key='display' FOR UPDATE", (case_id, section))
+                    row = await cursor.fetchone()
+                    before = ContextItem.model_validate_json(row[0]) if row else None
+                    await cursor.execute("SELECT state_json FROM case_context_items WHERE case_id=%s AND section=%s AND semantic_key LIKE 'display-archive:%%' FOR UPDATE", (case_id, section))
+                    existing_archives = [ContextItem.model_validate_json(value[0]) for value in await cursor.fetchall()]
+                    archive_id = f'ctx-{uuid4().hex}'
+                    display, archive = archive_display_line(
+                        before, case_id=case_id, section=section, expected_version=expected_version,
+                        remaining_text=remaining_text, archived_text=archived_text,
+                        archive_index=archive_position(archive_index, existing_archives),
+                        archive_item_id=archive_id, actor_id=actor_id,
+                    )
+                    await self._save(cursor, before, display, 'ARCHIVE_DELETE', actor_id)
+                    await self._save(cursor, None, archive, 'ARCHIVE_DELETE', actor_id)
+                await connection.commit()
+                return display, archive
+            except BaseException:
+                await connection.rollback()
+                raise
+
+    async def restore_archive(self, case_id, section, expected_version, archive_item_id, archive_version, actor_id):
+        pool = await self.cases._get_pool()
+        async with pool.acquire() as connection:
+            try:
+                await connection.begin()
+                async with connection.cursor() as cursor:
+                    await cursor.execute("SELECT state_json FROM case_context_items WHERE case_id=%s AND section=%s AND semantic_key='display' FOR UPDATE", (case_id, section))
+                    display_row = await cursor.fetchone()
+                    await cursor.execute("SELECT state_json FROM case_context_items WHERE case_id=%s AND section=%s AND semantic_key LIKE 'display-archive:%%' FOR UPDATE", (case_id, section))
+                    archives = [ContextItem.model_validate_json(value[0]) for value in await cursor.fetchall()]
+                    before_archive = next((item for item in archives if item.item_id == archive_item_id), None)
+                    if not display_row or before_archive is None:
+                        raise KeyError(archive_item_id)
+                    before_display = ContextItem.model_validate_json(display_row[0])
+                    archived_before = sum(1 for item in archives if item.deleted_by is not None and item.archive_index is not None
+                                          and before_archive.archive_index is not None and item.archive_index < before_archive.archive_index)
+                    display, archive = restore_display_line(
+                        before_display, before_archive, expected_version=expected_version,
+                        archive_version=archive_version, actor_id=actor_id,
+                        archived_before=archived_before,
+                    )
+                    await self._save(cursor, before_display, display, 'RESTORE_ARCHIVE', actor_id)
+                    await self._save(cursor, before_archive, archive, 'RESTORE_ARCHIVE', actor_id)
+                await connection.commit()
+                return display, archive
+            except BaseException:
+                await connection.rollback()
+                raise
 
     async def propose(self, case_id: str, section: str, semantic_key: str, text: str, evidence_refs: list[str]) -> ContextItem:
         # Validate before opening a transaction. Keys must derive from evidence
@@ -131,3 +192,38 @@ class InMemoryContextItemRepository:
             result = section_change(before, case_id, section, expected_version, operation, text, actor_id)
             self.cases._display_items[(case_id, section)] = result
             return result
+
+    async def archive_line(self, case_id, section, expected_version, remaining_text, archived_text, archive_index, actor_id):
+        async with self.cases._lock:
+            before = self.cases._display_items.get((case_id, section))
+            existing_archives = [item for (cid, _), item in self.cases._display_items.items()
+                                 if cid == case_id and item.section == section and item.semantic_key.startswith('display-archive:')]
+            archive_id = f'ctx-{uuid4().hex}'
+            display, archive = archive_display_line(
+                before, case_id=case_id, section=section, expected_version=expected_version,
+                remaining_text=remaining_text, archived_text=archived_text,
+                archive_index=archive_position(archive_index, existing_archives),
+                archive_item_id=archive_id, actor_id=actor_id,
+            )
+            self.cases._display_items[(case_id, section)] = display
+            self.cases._display_items[(case_id, archive.item_id)] = archive
+            return display, archive
+
+    async def restore_archive(self, case_id, section, expected_version, archive_item_id, archive_version, actor_id):
+        async with self.cases._lock:
+            display = self.cases._display_items.get((case_id, section))
+            archive = self.cases._display_items.get((case_id, archive_item_id))
+            if display is None or archive is None:
+                raise KeyError(archive_item_id)
+            archives = [item for (cid, _), item in self.cases._display_items.items()
+                        if cid == case_id and item.section == section and item.semantic_key.startswith('display-archive:')]
+            archived_before = sum(1 for item in archives if item.deleted_by is not None and item.archive_index is not None
+                                  and archive.archive_index is not None and item.archive_index < archive.archive_index)
+            restored_display, restored_archive = restore_display_line(
+                display, archive, expected_version=expected_version,
+                archive_version=archive_version, actor_id=actor_id,
+                archived_before=archived_before,
+            )
+            self.cases._display_items[(case_id, section)] = restored_display
+            self.cases._display_items[(case_id, archive_item_id)] = restored_archive
+            return restored_display, restored_archive

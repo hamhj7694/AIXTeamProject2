@@ -27,6 +27,13 @@ class ContextDisplayTest(unittest.TestCase):
         return self.client.patch(self.url + '/SUMMARY?actor_user_id=staff', json={
             'expected_version': version, 'operation': operation, 'text': text})
 
+    def archive(self, section, version, archived_text, archive_index, text=None):
+        payload = {'expected_version': version, 'operation': 'ARCHIVE',
+                   'archived_text': archived_text, 'archive_index': archive_index}
+        if text is not None:
+            payload['text'] = text
+        return self.client.patch(self.url + f'/{section}?actor_user_id=staff', json=payload)
+
     def test_edit_hide_restore_reset_and_conflict(self):
         response = self.change(0, 'EDIT', '송금 진술 확인\n기관 확인 필요')
         self.assertEqual(response.status_code, 200, response.text)
@@ -61,6 +68,62 @@ class ContextDisplayTest(unittest.TestCase):
         self.assertEqual(self.client.get(self.url + '?actor_user_id=outsider').json(), [])
         visible = self.client.get(self.url + '?actor_user_id=staff').json()
         self.assertEqual(visible[0]['staff_text'], '직원 전용 사건 정리')
+
+    def test_deleted_lines_are_archived_per_section_and_can_be_restored(self):
+        sections = ('SUMMARY', 'EXPOSURE', 'CLAIM', 'DEMAND')
+        for section in sections:
+            response = self.archive(section, 0, f'{section} 삭제 항목', 0, f'{section} 활성 항목')
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual(response.json()['display']['staff_text'], f'{section} 활성 항목')
+            self.assertEqual(response.json()['archive']['deleted_by'], 'staff')
+
+        refreshed = self.client.get(self.url + '?actor_user_id=staff').json()
+        for section in sections:
+            section_items = [item for item in refreshed if item['section'] == section]
+            self.assertEqual(len(section_items), 2)
+            self.assertEqual(next(item for item in section_items if item['semantic_key'] == 'display')['staff_text'], f'{section} 활성 항목')
+            self.assertEqual(next(item for item in section_items if item['semantic_key'].startswith('display-archive:'))['staff_text'], f'{section} 삭제 항목')
+
+        claim_items = [item for item in refreshed if item['section'] == 'CLAIM']
+        display = next(item for item in claim_items if item['semantic_key'] == 'display')
+        archive = next(item for item in claim_items if item['semantic_key'].startswith('display-archive:'))
+        restored = self.client.patch(self.url + '/CLAIM?actor_user_id=staff', json={
+            'expected_version': display['item_version'], 'operation': 'RESTORE_ARCHIVE',
+            'archive_item_id': archive['item_id'], 'archive_version': archive['item_version'],
+        })
+        self.assertEqual(restored.status_code, 200, restored.text)
+        self.assertEqual(restored.json()['display']['staff_text'], 'CLAIM 삭제 항목\nCLAIM 활성 항목')
+        claim_after_refresh = [item for item in self.client.get(self.url + '?actor_user_id=staff').json() if item['section'] == 'CLAIM']
+        self.assertEqual(len(claim_after_refresh), 1)
+        self.assertEqual(claim_after_refresh[0]['semantic_key'], 'display')
+
+    def test_archive_request_validation(self):
+        self.assertEqual(self.client.patch(self.url + '/SUMMARY?actor_user_id=staff', json={
+            'expected_version': 0, 'operation': 'ARCHIVE', 'archived_text': '누락된 위치',
+        }).status_code, 422)
+        self.assertEqual(self.client.patch(self.url + '/SUMMARY?actor_user_id=staff', json={
+            'expected_version': 0, 'operation': 'RESTORE_ARCHIVE', 'archive_item_id': 'missing',
+        }).status_code, 422)
+
+    def test_multiple_deleted_lines_restore_in_original_order(self):
+        self.assertEqual(self.archive('SUMMARY', 0, '첫째', 0, '둘째').status_code, 200)
+        self.assertEqual(self.archive('SUMMARY', 1, '둘째', 0).status_code, 200)
+        items = self.client.get(self.url + '?actor_user_id=staff').json()
+        display = next(item for item in items if item['semantic_key'] == 'display')
+        archives = sorted((item for item in items if item['semantic_key'].startswith('display-archive:')),
+                          key=lambda item: item['archive_index'])
+        self.assertEqual([item['archive_index'] for item in archives], [0, 1])
+        self.assertIsNotNone(display['deleted_by'])
+
+        for archive in reversed(archives):
+            response = self.client.patch(self.url + '/SUMMARY?actor_user_id=staff', json={
+                'expected_version': display['item_version'], 'operation': 'RESTORE_ARCHIVE',
+                'archive_item_id': archive['item_id'], 'archive_version': archive['item_version'],
+            })
+            self.assertEqual(response.status_code, 200, response.text)
+            display = response.json()['display']
+        self.assertEqual(display['staff_text'], '첫째\n둘째')
+        self.assertEqual(len(self.client.get(self.url + '?actor_user_id=staff').json()), 1)
 
     def test_generated_labels_preserve_urls_and_do_not_translate_substrings(self):
         self.assertEqual(user_text('personal_info_shared: 예 / Impersonation'), '개인정보 제공 여부: 예 / 기관·신분 사칭')

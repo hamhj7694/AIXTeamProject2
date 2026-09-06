@@ -13,6 +13,7 @@ import { BankPersonalNotes } from '../components/BankPersonalNotes';
 import { ParticipantManager } from '../components/ParticipantManager';
 import { readBankBookmarks, writeBankBookmarks, type BankBookmark } from '../bank/bookmarks';
 import { stripBankAiMention } from '../bank/aiMention';
+import { generateUuid } from '../uuid';
 import { mergePendingMessages, removeMessage, upsertMessage } from '../api/messageState';
 import { caseState, caseStateTone, incidentTitle, statusLabel } from '../presentation';
 
@@ -240,7 +241,7 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ onMutated, contextOp
     } finally { if (isCurrent()) setBusy(false); }
   };
   const send = (content: string, files: File[], target: ComposerTarget, requestAi: boolean): Promise<void> => {
-    const clientRequestId = crypto.randomUUID();
+    const clientRequestId = generateUuid();
     const visibility = target === 'CUSTOMER' ? 'CUSTOMER' : 'BANK_INTERNAL';
     const message: CaseMessage = {
       message_id: `pending-${clientRequestId}`,

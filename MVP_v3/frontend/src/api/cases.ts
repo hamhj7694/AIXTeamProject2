@@ -5,6 +5,7 @@ import type {
   CaseSupportSnapshot, CustomerQuestion, MessageChannel, MessageVisibility,
   PersonalNote, QuestionCandidate, StoredCase, VerificationTask, WorkCardType,
 } from './types';
+import { generateUuid } from '../uuid';
 
 export const CURRENT_BANK_USER = {
   user_id: 'mvp-v3-bank-operator',
@@ -38,7 +39,7 @@ export const casesApi = {
   }),
   finalReportDownloadUrl: (caseId: string, format: 'pdf' | 'docx') => apiUrl(`/api/cases/${encodeURIComponent(caseId)}/reports/final/export?format=${format}`),
   analyze: (text: string) => request<AnalyzeCaseResponse>('/api/cases/analyze', {
-    method: 'POST', body: JSON.stringify({ text, client_request_id: crypto.randomUUID() }),
+    method: 'POST', body: JSON.stringify({ text, client_request_id: generateUuid() }),
   }),
   get: (caseId: string) => request<StoredCase>(`/api/cases/${encodeURIComponent(caseId)}`),
   bundle: (caseId: string) => request<CaseBundle>(`/api/cases/${encodeURIComponent(caseId)}/bundle?view=bank`),
@@ -64,7 +65,7 @@ export const casesApi = {
   heartbeat: (caseId: string, user: { user_id: string; display_name: string }, presence: CasePresence['presence'], channel: MessageChannel) => request<CasePresence>(`/api/cases/${encodeURIComponent(caseId)}/presence/heartbeat`, {
     method: 'POST', body: JSON.stringify({ user_id: user.user_id, display_name: user.display_name, presence, channel }),
   }),
-  sendMessage: (caseId: string, content: string, channel: Exclude<MessageChannel, 'AI_INTERNAL'>, attachmentIds: string[] = [], clientRequestId: string = crypto.randomUUID()) => {
+  sendMessage: (caseId: string, content: string, channel: Exclude<MessageChannel, 'AI_INTERNAL'>, attachmentIds: string[] = [], clientRequestId: string = generateUuid()) => {
     const customer = channel === 'CUSTOMER';
     return request<CaseMessage>(`/api/cases/${encodeURIComponent(caseId)}/messages`, {
       method: 'POST',
@@ -81,7 +82,7 @@ export const casesApi = {
     method: 'POST',
     body: JSON.stringify({
       prompt, channel, response_style: responseStyle, requester_user_id: CURRENT_BANK_USER.user_id,
-      requester_display_name: CURRENT_BANK_USER.display_name, client_request_id: crypto.randomUUID(),
+      requester_display_name: CURRENT_BANK_USER.display_name, client_request_id: generateUuid(),
     }),
   }),
   generateWorkCard: (caseId: string, cardType: WorkCardType) => request<CaseWorkCard>(`/api/cases/${encodeURIComponent(caseId)}/ai/work-cards`, {
@@ -122,7 +123,7 @@ export const casesApi = {
     return response.json() as Promise<Attachment>;
   },
   attachmentUrl: (attachment: Attachment) => apiUrl(attachment.download_url.replace(/\?view=(bank|customer)$/, '?view=bank')),
-  sendCustomerMessage: (caseId: string, content: string, attachmentIds: string[] = [], clientRequestId: string = crypto.randomUUID()) => request<CaseMessage>(`/api/cases/${encodeURIComponent(caseId)}/messages`, {
+  sendCustomerMessage: (caseId: string, content: string, attachmentIds: string[] = [], clientRequestId: string = generateUuid()) => request<CaseMessage>(`/api/cases/${encodeURIComponent(caseId)}/messages`, {
     method: 'POST',
     body: JSON.stringify({
       actor_type: 'CUSTOMER', actor_user_id: CURRENT_CUSTOMER_USER.user_id,
@@ -160,7 +161,7 @@ export const casesApi = {
       requester_user_id: CURRENT_CUSTOMER_USER.user_id,
       requester_display_name: CURRENT_CUSTOMER_USER.display_name,
       reply_to_message_id: replyToMessageId,
-      client_request_id: crypto.randomUUID(),
+      client_request_id: generateUuid(),
     }),
   }),
 };

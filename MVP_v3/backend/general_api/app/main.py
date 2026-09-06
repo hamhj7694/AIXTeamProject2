@@ -1535,12 +1535,28 @@ async def get_customer_progress(case_id: str):
 
 class DisplayEditRequest(BaseModel):
     expected_version: int = Field(ge=0)
-    operation: Literal['EDIT', 'DELETE', 'RESTORE', 'RESET']
+    operation: Literal['EDIT', 'DELETE', 'RESTORE', 'RESET', 'ARCHIVE', 'RESTORE_ARCHIVE']
     text: str | None = Field(default=None, max_length=4000)
+    archived_text: str | None = Field(default=None, min_length=1, max_length=4000)
+    archive_index: int | None = Field(default=None, ge=0)
+    archive_item_id: str | None = Field(default=None, min_length=1, max_length=64)
+    archive_version: int | None = Field(default=None, ge=1)
 
     @model_validator(mode='after')
     def validate_change(self):
-        ContextItemChange(expected_version=max(1, self.expected_version), operation=self.operation, text=self.text)
+        if self.operation in {'EDIT', 'DELETE', 'RESTORE', 'RESET'}:
+            ContextItemChange(expected_version=max(1, self.expected_version), operation=self.operation, text=self.text)
+            if any(value is not None for value in (self.archived_text, self.archive_index, self.archive_item_id, self.archive_version)):
+                raise ValueError('편집 요청에 보관 필드를 함께 보낼 수 없습니다.')
+        elif self.operation == 'ARCHIVE':
+            if not self.archived_text or not self.archived_text.strip() or self.archive_index is None:
+                raise ValueError('삭제 보관 내용과 원래 위치가 필요합니다.')
+            if self.text is not None and not self.text.strip():
+                raise ValueError('남은 내용은 비어 있지 않아야 합니다.')
+            if self.archive_item_id is not None or self.archive_version is not None:
+                raise ValueError('삭제 보관 요청에 복원 필드를 함께 보낼 수 없습니다.')
+        elif not self.archive_item_id or self.archive_version is None or any(value is not None for value in (self.text, self.archived_text, self.archive_index)):
+            raise ValueError('복원할 삭제 항목과 버전이 필요합니다.')
         return self
 
 
@@ -1790,20 +1806,36 @@ async def read_context_display(case_id: str, actor_user_id: str):
     # 로컬 MVP 모드에서만 은행 업무 권한을 개방하고, 그 외에는 PATCH도 역할을 검증한다.
     store = await context_display_repository(case_id)
     if mvp_context_permissions(actor_user_id):
-        return [item for item in await store.list_items(case_id, include_deleted=True) if item.semantic_key == 'display']
+        return [item for item in await store.list_items(case_id, include_deleted=True)
+                if item.semantic_key == 'display' or (item.semantic_key.startswith('display-archive:') and item.deleted_by)]
     members = await repository.list_members(case_id)
     if not any(item.get('user_id') == actor_user_id and item.get('role') in {'CASE_OWNER', 'CHAT_OPERATOR', 'REVIEWER'} for item in members):
         return []
-    return [item for item in await store.list_items(case_id, include_deleted=True) if item.semantic_key == 'display']
+    return [item for item in await store.list_items(case_id, include_deleted=True)
+            if item.semantic_key == 'display' or (item.semantic_key.startswith('display-archive:') and item.deleted_by)]
 
 
 @app.patch('/api/cases/{case_id}/context-display/{section}')
 async def edit_context_display(case_id: str, section: Section, actor_user_id: str, request: DisplayEditRequest):
     store = await bank_display_repository(case_id, actor_user_id)
     try:
+        if request.operation == 'ARCHIVE':
+            display, archive = await store.archive_line(
+                case_id, section, request.expected_version, request.text,
+                request.archived_text, request.archive_index, actor_user_id,
+            )
+            return {'display': display, 'archive': archive}
+        if request.operation == 'RESTORE_ARCHIVE':
+            display, archive = await store.restore_archive(
+                case_id, section, request.expected_version, request.archive_item_id,
+                request.archive_version, actor_user_id,
+            )
+            return {'display': display, 'archive': archive}
         return await store.edit_section(case_id, section, request.expected_version, request.operation, request.text, actor_user_id)
     except ContextItemConflictError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail='삭제 항목을 찾을 수 없습니다.') from exc
 
 
 @app.put('/api/cases/{case_id}/customer-progress/{step}', response_model=list[CustomerProgressItem])

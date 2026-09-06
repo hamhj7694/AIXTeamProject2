@@ -28,6 +28,7 @@ class ContextItem(BaseModel):
     evidence_refs: list[str] = Field(default_factory=list)
     edited_by: str | None = None
     deleted_by: str | None = None
+    archive_index: int | None = Field(default=None, ge=0)
 
     @property
     def effective_text(self) -> str:
@@ -69,6 +70,102 @@ def apply_staff_change(item: ContextItem, change: ContextItemChange, actor_id: s
     if not changes:
         return item
     return item.model_copy(update={**changes, 'item_version': item.item_version + 1})
+
+
+def archive_display_line(
+    item: ContextItem | None,
+    *,
+    case_id: str,
+    section: Section,
+    expected_version: int,
+    remaining_text: str | None,
+    archived_text: str,
+    archive_index: int,
+    archive_item_id: str,
+    actor_id: str,
+) -> tuple[ContextItem, ContextItem]:
+    if not actor_id.strip() or len(actor_id) > 64:
+        raise ValueError('유효한 서버 확인 사용자 ID가 필요합니다.')
+    if expected_version != (item.item_version if item else 0):
+        raise ContextItemConflictError('다른 담당자가 수정했습니다. 최신 내용을 다시 확인해 주세요.')
+    if item is not None and item.deleted_by is not None:
+        raise ContextItemConflictError('이미 비어 있는 영역에서는 항목을 삭제할 수 없습니다.')
+    archived = archived_text.strip()
+    remaining = remaining_text.strip() if remaining_text else ''
+    if not archived or len(archived) > 4000 or len(remaining) > 4000:
+        raise ValueError('보관할 사건 맥락 내용이 유효하지 않습니다.')
+    seed = item or ContextItem(
+        item_id=f'ctx-{archive_item_id}', case_id=case_id, section=section,
+        semantic_key='display', item_version=1,
+    )
+    display = seed.model_copy(update={
+        'staff_text': remaining or None,
+        'edited_by': actor_id,
+        'deleted_by': None if remaining else actor_id,
+        'item_version': item.item_version + 1 if item else 1,
+    })
+    archive = ContextItem(
+        item_id=archive_item_id,
+        case_id=case_id,
+        section=section,
+        semantic_key=f'display-archive:{archive_item_id}',
+        item_version=1,
+        staff_text=archived,
+        edited_by=actor_id,
+        deleted_by=actor_id,
+        archive_index=archive_index,
+    )
+    return display, archive
+
+
+def archive_position(active_index: int, archives: list[ContextItem]) -> int:
+    position = active_index
+    for archived_index in sorted(
+        item.archive_index for item in archives
+        if item.deleted_by is not None and item.archive_index is not None
+    ):
+        if archived_index <= position:
+            position += 1
+    return position
+
+
+def restore_display_line(
+    display: ContextItem,
+    archive: ContextItem,
+    *,
+    expected_version: int,
+    archive_version: int,
+    actor_id: str,
+    archived_before: int = 0,
+) -> tuple[ContextItem, ContextItem]:
+    if not actor_id.strip() or len(actor_id) > 64:
+        raise ValueError('유효한 서버 확인 사용자 ID가 필요합니다.')
+    if display.item_version != expected_version or archive.item_version != archive_version:
+        raise ContextItemConflictError('다른 담당자가 수정했습니다. 최신 내용을 다시 확인해 주세요.')
+    if (
+        archive.case_id != display.case_id
+        or archive.section != display.section
+        or not archive.semantic_key.startswith('display-archive:')
+        or archive.deleted_by is None
+        or not archive.effective_text.strip()
+    ):
+        raise ContextItemConflictError('복원할 삭제 항목을 찾을 수 없습니다.')
+    lines = [] if display.deleted_by is not None else [line for line in display.effective_text.splitlines() if line.strip()]
+    original_index = archive.archive_index if archive.archive_index is not None else len(lines)
+    index = min(max(0, original_index - archived_before), len(lines))
+    lines.insert(index, archive.effective_text.strip())
+    restored_display = display.model_copy(update={
+        'staff_text': '\n'.join(lines),
+        'edited_by': actor_id,
+        'deleted_by': None,
+        'item_version': display.item_version + 1,
+    })
+    restored_archive = archive.model_copy(update={
+        'edited_by': actor_id,
+        'deleted_by': None,
+        'item_version': archive.item_version + 1,
+    })
+    return restored_display, restored_archive
 
 
 def merge_ai_proposal(item: ContextItem, text: str, evidence_refs: list[str]) -> ContextItem:

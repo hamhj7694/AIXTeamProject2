@@ -11,6 +11,7 @@ interface Props {
 
 export const BankPersonalNotes: React.FC<Props> = ({ caseId, open, onClose }) => {
   const closeRef = useRef<HTMLButtonElement>(null);
+  const onCloseRef = useRef(onClose);
   const [notes, setNotes] = useState<PersonalNote[]>([]);
   const [draft, setDraft] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -18,6 +19,8 @@ export const BankPersonalNotes: React.FC<Props> = ({ caseId, open, onClose }) =>
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
 
   const load = useCallback(async () => {
     setLoading(true); setError('');
@@ -29,10 +32,10 @@ export const BankPersonalNotes: React.FC<Props> = ({ caseId, open, onClose }) =>
   useEffect(() => {
     if (!open) return;
     void load(); closeRef.current?.focus();
-    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') onCloseRef.current(); };
     window.addEventListener('keydown', closeOnEscape);
     return () => window.removeEventListener('keydown', closeOnEscape);
-  }, [load, onClose, open]);
+  }, [load, open]);
 
   const create = async (event: FormEvent) => {
     event.preventDefault();

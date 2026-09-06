@@ -2,7 +2,8 @@ import unittest
 
 from pydantic import ValidationError
 from general_api.app.domains.cases.context_items import (
-    ContextItem, ContextItemChange, ContextItemConflictError, apply_staff_change, merge_ai_proposal,
+    ContextItem, ContextItemChange, ContextItemConflictError, apply_staff_change,
+    archive_display_line, archive_position, merge_ai_proposal, restore_display_line,
 )
 
 
@@ -44,3 +45,43 @@ class ContextItemTest(unittest.TestCase):
         deleted = apply_staff_change(self.item, ContextItemChange(expected_version=1, operation='DELETE'), 'staff-1')
         with self.assertRaises(ContextItemConflictError):
             apply_staff_change(deleted, ContextItemChange(expected_version=2, operation='EDIT', text='수정'), 'staff-1')
+
+    def test_archive_and_restore_display_line_preserve_identity_and_position(self):
+        display = ContextItem(item_id='display-1', case_id='VP-1', section='CLAIM',
+                              semantic_key='display', item_version=2, staff_text='첫째\n둘째')
+        active, archive = archive_display_line(
+            display, case_id='VP-1', section='CLAIM', expected_version=2,
+            remaining_text='둘째', archived_text='첫째', archive_index=0,
+            archive_item_id='archive-1', actor_id='staff-1',
+        )
+        self.assertEqual(active.staff_text, '둘째')
+        self.assertEqual(archive.staff_text, '첫째')
+        self.assertEqual(archive.deleted_by, 'staff-1')
+        self.assertEqual(archive.archive_index, 0)
+        restored, consumed = restore_display_line(
+            active, archive, expected_version=3, archive_version=1, actor_id='staff-2',
+        )
+        self.assertEqual(restored.staff_text, '첫째\n둘째')
+        self.assertIsNone(consumed.deleted_by)
+        self.assertEqual(consumed.item_id, archive.item_id)
+
+    def test_archive_positions_preserve_order_across_multiple_deletions(self):
+        first = ContextItem(item_id='archive-a', case_id='VP-1', section='CLAIM',
+                            semantic_key='display-archive:a', item_version=1,
+                            staff_text='첫째', deleted_by='staff', archive_index=0)
+        second_position = archive_position(0, [first])
+        self.assertEqual(second_position, 1)
+        second = ContextItem(item_id='archive-b', case_id='VP-1', section='CLAIM',
+                             semantic_key='display-archive:b', item_version=1,
+                             staff_text='둘째', deleted_by='staff', archive_index=second_position)
+        empty = ContextItem(item_id='display-1', case_id='VP-1', section='CLAIM',
+                            semantic_key='display', item_version=3, deleted_by='staff')
+        restored_second, _ = restore_display_line(
+            empty, second, expected_version=3, archive_version=1,
+            actor_id='staff', archived_before=1,
+        )
+        restored_all, _ = restore_display_line(
+            restored_second, first, expected_version=4, archive_version=1,
+            actor_id='staff', archived_before=0,
+        )
+        self.assertEqual(restored_all.staff_text, '첫째\n둘째')

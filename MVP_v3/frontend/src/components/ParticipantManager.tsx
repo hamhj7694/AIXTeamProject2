@@ -3,6 +3,7 @@ import { Check, Loader2, RefreshCw, UserPlus, Users, Wifi, WifiOff, X } from 'lu
 import { casesApi, CURRENT_BANK_USER, CURRENT_CUSTOMER_USER } from '../api/cases';
 import { loadRuntimePermissionsMode, type PermissionsMode } from '../api/contextWorkspace';
 import type { CaseMember, CaseMemberRole, CasePresence } from '../api/types';
+import { generateUuid } from '../uuid';
 
 interface Props {
   caseId: string;
@@ -78,7 +79,7 @@ export const ParticipantManager: React.FC<Props> = ({ caseId, open, onClose, onC
     if (!newName.trim() || busy) return;
     setBusy(true); setError('');
     try {
-      await casesApi.upsertMember(caseId, { user_id: `staff-${crypto.randomUUID()}`, display_name: newName.trim(), role: newRole });
+      await casesApi.upsertMember(caseId, { user_id: `staff-${generateUuid()}`, display_name: newName.trim(), role: newRole });
       setNewName(''); setNewRole('VIEWER'); await load(); await onChanged();
     } catch (reason) { setError(reason instanceof Error ? reason.message : '참여자를 추가하지 못했습니다.'); }
     finally { setBusy(false); }
