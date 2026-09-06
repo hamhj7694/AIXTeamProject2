@@ -60,11 +60,12 @@ class CaseContextV2EndpointTest(unittest.TestCase):
         self.assertEqual(len(data["legacy_records"]), 1)
         self.assertTrue(data["can_write"])
         self.assertFalse(data["can_review"])
+        self.assertTrue(data["can_review_suggestions"])
         self.assertEqual(len(self.repository._context_v2_history), 0)
 
     def test_legacy_suggestion_cannot_create_duplicate_tasks(self):
         self.repository._actions = [{"case_id": "VP-V2", "action_id": "old-ai", "action_type": "AI_CHECKLIST:P0:transfer_status", "status": "REQUESTED", "note": "실제 송금 내역 검토"}]
-        url = f"{self.base}/legacy-suggestions/old-ai/review?actor_user_id=owner"
+        url = f"{self.base}/legacy-suggestions/old-ai/review?actor_user_id=operator"
         payload = {"expected_version": 1, "decision": "ACCEPT", "edited_title": "원장 확인"}
         first = self.client.post(url, json=payload)
         self.assertEqual(first.status_code, 200, first.text)
@@ -262,6 +263,37 @@ class CaseContextV2EndpointTest(unittest.TestCase):
         self.assertEqual(repeated.status_code, 409)
         resources = self.client.get(f"{self.base}/resources?actor_user_id=owner").json()
         self.assertEqual(len(resources["tasks"]), 1)
+
+    def test_chat_operator_can_review_only_ai_suggestions(self):
+        store = InMemoryCaseContextV2Repository(self.repository)
+        accepted_candidate = asyncio.run(store.propose_suggestion("VP-V2", {
+            "suggestion_type": "STAFF_REVIEW", "title": "자료 검토", "rationale": "추가 검토 필요",
+            "priority": "HIGH", "dedupe_key": "operator-review:accept",
+        }))
+        accepted = self.client.patch(
+            f"{self.base}/suggestions/{accepted_candidate.suggestion_id}/review?actor_user_id=operator",
+            json={"expected_version": 1, "decision": "ACCEPT", "edited_title": "거래 자료 검토"},
+        )
+        self.assertEqual(accepted.status_code, 200, accepted.text)
+        dismissed_candidate = asyncio.run(store.propose_suggestion("VP-V2", {
+            "suggestion_type": "STAFF_REVIEW", "title": "중복 검토", "rationale": "중복 후보",
+            "priority": "NORMAL", "dedupe_key": "operator-review:dismiss",
+        }))
+        dismissed = self.client.patch(
+            f"{self.base}/suggestions/{dismissed_candidate.suggestion_id}/review?actor_user_id=operator",
+            json={"expected_version": 1, "decision": "DISMISS", "reason": "중복"},
+        )
+        self.assertEqual(dismissed.status_code, 200, dismissed.text)
+        viewer_candidate = asyncio.run(store.propose_suggestion("VP-V2", {
+            "suggestion_type": "STAFF_REVIEW", "title": "제한 확인", "rationale": "권한 확인",
+            "priority": "NORMAL", "dedupe_key": "viewer-review:forbidden",
+        }))
+        forbidden = self.client.patch(
+            f"{self.base}/suggestions/{viewer_candidate.suggestion_id}/review?actor_user_id=viewer",
+            json={"expected_version": 1, "decision": "DISMISS", "reason": "권한 없음"},
+        )
+        self.assertEqual(forbidden.status_code, 403)
+        self.assertFalse(self.client.get(f"{self.base}/workspace?actor_user_id=operator").json()["can_review"])
 
     def test_task_completion_requires_result_and_reviewer(self):
         created = self.client.post(f"{self.base}/tasks?actor_user_id=operator", json={

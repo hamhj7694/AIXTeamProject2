@@ -35,6 +35,7 @@ class MvpOpenPermissionsTest(unittest.TestCase):
                 self.assertEqual(response.status_code, 200, response.text)
                 self.assertTrue(response.json()["can_write"])
                 self.assertTrue(response.json()["can_review"])
+                self.assertTrue(response.json()["can_review_suggestions"])
                 self.assertEqual(response.json()["permissions_mode"], "MVP_OPEN")
         self.assertEqual(self.repo._members, before)
 
@@ -88,5 +89,6 @@ class MvpOpenPermissionsTest(unittest.TestCase):
         with patch.dict(os.environ, {"MVP_OPEN_PERMISSIONS": "0"}):
             self.assertEqual(self.client.get('/api/runtime-config').json(), {"permissions_mode": "ROLE_BASED"})
             self.assertFalse(self.client.get(f"{self.base}/workspace?actor_user_id=operator").json()["can_review"])
+            self.assertTrue(self.client.get(f"{self.base}/workspace?actor_user_id=operator").json()["can_review_suggestions"])
             self.assertEqual(self.client.get(f"{self.base}/workspace?actor_user_id=new-bank-user").status_code, 403)
         self.assertEqual(self.client.get('/api/cases/missing/context-v2/workspace?actor_user_id=new-bank-user').status_code, 404)

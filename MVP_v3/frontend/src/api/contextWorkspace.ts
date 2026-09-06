@@ -16,6 +16,7 @@ export interface ContextWorkspaceData {
   permissions_mode: PermissionsMode;
   can_write: boolean;
   can_review: boolean;
+  can_review_suggestions: boolean;
   confirmed_facts: ContextFact[];
   proposed_facts: ContextFact[];
   open_gaps: ContextGap[];

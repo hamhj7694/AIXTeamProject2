@@ -1682,12 +1682,13 @@ async def read_context_workspace(case_id: str, actor_user_id: str):
     result["permissions_mode"] = "MVP_OPEN" if allow_all else "ROLE_BASED"
     result["can_write"] = allow_all or role in {"CASE_OWNER", "CHAT_OPERATOR", "REVIEWER"}
     result["can_review"] = allow_all or role in {"CASE_OWNER", "REVIEWER"}
+    result["can_review_suggestions"] = allow_all or role in {"CASE_OWNER", "CHAT_OPERATOR", "REVIEWER"}
     return result
 
 
 @app.post("/api/cases/{case_id}/context-v2/legacy-suggestions/{action_id}/review", response_model=PublicSuggestionReviewResultV2)
 async def review_legacy_context_suggestion(case_id: str, action_id: str, actor_user_id: str, request: PublicReviewSuggestionV2Request):
-    store = await require_context_v2_member(case_id, actor_user_id, access="REVIEW")
+    store = await require_context_v2_member(case_id, actor_user_id, access="WRITE")
     try:
         action = next((a for a in await repository.list_actions(case_id) if a["action_id"] == action_id), None)
         if not action or not action.get("action_type", "").startswith("AI_CHECKLIST:"):
@@ -1767,7 +1768,7 @@ async def update_legacy_context_gap(case_id: str, action_id: str, actor_user_id:
 
 @app.patch("/api/cases/{case_id}/context-v2/suggestions/{suggestion_id}/review", response_model=PublicSuggestionReviewResultV2)
 async def review_case_context_v2_suggestion(case_id: str, suggestion_id: str, actor_user_id: str, request: PublicReviewSuggestionV2Request) -> PublicSuggestionReviewResultV2:
-    store = await require_context_v2_member(case_id, actor_user_id, access="REVIEW")
+    store = await require_context_v2_member(case_id, actor_user_id, access="WRITE")
     try:
         suggestion, task = await store.review_suggestion(case_id, suggestion_id, request.model_dump(mode="json"), actor_user_id)
         return PublicSuggestionReviewResultV2(suggestion=suggestion, created_task=task)

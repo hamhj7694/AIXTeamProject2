@@ -22,6 +22,27 @@ const DialogShell: React.FC<{ title: string; description: string; children: Reac
 const DialogError = ({ message }: { message: string }) => message ? <p className="dialog-error"><AlertCircle size={15}/>{message}</p> : null;
 
 type QuestionDraftState = { items: QuestionCandidate[]; selected: string[] };
+const questionTargetKey = (value: string) => ({
+  PERSONAL_INFO: 'personal_information_exposure', PERSONAL_INFO_SHARED: 'personal_information_exposure', PERSONAL_INFORMATION: 'personal_information_exposure',
+  AUTHENTICATION_INFO: 'authentication_information_exposure', AUTH_INFO: 'authentication_information_exposure', AUTH_INFO_SHARED: 'authentication_information_exposure',
+  VICTIM_TRANSFER_STATUS: 'transfer_status',
+}[value.trim().toUpperCase()] ?? value.trim().toLowerCase());
+const questionTextKey = (value: string) => value.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+
+export const reconcileQuestionDraft = (items: QuestionCandidate[], selected: string[], authoritative: QuestionCandidate[]): QuestionDraftState => {
+  const validTargets = new Set(authoritative.map((item) => questionTargetKey(item.target_field)));
+  const preserved = items.filter((item) => item.question_id.startsWith('staff-') || validTargets.has(questionTargetKey(item.target_field)));
+  const usedTargets = new Set(preserved.filter((item) => !item.question_id.startsWith('staff-')).map((item) => questionTargetKey(item.target_field)));
+  const usedTexts = new Set(preserved.map((item) => questionTextKey(item.question_text)));
+  const added = authoritative.filter((item) => !usedTargets.has(questionTargetKey(item.target_field)) && !usedTexts.has(questionTextKey(item.question_text)));
+  const nextItems = [...preserved, ...added];
+  const validIds = new Set(nextItems.map((item) => item.question_id));
+  return {
+    items: nextItems,
+    selected: [...new Set([...selected.filter((id) => validIds.has(id)), ...added.filter((item) => item.priority === 'P0').map((item) => item.question_id)])],
+  };
+};
+
 const questionDraftKey = (caseId: string) => `csr:question-drafts:${caseId}`;
 const readQuestionDraft = (caseId: string): QuestionDraftState | null => {
   try {
@@ -39,19 +60,27 @@ export const QuestionDialog: React.FC<{ caseId: string; initial: QuestionCandida
   const [items, setItems] = useState<QuestionCandidate[]>(savedDraft?.items ?? initial);
   const [selected, setSelected] = useState<string[]>(savedDraft?.selected ?? initial.filter((item) => item.priority === 'P0').map((item) => item.question_id));
   const [custom, setCustom] = useState('');
-  const [loading, setLoading] = useState(initial.length === 0 && !savedDraft);
+  const [loading, setLoading] = useState(true);
   const [recommending, setRecommending] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [aiNote, setAiNote] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState('');
+  const itemsRef = useRef(items);
+  const selectedRef = useRef(selected);
+  itemsRef.current = items;
+  selectedRef.current = selected;
+  const applyAuthoritativeCandidates = (authoritative: QuestionCandidate[], baseItems = itemsRef.current, baseSelected = selectedRef.current) => {
+    const next = reconcileQuestionDraft(baseItems, baseSelected, authoritative);
+    setItems(next.items); setSelected(next.selected);
+  };
   useEffect(() => {
-    if (initial.length || savedDraft) return;
     let active = true;
-    casesApi.questionCandidates(caseId).then((next) => { if (active) { setItems(next); setSelected(next.filter((item) => item.priority === 'P0').map((item) => item.question_id)); } }).catch((reason) => active && setError(reason instanceof Error ? reason.message : '질문 후보를 불러오지 못했습니다.')).finally(() => active && setLoading(false));
+    setLoading(true);
+    casesApi.questionCandidates(caseId).then((next) => { if (active) applyAuthoritativeCandidates(next); }).catch((reason) => active && setError(reason instanceof Error ? reason.message : '질문 후보를 불러오지 못했습니다.')).finally(() => active && setLoading(false));
     return () => { active = false; };
-  }, [caseId, initial.length, savedDraft]);
+  }, [caseId]);
   useEffect(() => {
     if (!loading) writeQuestionDraft(caseId, { items, selected });
   }, [caseId, items, loading, selected]);
@@ -79,12 +108,15 @@ export const QuestionDialog: React.FC<{ caseId: string; initial: QuestionCandida
     try {
       const card = await casesApi.generateWorkCard(caseId, 'QUESTION_PLAN');
       const recommended = card.questions ?? [];
-      setItems((current) => {
-        const keys = new Set(current.map((item) => `${item.target_field}|${item.question_text.trim()}`));
-        return [...current, ...recommended.filter((item) => !keys.has(`${item.target_field}|${item.question_text.trim()}`))];
-      });
-      setSelected((current) => [...new Set([...current, ...recommended.map((item) => item.question_id)])]);
-      setAiNote(recommended.length ? `${recommended.length}개의 질문 초안을 현재 목록에 반영했습니다. 내용을 검토하고 수정·선택해 주세요.` : '현재 Case에서 새로 추천할 질문이 없습니다.');
+      const keys = new Set(itemsRef.current.map((item) => `${questionTargetKey(item.target_field)}|${questionTextKey(item.question_text)}`));
+      const additions = recommended.filter((item) => !keys.has(`${questionTargetKey(item.target_field)}|${questionTextKey(item.question_text)}`));
+      const combined = [...itemsRef.current, ...additions];
+      const latest = await casesApi.questionCandidates(caseId);
+      const next = reconcileQuestionDraft(combined, [...selectedRef.current, ...additions.map((item) => item.question_id)], latest);
+      setItems(next.items); setSelected(next.selected);
+      const acceptedIds = new Set(next.items.map((item) => item.question_id));
+      const accepted = additions.filter((item) => acceptedIds.has(item.question_id)).length;
+      setAiNote(accepted > 0 ? `${accepted}개의 질문 초안을 현재 목록에 반영했습니다. 내용을 검토하고 수정·선택해 주세요.` : '현재 Case에서 새로 추천할 질문이 없습니다.');
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'AI 질문 추천을 만들지 못했습니다.'); }
     finally { setRecommending(false); }
   };
@@ -92,7 +124,27 @@ export const QuestionDialog: React.FC<{ caseId: string; initial: QuestionCandida
   const submit = async () => {
     if (!chosen.length || saving) return;
     setSaving(true); setError('');
-    try { await casesApi.queueQuestions(caseId, chosen); clearQuestionDraft(caseId); await onDone(); onClose(); }
+    try {
+      const created = await casesApi.queueQuestions(caseId, chosen);
+      if (created.length === chosen.length) {
+        clearQuestionDraft(caseId); await onDone(); onClose(); return;
+      }
+      if (created.length > 0) await onDone();
+      const createdTargets = new Set(created.map((item) => questionTargetKey(item.target_field)));
+      const createdTexts = new Set(created.map((item) => questionTextKey(item.question_text)));
+      const remaining = created.length > 0
+        ? itemsRef.current.filter((item) => !createdTargets.has(questionTargetKey(item.target_field)) && !createdTexts.has(questionTextKey(item.question_text)))
+        : itemsRef.current;
+      const remainingIds = new Set(remaining.map((item) => item.question_id));
+      try {
+        const latest = await casesApi.questionCandidates(caseId);
+        applyAuthoritativeCandidates(latest, remaining, selectedRef.current.filter((id) => remainingIds.has(id)));
+      } catch {
+        setItems(remaining); setSelected((current) => current.filter((id) => remainingIds.has(id)));
+      }
+      if (created.length === 0) setError('새로 등록된 질문이 없습니다. 이미 등록·발송·답변되었거나 확인이 완료된 질문일 수 있습니다.');
+      else setAiNote(`${chosen.length}개 중 ${created.length}개를 등록했습니다. 나머지는 이미 처리된 질문이라 제외되었습니다.`);
+    }
     catch (reason) { setError(reason instanceof Error ? reason.message : '질문을 고객 대기열에 등록하지 못했습니다.'); }
     finally { setSaving(false); }
   };
@@ -103,6 +155,7 @@ export const QuestionDialog: React.FC<{ caseId: string; initial: QuestionCandida
       {loading ? <div className="dialog-loading"><Loader2 className="spin" size={18}/>현재 Case에서 필요한 질문을 정리하고 있습니다.</div> : <div className="question-options">{items.length ? items.map((item) => <article className="question-option-card" key={item.question_id}><label><input type="checkbox" checked={selected.includes(item.question_id)} onChange={() => setSelected((current) => current.includes(item.question_id) ? current.filter((id) => id !== item.question_id) : [...current, item.question_id])}/><span>{editingId === item.question_id ? <input className="question-edit-input" value={editingText} autoFocus onChange={(event) => setEditingText(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); saveEditing(item.question_id); } if (event.key === 'Escape') { setEditingId(null); setEditingText(''); } }}/>: <b>{item.question_text}</b>}<small><em>{priorityLabel(item.priority)}</em>{item.reason}</small></span></label><div className="question-card-actions">{editingId === item.question_id ? <><button type="button" onClick={() => saveEditing(item.question_id)} disabled={!editingText.trim()} aria-label="질문 수정 저장"><Check size={14}/></button><button type="button" onClick={() => { setEditingId(null); setEditingText(''); }} aria-label="질문 수정 취소"><X size={14}/></button></> : <button type="button" onClick={() => startEditing(item)} aria-label="질문 편집"><Pencil size={14}/></button>}<button type="button" onClick={() => removeQuestion(item.question_id)} aria-label="질문 삭제"><Trash2 size={14}/></button></div></article>) : <p className="dialog-empty">추가로 추천할 질문이 없습니다. 필요한 질문을 직접 추가할 수 있습니다.</p>}</div>}
       <div className="inline-add"><input value={custom} onChange={(event) => setCustom(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addCustom(); } }} placeholder="직접 질문 추가"/><button type="button" onClick={addCustom} disabled={!custom.trim()}><Plus size={15}/>추가</button></div>
       <DialogError message={error}/>
+      <p className="dialog-queue-note">여러 질문을 등록해도 고객에게는 한 번에 하나씩 표시되며, 나머지는 답변 대기열에 저장됩니다.</p>
     </div>
     <footer className="dialog-footer"><button className="secondary-action" onClick={onClose}>취소</button><button className="primary-action" onClick={() => void submit()} disabled={!chosen.length || saving}>{saving ? <Loader2 className="spin" size={15}/> : <Check size={15}/>}선택한 질문 {chosen.length}개 전달</button></footer>
   </DialogShell>;
