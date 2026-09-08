@@ -1,0 +1,90 @@
+{
+  "site": {
+    "service_purpose": "탐지 이후 고객 확인, 사실 검증, 은행 대응을 하나의 Shared Case로 연결합니다.",
+    "judge_explanation": "CSR은 탐지 시스템이나 금융조치 시스템을 대체하지 않습니다. 위험 신호가 발견된 뒤 사람이 확인하고 대응하는 과정을 구조화합니다."
+  },
+  "intro_steps": [
+    {
+      "id": "need",
+      "label": "STEP 1",
+      "purpose": "왜 필요한가",
+      "title": "탐지 이후에도 대응은 끝나지 않습니다.",
+      "description": "위험 신호를 찾은 뒤에도 실제 상황을 이해하고 고객에게 확인하며, 사실을 검증하고 대응해야 합니다.",
+      "items": ["사건 파악", "고객 확인", "사실 검증", "대응"],
+      "visual": "sequence"
+    },
+    {
+      "id": "shared-case",
+      "label": "STEP 2",
+      "purpose": "CSR이 무엇인가",
+      "title": "고객과 은행이 같은 사건을 함께 확인합니다.",
+      "description": "Shared Case를 중심으로 고객의 답변과 은행의 확인 업무가 이어집니다. 양쪽은 같은 사건을 보지만 공개 범위는 다릅니다.",
+      "items": ["은행 담당자", "Shared Case", "고객"],
+      "visual": "relationship"
+    },
+    {
+      "id": "target",
+      "label": "STEP 3",
+      "purpose": "실제 어디에 붙는가",
+      "title": "기존 은행 업무와 고객 접점 사이에 연결됩니다.",
+      "description": "아래 내용은 현재 외부 연동 사실이 아니라 실제 서비스 적용 방향입니다.",
+      "badge": "TARGET SERVICE",
+      "items": ["FDS / Fraud Monitoring → CSR Bank Case Room", "Bank App / Chatbot / Transfer Flow → CSR Customer Support"],
+      "visual": "target"
+    },
+    {
+      "id": "mvp",
+      "label": "STEP 4",
+      "purpose": "이번 MVP",
+      "title": "핵심 협업 흐름을 직접 체험합니다.",
+      "description": "외부 위험 Trigger 대신 통화 Text를 입력하고, 생성된 Shared Case에서 고객과 은행의 확인·대응 흐름을 살펴봅니다.",
+      "items": ["통화 Text 입력", "AI/ML 분석", "Shared Case 생성", "고객 ↔ 은행 확인·대응", "사건 기록 / Report"],
+      "visual": "sequence"
+    }
+  ],
+  "components": {
+    "frontend": {"simple_description": "고객과 은행 담당자가 실제로 사용하는 화면입니다.", "why_it_exists": "같은 사건을 서로 다른 공개 범위로 확인하고 대화하기 위해 존재합니다."},
+    "nginx": {"simple_description": "화면 파일을 제공하고 API 요청을 서비스 내부로 전달하는 입구입니다.", "why_it_exists": "사용자에게는 하나의 주소를 제공하면서 내부 서비스를 분리합니다."},
+    "general-api": {"simple_description": "Case 상태와 데이터 변경을 통제하는 서비스의 중심입니다.", "why_it_exists": "AI 결과와 사람의 업무 기록을 검증 가능한 절차로 저장하기 위해 존재합니다."},
+    "lexical-retrieval": {"simple_description": "같은 사건 안에서 질문과 관련된 근거를 찾아냅니다.", "why_it_exists": "AI가 사건 범위와 공개 범위를 벗어난 정보를 근거처럼 사용하지 않도록 돕습니다."},
+    "ai-api": {"simple_description": "통화 분석과 사건 정리, 담당자 업무 초안을 지원합니다.", "why_it_exists": "반복적인 정보 구조화와 확인 순서 정리를 보조합니다."},
+    "ml-engine": {"simple_description": "구조화된 위험 신호에서 위험 확률을 계산하는 실험 모델입니다.", "why_it_exists": "정해진 Feature 계약으로 일관된 위험 점수를 계산하는 가능성을 검증합니다."},
+    "mysql": {"simple_description": "Shared Case와 대화, 확인 업무, 보고서를 저장합니다.", "why_it_exists": "고객과 은행의 대응 기록을 한 사건 단위로 이어가기 위해 존재합니다."},
+    "docker-runtime": {"simple_description": "화면과 두 API, 데이터베이스를 함께 실행하는 환경입니다.", "why_it_exists": "개발·시연 환경을 같은 구성으로 재현하기 위해 존재합니다."}
+  },
+  "technology_roles": {
+    "react": {"where": "사용자 화면", "role": "은행·고객 UI 구성"},
+    "typescript": {"where": "사용자 화면", "role": "화면 데이터와 동작의 타입 검증"},
+    "vite": {"where": "Frontend", "role": "개발 서버와 production build"},
+    "nginx": {"where": "웹 서비스 입구", "role": "정적 화면 제공과 API reverse proxy"},
+    "fastapi": {"where": "General / AI API", "role": "REST API와 서비스 로직"},
+    "uvicorn": {"where": "API Runtime", "role": "FastAPI 애플리케이션 실행"},
+    "pydantic": {"where": "Backend Contract", "role": "요청·응답 데이터 검증"},
+    "httpx": {"where": "General → AI", "role": "내부 비동기 HTTP 통신"},
+    "openai": {"where": "AI 지원", "role": "비정형 대화 구조화와 업무지원 생성"},
+    "scikit-learn": {"where": "ML Engine", "role": "Window Logistic 추론"},
+    "joblib": {"where": "ML Engine", "role": "승인된 모델 artifact 로드"},
+    "mysql": {"where": "Shared Case Data", "role": "사건과 업무 기록 영속 저장"},
+    "docker": {"where": "Runtime", "role": "서비스 실행환경 구성"}
+  },
+  "comparison": {
+    "current": {
+      "badge": "CURRENT MVP",
+      "title": "지금 직접 체험할 수 있습니다.",
+      "description": "독립 화면과 통화 Text 입력으로 Shared Case 협업 흐름을 검증합니다.",
+      "steps": ["통화 Text 직접 입력", "AI/ML 분석", "Shared Case 생성", "Bank / Customer UI", "확인·업무 기록", "Final Report"]
+    },
+    "target": {
+      "badge": "TARGET SERVICE",
+      "title": "기존 금융 업무에 연결하는 방향입니다.",
+      "description": "현재 연동 사실이 아니라 실제 서비스 적용을 위한 설계 방향입니다.",
+      "steps": ["FDS / Telecom / ASAP / 고객 Trigger", "CSR Shared Case", "은행 Fraud/FDS 업무환경", "Bank App / Chatbot / Transfer Flow", "담당자 판단", "기존 금융시스템의 실제 조치"]
+    }
+  },
+  "expected_effects": [
+    "고객이 자신의 송금·정보 노출 상태를 다시 확인할 기회를 제공합니다.",
+    "은행 담당자가 통화 맥락과 고객 답변, 검증 결과를 한 사건에서 파악하도록 지원합니다.",
+    "AI 추천과 사람의 실행·결정을 분리해 책임 있는 업무 기록을 남깁니다."
+  ],
+  "future_integrations": ["FDS·ASAP·통신사 위험 Trigger", "은행 App·Chatbot·송금 Flow", "실제 금융조치와 공식기관 연동", "운영형 인증·실시간 이벤트·관측성"]
+}

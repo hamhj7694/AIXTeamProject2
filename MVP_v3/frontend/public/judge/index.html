@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f4f7fb" />
+    <meta name="description" content="CSR Case Share Room의 목적, 구현 구조, 현재 MVP와 실제 서비스 적용 방향을 안내합니다." />
+    <title>CSR 심사위원 안내</title>
+    <link rel="stylesheet" href="./css/judge.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">본문으로 건너뛰기</a>
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="CSR 심사위원 안내 홈">
+        <span class="brand-mark" aria-hidden="true">✓</span>
+        <span><strong>CSR | Case Share Room</strong><small>심사위원용 Intro &amp; Project Explorer</small></span>
+      </a>
+      <nav class="site-nav" aria-label="주요 영역">
+        <a href="#architecture">서비스 구조</a>
+        <a href="#technology">기술 구현</a>
+        <a href="#workflow">MVP vs 실제 서비스</a>
+      </nav>
+      <div class="header-actions">
+        <button class="button button-quiet" id="replay-intro" type="button">소개 다시보기</button>
+        <a class="button button-primary" href="/" target="_blank" rel="noopener noreferrer">CSR 서비스 체험 시작</a>
+      </div>
+    </header>
+
+    <main id="main-content">
+      <section class="hero" id="top" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="eyebrow">탐지 이후의 확인과 대응</p>
+          <h1 id="hero-title">위험 신호를 하나의<br /><span>Shared Case</span>로 연결합니다.</h1>
+          <p class="hero-description">고객과 은행이 같은 사건을 기준으로 상황을 확인하고, AI는 필요한 질문과 업무 정리를 지원합니다. 최종 판단과 실제 금융조치는 사람이 수행합니다.</p>
+          <div class="hero-actions">
+            <a class="button button-primary button-large" href="/" target="_blank" rel="noopener noreferrer">CSR 서비스 체험 시작 <span aria-hidden="true">↗</span></a>
+            <a class="button button-secondary button-large" href="#architecture">구조 먼저 보기</a>
+          </div>
+          <p class="snapshot-line" id="snapshot-line">실제 코드 기반 기술 정보를 불러오는 중입니다.</p>
+        </div>
+        <div class="hero-map" aria-label="CSR의 역할 요약">
+          <div class="map-side">
+            <span class="map-label">BANK SIDE</span>
+            <strong>은행 담당자</strong>
+            <small>사건 파악 · 검증 · 업무 기록</small>
+          </div>
+          <div class="map-link" aria-hidden="true"><span></span><b>↔</b><span></span></div>
+          <div class="map-core">
+            <span class="shield-symbol" aria-hidden="true">✓</span>
+            <strong>Shared Case</strong>
+            <small>같은 사건, 다른 공개 범위</small>
+          </div>
+          <div class="map-link" aria-hidden="true"><span></span><b>↔</b><span></span></div>
+          <div class="map-side">
+            <span class="map-label">CUSTOMER SIDE</span>
+            <strong>고객</strong>
+            <small>안전 확인 · 답변 · 진행 확인</small>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="architecture" aria-labelledby="architecture-title">
+        <div class="section-heading">
+          <div><p class="eyebrow">A. 서비스 구조</p><h2 id="architecture-title">역할부터 이해하는 CSR 구조</h2></div>
+          <p>기술명은 작게, 각 구성요소가 실제로 맡는 일을 먼저 보여줍니다. 카드를 선택하면 코드 근거와 상세 정보를 확인할 수 있습니다.</p>
+        </div>
+        <div class="architecture-flow" id="architecture-flow" aria-live="polite"></div>
+        <div class="architecture-grid" id="architecture-grid"></div>
+
+        <div class="preview-heading">
+          <div><span class="badge badge-current">CURRENT MVP</span><h3>실제 화면 미리보기</h3></div>
+          <p>기존 화면을 복제하지 않고, 현재 MVP에서 체험할 흐름만 보여줍니다.</p>
+        </div>
+        <div class="screenshot-grid">
+          <figure class="screenshot-card screenshot-wide">
+            <img src="./assets/screenshots/home.png" alt="현재 대응 사건 목록과 새 통화 분석 진입 화면" loading="lazy" />
+            <figcaption><strong>Home</strong><span>통화 Text 입력과 Shared Case 진입</span></figcaption>
+          </figure>
+          <figure class="screenshot-card">
+            <img src="./assets/screenshots/analysis-result.png" alt="통화 분석 후 생성된 Shared Case 분석 결과 화면" loading="lazy" />
+            <figcaption><strong>분석 결과</strong><span>핵심 신호와 초기 사건 정리</span></figcaption>
+          </figure>
+          <figure class="screenshot-card screenshot-wide">
+            <img src="./assets/screenshots/bank-case-room.png" alt="은행 담당자용 Bank Case Room 전체 화면" loading="lazy" />
+            <figcaption><strong>Bank Case Room</strong><span>대화 · 검증 · 업무 · 사건 맥락</span></figcaption>
+          </figure>
+          <figure class="screenshot-card screenshot-wide">
+            <img src="./assets/screenshots/customer-chat.png" alt="고객용 Customer Case Chat PC 화면" loading="lazy" />
+            <figcaption><strong>Customer Case Chat</strong><span>고객 공개 범위의 안전 확인과 상담</span></figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section class="section section-tinted" id="technology" aria-labelledby="technology-title">
+        <div class="section-heading">
+          <div><p class="eyebrow">B. 기술 구현</p><h2 id="technology-title">Technology in Action</h2></div>
+          <p>무엇을 사용했는지보다 어디에서 어떤 역할을 수행하는지에 집중합니다. CURRENT 표시는 실제 코드 근거가 있을 때만 사용합니다.</p>
+        </div>
+        <div class="technology-list" id="technology-list" aria-live="polite"></div>
+        <div class="technical-panels">
+          <article class="technical-panel">
+            <div class="panel-title"><span class="panel-icon" aria-hidden="true">AI</span><div><h3>현재 AI 기능</h3><p>실제 endpoint와 구현 파일에서 확인된 기능</p></div></div>
+            <div class="service-list" id="ai-service-list"></div>
+            <p class="boundary-note"><strong>구현 경계</strong> Case Support Snapshot은 규칙 기반 projection입니다. 사건 근거 검색은 General API에서 수행하고 AI API에는 선별된 <code>retrieved_context</code>만 전달합니다.</p>
+          </article>
+          <article class="technical-panel">
+            <div class="panel-title"><span class="panel-icon panel-icon-ml" aria-hidden="true">ML</span><div><h3>위험 확률 Pipeline</h3><p>실험용 artifact를 사용한 현재 추론 흐름</p></div></div>
+            <div class="ml-status"><span class="badge badge-experimental">EXPERIMENTAL</span><span id="artifact-summary">Artifact 정보를 불러오는 중입니다.</span></div>
+            <ol class="pipeline" aria-label="ML 위험 확률 계산 단계">
+              <li>Event</li><li>Feature</li><li>Window</li><li>Feature Vector</li><li>Logistic Model</li><li>predict_proba</li><li>Risk Probability</li>
+            </ol>
+          </article>
+        </div>
+        <div class="code-facts" id="code-facts"></div>
+      </section>
+
+      <section class="section" id="workflow" aria-labelledby="workflow-title">
+        <div class="section-heading">
+          <div><p class="eyebrow">C. MVP vs 실제 서비스</p><h2 id="workflow-title">현재 구현과 적용 방향을 분리합니다.</h2></div>
+          <p>왼쪽은 지금 직접 체험할 수 있는 범위이고, 오른쪽은 금융기관 환경에 연결하는 TARGET SERVICE 설계입니다.</p>
+        </div>
+        <div class="comparison" id="comparison"></div>
+        <div class="final-cta">
+          <div><span class="badge badge-current">READY TO TRY</span><h2>이제 실제 CSR을 체험해 보세요.</h2><p>통화 Text 분석부터 고객과 은행의 양방향 확인, 사건 기록과 Report까지 같은 Shared Case에서 이어집니다.</p></div>
+          <a class="button button-primary button-large" href="/" target="_blank" rel="noopener noreferrer">CSR 서비스 체험 시작 <span aria-hidden="true">↗</span></a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <strong>CSR | Case Share Room</strong>
+      <p>AI는 분석과 업무 정리를 지원하며, 확인과 최종 판단은 담당자가 수행합니다.</p>
+    </footer>
+
+    <a class="floating-cta" href="/" target="_blank" rel="noopener noreferrer">CSR 체험 시작 <span aria-hidden="true">↗</span></a>
+
+    <dialog class="intro-dialog" id="intro-dialog" aria-labelledby="intro-title">
+      <div class="intro-shell">
+        <div class="intro-topbar">
+          <div class="intro-progress" id="intro-progress" aria-label="소개 진행 단계"></div>
+          <button class="button button-quiet" id="skip-intro" type="button">건너뛰기</button>
+        </div>
+        <div class="intro-content" id="intro-content"></div>
+        <div class="intro-actions">
+          <button class="button button-secondary" id="intro-back" type="button">이전</button>
+          <button class="button button-primary" id="intro-next" type="button">다음</button>
+          <a class="button button-primary" id="intro-start" href="/" target="_blank" rel="noopener noreferrer">CSR 서비스 체험 시작 <span aria-hidden="true">↗</span></a>
+        </div>
+      </div>
+    </dialog>
+
+    <div class="load-status" id="load-status" role="status" aria-live="polite"></div>
+    <script type="module" src="./js/app.js"></script>
+  </body>
+</html>
