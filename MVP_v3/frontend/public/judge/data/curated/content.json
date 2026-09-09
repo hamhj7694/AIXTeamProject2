@@ -85,8 +85,8 @@
   "demo_flow": [
     {"title": "통화 내용 입력", "description": "보이스피싱 의심 통화 Text를 입력합니다.", "image": "new-analysis.png", "alt": "통화 Text가 입력된 New Shared Case 화면"},
     {"title": "AI·ML 분석", "description": "통화 맥락과 위험신호를 결합해 초기 정보를 구성합니다.", "image": "analysis-result.png", "alt": "AI와 ML 분석 결과 화면"},
-    {"title": "Shared Case 생성", "description": "분석된 위험정보를 하나의 사건으로 연결합니다.", "image": "home.png", "alt": "생성된 Shared Case 목록 화면"},
-    {"title": "고객 ↔ 은행 확인·대응", "description": "고객 답변과 담당자 확인 업무가 같은 Case에서 이어집니다.", "image": "bank-case-room.png", "alt": "은행 담당자용 Bank Case Room 화면"},
+    {"title": "Shared Case 생성", "description": "분석된 위험정보를 하나의 사건으로 연결합니다.", "image": "bank-case-room.png", "alt": "생성된 Shared Case의 Bank Case Room 화면"},
+    {"title": "고객 ↔ 은행 확인·대응", "description": "고객 답변과 담당자 확인 업무가 같은 Case에서 이어집니다.", "image": "customer-chat.png", "alt": "고객 확인과 대화가 이어지는 Customer Case Chat 화면"},
     {"title": "사건 맥락·업무 기록", "description": "확인 정보와 남은 업무를 보고 필요하면 Report로 이어갑니다.", "image": "context-panel.png", "alt": "사건 맥락과 업무 기록 패널"}
   ],
   "implementation_boundaries": [

@@ -3,9 +3,6 @@ import {
   renderApplication,
   renderArchitecture,
   renderDemo,
-  renderDeveloperDetails,
-  renderImplementationBoundary,
-  renderTechnologies,
 } from './explorer.js';
 
 const DATA_ROOT = './data';
@@ -42,9 +39,6 @@ async function start() {
     renderArchitecture(data.architecture, data.curated, data.api);
     renderApplication(data.curated);
     renderDemo(data.curated);
-    renderTechnologies(data.technologies, data.curated, data.architecture);
-    renderDeveloperDetails(data.architecture, data.api);
-    renderImplementationBoundary(data.curated, data.ai, data.api, data.database);
   } catch (error) {
     console.error(error);
     showStatus('일부 안내 정보를 불러오지 못했습니다. CSR MVP 체험은 계속 사용할 수 있습니다.');
