@@ -15,18 +15,27 @@ const readJson = (name) => JSON.parse(fs.readFileSync(path.join(autoRoot, name),
 test("Judge entry uses hash navigation and the required external MVP CTA", () => {
   const html = read("index.html");
   assert.match(html, /href="#architecture"/);
-  assert.match(html, /href="#technology"/);
-  assert.match(html, /href="#workflow"/);
+  assert.match(html, /href="#service-application"/);
+  assert.match(html, /href="#demo"/);
   assert.match(html, /id="replay-intro"/);
   assert.match(read("js/intro.js"), /location\.hash === '#intro'/);
-  assert.doesNotMatch(html, /href="\/judge\/(?:architecture|technology|workflow)/);
+  assert.doesNotMatch(html, /href="\/judge\/(?:architecture|service-application|demo)/);
   assert.match(html, /href="\/"[^>]*target="_blank"[^>]*rel="noopener noreferrer"/);
+});
+
+test("Intro state remains Judge-local and developer facts are not in the main hierarchy", () => {
+  const intro = read("js/intro.js");
+  const html = read("index.html");
+  assert.match(intro, /csr_judge_intro_seen/);
+  assert.doesNotMatch(html, /snapshot-line|code-facts|metadata generated|Git commit/i);
+  assert.match(html, /<details id="technology-details">/);
+  assert.match(html, /<details id="implementation-details">/);
 });
 
 test("Every local static dependency referenced by index exists", () => {
   const html = read("index.html");
   const references = [...html.matchAll(/(?:src|href)="\.\/([^"#]+)"/g)].map((match) => match[1]);
-  assert.ok(references.length >= 4);
+  assert.ok(references.length >= 2);
   for (const reference of references) {
     assert.equal(fs.existsSync(path.join(judgeRoot, reference)), true, `missing ${reference}`);
   }
@@ -98,4 +107,12 @@ test("Curated data cannot redefine AUTO technical facts", () => {
     }
   };
   inspect(curated);
+});
+
+test("Five-step demo uses only available CSR screenshots", () => {
+  const curated = JSON.parse(read("data/curated/content.json"));
+  assert.equal(curated.demo_flow.length, 5);
+  for (const step of curated.demo_flow) {
+    assert.equal(fs.existsSync(path.join(judgeRoot, "assets/screenshots", step.image)), true, step.image);
+  }
 });

@@ -1,5 +1,12 @@
 import { initIntro } from './intro.js';
-import { renderAi, renderArchitecture, renderCodeFacts, renderComparison, renderSnapshot, renderTechnologies } from './explorer.js';
+import {
+  renderApplication,
+  renderArchitecture,
+  renderDemo,
+  renderDeveloperDetails,
+  renderImplementationBoundary,
+  renderTechnologies,
+} from './explorer.js';
 
 const DATA_ROOT = './data';
 const files = {
@@ -32,16 +39,15 @@ async function start() {
     const values = await Promise.all(keys.map((key) => loadJson(files[key])));
     const data = Object.fromEntries(keys.map((key, index) => [key, values[index]]));
     initIntro(data.curated.intro_steps);
-    renderArchitecture(data.architecture, data.curated);
-    renderTechnologies(data.technologies, data.curated);
-    renderAi(data.ai);
-    renderComparison(data.curated);
-    renderCodeFacts(data.api, data.database, data.deployment);
-    renderSnapshot(data.snapshot);
+    renderArchitecture(data.architecture, data.curated, data.api);
+    renderApplication(data.curated);
+    renderDemo(data.curated);
+    renderTechnologies(data.technologies, data.curated, data.architecture);
+    renderDeveloperDetails(data.architecture, data.api);
+    renderImplementationBoundary(data.curated, data.ai, data.api, data.database);
   } catch (error) {
     console.error(error);
-    document.querySelector('#snapshot-line').textContent = '기술 metadata를 불러오지 못했습니다. CSR 서비스 체험은 계속 사용할 수 있습니다.';
-    showStatus('일부 기술 정보를 불러오지 못했습니다. 잠시 후 새로고침해 주세요.');
+    showStatus('일부 안내 정보를 불러오지 못했습니다. CSR MVP 체험은 계속 사용할 수 있습니다.');
   }
 }
 

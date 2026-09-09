@@ -5,126 +5,145 @@ const escapeHtml = (value) => String(value ?? '')
   .replaceAll('"', '&quot;')
   .replaceAll("'", '&#039;');
 
+const statusLabel = (status) => ({
+  CURRENT: '현재 구현', PARTIAL: '일부 구현', EXPERIMENTAL: '실험 구현', FUTURE: '향후 연동',
+}[status] ?? '확인 필요');
+
 const badgeClass = (status) => ({
   CURRENT: 'badge-current', PARTIAL: 'badge-partial', EXPERIMENTAL: 'badge-experimental', FUTURE: 'badge-future',
 }[status] ?? 'badge-partial');
 
-const cleanTechnology = (value) => String(value ?? '').replace(/\s+/g, ' ').trim();
+const plainTechnology = (value) => String(value ?? '')
+  .replace(/:[0-9].*$/, '')
+  .replace(/\s+[0-9].*$/, '')
+  .trim();
 
-const detailRows = (component) => {
-  const dependencies = component.dependencies?.join(', ') || '없음';
-  const sources = (component.source_paths ?? []).map((path) => `<li>${escapeHtml(path)}</li>`).join('');
-  return `
-    <dl>
-      <dt>Runtime</dt><dd>${escapeHtml(component.runtime || '확인되지 않음')}</dd>
-      <dt>Port</dt><dd>${component.port ? escapeHtml(component.port) : '내부 module / 해당 없음'}</dd>
-      <dt>연결</dt><dd>${escapeHtml(dependencies)}</dd>
-      <dt>Source</dt><dd><ul class="source-list">${sources}</ul></dd>
-    </dl>`;
+const displayTechnologies = (component) => {
+  const names = (component.technologies ?? []).map(plainTechnology);
+  if (component.id === 'frontend') return names.filter((name) => !name.includes('Router')).slice(0, 2).join(' · ');
+  if (component.id === 'general-api') return names.filter((name) => ['FastAPI', 'Uvicorn'].includes(name)).join(' · ');
+  if (component.id === 'ai-api') return names.filter((name) => name.includes('OpenAI') || name.includes('scikit')).join(' · ');
+  return names.slice(0, 2).join(' · ');
 };
 
-export function renderArchitecture(manifest, curated) {
+const routeSummary = (component, api) => {
+  const service = (api.services ?? []).find((item) => item.component_id === component.id);
+  if (!service) return '별도 공개 route 없음';
+  const routes = service.endpoints ?? [];
+  const examples = routes.slice(0, 3).map((item) => `${item.method} ${item.path}`).join(', ');
+  return `${routes.length}개 route${examples ? ` · 예: ${examples}` : ''}`;
+};
+
+const technicalRows = (component, api) => {
+  const sources = (component.source_paths ?? []).map((source) => `<li>${escapeHtml(source)}</li>`).join('');
+  const evidence = (component.evidence ?? []).map((item) => `<li>${escapeHtml(item.reason)}${item.line ? ` · line ${item.line}` : ''}</li>`).join('');
+  return `<dl>
+    <dt>정확한 기술</dt><dd>${escapeHtml((component.technologies ?? []).join(' · '))}</dd>
+    <dt>Runtime</dt><dd>${escapeHtml(component.runtime || '확인되지 않음')}</dd>
+    <dt>내부 Port</dt><dd>${component.port ? escapeHtml(component.port) : '해당 없음'}</dd>
+    <dt>연결 대상</dt><dd>${escapeHtml(component.dependencies?.join(', ') || '없음')}</dd>
+    <dt>Endpoint</dt><dd>${escapeHtml(routeSummary(component, api))}</dd>
+    <dt>Source</dt><dd><ul class="source-list">${sources}</ul></dd>
+    <dt>Code evidence</dt><dd><ul class="evidence-list">${evidence}</ul></dd>
+  </dl>`;
+};
+
+const nodeButton = (component, className = '') => `<button class="architecture-node ${className}" type="button" data-component-id="${escapeHtml(component.id)}" aria-pressed="false">
+  <strong>${escapeHtml(component.friendly_name)}</strong>
+  <small>${escapeHtml(displayTechnologies(component))}</small>
+</button>`;
+
+export function renderArchitecture(manifest, curated, api) {
   const flow = document.querySelector('#architecture-flow');
-  const grid = document.querySelector('#architecture-grid');
-  const descriptions = curated.components ?? {};
-  const components = manifest.components ?? [];
-  const flowOrder = ['frontend', 'nginx', 'general-api', 'ai-api', 'mysql'];
-  const byId = Object.fromEntries(components.map((item) => [item.id, item]));
-  flow.innerHTML = flowOrder.filter((id) => byId[id]).map((id, index, selected) => {
-    const item = byId[id];
-    return `${index ? '<span class="flow-arrow" aria-hidden="true">→</span>' : ''}<div class="flow-node"><strong>${escapeHtml(item.friendly_name)}</strong><small>${escapeHtml(item.technologies.join(' · '))}</small></div>`;
-  }).join('');
+  const detail = document.querySelector('#architecture-detail');
+  const byId = Object.fromEntries((manifest.components ?? []).map((item) => [item.id, item]));
+  const main = ['frontend', 'nginx', 'general-api'].map((id) => byId[id]).filter(Boolean);
+  const branches = ['ai-api', 'mysql'].map((id) => byId[id]).filter(Boolean);
 
-  grid.innerHTML = components.map((component) => {
-    const copy = descriptions[component.id] ?? {};
-    return `<article class="node-card">
-      <button class="node-toggle" type="button" aria-expanded="false">
-        <span class="node-topline"><span class="badge ${badgeClass(component.status)}">${escapeHtml(component.status)}</span><span class="node-chevron" aria-hidden="true">⌄</span></span>
-        <strong class="node-role">${escapeHtml(component.friendly_name)}</strong>
-        <span class="node-tech">${escapeHtml(component.technologies.join(' · '))}</span>
-      </button>
-      <div class="node-summary" hidden>
-        <p>${escapeHtml(copy.simple_description || component.responsibilities?.[0] || '')}</p>
-        <p class="node-why">${escapeHtml(copy.why_it_exists || '')}</p>
-        <button class="technical-toggle" type="button" aria-expanded="false">기술 상세 보기</button>
-        <div class="node-technical" hidden>${detailRows(component)}</div>
-      </div>
+  flow.innerHTML = `<div class="diagram-main">${main.map((component, index) => `${index ? '<span class="diagram-arrow" aria-hidden="true"><span>→</span></span>' : ''}${nodeButton(component)}`).join('')}</div>
+    <div class="diagram-connector" aria-hidden="true"></div>
+    <div class="diagram-branches">${branches.map((component) => nodeButton(component)).join('')}</div>`;
+
+  const select = (id) => {
+    const component = byId[id];
+    if (!component) return;
+    flow.querySelectorAll('[data-component-id]').forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.componentId === id)));
+    const copy = curated.components?.[id] ?? {};
+    detail.innerHTML = `<article class="role-detail">
+      <div class="role-detail-top"><div><h3>${escapeHtml(component.friendly_name)}</h3><p>${escapeHtml(copy.simple_description || component.responsibilities?.[0] || '')}</p></div><span class="badge ${badgeClass(component.status)}">${escapeHtml(statusLabel(component.status))}</span></div>
+      <div class="role-meta"><span><strong>작동 위치</strong> ${escapeHtml(copy.where || component.layer)}</span><span><strong>담당 역할</strong> ${escapeHtml(copy.role || component.responsibilities?.join(' · ') || '')}</span><span><strong>주요 기술</strong> ${escapeHtml(displayTechnologies(component))}</span></div>
+      <button class="technical-toggle" type="button" aria-expanded="false">기술 상세 보기</button>
+      <div class="node-technical" hidden>${technicalRows(component, api)}</div>
     </article>`;
-  }).join('');
+  };
 
-  grid.addEventListener('click', (event) => {
-    const nodeButton = event.target.closest('.node-toggle');
-    if (nodeButton) {
-      const expanded = nodeButton.getAttribute('aria-expanded') === 'true';
-      nodeButton.setAttribute('aria-expanded', String(!expanded));
-      nodeButton.nextElementSibling.hidden = expanded;
-      return;
-    }
-    const detailButton = event.target.closest('.technical-toggle');
-    if (detailButton) {
-      const expanded = detailButton.getAttribute('aria-expanded') === 'true';
-      detailButton.setAttribute('aria-expanded', String(!expanded));
-      detailButton.textContent = expanded ? '기술 상세 보기' : '기술 상세 닫기';
-      detailButton.nextElementSibling.hidden = expanded;
-    }
+  flow.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-component-id]');
+    if (button) select(button.dataset.componentId);
   });
+  detail.addEventListener('click', (event) => {
+    const button = event.target.closest('.technical-toggle');
+    if (!button) return;
+    const expanded = button.getAttribute('aria-expanded') === 'true';
+    button.setAttribute('aria-expanded', String(!expanded));
+    button.textContent = expanded ? '기술 상세 보기' : '기술 상세 닫기';
+    button.nextElementSibling.hidden = expanded;
+  });
+  if (main[0]) select(main[0].id);
 }
 
-export function renderTechnologies(manifest, curated) {
-  const list = document.querySelector('#technology-list');
-  const roles = curated.technology_roles ?? {};
-  const aliases = { 'react-dom': 'react', 'react-router-dom': 'react', '@vitejs/plugin-react': 'vite', 'python': 'python', 'nginx': 'nginx' };
-  const preferred = ['react', 'typescript', 'vite', 'nginx', 'fastapi', 'uvicorn', 'pydantic', 'httpx', 'openai', 'scikit-learn', 'joblib', 'mysql', 'docker'];
+export function renderApplication(curated) {
+  const root = document.querySelector('#application-map');
+  const target = curated.target_service;
+  const lane = (item) => `<article class="application-lane">
+    <div class="lane-heading"><span>${escapeHtml(item.label)}</span><span class="badge badge-target">TARGET SERVICE</span></div>
+    <h3>${escapeHtml(item.title)}</h3>
+    <div class="flow-stack">${item.steps.map((step, index) => `${index ? '<span class="flow-down" aria-hidden="true">↓</span>' : ''}<div class="flow-step">${escapeHtml(step)}</div>`).join('')}</div>
+    <p>${escapeHtml(item.description)}</p>
+  </article>`;
+  root.innerHTML = `${lane(target.bank)}<div class="shared-bridge" aria-label="두 접점을 연결하는 Shared Case"><strong>Shared Case</strong></div>${lane(target.customer)}
+    <p class="target-notice"><span class="badge badge-target">TARGET SERVICE</span><span>${escapeHtml(target.notice)}</span></p>`;
+}
+
+export function renderDemo(curated) {
+  const root = document.querySelector('#demo-flow');
+  root.innerHTML = (curated.demo_flow ?? []).map((step, index) => `<li class="demo-card">
+    <div class="demo-image"><img src="./assets/screenshots/${escapeHtml(step.image)}" alt="${escapeHtml(step.alt)}" loading="lazy" /></div>
+    <div class="demo-copy"><span>STEP ${index + 1}</span><h3>${escapeHtml(step.title)}</h3><p>${escapeHtml(step.description)}</p></div>
+  </li>`).join('');
+}
+
+const findTechnology = (all, names) => all.find((item) => names.includes(item.name.toLowerCase()));
+
+export function renderTechnologies(manifest, curated, architecture) {
   const all = manifest.technologies ?? [];
-  const rows = preferred.flatMap((name) => {
-    const match = all.find((item) => item.name.toLowerCase() === name || aliases[item.name.toLowerCase()] === name);
-    if (!match || !roles[name]) return [];
-    return [{ name, item: match, copy: roles[name] }];
-  });
-  list.innerHTML = rows.map(({ name, item, copy }) => `
-    <div class="technology-row">
-      <strong>${escapeHtml(name === 'openai' ? 'OpenAI' : name === 'mysql' ? 'MySQL' : name.charAt(0).toUpperCase() + name.slice(1))}</strong>
-      <span class="tech-where">${escapeHtml(copy.where)}</span>
-      <span class="tech-role">${escapeHtml(copy.role)}</span>
-      <span class="tech-version">${escapeHtml(item.resolved_version || item.declared_version || 'version unverified')}</span>
-    </div>`).join('');
-}
-
-export function renderAi(aiManifest) {
-  const list = document.querySelector('#ai-service-list');
-  list.innerHTML = (aiManifest.services ?? []).map((service) => `
-    <span class="service-chip">${escapeHtml(service.name)}<small>${escapeHtml(service.implementation_kind)}</small></span>
-  `).join('');
-  const artifact = aiManifest.ml_artifact ?? {};
-  document.querySelector('#artifact-summary').textContent = artifact.hash_matches_code
-    ? `${artifact.name} · SHA-256 코드 기대값 일치 · 역직렬화 없이 확인`
-    : 'Artifact 상태를 정적 분석만으로 확정하지 못했습니다.';
-}
-
-export function renderComparison(curated) {
-  const comparison = document.querySelector('#comparison');
-  const entries = [curated.comparison.current, curated.comparison.target];
-  comparison.innerHTML = entries.map((item, index) => `
-    <article class="comparison-card ${index ? 'target' : ''}">
-      <span class="badge ${index ? 'badge-target' : 'badge-current'}">${escapeHtml(item.badge)}</span>
-      <h3>${escapeHtml(item.title)}</h3>
-      <p>${escapeHtml(item.description)}</p>
-      <ol class="comparison-steps">${item.steps.map((step, stepIndex) => `<li data-step="${stepIndex + 1}">${escapeHtml(step)}</li>`).join('')}</ol>
-      ${index ? '<p class="comparison-warning">현재 외부 시스템과 연동된 기능이 아닙니다. 실제 서비스 적용 방향으로만 제시합니다.</p>' : ''}
-    </article>`).join('');
-}
-
-export function renderCodeFacts(api, database, deployment) {
-  const facts = [
-    { value: api.services?.find((item) => item.component_id === 'general-api')?.endpoints?.length ?? '—', label: 'General API endpoint' },
-    { value: api.services?.find((item) => item.component_id === 'ai-api')?.endpoints?.length ?? '—', label: 'AI API endpoint' },
-    { value: database.table_count ?? '—', label: '코드에서 확인된 DB table' },
+  const roles = curated.technology_roles ?? {};
+  const definitions = [
+    ['React', 'react', ['react']],
+    ['Nginx', 'nginx', ['nginx']],
+    ['FastAPI + Uvicorn', 'fastapi', ['fastapi']],
+    ['OpenAI', 'openai', ['openai']],
+    ['Logistic Regression', 'scikit-learn', ['scikit-learn']],
+    ['TF-IDF', 'tf-idf', []],
+    ['MySQL', 'mysql', ['mysql']],
+    ['Docker', 'docker', ['docker']],
   ];
-  document.querySelector('#code-facts').innerHTML = facts.map((item) => `<div class="fact-card"><strong>${escapeHtml(item.value)}</strong><span>${escapeHtml(item.label)}</span></div>`).join('');
+  const lexicalExists = (architecture.components ?? []).some((item) => item.id === 'lexical-retrieval');
+  const rows = definitions.filter(([, key, names]) => (key === 'tf-idf' ? lexicalExists : findTechnology(all, names)) && roles[key]);
+  document.querySelector('#technology-list').innerHTML = rows.map(([label, key]) => `<div class="technology-row"><strong>${escapeHtml(label)}</strong><span>${escapeHtml(roles[key].where)}</span><span>${escapeHtml(roles[key].role)}</span></div>`).join('');
 }
 
-export function renderSnapshot(snapshot) {
-  const commit = snapshot.git_commit === 'unknown' ? 'commit 확인 불가' : snapshot.git_commit.slice(0, 10);
-  const generated = snapshot.metadata_generated_at ? new Date(snapshot.metadata_generated_at).toLocaleString('ko-KR') : '생성 시각 확인 불가';
-  document.querySelector('#snapshot-line').textContent = `코드 기준 ${commit} · metadata generated at ${generated}`;
+export function renderDeveloperDetails(architecture, api) {
+  const root = document.querySelector('#developer-detail');
+  root.innerHTML = (architecture.components ?? []).map((component) => `<details class="component-developer"><summary>${escapeHtml(component.friendly_name)} · ${escapeHtml(statusLabel(component.status))}</summary><div class="node-technical">${technicalRows(component, api)}</div></details>`).join('');
+}
+
+export function renderImplementationBoundary(curated, ai, api, database) {
+  const root = document.querySelector('#implementation-boundary');
+  const classByLabel = { '현재 구현': 'badge-current', '일부 구현': 'badge-partial', '실험 구현': 'badge-experimental', '향후 연동': 'badge-future' };
+  const generalRoutes = api.services?.find((item) => item.component_id === 'general-api')?.endpoints?.length ?? '—';
+  const aiRoutes = api.services?.find((item) => item.component_id === 'ai-api')?.endpoints?.length ?? '—';
+  const cards = (curated.implementation_boundaries ?? []).map((item) => `<article class="boundary-card"><span class="badge ${classByLabel[item.badge] ?? 'badge-partial'}">${escapeHtml(item.badge)}</span><h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(item.description)}</p></article>`);
+  cards.push(`<article class="boundary-card"><span class="badge badge-current">코드 기준 상세</span><h3>현재 수집된 구현 정보</h3><ul><li>General API route ${escapeHtml(generalRoutes)}개</li><li>AI API route ${escapeHtml(aiRoutes)}개</li><li>DB table ${escapeHtml(database.table_count ?? '—')}개</li><li>ML artifact: ${escapeHtml(ai.ml_artifact?.status ?? 'UNVERIFIED')}</li></ul></article>`);
+  root.innerHTML = cards.join('');
 }

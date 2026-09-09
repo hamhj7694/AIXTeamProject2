@@ -10,10 +10,13 @@ const escapeHtml = (value) => String(value ?? '')
 const introVisual = (step) => {
   const items = step.items ?? [];
   const separator = step.visual === 'sequence' || step.visual === 'relationship';
-  return `<div class="intro-visual ${escapeHtml(step.visual)}">${items.map((item, index) => `
+  const sequence = `<div class="intro-visual ${escapeHtml(step.visual)}">${items.map((item, index) => `
     ${index && separator ? '<span class="intro-arrow" aria-hidden="true">→</span>' : ''}
     <span class="intro-item">${escapeHtml(item)}</span>
   `).join('')}</div>`;
+  const images = (step.images ?? []).length ? `<div class="intro-images">${step.images.map((item) => `<figure><img src="${escapeHtml(item.src)}" alt="" /><figcaption>${escapeHtml(item.label)}</figcaption></figure>`).join('')}</div>` : '';
+  const warning = step.warning ? `<p class="intro-warning">${escapeHtml(step.warning)}</p>` : '';
+  return `${sequence}${images}${warning}`;
 };
 
 export function initIntro(steps) {

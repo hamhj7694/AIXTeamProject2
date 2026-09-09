@@ -2,6 +2,8 @@
 
 심사위원이 CSR의 목적과 실제 구현 구조를 짧게 이해한 뒤 기존 MVP를 체험하도록 돕는 독립 정적 웹이다.
 
+Core Focus V2의 기본 순서는 `전체 서비스·개발 구조 → 실제 금융서비스 적용 위치 → 3분 MVP 체험`이다. 버전, route, port, source와 code evidence는 접힌 기술 상세에서만 표시한다.
+
 - 공식 URL: `/judge/`
 - 직접 파일 URL: `/judge/index.html`
 - 내부 이동: `/judge/#architecture` 같은 hash만 사용
