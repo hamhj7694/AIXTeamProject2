@@ -79,10 +79,28 @@ class MySqlCaseRepository:
 
     async def next_case_id(self) -> str:
         pool = await self._get_pool()
-        async with pool.acquire() as connection, connection.cursor() as cursor:
-            await cursor.execute("SELECT case_id FROM cases WHERE case_id REGEXP '^VP-[0-9]+$'")
-            values = [int(str(row[0]).removeprefix("VP-")) for row in await cursor.fetchall()]
-        return f"VP-{max(values, default=0) + 1}"
+        async with pool.acquire() as connection:
+            try:
+                await connection.begin()
+                async with connection.cursor() as cursor:
+                    # Lock the single counter row so concurrent requests reserve unique Case numbers.
+                    await cursor.execute(
+                        "SELECT current_value FROM case_number_sequences WHERE sequence_name=%s FOR UPDATE",
+                        ("cases",),
+                    )
+                    row = await cursor.fetchone()
+                    if not row:
+                        raise RuntimeError("Case number sequence is not initialized. Apply migration 015_case_number_sequence.sql.")
+                    next_value = int(row[0]) + 1
+                    await cursor.execute(
+                        "UPDATE case_number_sequences SET current_value=%s WHERE sequence_name=%s",
+                        (next_value, "cases"),
+                    )
+                await connection.commit()
+            except Exception:
+                await connection.rollback()
+                raise
+        return f"VP-{next_value}"
 
     async def get(self, case_id: str, *, include_deleted: bool = False) -> dict[str, Any] | None:
         pool = await self._get_pool()
