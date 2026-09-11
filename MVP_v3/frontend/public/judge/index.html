@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f4f7fb" />
+    <meta name="description" content="CSR의 전체 구조, 실제 금융서비스 적용 위치, 현재 MVP 체험 순서를 안내합니다." />
+    <title>CSR 심사위원 안내</title>
+    <link rel="stylesheet" href="./css/judge.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">본문으로 건너뛰기</a>
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="CSR 심사위원 안내 홈">
+        <span class="brand-mark" aria-hidden="true">✓</span>
+        <span><strong>CSR | Case Share Room</strong><small>심사위원 안내</small></span>
+      </a>
+      <nav class="site-nav" aria-label="주요 영역">
+        <a href="#architecture">전체 구조</a>
+        <a href="#service-application">실제 적용</a>
+        <a href="#demo">MVP 체험</a>
+      </nav>
+      <div class="header-actions">
+        <button class="button button-quiet" id="replay-intro" type="button">소개 다시보기</button>
+        <a class="button button-primary" href="/" target="_blank" rel="noopener noreferrer">CSR MVP 체험</a>
+      </div>
+    </header>
+
+    <main id="main-content">
+      <section class="hero" id="top" aria-labelledby="hero-title">
+        <div class="hero-heading">
+          <p class="eyebrow">CSR 심사위원 안내</p>
+          <h1 id="hero-title">CSR 핵심을 <span>3가지</span>로 확인하세요.</h1>
+          <p>전체 구조부터 실제 금융서비스의 적용 위치, 지금 체험할 MVP 순서까지 빠르게 살펴볼 수 있습니다.</p>
+        </div>
+        <nav class="core-navigation" aria-label="CSR 핵심 안내">
+          <a class="core-card" href="#architecture">
+            <span class="core-number">01</span>
+            <span><small>어떻게 만들어졌나요?</small><strong>서비스 전체 구조</strong></span>
+            <span class="core-arrow" aria-hidden="true">↓</span>
+          </a>
+          <a class="core-card" href="#service-application">
+            <span class="core-number">02</span>
+            <span><small>실제 어디에 적용되나요?</small><strong>은행 업무환경 + 은행 App</strong></span>
+            <span class="core-arrow" aria-hidden="true">↓</span>
+          </a>
+          <a class="core-card" href="#demo">
+            <span class="core-number">03</span>
+            <span><small>무엇을 체험하면 되나요?</small><strong>현재 MVP Demo Flow</strong></span>
+            <span class="core-arrow" aria-hidden="true">↓</span>
+          </a>
+        </nav>
+      </section>
+
+      <section class="section section-white" id="architecture" aria-labelledby="architecture-title">
+        <div class="section-heading">
+          <div><p class="eyebrow">01 · 전체 서비스·개발 구조</p><h2 id="architecture-title">CSR은 이렇게 연결되어 동작합니다.</h2></div>
+          <p>화면의 요청을 서비스가 관리하고, AI·ML 지원과 Shared Case 데이터가 같은 사건 흐름을 뒷받침합니다.</p>
+        </div>
+        <div class="architecture-diagram" id="architecture-flow" aria-label="CSR 전체 서비스 구조" aria-live="polite"></div>
+        <p class="interaction-hint">구성요소를 선택하면 쉬운 역할 설명을 확인할 수 있습니다.</p>
+        <div class="architecture-detail" id="architecture-detail" aria-live="polite"></div>
+      </section>
+
+      <section class="section" id="service-application" aria-labelledby="application-title">
+        <div class="section-heading">
+          <div><p class="eyebrow">02 · 실제 서비스 적용 위치</p><h2 id="application-title">실제 금융서비스에서는 이렇게 연결됩니다.</h2></div>
+          <p>새로운 독립 시스템이 아니라, 은행 직원의 기존 업무환경과 고객의 은행 App 사이에 연결하는 방향입니다.</p>
+        </div>
+        <div class="application-map" id="application-map"></div>
+      </section>
+
+      <section class="section section-white" id="demo" aria-labelledby="demo-title">
+        <div class="section-heading">
+          <div><p class="eyebrow">03 · 현재 MVP 체험</p><h2 id="demo-title">직접 확인해 보세요 — 약 3분</h2></div>
+          <p>통화 Text 분석부터 고객과 은행의 확인·대응 기록까지 아래 순서대로 살펴보면 됩니다.</p>
+        </div>
+        <ol class="demo-flow" id="demo-flow" aria-label="CSR MVP 체험 5단계"></ol>
+        <div class="primary-cta">
+          <div><span class="badge badge-current">현재 구현</span><h2>이제 실제 CSR 흐름을 확인해 보세요.</h2><p>새 탭에서 현재 MVP가 열립니다.</p></div>
+          <a class="button button-primary button-xl" href="/" target="_blank" rel="noopener noreferrer">CSR MVP 체험 시작 <span aria-hidden="true">→</span></a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <strong>CSR | Case Share Room</strong>
+      <p>고객과 은행이 같은 사건을 함께 확인하는 보이스피싱 공동대응 플랫폼</p>
+    </footer>
+
+    <dialog class="intro-dialog" id="intro-dialog" aria-labelledby="intro-title" aria-modal="true">
+      <div class="intro-shell">
+        <div class="intro-topbar">
+          <div class="intro-progress" id="intro-progress" aria-label="소개 진행 단계"></div>
+          <button class="button button-quiet" id="skip-intro" type="button">건너뛰기</button>
+        </div>
+        <div class="intro-content" id="intro-content"></div>
+        <div class="intro-actions">
+          <button class="button button-secondary" id="intro-back" type="button">이전</button>
+          <button class="button button-primary" id="intro-next" type="button">다음</button>
+          <a class="button button-primary" id="intro-start" href="/" target="_blank" rel="noopener noreferrer">CSR 서비스 체험 시작 <span aria-hidden="true">→</span></a>
+        </div>
+      </div>
+    </dialog>
+
+    <div class="load-status" id="load-status" role="status" aria-live="polite"></div>
+    <script type="module" src="./js/app.js"></script>
+  </body>
+</html>

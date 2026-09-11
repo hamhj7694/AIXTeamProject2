@@ -1,0 +1,318 @@
+{
+  "components": [
+    {
+      "dependencies": [
+        "ml-engine"
+      ],
+      "evidence": [
+        {
+          "reason": "AI API routes backed by domain services",
+          "source_path": "backend/ai_api/app/main.py"
+        }
+      ],
+      "friendly_name": "AI 지원",
+      "id": "ai-api",
+      "layer": "ai-service",
+      "port": 8101,
+      "responsibilities": [
+        "통화 분석",
+        "Case Copilot",
+        "업무 카드·보고서 생성"
+      ],
+      "runtime": "python:3.11-slim",
+      "source_paths": [
+        "backend/ai_api/app/domains/",
+        "backend/ai_api/app/main.py"
+      ],
+      "status": "CURRENT",
+      "technologies": [
+        "FastAPI",
+        "OpenAI SDK",
+        "scikit-learn"
+      ]
+    },
+    {
+      "dependencies": [
+        "nginx",
+        "general-api",
+        "ai-api",
+        "mysql"
+      ],
+      "evidence": [
+        {
+          "reason": "Four-service runtime",
+          "source_path": "docker-compose.yml"
+        }
+      ],
+      "friendly_name": "서비스 실행환경",
+      "id": "docker-runtime",
+      "layer": "runtime",
+      "port": null,
+      "responsibilities": [
+        "Frontend·General API·AI API·MySQL 실행",
+        "내부 네트워크·volume 구성"
+      ],
+      "runtime": "Containers",
+      "source_paths": [
+        "docker-compose.yml"
+      ],
+      "status": "CURRENT",
+      "technologies": [
+        "Docker Compose",
+        "Docker"
+      ]
+    },
+    {
+      "dependencies": [
+        "nginx",
+        "general-api"
+      ],
+      "evidence": [
+        {
+          "reason": "BrowserRouter routes and user workspaces",
+          "source_path": "frontend/src/App.tsx"
+        },
+        {
+          "reason": "Resolved frontend versions",
+          "source_path": "frontend/package-lock.json"
+        }
+      ],
+      "friendly_name": "사용자 화면",
+      "id": "frontend",
+      "layer": "presentation",
+      "port": null,
+      "responsibilities": [
+        "은행·고객 화면",
+        "Shared Case 상호작용"
+      ],
+      "runtime": "Browser",
+      "source_paths": [
+        "frontend/package.json",
+        "frontend/src/App.tsx"
+      ],
+      "status": "CURRENT",
+      "technologies": [
+        "React 18.3.1",
+        "TypeScript 5.9.3",
+        "React Router 6.30.6"
+      ]
+    },
+    {
+      "dependencies": [
+        "ai-api",
+        "mysql",
+        "lexical-retrieval"
+      ],
+      "evidence": [
+        {
+          "reason": "General API FastAPI routes",
+          "source_path": "backend/general_api/app/main.py"
+        },
+        {
+          "reason": "MySQL persistence and transactions",
+          "source_path": "backend/general_api/app/domains/cases/mysql_repository.py"
+        }
+      ],
+      "friendly_name": "서비스 제어",
+      "id": "general-api",
+      "layer": "service",
+      "port": 8100,
+      "responsibilities": [
+        "공개 REST API",
+        "Case 상태·DB transaction",
+        "AI 호출 조정"
+      ],
+      "runtime": "python:3.11-slim",
+      "source_paths": [
+        "backend/general_api/app/domains/cases/mysql_repository.py",
+        "backend/general_api/app/main.py"
+      ],
+      "status": "CURRENT",
+      "technologies": [
+        "FastAPI",
+        "Uvicorn",
+        "Pydantic",
+        "HTTPX"
+      ]
+    },
+    {
+      "dependencies": [
+        "general-api",
+        "ai-api"
+      ],
+      "evidence": [
+        {
+          "line": 55,
+          "reason": "Authorized Case-local character n-gram retrieval",
+          "source_path": "backend/general_api/app/domains/cases/case_retrieval.py"
+        }
+      ],
+      "friendly_name": "사건 근거 검색",
+      "id": "lexical-retrieval",
+      "layer": "service-module",
+      "port": null,
+      "responsibilities": [
+        "같은 Case에서 허용된 근거 선별",
+        "고객·은행 공개 범위 분리"
+      ],
+      "runtime": "General API process",
+      "source_paths": [
+        "backend/general_api/app/domains/cases/case_retrieval.py"
+      ],
+      "status": "CURRENT",
+      "technologies": [
+        "TF-IDF character n-gram",
+        "Python"
+      ]
+    },
+    {
+      "dependencies": [
+        "ai-api"
+      ],
+      "evidence": [
+        {
+          "reason": "Artifact filename, expected hash and runtime guard",
+          "source_path": "backend/ai_api/app/domains/diagnosis/model_adapter.py"
+        },
+        {
+          "reason": "Artifact SHA-256 calculated without deserialization",
+          "source_path": "backend/ai_api/models/WINDOW_LOGISTIC_DASHBOARD_EXPERIMENTAL_SAMPLE_v1.pkl"
+        }
+      ],
+      "friendly_name": "위험 확률 계산",
+      "id": "ml-engine",
+      "layer": "ml",
+      "port": null,
+      "responsibilities": [
+        "Window feature vector 추론",
+        "predict_proba 위험 확률"
+      ],
+      "runtime": "scikit-learn 1.6.1",
+      "source_paths": [
+        "backend/ai_api/app/domains/diagnosis/model_adapter.py",
+        "backend/ai_api/models/WINDOW_LOGISTIC_DASHBOARD_EXPERIMENTAL_SAMPLE_v1.pkl"
+      ],
+      "status": "EXPERIMENTAL",
+      "technologies": [
+        "scikit-learn",
+        "joblib",
+        "Logistic model"
+      ]
+    },
+    {
+      "dependencies": [
+        "general-api"
+      ],
+      "evidence": [
+        {
+          "reason": "New database baseline schema and migration markers",
+          "source_path": "database/01_mysql_csr_schema.sql"
+        },
+        {
+          "reason": "Additive migration files discovered by filename",
+          "source_path": "backend/migrations/"
+        }
+      ],
+      "friendly_name": "Shared Case Data",
+      "id": "mysql",
+      "layer": "data",
+      "port": 3306,
+      "responsibilities": [
+        "Shared Case 영속 상태",
+        "메시지·질문·검증·업무·보고 저장"
+      ],
+      "runtime": "mysql:8.4",
+      "source_paths": [
+        "backend/migrations/",
+        "database/01_mysql_csr_schema.sql"
+      ],
+      "status": "CURRENT",
+      "technologies": [
+        "mysql:8.4"
+      ]
+    },
+    {
+      "dependencies": [
+        "frontend",
+        "general-api"
+      ],
+      "evidence": [
+        {
+          "reason": "Production static root and API proxy",
+          "source_path": "frontend/nginx.conf"
+        }
+      ],
+      "friendly_name": "웹 서비스 입구",
+      "id": "nginx",
+      "layer": "web-entry",
+      "port": 80,
+      "responsibilities": [
+        "정적 파일 제공",
+        "SPA fallback",
+        "/api reverse proxy"
+      ],
+      "runtime": "nginx:1.27-alpine",
+      "source_paths": [
+        "frontend/Dockerfile",
+        "frontend/nginx.conf"
+      ],
+      "status": "CURRENT",
+      "technologies": [
+        "nginx:1.27-alpine"
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "direction": "inference",
+      "label": "feature vector → predict_proba",
+      "source": "ai-api",
+      "target": "ml-engine",
+      "type": "IN_PROCESS"
+    },
+    {
+      "direction": "request",
+      "label": "same-origin /api",
+      "source": "frontend",
+      "target": "nginx",
+      "type": "HTTP"
+    },
+    {
+      "direction": "request",
+      "label": "internal AI API :8101",
+      "source": "general-api",
+      "target": "ai-api",
+      "type": "HTTP"
+    },
+    {
+      "direction": "query",
+      "label": "authorized Case records",
+      "source": "general-api",
+      "target": "lexical-retrieval",
+      "type": "IN_PROCESS"
+    },
+    {
+      "direction": "read_write",
+      "label": "transactional persistence",
+      "source": "general-api",
+      "target": "mysql",
+      "type": "SQL"
+    },
+    {
+      "direction": "input",
+      "label": "selected retrieved_context",
+      "source": "lexical-retrieval",
+      "target": "ai-api",
+      "type": "CONTEXT"
+    },
+    {
+      "direction": "forward",
+      "label": "/api → :8100",
+      "source": "nginx",
+      "target": "general-api",
+      "type": "HTTP_PROXY"
+    }
+  ],
+  "manifest_type": "architecture",
+  "manifest_version": "1.0.0"
+}

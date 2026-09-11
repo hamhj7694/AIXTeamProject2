@@ -1,0 +1,23 @@
+{
+  "git_commit": "9dbc201993a5343bd4e5a31e70d9453a7202506e",
+  "hash_algorithm": "sha256",
+  "hash_scope": [
+    "ai_manifest.json",
+    "api_manifest.json",
+    "architecture.json",
+    "db_manifest.json",
+    "deployment.json",
+    "technologies.json"
+  ],
+  "manifest_hash": "ac674d74fcf05c7c1d39be44bddfded72b5fba4c0dc045579df69824cded0ebb",
+  "manifest_type": "build_snapshot",
+  "manifest_version": "1.0.0",
+  "metadata_generated_at": "2026-09-09T01:40:59.189Z",
+  "scanner_version": "1.0.0",
+  "volatile_fields_excluded_from_hash": [
+    "metadata_generated_at",
+    "git_commit",
+    "working_tree_dirty"
+  ],
+  "working_tree_dirty": true
+}
