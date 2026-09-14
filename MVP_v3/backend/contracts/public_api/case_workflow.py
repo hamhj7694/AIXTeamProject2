@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -22,6 +23,12 @@ class PublicQuestionCandidateResponse(PublicWorkflowModel):
     customer_explanation: str | None = Field(default=None, max_length=500)
     answer_mode: Literal["SINGLE_CHOICE", "TEXT", "CHOICE_OR_TEXT"] = "CHOICE_OR_TEXT"
     allow_free_text: bool = True
+    allow_multi_select: bool = False
+
+
+class PublicQuestionOption(PublicWorkflowModel):
+    option_id: str = Field(min_length=1, max_length=64)
+    label: str = Field(min_length=1, max_length=500)
 
 
 class PublicCaseSupportBrief(PublicWorkflowModel):
@@ -89,6 +96,11 @@ class PublicCustomerQuestionResponse(PublicWorkflowModel):
     customer_explanation: str | None = Field(default=None, max_length=500)
     answer_mode: Literal["SINGLE_CHOICE", "TEXT", "CHOICE_OR_TEXT"] = "CHOICE_OR_TEXT"
     allow_free_text: bool = True
+    allow_multi_select: bool = False
+    option_items: list[PublicQuestionOption] = Field(default_factory=list, max_length=8)
+    question_version: int = Field(default=1, ge=1)
+    answer_payload: dict[str, Any] | None = None
+    answer_question_version: int | None = Field(default=None, ge=1)
 
 
 class PublicCustomerQuestionView(PublicWorkflowModel):
@@ -106,12 +118,39 @@ class PublicCustomerQuestionView(PublicWorkflowModel):
     customer_explanation: str | None = Field(default=None, max_length=500)
     answer_mode: Literal["SINGLE_CHOICE", "TEXT", "CHOICE_OR_TEXT"] = "CHOICE_OR_TEXT"
     allow_free_text: bool = True
+    allow_multi_select: bool = False
+    option_items: list[PublicQuestionOption] = Field(default_factory=list, max_length=8)
+    question_version: int = Field(default=1, ge=1)
+    answer_payload: dict[str, Any] | None = None
+    answer_question_version: int | None = Field(default=None, ge=1)
 
 
 class PublicAnswerCustomerQuestionRequest(PublicWorkflowModel):
-    raw_answer: str = Field(min_length=1, max_length=10_000)
+    raw_answer: str | None = Field(default=None, min_length=1, max_length=10_000)
+    selected_option_ids: list[str] = Field(default_factory=list, max_length=8)
+    free_text: str | None = Field(default=None, max_length=10_000)
+    question_version: int | None = Field(default=None, ge=1)
     actor_user_id: str = Field(min_length=1, max_length=64)
     actor_display_name: str = Field(min_length=1, max_length=80)
+
+    @model_validator(mode="after")
+    def require_answer_content(self):
+        if not self.raw_answer and not self.selected_option_ids and not (self.free_text or "").strip():
+            raise ValueError("선택지 또는 직접 입력 답변이 필요합니다.")
+        if len(set(self.selected_option_ids)) != len(self.selected_option_ids):
+            raise ValueError("같은 선택지를 중복 선택할 수 없습니다.")
+        return self
+
+
+def question_option_items(question_id: str, options: list[str]) -> list[dict[str, str]]:
+    """Give legacy string options stable IDs without changing their stored labels."""
+    return [
+        {
+            "option_id": f"opt-{hashlib.sha256(f'{question_id}:{index}:{label}'.encode()).hexdigest()[:20]}",
+            "label": label,
+        }
+        for index, label in enumerate(options)
+    ]
 
 
 class PublicCaseFactResponse(PublicWorkflowModel):
@@ -295,6 +334,7 @@ class PublicCaseBundleResponse(PublicWorkflowModel):
 
 
 def to_public_customer_question(record: dict[str, Any]) -> PublicCustomerQuestionResponse:
+    options = record.get("options", [])
     return PublicCustomerQuestionResponse.model_validate({
         "question_id": record["question_id"], "case_id": record["case_id"],
         "source": record.get("source", "CUSTOMER_AGENT"), "target_field": record["target_field"],
@@ -302,23 +342,34 @@ def to_public_customer_question(record: dict[str, Any]) -> PublicCustomerQuestio
         "priority": record["priority"], "status": record["status"], "sequence": record["sequence"],
         "requested_by": record.get("requested_by"), "asked_at": record.get("asked_at"),
         "answered_at": record.get("answered_at"), "answer_message_id": record.get("answer_message_id"), "answer_text": record.get("answer_text"),
-        "options": record.get("options", []),
+        "options": options,
         "customer_explanation": record.get("customer_explanation"),
         "answer_mode": record.get("answer_mode", "CHOICE_OR_TEXT"),
         "allow_free_text": record.get("allow_free_text", True),
+        "allow_multi_select": record.get("allow_multi_select", False),
+        "option_items": record.get("option_items") or question_option_items(record["question_id"], options),
+        "question_version": record.get("question_version", 1),
+        "answer_payload": record.get("answer_payload"),
+        "answer_question_version": record.get("answer_question_version"),
     })
 
 
 def to_public_customer_question_view(record: dict[str, Any]) -> PublicCustomerQuestionView:
+    options = record.get("options", [])
     return PublicCustomerQuestionView.model_validate({
         "question_id": record["question_id"], "case_id": record["case_id"],
         "question_text": record["question_text"], "priority": record["priority"],
         "status": record["status"], "sequence": record["sequence"],
         "answered_at": record.get("answered_at"), "answer_message_id": record.get("answer_message_id"), "answer_text": record.get("answer_text"),
-        "options": record.get("options", []),
+        "options": options,
         "customer_explanation": record.get("customer_explanation"),
         "answer_mode": record.get("answer_mode", "CHOICE_OR_TEXT"),
         "allow_free_text": record.get("allow_free_text", True),
+        "allow_multi_select": record.get("allow_multi_select", False),
+        "option_items": record.get("option_items") or question_option_items(record["question_id"], options),
+        "question_version": record.get("question_version", 1),
+        "answer_payload": record.get("answer_payload"),
+        "answer_question_version": record.get("answer_question_version"),
     })
 
 

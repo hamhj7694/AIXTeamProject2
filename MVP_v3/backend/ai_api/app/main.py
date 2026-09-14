@@ -10,6 +10,7 @@ from contracts.ai_internal.case_snapshot import CaseSnapshotAiInput, CaseSnapsho
 from contracts.ai_internal.case_copilot import CaseCopilotInput, CaseCopilotOutput
 from contracts.ai_internal.final_report import FinalCaseReportInput, FinalCaseReportOutput
 from contracts.ai_internal.work_card import CaseWorkCardInput, CaseWorkCardOutput
+from contracts.ai_internal.context_fact_extraction import ContextFactExtractionInput, ContextFactExtractionOutput
 from contracts.diagnosis import AnalyzeTextRequest, DiagnosisResult
 from request_trace import install_request_trace
 
@@ -17,6 +18,7 @@ from .domains.case_support import CaseSnapshotAiAdapter
 from .domains.case_support.copilot_service import CaseCopilotAuthenticationError, CaseCopilotQuotaError, CaseCopilotService
 from .domains.case_support.final_report_service import FinalCaseReportService
 from .domains.case_support.work_card_service import CaseWorkCardService
+from .domains.case_support.context_fact_extraction_service import ContextFactExtractionService
 from .domains.diagnosis import DiagnosisService
 from .domains.diagnosis.budget import DiagnosisBudgetExceededError
 from .domains.diagnosis.extractor import AiProviderAuthenticationError, AiProviderQuotaError
@@ -32,6 +34,7 @@ case_snapshot_adapter = CaseSnapshotAiAdapter()
 case_copilot_service = CaseCopilotService()
 case_work_card_service = CaseWorkCardService()
 final_report_service = FinalCaseReportService()
+context_fact_extraction_service = ContextFactExtractionService()
 
 
 @app.on_event("startup")
@@ -81,6 +84,17 @@ async def build_case_support_snapshot(request: CaseSnapshotAiInput) -> CaseSnaps
             status_code=503,
             detail={"code": "AI_CASE_SUPPORT_FAILED", "message": str(exc)},
         ) from exc
+
+
+@app.post("/ai/context/facts/extract", response_model=ContextFactExtractionOutput)
+async def extract_context_facts(request: ContextFactExtractionInput) -> ContextFactExtractionOutput:
+    """Extract typed, review-required proposals from one committed human message."""
+    try:
+        return await context_fact_extraction_service.extract(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail={"code": "INVALID_CONTEXT_EXTRACTION_INPUT", "message": str(exc)}) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail={"code": "CONTEXT_FACT_EXTRACTION_FAILED", "message": str(exc)}) from exc
 
 
 @app.post("/ai/case-copilot/replies", response_model=CaseCopilotOutput)

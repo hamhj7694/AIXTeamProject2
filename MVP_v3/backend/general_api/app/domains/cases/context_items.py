@@ -5,6 +5,7 @@ model. An actor ID supplied by a client is not production authentication.
 """
 from __future__ import annotations
 
+import hashlib
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -29,6 +30,10 @@ class ContextItem(BaseModel):
     edited_by: str | None = None
     deleted_by: str | None = None
     archive_index: int | None = Field(default=None, ge=0)
+    override_scope: Literal['SECTION_DISPLAY'] | None = None
+    base_projection_revision: int | None = Field(default=None, ge=1)
+    base_content_hash: str | None = Field(default=None, max_length=64)
+    updated_by: str | None = None
 
     @property
     def effective_text(self) -> str:
@@ -60,11 +65,15 @@ def apply_staff_change(item: ContextItem, change: ContextItemChange, actor_id: s
         raise ContextItemConflictError('삭제된 항목은 복원한 뒤 수정해 주세요.')
     changes: dict = {}
     if change.operation == 'EDIT':
-        changes = {'staff_text': change.text.strip(), 'edited_by': actor_id}
+        changes = {
+            'staff_text': change.text.strip(), 'edited_by': actor_id, 'updated_by': actor_id,
+            'override_scope': 'SECTION_DISPLAY',
+            'base_content_hash': hashlib.sha256(item.effective_text.encode()).hexdigest(),
+        }
     elif change.operation == 'DELETE' and item.deleted_by is None:
-        changes = {'deleted_by': actor_id}
+        changes = {'deleted_by': actor_id, 'updated_by': actor_id}
     elif change.operation == 'RESTORE' and item.deleted_by is not None:
-        changes = {'deleted_by': None}
+        changes = {'deleted_by': None, 'updated_by': actor_id}
     elif change.operation == 'RESET':
         changes = {'staff_text': None, 'edited_by': None, 'deleted_by': None}
     if not changes:

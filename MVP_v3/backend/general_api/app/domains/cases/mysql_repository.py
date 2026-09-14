@@ -258,6 +258,7 @@ class MySqlCaseRepository:
                     await cursor.execute("DELETE FROM case_report_sections WHERE report_id IN (SELECT report_id FROM case_reports WHERE case_id=%s)", (case_id,))
                     for table in (
                         "transcript_segments", "voice_sessions", "case_context_projections", "case_context_items",
+                        "message_context_extractions",
                         "personal_notes", "case_facts", "customer_questions", "case_attachments", "actions",
                         "verification_tasks", "case_presence", "case_members", "messages", "case_events",
                         "context_features", "analysis_segments", "case_inputs", "case_reports",
@@ -399,6 +400,52 @@ class MySqlCaseRepository:
                 ]
                 message["attachment_ids"] = [item["attachment_id"] for item in message["attachments"]]
             return messages
+
+    async def enqueue_message_extraction(self, case_id: str, message_id: str) -> dict[str, Any]:
+        pool = await self._get_pool(); now = datetime.now(); extraction_id = f"extract-{uuid.uuid4().hex}"
+        async with pool.acquire() as connection:
+            async with connection.cursor(aiomysql.DictCursor) as cursor:
+                await cursor.execute(
+                    "INSERT IGNORE INTO message_context_extractions (extraction_id,case_id,message_id,status,attempts,created_at,updated_at) VALUES (%s,%s,%s,'PENDING',0,%s,%s)",
+                    (extraction_id, case_id, message_id, now, now),
+                )
+                await cursor.execute("SELECT * FROM message_context_extractions WHERE message_id=%s", (message_id,))
+                row = await cursor.fetchone()
+            await connection.commit()
+        return dict(row)
+
+    async def claim_message_extraction(self, message_id: str) -> dict[str, Any] | None:
+        pool = await self._get_pool(); now = datetime.now()
+        async with pool.acquire() as connection:
+            try:
+                async with connection.cursor(aiomysql.DictCursor) as cursor:
+                    await cursor.execute("SELECT * FROM message_context_extractions WHERE message_id=%s FOR UPDATE", (message_id,))
+                    row = await cursor.fetchone()
+                    if not row or row["status"] in {"COMPLETED", "SKIPPED", "PROCESSING"} or int(row["attempts"]) >= 3:
+                        await connection.commit(); return None
+                    await cursor.execute("UPDATE message_context_extractions SET status='PROCESSING',attempts=attempts+1,updated_at=%s WHERE message_id=%s", (now, message_id))
+                    row.update(status="PROCESSING", attempts=int(row["attempts"]) + 1, updated_at=now)
+                await connection.commit(); return dict(row)
+            except Exception:
+                await connection.rollback(); raise
+
+    async def complete_message_extraction(self, message_id: str, model_version: str, prompt_version: str) -> None:
+        pool = await self._get_pool(); now = datetime.now()
+        async with pool.acquire() as connection, connection.cursor() as cursor:
+            await cursor.execute("UPDATE message_context_extractions SET status='COMPLETED',model_version=%s,prompt_version=%s,last_error=NULL,completed_at=%s,updated_at=%s WHERE message_id=%s", (model_version, prompt_version, now, now, message_id))
+            await connection.commit()
+
+    async def fail_message_extraction(self, message_id: str, error: str) -> None:
+        pool = await self._get_pool(); now = datetime.now()
+        async with pool.acquire() as connection, connection.cursor() as cursor:
+            await cursor.execute("UPDATE message_context_extractions SET status='FAILED',last_error=%s,updated_at=%s WHERE message_id=%s", (error[:1000], now, message_id))
+            await connection.commit()
+
+    async def list_retryable_message_extractions(self, limit: int = 20) -> list[dict[str, Any]]:
+        pool = await self._get_pool()
+        async with pool.acquire() as connection, connection.cursor(aiomysql.DictCursor) as cursor:
+            await cursor.execute("SELECT * FROM message_context_extractions WHERE status IN ('PENDING','FAILED') AND attempts<3 ORDER BY updated_at LIMIT %s", (limit,))
+            return [dict(row) for row in await cursor.fetchall()]
 
     async def create_attachment(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]:
         pool = await self._get_pool()
@@ -870,7 +917,7 @@ class MySqlCaseRepository:
                         created_ids.append(qid)
                         active_fields.add(target_field)
                         active_texts.add(normalized_text)
-                        await cursor.execute("INSERT INTO customer_questions (question_id,case_id,source,target_field,question_text,reason,priority,status,sequence,requested_by,options_json,created_at) VALUES (%s,%s,%s,%s,%s,%s,%s,'PENDING',%s,%s,%s,%s)", (qid, case_id, question.get("source", "BANK_SELECTED"), target_field, question["question_text"], question["reason"], question["priority"], sequence, requested_by, json.dumps(question.get("options", []), ensure_ascii=False), now))
+                        await cursor.execute("INSERT INTO customer_questions (question_id,case_id,source,target_field,question_text,reason,priority,status,sequence,requested_by,options_json,allow_multi_select,created_at) VALUES (%s,%s,%s,%s,%s,%s,%s,'PENDING',%s,%s,%s,%s,%s)", (qid, case_id, question.get("source", "BANK_SELECTED"), target_field, question["question_text"], question["reason"], question["priority"], sequence, requested_by, json.dumps(question.get("options", []), ensure_ascii=False), bool(question.get("allow_multi_select", False)), now))
                     if created_ids:
                         await cursor.execute("INSERT INTO case_events (case_id,event_type,actor_type,payload_json,occurred_at) VALUES (%s,'CUSTOMER_QUESTIONS_QUEUED','BANK_STAFF',%s,%s)", (case_id, json.dumps({"question_ids": created_ids}), now))
                         await cursor.execute("UPDATE cases SET updated_at=%s WHERE case_id=%s", (now, case_id))
@@ -927,7 +974,7 @@ class MySqlCaseRepository:
             except Exception: await connection.rollback(); raise
         row["status"] = "ANSWERED"; row["answered_at"] = now; row["answer_message_id"] = message_id; row["answer_text"] = answer_text; return self._question_row(row)
 
-    async def submit_customer_answer(self, case_id: str, question_id: str, answer_text: str, actor_user_id: str, actor_display_name: str) -> dict[str, Any]:
+    async def submit_customer_answer(self, case_id: str, question_id: str, answer_text: str, actor_user_id: str, actor_display_name: str, answer_payload: dict[str, Any] | None = None, answer_question_version: int | None = None) -> dict[str, Any]:
         pool = await self._get_pool()
         now = datetime.now()
         async with pool.acquire() as connection:
@@ -969,7 +1016,7 @@ class MySqlCaseRepository:
                         await cursor.execute('UPDATE case_facts SET value=%s,evidence_message_id=%s,source_question_id=%s WHERE fact_id=%s', (answer_text, message_id, question_id, fact_id))
                     else:
                         await cursor.execute("INSERT INTO case_facts (fact_id,case_id,field_name,value,source,status,confidence,evidence_message_id,source_question_id,created_at) VALUES (%s,%s,%s,%s,'AI_EXTRACTED','PROPOSED',0.7000,%s,%s,%s)", (fact_id, case_id, field, answer_text, message_id, question_id, now))
-                    await cursor.execute("UPDATE customer_questions SET status='ANSWERED',answered_at=%s,answer_message_id=%s,answer_text=%s WHERE case_id=%s AND question_id=%s", (now, message_id, answer_text, case_id, question_id))
+                    await cursor.execute("UPDATE customer_questions SET status='ANSWERED',answered_at=%s,answer_message_id=%s,answer_text=%s,answer_payload_json=%s,answer_question_version=%s WHERE case_id=%s AND question_id=%s", (now, message_id, answer_text, json.dumps(answer_payload, ensure_ascii=False) if answer_payload is not None else None, answer_question_version, case_id, question_id))
                     await cursor.executemany('INSERT INTO case_events (case_id,event_type,actor_type,payload_json,occurred_at) VALUES (%s,%s,%s,%s,%s)', [
                         (case_id, 'CUSTOMER_QUESTION_ANSWERED', 'CUSTOMER', json.dumps({'question_id': question_id, 'message_id': message_id}), now),
                         (case_id, 'CASE_FACT_PROPOSED', 'CUSTOMER_AGENT', json.dumps({'fact_id': fact_id, 'field': field}), now),
@@ -979,7 +1026,8 @@ class MySqlCaseRepository:
             except Exception:
                 await connection.rollback()
                 raise
-        row.update(status='ANSWERED', answered_at=now, answer_message_id=message_id, answer_text=answer_text)
+        row.update(status='ANSWERED', answered_at=now, answer_message_id=message_id, answer_text=answer_text,
+                   answer_payload_json=answer_payload, answer_question_version=answer_question_version)
         return self._question_row(row)
 
     async def list_case_facts(self, case_id: str) -> list[dict[str, Any]]:
@@ -1055,7 +1103,8 @@ class MySqlCaseRepository:
             await connection.commit()
 
     def _question_row(self, row: dict[str, Any]) -> dict[str, Any]:
-        return {"question_id": row["question_id"], "case_id": row["case_id"], "source": row["source"], "target_field": row["target_field"], "question_text": row["question_text"], "reason": row["reason"], "priority": row["priority"], "status": row["status"], "sequence": row["sequence"], "requested_by": row.get("requested_by"), "asked_at": _utc_iso(row["asked_at"]) if row.get("asked_at") else None, "answered_at": _utc_iso(row["answered_at"]) if row.get("answered_at") else None, "answer_text": row.get("answer_text"), "options": self._json(row.get("options_json")) or [], "question_message_id": row.get("question_message_id"), "answer_message_id": row.get("answer_message_id")}
+        options = self._json(row.get("options_json")) or []
+        return {"question_id": row["question_id"], "case_id": row["case_id"], "source": row["source"], "target_field": row["target_field"], "question_text": row["question_text"], "reason": row["reason"], "priority": row["priority"], "status": row["status"], "sequence": row["sequence"], "requested_by": row.get("requested_by"), "asked_at": _utc_iso(row["asked_at"]) if row.get("asked_at") else None, "answered_at": _utc_iso(row["answered_at"]) if row.get("answered_at") else None, "answer_text": row.get("answer_text"), "options": options, "allow_multi_select": bool(row.get("allow_multi_select", False)), "question_message_id": row.get("question_message_id"), "answer_message_id": row.get("answer_message_id"), "question_version": int(row.get("question_version") or 1), "answer_payload": self._json(row.get("answer_payload_json")), "answer_question_version": int(row["answer_question_version"]) if row.get("answer_question_version") else None}
 
     def _fact_row(self, row: dict[str, Any]) -> dict[str, Any]:
         return {"fact_id": row["fact_id"], "case_id": row["case_id"], "field": normalize_target_field(row.get("field", row.get("field_name"))), "value": row["value"], "source": row["source"], "status": row["status"], "confidence": float(row["confidence"]), "evidence_message_id": row.get("evidence_message_id"), "source_question_id": row.get("source_question_id"), "confirmed_by": row.get("confirmed_by"), "confirmed_at": row["confirmed_at"].isoformat() if row.get("confirmed_at") else None, "created_at": row["created_at"].isoformat() if hasattr(row.get("created_at"), "isoformat") else row["created_at"]}

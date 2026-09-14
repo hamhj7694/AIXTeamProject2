@@ -242,6 +242,42 @@ class PublicReviewFactV2Request(CaseContextV2Model):
     expected_version: int = Field(ge=1)
     decision: Literal["CONFIRM", "REJECT"]
     reason: str = Field(min_length=1, max_length=1000)
+    supersedes_fact_id: str | None = Field(default=None, max_length=64)
+
+
+class PublicContextPanelItemV3(CaseContextV2Model):
+    item_id: str
+    semantic_key: str
+    label: str
+    display_value: str
+    value: dict[str, Any] = Field(default_factory=dict)
+    source_kind: str
+    status: str
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    evidence_refs: list[PublicEvidenceRef] = Field(default_factory=list)
+    visibility: InternalVisibility = "BANK_INTERNAL"
+    masked: bool = False
+    version: int = Field(default=1, ge=1)
+
+
+class PublicContextPanelSectionV3(CaseContextV2Model):
+    section_id: Literal[
+        "SUMMARY", "EXPOSURE", "IMPERSONATION_CONTACT", "FRAUD_CIRCUMSTANCES",
+        "FACT_VERIFICATION", "STAFF_ACTIONS", "CUSTOMER_SHARE",
+    ]
+    title: str
+    items: list[PublicContextPanelItemV3] = Field(default_factory=list)
+    groups: dict[str, list[PublicContextPanelItemV3]] = Field(default_factory=dict)
+
+
+class PublicContextPanelV3(CaseContextV2Model):
+    schema_version: Literal["context-panel.v3"] = "context-panel.v3"
+    case_id: str
+    view: Literal["bank", "customer"]
+    source_revision: int = Field(ge=1)
+    projection_status: Literal["CURRENT", "UPDATING", "STALE", "FAILED", "UNCACHED"] = "CURRENT"
+    generated_by: Literal["DETERMINISTIC_FALLBACK", "LAST_SUCCESS", "LLM"] = "DETERMINISTIC_FALLBACK"
+    sections: list[PublicContextPanelSectionV3] = Field(min_length=7, max_length=7)
 
 
 class PublicCreateFactV2Request(CaseContextV2Model):

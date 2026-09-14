@@ -3,7 +3,7 @@ import type {
   CustomerProgressItem, ProgressStep, UpdateCustomerProgress,
   AiInvocationResult, AnalyzeCaseResponse, Attachment, CaseAction, CaseBundle, CaseFact, CaseMember, CaseMessage, CasePresence, CaseWorkCard, InitialReport,
   CaseSupportSnapshot, CustomerQuestion, MessageChannel, MessageVisibility,
-  PersonalNote, QuestionCandidate, StoredCase, VerificationTask, WorkCardType,
+  PersonalNote, QuestionCandidate, StructuredQuestionAnswer, StoredCase, VerificationTask, WorkCardType,
 } from './types';
 import { generateUuid } from '../uuid';
 
@@ -142,9 +142,11 @@ export const casesApi = {
     return response.json() as Promise<Attachment>;
   },
   customerAttachmentUrl: (attachment: Attachment) => apiUrl(attachment.download_url.replace(/\?view=(bank|customer)$/, '?view=customer')),
-  answerCustomerQuestion: (caseId: string, questionId: string, rawAnswer: string) => request<CustomerQuestion>(`/api/cases/${encodeURIComponent(caseId)}/customer-questions/${encodeURIComponent(questionId)}/answer`, {
+  answerCustomerQuestion: (caseId: string, questionId: string, answer: StructuredQuestionAnswer) => request<CustomerQuestion>(`/api/cases/${encodeURIComponent(caseId)}/customer-questions/${encodeURIComponent(questionId)}/answer`, {
     method: 'POST', body: JSON.stringify({
-      raw_answer: rawAnswer,
+      selected_option_ids: answer.selected_option_ids,
+      free_text: answer.free_text,
+      question_version: answer.question_version,
       actor_user_id: CURRENT_CUSTOMER_USER.user_id,
       actor_display_name: CURRENT_CUSTOMER_USER.display_name,
     }),

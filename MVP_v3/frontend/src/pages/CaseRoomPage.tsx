@@ -1,10 +1,13 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { AlertCircle, Loader2, PanelRightClose, PanelRightOpen, RefreshCw, Users } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Clock3, Loader2, PanelRightClose, PanelRightOpen, RefreshCw, RotateCcw, Trash2, Users } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { casesApi, CURRENT_BANK_USER } from '../api/cases';
-import type { CaseAction, CaseBundle, CaseFact, CaseMessage, CaseSupportSnapshot, StoredCase, VerificationTask } from '../api/types';
+import type { CaseBundle, CaseFact, CaseMessage, CaseSupportSnapshot, StoredCase, VerificationTask } from '../api/types';
 import { ActionDialog, QuestionDialog, VerificationDialog } from '../components/CaseActionDialogs';
-import { CaseContextPanel } from '../components/CaseContextPanel';
+import { AdminCaseDialog } from '../components/AdminCaseDialog';
+import { ContextPanelV3 } from '../context-v3/ContextPanelV3';
+import { HistoryDrawer } from '../context-v3/HistoryDrawer';
+import { MoreMenu } from '../context-v3/components';
 import { CaseContextLayout } from '../components/CaseContextLayout';
 import { ConversationComposer, type ComposerTarget } from '../components/ConversationComposer';
 import { SharedConversation } from '../components/SharedConversation';
@@ -18,6 +21,7 @@ import { mergePendingMessages, removeMessage, upsertMessage } from '../api/messa
 import { caseState, caseStateTone, incidentTitle, statusLabel } from '../presentation';
 
 type DialogState = { type: 'questions' } | { type: 'verification'; task?: VerificationTask } | { type: 'action' } | null;
+type AdminAction = 'finalize' | 'reopen' | 'trash' | null;
 type BankOutboxItem = {
   message: CaseMessage;
   content: string;
@@ -58,12 +62,14 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ onMutated, contextOp
   const [partialWarnings, setPartialWarnings] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [aiPendingCount, setAiPendingCount] = useState(0);
-  const [checklistBusy, setChecklistBusy] = useState(false);
   const [view, setView] = useState<'conversation' | 'timeline'>('conversation');
   const [dialog, setDialog] = useState<DialogState>(null);
   const [bookmarkOpen, setBookmarkOpen] = useState(false);
   const [noteOpen, setNoteOpen] = useState(false);
   const [participantOpen, setParticipantOpen] = useState(false);
+  const [participantCount, setParticipantCount] = useState(0);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [adminAction, setAdminAction] = useState<AdminAction>(null);
   const [accessRevision, setAccessRevision] = useState(0);
   const [bookmarks, setBookmarks] = useState<BankBookmark[]>([]);
   const lastSupportRevisionRef = useRef('');
@@ -176,14 +182,17 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ onMutated, contextOp
     outboxRef.current.clear();
     setAiPendingCount(0); setBusy(false);
     lastSupportRevisionRef.current = '';
-    setCaseItem(null); setBundle(null); setSupport(null); setFacts([]); setDialog(null); setBookmarkOpen(false); setNoteOpen(false); setParticipantOpen(false); setBookmarks(readBankBookmarks(caseId)); setError('');
+    setCaseItem(null); setBundle(null); setSupport(null); setFacts([]); setDialog(null); setBookmarkOpen(false); setNoteOpen(false); setParticipantOpen(false); setParticipantCount(0); setHistoryOpen(false); setAdminAction(null); setBookmarks(readBankBookmarks(caseId)); setError('');
     // Register the existing demo identity before mounting editors that require membership.
     let active = true;
     void (async () => {
       try {
         const items = await casesApi.members(caseId);
+        if (active) setParticipantCount(items.length);
         if (!items.some((item) => item.user_id === CURRENT_BANK_USER.user_id)) {
           await casesApi.upsertMember(caseId, { ...CURRENT_BANK_USER, role: 'CHAT_OPERATOR' });
+          const updatedItems = await casesApi.members(caseId);
+          if (active) setParticipantCount(updatedItems.length);
         }
       } catch {
         if (active) setError('사건 참여 정보를 확인하지 못했습니다. 참여자 관리에서 다시 확인해 주세요.');
@@ -291,28 +300,6 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ onMutated, contextOp
     const next = bookmarks.some((item) => item.entryId === bookmark.entryId) ? bookmarks.filter((item) => item.entryId !== bookmark.entryId) : [...bookmarks, bookmark];
     setBookmarks(next); writeBankBookmarks(caseId, next);
   };
-  const createJudgment = async (note: string) => {
-    setChecklistBusy(true); setError('');
-    try {
-      await casesApi.createAction(caseId, 'STAFF_JUDGMENT', note);
-      await refreshAfterMutation();
-      return true;
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : '담당자 판단을 저장하지 못했습니다.');
-      return false;
-    } finally { setChecklistBusy(false); }
-  };
-  const updateChecklist = async (action: CaseAction, values: { status?: 'REQUESTED' | 'COMPLETED' | 'CANCELLED'; note?: string }) => {
-    setChecklistBusy(true); setError('');
-    try {
-      await casesApi.updateAction(caseId, action.action_id, values);
-      await refreshAfterMutation();
-      return true;
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : '체크리스트 상태를 변경하지 못했습니다.');
-      return false;
-    } finally { setChecklistBusy(false); }
-  };
   const finalizeCase = async (password: string, note: string) => {
     if (!caseItem) return;
     await casesApi.finalize(caseId, caseItem.version, password, note);
@@ -336,9 +323,9 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ onMutated, contextOp
   if (!caseItem || !bundle) return <section className="room-state error"><AlertCircle size={24}/><strong>Case 기록을 열 수 없습니다.</strong><span>General API의 Bundle 응답을 확인해 주세요.</span><button onClick={() => void load()}>다시 시도</button></section>;
 
   return <section className="case-room">
-    <header className="case-room-header">
-      <div className="case-heading"><span className={`risk-dot ${caseStateTone(caseState(caseItem))}`}/><div><div className="case-title-line"><span>{caseItem.case_id}</span><h1>{incidentTitle(caseItem)}</h1></div><p>{statusLabel(caseItem.status, caseItem.mode)} · 담당자 {caseItem.primary_assignee || '미배정'}</p></div></div>
-      <div className="room-header-actions"><button className="participant-open" type="button" onClick={() => setParticipantOpen(true)}><Users size={16}/>참여자 관리</button><button type="button" className="app-context-toggle" onClick={() => onContextOpenChange(!contextOpen)} aria-label={contextOpen ? '사건 맥락 접기' : '사건 맥락 열기'} aria-expanded={contextOpen} aria-controls="case-context-content" title={contextOpen ? '사건 맥락 접기' : '사건 맥락 열기'}>{contextOpen ? <PanelRightClose size={16}/> : <PanelRightOpen size={16}/>}</button><button className="icon-button" onClick={() => void load(true, true)} aria-label="Case와 AI 사건 맥락 새로고침"><RefreshCw size={17} className={refreshing ? 'spin' : ''}/></button><button className="context-open" onClick={() => onContextOpenChange(true)}><PanelRightOpen size={17}/>사건 맥락</button></div>
+    <header className="case-room-header case-command-header">
+      <div className="case-heading"><span className={`risk-dot ${caseStateTone(caseState(caseItem))}`}/><div><div className="case-title-line"><span>{caseItem.case_id}</span><h1>{incidentTitle(caseItem)}</h1></div><div className="case-header-meta"><span className={`case-header-risk ${caseStateTone(caseState(caseItem))}`}>{caseItem.risk} 위험</span><span>{statusLabel(caseItem.status, caseItem.mode)}</span><span>주 담당자 {caseItem.primary_assignee || '미배정'}</span></div></div></div>
+      <div className="room-header-actions"><button className="participant-open" type="button" onClick={() => setParticipantOpen(true)}><Users size={16}/>참여자 <b>{participantCount}</b></button><button type="button" className="header-history-action" onClick={() => setHistoryOpen(true)}><Clock3 size={16}/>최근 사건 기록</button><button type="button" className="app-context-toggle" onClick={() => onContextOpenChange(!contextOpen)} aria-label={contextOpen ? '사건 맥락 접기' : '사건 맥락 열기'} aria-expanded={contextOpen} aria-controls="case-context-content" title={contextOpen ? '사건 맥락 접기' : '사건 맥락 열기'}>{contextOpen ? <PanelRightClose size={16}/> : <PanelRightOpen size={16}/>}</button><button className="icon-button" onClick={() => void load(true, true)} aria-label="Case와 AI 사건 맥락 새로고침"><RefreshCw size={17} className={refreshing ? 'spin' : ''}/></button><MoreMenu label="Case 관리 메뉴">{caseItem.mode === 'CLOSED' ? <button onClick={() => setAdminAction('reopen')}><RotateCcw size={14}/>사건 다시 진행</button> : <button onClick={() => setAdminAction('finalize')}><CheckCircle2 size={14}/>해결 및 종료</button>}<button className="danger" onClick={() => setAdminAction('trash')}><Trash2 size={14}/>휴지통으로 이동</button></MoreMenu></div>
     </header>
     <CaseContextLayout contextOpen={contextOpen}>
       <main className="conversation-column">
@@ -348,13 +335,17 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ onMutated, contextOp
         {error && <div className="partial-warning danger composer-warning"><AlertCircle size={15}/><span>{error}</span></div>}
         <ConversationComposer busy={busy} aiBusy={aiPendingCount > 0} onSend={send} onOpenQuestions={() => setDialog({ type: 'questions' })} onOpenVerification={() => setDialog({ type: 'verification' })} onOpenAction={() => setDialog({ type: 'action' })} onInvokeAi={() => void invokeAi()} onOpenNotes={() => setNoteOpen(true)} onOpenBookmarks={() => setBookmarkOpen(true)} bookmarkCount={bookmarks.length}/>
       </main>
-      <CaseContextPanel accessRevision={accessRevision} onOpenParticipants={() => setParticipantOpen(true)} caseItem={caseItem} bundle={bundle} facts={facts} support={support} open={contextOpen} onToggle={() => onContextOpenChange(!contextOpen)} onEditVerification={(task) => setDialog({ type: 'verification', task })} onCreateJudgment={createJudgment} onUpdateChecklist={updateChecklist} checklistBusy={checklistBusy} onProgressSaved={(items) => { loadRequestRef.current += 1; setBundle((current) => current ? { ...current, customer_progress: items } : current); void load(true); }} onFinalize={finalizeCase} onReopen={reopenCase} onTrash={trashCase}/>
+      <ContextPanelV3 accessRevision={accessRevision} caseItem={caseItem} bundle={bundle} open={contextOpen} onToggle={() => onContextOpenChange(!contextOpen)} onCreateVerification={() => setDialog({ type: 'verification' })} onEditVerification={(task) => setDialog({ type: 'verification', task })} onProgressSaved={(items) => { loadRequestRef.current += 1; setBundle((current) => current ? { ...current, customer_progress: items } : current); void load(true); }}/>
     </CaseContextLayout>
     {dialog?.type === 'questions' && <QuestionDialog caseId={caseId} initial={support?.recommended_questions ?? []} onDone={refreshAfterMutation} onClose={() => setDialog(null)}/>} 
     {dialog?.type === 'verification' && <VerificationDialog caseId={caseId} task={dialog.task} onDone={refreshAfterMutation} onClose={() => setDialog(null)}/>} 
     {dialog?.type === 'action' && <ActionDialog caseId={caseId} recovery={caseItem.mode === 'RECOVERY'} onDone={refreshAfterMutation} onClose={() => setDialog(null)}/>} 
     <BankBookmarks open={bookmarkOpen} items={bookmarks} onClose={() => setBookmarkOpen(false)}/>
     <BankPersonalNotes caseId={caseId} open={noteOpen} onClose={() => setNoteOpen(false)}/>
-    <ParticipantManager caseId={caseId} open={participantOpen} onClose={() => setParticipantOpen(false)} onChanged={async () => { setAccessRevision((value) => value + 1); await refreshAfterMutation(); }}/>
+    <ParticipantManager caseId={caseId} open={participantOpen} onClose={() => setParticipantOpen(false)} onChanged={async () => { setAccessRevision((value) => value + 1); const members = await casesApi.members(caseId); setParticipantCount(members.length); await refreshAfterMutation(); }}/>
+    <HistoryDrawer open={historyOpen} events={bundle.recent_events} onClose={() => setHistoryOpen(false)}/>
+    {adminAction === 'finalize' && <AdminCaseDialog title="해결 및 종료 처리" description="사건을 해결 상태로 종결합니다. 관리자 암호를 입력해 주세요." confirmLabel="해결 및 종료" noteLabel="종결 메모 (선택)" notePlaceholder="처리 결과나 인계 사항을 기록하세요." onConfirm={finalizeCase} onClose={() => setAdminAction(null)}/>}
+    {adminAction === 'reopen' && <AdminCaseDialog title="사건 다시 진행하기" description="종결 직전의 사건 상태로 복구합니다. 관리자 암호를 입력해 주세요." confirmLabel="진행 상태로 복구" onConfirm={(password) => reopenCase(password)} onClose={() => setAdminAction(null)}/>}
+    {adminAction === 'trash' && <AdminCaseDialog title="휴지통으로 보내기" description="사건은 휴지통에서 30일 동안 보관되며 그 안에는 복구할 수 있습니다." confirmLabel="휴지통으로 보내기" onConfirm={(password) => trashCase(password)} onClose={() => setAdminAction(null)}/>}
   </section>;
 };

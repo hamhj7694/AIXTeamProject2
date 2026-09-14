@@ -247,12 +247,37 @@ CREATE TABLE IF NOT EXISTS customer_questions (
     asked_at DATETIME(6) NULL,
     answered_at DATETIME(6) NULL,
     options_json JSON NOT NULL,
+    allow_multi_select BOOLEAN NOT NULL DEFAULT FALSE,
     question_message_id VARCHAR(64) NULL,
     answer_message_id VARCHAR(64) NULL,
     answer_text TEXT NULL,
+    question_version BIGINT NOT NULL DEFAULT 1,
+    answer_payload_json JSON NULL,
+    answer_question_version BIGINT NULL,
     created_at DATETIME(6) NOT NULL,
     INDEX idx_customer_questions_case (case_id, sequence),
     CONSTRAINT fk_customer_questions_case FOREIGN KEY (case_id) REFERENCES cases(case_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS message_context_extractions (
+    extraction_id VARCHAR(64) PRIMARY KEY,
+    case_id VARCHAR(32) NOT NULL,
+    message_id VARCHAR(64) NOT NULL,
+    status VARCHAR(16) NOT NULL DEFAULT 'PENDING',
+    attempts INT NOT NULL DEFAULT 0,
+    last_error VARCHAR(1000) NULL,
+    model_version VARCHAR(100) NULL,
+    prompt_version VARCHAR(100) NULL,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    completed_at DATETIME(6) NULL,
+    UNIQUE KEY uq_message_context_extraction_message (message_id),
+    INDEX idx_message_context_extraction_retry (status, attempts, updated_at),
+    INDEX idx_message_context_extraction_case (case_id, created_at),
+    CONSTRAINT fk_message_context_extraction_case FOREIGN KEY (case_id) REFERENCES cases(case_id) ON DELETE CASCADE,
+    CONSTRAINT fk_message_context_extraction_message FOREIGN KEY (message_id) REFERENCES messages(message_id) ON DELETE CASCADE,
+    CONSTRAINT chk_message_context_extraction_status CHECK (status IN ('PENDING','PROCESSING','COMPLETED','FAILED','SKIPPED')),
+    CONSTRAINT chk_message_context_extraction_attempts CHECK (attempts BETWEEN 0 AND 3)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS case_facts (
@@ -333,7 +358,7 @@ SET NEW.context_revision=GREATEST(NEW.context_revision,OLD.context_revision+IF(N
 CREATE TRIGGER trg_messages_context_revision_insert AFTER INSERT ON messages FOR EACH ROW UPDATE cases SET context_revision=context_revision+1 WHERE case_id=NEW.case_id;
 CREATE TRIGGER trg_messages_context_revision_delete AFTER DELETE ON messages FOR EACH ROW UPDATE cases SET context_revision=context_revision+1 WHERE case_id=OLD.case_id;
 CREATE TRIGGER trg_questions_context_revision_insert AFTER INSERT ON customer_questions FOR EACH ROW UPDATE cases SET context_revision=context_revision+1 WHERE case_id=NEW.case_id;
-CREATE TRIGGER trg_questions_context_revision_update AFTER UPDATE ON customer_questions FOR EACH ROW UPDATE cases SET context_revision=context_revision+IF(NOT (OLD.target_field <=> NEW.target_field) OR NOT (OLD.question_text <=> NEW.question_text) OR NOT (OLD.reason <=> NEW.reason) OR NOT (OLD.priority <=> NEW.priority) OR NOT (OLD.status <=> NEW.status) OR NOT (OLD.answer_text <=> NEW.answer_text),1,0) WHERE case_id=NEW.case_id;
+CREATE TRIGGER trg_questions_context_revision_update AFTER UPDATE ON customer_questions FOR EACH ROW UPDATE cases SET context_revision=context_revision+IF(NOT (OLD.target_field <=> NEW.target_field) OR NOT (OLD.question_text <=> NEW.question_text) OR NOT (OLD.reason <=> NEW.reason) OR NOT (OLD.priority <=> NEW.priority) OR NOT (OLD.status <=> NEW.status) OR NOT (OLD.answer_text <=> NEW.answer_text) OR NOT (OLD.answer_payload_json <=> NEW.answer_payload_json),1,0) WHERE case_id=NEW.case_id;
 CREATE TRIGGER trg_questions_context_revision_delete AFTER DELETE ON customer_questions FOR EACH ROW UPDATE cases SET context_revision=context_revision+1 WHERE case_id=OLD.case_id;
 CREATE TRIGGER trg_facts_context_revision_insert AFTER INSERT ON case_facts FOR EACH ROW UPDATE cases SET context_revision=context_revision+1 WHERE case_id=NEW.case_id;
 CREATE TRIGGER trg_facts_context_revision_update AFTER UPDATE ON case_facts FOR EACH ROW UPDATE cases SET context_revision=context_revision+IF(NOT (OLD.field_name <=> NEW.field_name) OR NOT (OLD.value <=> NEW.value) OR NOT (OLD.source <=> NEW.source) OR NOT (OLD.status <=> NEW.status),1,0) WHERE case_id=NEW.case_id;
@@ -361,3 +386,4 @@ INSERT IGNORE INTO schema_migrations (migration_name) VALUES
     ('010_case_fact_question_link.sql'),
     ('012_context_items.sql'),
     ('013_context_projection_revision.sql');
+INSERT IGNORE INTO schema_migrations (migration_name) VALUES ('015_context_panel_v3.sql');

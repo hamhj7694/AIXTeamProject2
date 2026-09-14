@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { BadgeCheck, Bookmark, Bot, CheckCircle2, FileText, ShieldCheck, UserRound } from 'lucide-react';
 import { casesApi, CURRENT_CUSTOMER_USER } from '../api/cases';
-import type { CaseBundle, CaseMessage, CustomerQuestion, CustomerVerificationResult } from '../api/types';
+import type { CaseBundle, CaseMessage, CustomerQuestion, CustomerVerificationResult, StructuredQuestionAnswer } from '../api/types';
 import { formatClock } from '../presentation';
 import type { CustomerBookmark } from './bookmarks';
 import { CustomerQuestionCard } from './CustomerQuestionCard';
@@ -15,7 +15,7 @@ interface Props {
   bundle: CaseBundle;
   busy: boolean;
   bookmarkedIds: Set<string>;
-  onAnswer: (question: CustomerQuestion, answer: string) => Promise<void>;
+  onAnswer: (question: CustomerQuestion, answer: StructuredQuestionAnswer) => Promise<void>;
   onRecoveryRequest: (kind: 'AI_ADVICE' | 'HUMAN_HANDOFF', step: RecoveryStep) => Promise<void>;
   onToggleBookmark: (bookmark: CustomerBookmark) => void;
   onRetryMessage: (message: CaseMessage) => void;
