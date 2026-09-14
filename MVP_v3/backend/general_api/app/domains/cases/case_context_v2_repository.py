@@ -205,6 +205,7 @@ class InMemoryCaseContextV2Repository:
                 fact_id=f"fact-{uuid4().hex}", case_id=case_id, semantic_key=data["semantic_key"],
                 display_label=data["display_label"], value=data["value"], display_value=data["display_value"],
                 source_kind=source_kind, status="PROPOSED", evidence_refs=data.get("evidence_refs", []),
+                confidence=data.get("confidence"),
                 visibility=data.get("visibility", "BANK_INTERNAL"), version=1, created_at=now, updated_at=now,
             )
             self.cases._context_v2_facts[(case_id, item.fact_id)] = item
@@ -213,7 +214,7 @@ class InMemoryCaseContextV2Repository:
             self._touch(case_id, now)
             return deepcopy(item)
 
-    async def review_fact(self, case_id: str, fact_id: str, expected_version: int, decision: str, reason: str, actor: str) -> PublicCaseFactV2:
+    async def review_fact(self, case_id: str, fact_id: str, expected_version: int, decision: str, reason: str, actor: str, supersedes_fact_id: str | None = None) -> PublicCaseFactV2:
         async with self.cases._lock:
             before = self.cases._context_v2_facts.get((case_id, fact_id))
             if before is None:
@@ -226,6 +227,13 @@ class InMemoryCaseContextV2Repository:
             update = {"version": before.version + 1, "updated_at": now}
             if decision == "CONFIRM":
                 update.update(status="CONFIRMED", confirmed_by=actor, confirmed_at=now)
+                if supersedes_fact_id:
+                    old = self.cases._context_v2_facts.get((case_id, supersedes_fact_id))
+                    if old is None or old.status != "CONFIRMED" or old.semantic_key != before.semantic_key:
+                        raise ContextV2TransitionError("대체할 확정 사실이 유효하지 않습니다.")
+                    replaced = old.model_copy(update={"status": "SUPERSEDED", "supersedes_fact_id": fact_id, "version": old.version + 1, "updated_at": now})
+                    self.cases._context_v2_facts[(case_id, supersedes_fact_id)] = replaced
+                    self._history(case_id, "FACT", supersedes_fact_id, replaced.version, "SUPERSEDE", actor, old, replaced)
             else:
                 update.update(status="REJECTED", rejection_reason=reason)
             after = before.model_copy(update=update)
@@ -508,11 +516,11 @@ class MySqlCaseContextV2Repository:
                     now, fact_id = _now(), f"fact-{uuid4().hex}"
                     await cursor.execute(
                         """INSERT INTO case_context_facts_v2
-                        (fact_id,case_id,semantic_key,display_label,value_json,display_value,source_kind,status,
+                        (fact_id,case_id,semantic_key,display_label,value_json,display_value,source_kind,status,confidence,
                          evidence_refs_json,visibility,client_request_id,version,created_at,updated_at)
-                        VALUES (%s,%s,%s,%s,%s,%s,%s,'PROPOSED',%s,%s,%s,1,%s,%s)""",
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,'PROPOSED',%s,%s,%s,%s,1,%s,%s)""",
                         (fact_id, case_id, data["semantic_key"], data["display_label"], _json_dump(data["value"]),
-                         data["display_value"], source_kind, _json_dump(data.get("evidence_refs", [])),
+                         data["display_value"], source_kind, data.get("confidence"), _json_dump(data.get("evidence_refs", [])),
                          data.get("visibility", "BANK_INTERNAL"), data["client_request_id"], _naive_utc(now), _naive_utc(now)),
                     )
                     row = await self._one(cursor, "case_context_facts_v2", "fact_id", case_id, fact_id)
@@ -524,7 +532,7 @@ class MySqlCaseContextV2Repository:
                 await connection.rollback()
                 raise
 
-    async def review_fact(self, case_id: str, fact_id: str, expected_version: int, decision: str, reason: str, actor: str) -> PublicCaseFactV2:
+    async def review_fact(self, case_id: str, fact_id: str, expected_version: int, decision: str, reason: str, actor: str, supersedes_fact_id: str | None = None) -> PublicCaseFactV2:
         pool = await self.cases._get_pool()
         async with pool.acquire() as connection:
             try:
@@ -540,6 +548,14 @@ class MySqlCaseContextV2Repository:
                         raise ContextV2TransitionError("검토 대기 중인 사실만 확정하거나 제외할 수 있습니다.")
                     now = _now()
                     if decision == "CONFIRM":
+                        if supersedes_fact_id:
+                            old_row = await self._one(cursor, "case_context_facts_v2", "fact_id", case_id, supersedes_fact_id, lock=True)
+                            old = _fact(old_row) if old_row else None
+                            if old is None or old.status != "CONFIRMED" or old.semantic_key != before.semantic_key:
+                                raise ContextV2TransitionError("대체할 확정 사실이 유효하지 않습니다.")
+                            await cursor.execute("UPDATE case_context_facts_v2 SET status='SUPERSEDED',supersedes_fact_id=%s,version=version+1,updated_at=%s WHERE fact_id=%s", (fact_id, _naive_utc(now), supersedes_fact_id))
+                            replaced = _fact(await self._one(cursor, "case_context_facts_v2", "fact_id", case_id, supersedes_fact_id))
+                            await self._history(cursor, case_id, "FACT", supersedes_fact_id, replaced.version, "SUPERSEDE", actor, old, replaced)
                         await cursor.execute("UPDATE case_context_facts_v2 SET status='CONFIRMED',confirmed_by=%s,confirmed_at=%s,version=version+1,updated_at=%s WHERE fact_id=%s", (actor, _naive_utc(now), _naive_utc(now), fact_id))
                     else:
                         await cursor.execute("UPDATE case_context_facts_v2 SET status='REJECTED',rejection_reason=%s,version=version+1,updated_at=%s WHERE fact_id=%s", (reason, _naive_utc(now), fact_id))

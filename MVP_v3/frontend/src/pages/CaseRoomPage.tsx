@@ -4,7 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { casesApi, CURRENT_BANK_USER } from '../api/cases';
 import type { CaseAction, CaseBundle, CaseFact, CaseMessage, CaseSupportSnapshot, StoredCase, VerificationTask } from '../api/types';
 import { ActionDialog, QuestionDialog, VerificationDialog } from '../components/CaseActionDialogs';
-import { CaseContextPanel } from '../components/CaseContextPanel';
+import { ContextPanelV3 } from '../context-v3/ContextPanelV3';
 import { CaseContextLayout } from '../components/CaseContextLayout';
 import { ConversationComposer, type ComposerTarget } from '../components/ConversationComposer';
 import { SharedConversation } from '../components/SharedConversation';
@@ -348,7 +348,7 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ onMutated, contextOp
         {error && <div className="partial-warning danger composer-warning"><AlertCircle size={15}/><span>{error}</span></div>}
         <ConversationComposer busy={busy} aiBusy={aiPendingCount > 0} onSend={send} onOpenQuestions={() => setDialog({ type: 'questions' })} onOpenVerification={() => setDialog({ type: 'verification' })} onOpenAction={() => setDialog({ type: 'action' })} onInvokeAi={() => void invokeAi()} onOpenNotes={() => setNoteOpen(true)} onOpenBookmarks={() => setBookmarkOpen(true)} bookmarkCount={bookmarks.length}/>
       </main>
-      <CaseContextPanel accessRevision={accessRevision} onOpenParticipants={() => setParticipantOpen(true)} caseItem={caseItem} bundle={bundle} facts={facts} support={support} open={contextOpen} onToggle={() => onContextOpenChange(!contextOpen)} onEditVerification={(task) => setDialog({ type: 'verification', task })} onCreateJudgment={createJudgment} onUpdateChecklist={updateChecklist} checklistBusy={checklistBusy} onProgressSaved={(items) => { loadRequestRef.current += 1; setBundle((current) => current ? { ...current, customer_progress: items } : current); void load(true); }} onFinalize={finalizeCase} onReopen={reopenCase} onTrash={trashCase}/>
+      <ContextPanelV3 accessRevision={accessRevision} onOpenParticipants={() => setParticipantOpen(true)} caseItem={caseItem} bundle={bundle} facts={facts} support={support} open={contextOpen} onToggle={() => onContextOpenChange(!contextOpen)} onEditVerification={(task) => setDialog({ type: 'verification', task })} onCreateJudgment={createJudgment} onUpdateChecklist={updateChecklist} checklistBusy={checklistBusy} onProgressSaved={(items) => { loadRequestRef.current += 1; setBundle((current) => current ? { ...current, customer_progress: items } : current); void load(true); }} onFinalize={finalizeCase} onReopen={reopenCase} onTrash={trashCase}/>
     </CaseContextLayout>
     {dialog?.type === 'questions' && <QuestionDialog caseId={caseId} initial={support?.recommended_questions ?? []} onDone={refreshAfterMutation} onClose={() => setDialog(null)}/>} 
     {dialog?.type === 'verification' && <VerificationDialog caseId={caseId} task={dialog.task} onDone={refreshAfterMutation} onClose={() => setDialog(null)}/>} 

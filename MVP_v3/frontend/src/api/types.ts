@@ -183,7 +183,12 @@ export interface QuestionCandidate {
   customer_explanation?: string | null;
   answer_mode?: 'SINGLE_CHOICE' | 'TEXT' | 'CHOICE_OR_TEXT';
   allow_free_text?: boolean;
+  allow_multi_select?: boolean;
+  option_items?: QuestionOption[];
 }
+
+export interface QuestionOption { option_id: string; label: string }
+export interface StructuredQuestionAnswer { selected_option_ids: string[]; free_text?: string | null; question_version: number }
 
 export interface CustomerQuestion extends QuestionCandidate {
   case_id: string;
@@ -195,6 +200,9 @@ export interface CustomerQuestion extends QuestionCandidate {
   answered_at?: string | null;
   answer_message_id?: string | null;
   answer_text?: string | null;
+  question_version?: number;
+  answer_payload?: { selected_option_ids: string[]; selected_option_labels?: string[]; free_text?: string | null } | null;
+  answer_question_version?: number | null;
 }
 
 export interface CustomerVerificationResult {

@@ -6,7 +6,8 @@ from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
 
 import general_api.app.main as general_main
-from contracts.public_api.case_workflow import to_public_customer_question_view
+from contracts.ai_internal.context_fact_extraction import ContextFactExtractionOutput
+from contracts.public_api.case_workflow import question_option_items, to_public_customer_question_view
 
 
 CASE = {"case_id": "VP-ACTIVITY", "input_text": "test"}
@@ -57,9 +58,16 @@ class CaseActivityEndpointTest(unittest.TestCase):
             new=AsyncMock(return_value=FINAL_AI_REPORT),
         )
         self.generate_final_report = self.ai_report_patch.start()
+        self.extract_patch = patch.object(
+            general_main.service.ai_client,
+            "extract_context_facts",
+            new=AsyncMock(return_value=ContextFactExtractionOutput(proposals=[])),
+        )
+        self.extract_context_facts = self.extract_patch.start()
 
     def tearDown(self) -> None:
         general_main.repository = self.original_repository
+        self.extract_patch.stop()
         self.ai_report_patch.stop()
         self.client.close()
         self.admin_env.stop()
@@ -395,6 +403,59 @@ class CaseActivityEndpointTest(unittest.TestCase):
         self.repository.update_case.assert_awaited_once_with("VP-ACTIVITY", 2, {
             "victim_transfer_status": "YES", "mode": "RECOVERY",
         })
+
+    def test_structured_answer_persists_multiple_choices_and_free_text_together(self) -> None:
+        options = ["OTP", "비밀번호", "신분증"]
+        option_items = question_option_items("cq-structured", options)
+        question = {
+            "question_id": "cq-structured", "case_id": "VP-ACTIVITY", "source": "BANK_SELECTED",
+            "target_field": "authentication_information_exposure", "question_text": "어떤 정보를 제공했나요?",
+            "reason": "노출 범위 확인", "priority": "P0", "status": "ASKED", "sequence": 1,
+            "requested_by": "은행 직원", "options": options, "allow_multi_select": True,
+            "allow_free_text": True, "answer_mode": "CHOICE_OR_TEXT", "question_version": 2,
+        }
+        selected = [option_items[0]["option_id"], option_items[1]["option_id"]]
+        payload = {"selected_option_ids": selected, "selected_option_labels": ["OTP", "비밀번호"], "free_text": "카드번호도 알려줬어요."}
+        answered = {**question, "status": "ANSWERED", "answer_text": "OTP\n비밀번호\n카드번호도 알려줬어요.", "answer_payload": payload, "answer_question_version": 2}
+        self.repository.list_customer_questions.return_value = [question]
+        self.repository.submit_customer_answer.return_value = answered
+        self.repository.list_messages.return_value = []
+        self.repository.dispatch_next_customer_question.return_value = None
+
+        response = self.client.post("/api/cases/VP-ACTIVITY/customer-questions/cq-structured/answer", json={
+            "selected_option_ids": selected, "free_text": "카드번호도 알려줬어요.", "question_version": 2,
+            "actor_user_id": "customer-1", "actor_display_name": "고객",
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["answer_payload"], payload)
+        self.assertEqual(response.json()["answer_question_version"], 2)
+        self.repository.submit_customer_answer.assert_awaited_once_with(
+            "VP-ACTIVITY", "cq-structured", "OTP\n비밀번호\n카드번호도 알려줬어요.",
+            "customer-1", "고객", payload, 2,
+        )
+
+    def test_extraction_failure_keeps_committed_message_and_marks_durable_job_failed(self) -> None:
+        message = {
+            "message_id": "msg-extraction-fail", "case_id": "VP-ACTIVITY", "actor_type": "CUSTOMER",
+            "actor_user_id": "customer-1", "actor_display_name": "고객", "content": "OTP를 알려줬어요.",
+            "channel": "CUSTOMER", "audience": "CUSTOMER", "visibility": "CUSTOMER", "message_kind": "CHAT",
+            "created_at": "2026-09-02T01:00:00+00:00",
+        }
+        self.repository.append_message.return_value = message
+        self.repository.list_messages.return_value = [message]
+        self.repository.claim_message_extraction.return_value = {"message_id": message["message_id"], "attempt_count": 1}
+
+        with patch.object(general_main.service.ai_client, "extract_context_facts", new=AsyncMock(side_effect=RuntimeError("AI unavailable"))):
+            response = self.client.post("/api/cases/VP-ACTIVITY/messages", json={
+                "actor_type": "CUSTOMER", "actor_user_id": "customer-1", "actor_display_name": "고객",
+                "content": "OTP를 알려줬어요.", "channel": "CUSTOMER", "audience": "CUSTOMER", "visibility": "CUSTOMER",
+            })
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["message_id"], "msg-extraction-fail")
+        self.repository.enqueue_message_extraction.assert_awaited_once_with("VP-ACTIVITY", "msg-extraction-fail")
+        self.repository.fail_message_extraction.assert_awaited_once()
 
     def test_customer_chat_loss_statement_activates_recovery_without_duplicate_ack(self) -> None:
         customer_message = {

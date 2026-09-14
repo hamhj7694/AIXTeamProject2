@@ -30,6 +30,14 @@ def candidate(target: str, text: str, *, question_id: str = "candidate") -> Publ
 
 
 class ContextualQuestionFilterTest(unittest.TestCase):
+    def test_human_message_answers_suppress_matching_repeat_questions(self) -> None:
+        fields = main.question_fields_answered_by_messages([
+            {"actor_type": "CUSTOMER", "message_kind": "CHAT", "content": "OTP를 알려줬고 원격제어 앱도 설치했어요."},
+            {"actor_type": "BANK_STAFF", "message_kind": "CHAT", "content": "고객은 송금하지 않았습니다."},
+            {"actor_type": "BANK_AGENT", "message_kind": "CHAT", "content": "개인정보를 제공했습니다."},
+        ])
+        self.assertEqual(fields, {"authentication_information_exposure", "remote_control_app", "transfer_status"})
+
     def setUp(self) -> None:
         self.baseline = [candidate("transfer_status", "현재 송금하거나 이체한 금액이 있나요?")]
 

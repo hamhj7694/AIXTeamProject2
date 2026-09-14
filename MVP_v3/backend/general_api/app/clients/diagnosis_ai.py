@@ -6,11 +6,13 @@ from typing import Protocol
 import httpx
 
 from contracts.diagnosis import AnalyzeTextRequest, DiagnosisResult
+from contracts.ai_internal.context_fact_extraction import ContextFactExtractionInput, ContextFactExtractionOutput
 from request_trace import request_id
 
 
 class DiagnosisAiClient(Protocol):
     async def analyze(self, request: AnalyzeTextRequest) -> DiagnosisResult: ...
+    async def extract_context_facts(self, request: ContextFactExtractionInput) -> ContextFactExtractionOutput: ...
 
 
 class AiServiceError(RuntimeError):
@@ -49,6 +51,22 @@ class HttpDiagnosisAiClient:
             raise AiServiceError(f"AI 분석 제한시간({self.timeout_seconds:.0f}초)을 초과했습니다. 다시 시도해 주세요.") from exc
         except httpx.RequestError as exc:
             raise AiServiceError("AI 분석 서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.") from exc
+
+    async def extract_context_facts(self, request: ContextFactExtractionInput) -> ContextFactExtractionOutput:
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+                response = await client.post(
+                    f"{self.base_url}/ai/context/facts/extract",
+                    json=request.model_dump(mode="json"),
+                    headers={"X-Request-ID": request_id.get()},
+                )
+                if not response.is_success:
+                    raise AiServiceError("AI 맥락 사실 추출에 실패했습니다.")
+                return ContextFactExtractionOutput.model_validate(response.json())
+        except httpx.TimeoutException as exc:
+            raise AiServiceError("AI 맥락 사실 추출 제한 시간을 초과했습니다.") from exc
+        except httpx.RequestError as exc:
+            raise AiServiceError("AI 맥락 사실 추출 서버에 연결할 수 없습니다.") from exc
 
     async def generate_case_copilot_reply(self, payload: dict) -> dict:
         """One user-initiated, bounded CaseCopilot request."""

@@ -200,10 +200,10 @@ export const CustomerCaseRoomPage: React.FC = () => {
     setBundle((current) => current ? { ...current, recent_messages: removeMessage(current.recent_messages, message) } : current);
   };
 
-  const answer = async (question: CustomerQuestion, rawAnswer: string) => {
+  const answer = async (question: CustomerQuestion, structuredAnswer: import('../api/types').StructuredQuestionAnswer) => {
     setBusy(true); setError(''); setNotice('');
     try {
-      await casesApi.answerCustomerQuestion(caseId, question.question_id, rawAnswer);
+      await casesApi.answerCustomerQuestion(caseId, question.question_id, structuredAnswer);
       try { await refresh(); } catch { setNotice('답변은 접수됐지만 최신 화면을 갱신하지 못했습니다. 다시 요청하지 말고 새로고침해 주세요.'); }
     } finally { setBusy(false); }
   };

@@ -24,13 +24,14 @@ class ContextItemRepository:
             try:
                 await connection.begin()
                 async with connection.cursor() as cursor:
-                    await cursor.execute('SELECT case_id FROM cases WHERE case_id=%s FOR UPDATE', (case_id,))
-                    if not await cursor.fetchone():
+                    await cursor.execute('SELECT context_revision FROM cases WHERE case_id=%s FOR UPDATE', (case_id,))
+                    case_row = await cursor.fetchone()
+                    if not case_row:
                         raise KeyError(case_id)
                     await cursor.execute("SELECT state_json FROM case_context_items WHERE case_id=%s AND section=%s AND semantic_key='display' FOR UPDATE", (case_id, section))
                     row = await cursor.fetchone()
                     before = ContextItem.model_validate_json(row[0]) if row else None
-                    after = section_change(before, case_id, section, expected_version, operation, text, actor_id)
+                    after = section_change(before, case_id, section, expected_version, operation, text, actor_id, int(case_row[0]))
                     await self._save(cursor, before, after, operation, actor_id)
                 await connection.commit()
                 return after
@@ -167,12 +168,14 @@ class ContextItemRepository:
                              (after.item_id, after.item_version, operation, actor_id, before.model_dump_json() if before else None, payload))
 
 
-def section_change(before, case_id, section, version, operation, text, actor_id):
+def section_change(before, case_id, section, version, operation, text, actor_id, base_projection_revision=None):
     if version != (before.item_version if before else 0):
         raise ContextItemConflictError('다른 담당자가 수정했습니다. 최신 내용을 다시 확인해 주세요.')
     seed = before or ContextItem(item_id=f'ctx-{uuid4().hex}', case_id=case_id, section=section, semantic_key='display', item_version=1)
     change = ContextItemChange(expected_version=seed.item_version, operation=operation, text=text)
     result = apply_staff_change(seed, change, actor_id)
+    if operation == 'EDIT' and base_projection_revision is not None:
+        result = result.model_copy(update={'base_projection_revision': base_projection_revision})
     return result if before else result.model_copy(update={'item_version': 1})
 
 
@@ -189,7 +192,10 @@ class InMemoryContextItemRepository:
     async def edit_section(self, case_id, section, expected_version, operation, text, actor_id):
         async with self.cases._lock:
             before = self.cases._display_items.get((case_id, section))
-            result = section_change(before, case_id, section, expected_version, operation, text, actor_id)
+            case = await self.cases.get(case_id)
+            if case is None:
+                raise KeyError(case_id)
+            result = section_change(before, case_id, section, expected_version, operation, text, actor_id, int(case.get('context_revision', 1)))
             self.cases._display_items[(case_id, section)] = result
             return result
 

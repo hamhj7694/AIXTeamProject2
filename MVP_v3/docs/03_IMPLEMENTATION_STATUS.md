@@ -1,6 +1,6 @@
 # MVP v3 구현 기준·현재 상태·다음 작업
 
-최종 갱신: 2026-09-05
+최종 갱신: 2026-09-14
 문서 역할: **모든 개발·점검 작업이 시작될 때 가장 먼저 확인하는 단일 기준 문서**
 
 > 실제 코드와 검증 결과가 이 문서보다 우선한다. 작업 시작 시 이 문서와 실제 코드를 대조하고, 검증을 마친 변경만 완료로 기록한다. 세부 이력과 장기 백로그는 `02_DETAILED_TODO.md`에서 관리한다.
@@ -42,6 +42,19 @@ V3 Frontend :5176
 - 현재 세 서비스 모두 HTTP 200으로 응답한다.
 
 ## 3. 현재 완료된 범위
+
+### Context Panel V3 (2026-09-14)
+
+- 은행 Case Room 기본 패널을 신규 `frontend/src/context-v3/` 구현으로 전환했고, 현재 사건 요약·피해/노출·사칭/접촉·사기 정황·사실/확인·직원 조치/결과·고객 공유의 정확한 7개 Section을 사용한다.
+- `GET /api/cases/{case_id}/context-v2/panel`이 `case_context_facts_v2`, Gap, Verification, Suggestion, Task, 고객 공개 결과를 하나의 typed read model로 조립한다.
+- 고객·직원의 CHAT 메시지를 먼저 저장한 뒤 durable extraction job을 만들고 AI API bounded extractor 결과를 검증해 `PROPOSED` Fact로 저장한다. AI 실패는 메시지를 rollback하지 않으며 최대 3회 재시도한다.
+- 요청 금액·실제 피해액·실제 송금 상태, DEMAND·EXPOSURE, CLAIM·DEMAND·TACTIC을 분리하고 연락처·제시 계좌는 은행 화면에서도 기본 마스킹한다.
+- 고객 질문 답변은 복수 선택과 직접 입력을 함께 저장하는 구조화 payload를 사용하며 기존 `raw_answer` writer를 호환한다.
+- Verification 완료 결과는 `OFFICIAL_VERIFICATION / PROPOSED` Fact가 되고, 직원 confirm 후 같은 key의 Gap을 해소한다. AI 제안은 직원 채택 뒤 Task가 되며 AI 추천만으로 완료되지 않는다.
+- 고객 공유는 서버 allowlist projection으로 확정·공개 Fact, 공개 Verification 결과, 공개 Task 결과, 고객 진행 상태, 고객 공개 메시지만 포함한다.
+- 최신 `context_revision`과 다른 표시용 요약 override는 보존하되 화면에는 적용하지 않아 오래된 직원 문구가 최신 canonical data를 가리지 않는다.
+- Additive migration `015_context_panel_v3.sql`과 rollback을 작성했고 격리 MySQL에서 적용→rollback→재적용을 확인했다.
+- 상세 구조·검증·잔존 범위는 `15_CONTEXT_PANEL_V3_IMPLEMENTATION_REPORT.md`를 기준으로 한다.
 
 ### Frontend
 
@@ -117,15 +130,15 @@ V3 Frontend :5176
 
 ## 4. 아직 완료로 보면 안 되는 범위
 
-- 사건 맥락 v2의 저장 리소스와 Frontend 업무 관리 화면을 연결했다. 기존 고객 답변은 현재 support projection의 요약·피해/노출 상태에는 반영되지만, **실제 LLM projection 및 새 v2 Fact/Gap 리소스로의 영속 자동 이관은 아직 미연결**이다. 기존 사실 후보는 읽기 전용으로 보존하며 새 후보와 구분한다.
-- 새 업무·사실·결정의 은행 AI/보고서 입력 연결은 완료했다. 기존 고객 답변의 새 리소스 영속 이관과 모든 Gap의 자동 동기화는 미완료이며, 이번에 자동 이관하지 않았다.
+- 신규 고객·직원 CHAT과 구조화 고객 답변은 Context v2 Fact proposal로 연결됐다. 다만 과거에 이미 저장된 모든 legacy 메시지·질문 답변을 일괄 backfill하지 않으며, legacy row bulk rewrite도 수행하지 않았다.
+- 새 업무·사실·결정의 은행 AI/보고서 입력 연결은 유지한다. 모든 종류의 Gap을 자동 생성하는 정책과 외부 기관 결과의 업무별 semantic key 지정은 아직 일반화하지 않았다.
 - 사건 맥락의 현재 요약은 **규칙 기반 재구성**이다. 실제 LLM 종합 재요약이 아니다.
 - 사용자 표시 점검의 최소 수정은 반영했다. `12_USER_TEXT_AUDIT.md` 후속 수정 기록 참조. 등록하지 않은 새로운 영어 표현까지 자동 번역한다고 보장하지 않으며, 실제 브라우저 편집·재저장 및 PDF/Word 시각 검증은 남아 있다.
 - 사건 기록 검색을 통한 RAG는 연결했다. **임베딩 기반 의미 검색은 아니다.** 한국어 문구·동의어 기반 검색으로, 완전히 다른 표현의 중복까지 보장하지 않는다. 구조화 상태 검사를 우선한다.
 - 실제 인증 세션과 운영형 RBAC가 없다. 프론트의 고정 사용자와 요청 actor 값을 사용한다.
 - 사건 관리 권한도 현재는 환경변수의 공용 관리자 암호 방식이며 사용자별 인증·감사 체계는 아니다.
 - 변경 동기화는 5초 polling 중심이다. SSE/WebSocket은 없다.
-- 자동 테스트는 통과하지만 실제 브라우저에서 전체 업무 흐름을 끝까지 수행하는 E2E 증거가 부족하다.
+- Backend vertical slice와 MySQL persistence, Frontend typecheck/build·회귀 스크립트는 통과하지만 실제 브라우저에서 전체 업무 흐름을 끝까지 클릭한 E2E 증거는 아직 없다.
 - AI 최종 결과 보고서의 실제 OpenAI 생성 품질은 운영 API 키로 별도 확인해야 한다. 자동 테스트는 계약·오류 처리·DB 저장 경로를 검증한다.
 - 지급정지·신고·피해구제·기관 확인은 실제 외부 금융 시스템을 실행하지 않는다.
 - 은행 북마크 일부와 고객 북마크는 브라우저 localStorage를 사용한다.
@@ -205,10 +218,15 @@ V3 Frontend :5176
 
 ## 6. 최신 검증 기준선
 
-검증 일시: 2026-09-05
+검증 일시: 2026-09-14
 
 | 검증 | 결과 |
 |---|---|
+| Context V3 General API 전체 | 174개 통과. Message→Fact vertical slice, structured answer, conflict/supersede, customer allowlist, MySQL integration 포함 |
+| Context V3 AI API 전체 | 106개 통과. bounded Fact extraction 8개 시나리오와 기존 Diagnosis/Copilot 회귀 포함 |
+| Context V3 migration rehearsal | 격리 MySQL DB에서 전체 적용 → 015 rollback → 015 재적용 통과 |
+| Context V3 Frontend | typecheck·production build(1,459 modules) 통과, `test-context-v3.cjs` 포함 13개 회귀 스크립트 통과 |
+| Context V3 browser E2E | 미실행. 자동 vertical slice와 API/MySQL/Frontend 계약 검증까지만 통과했으므로 전체 E2E는 PARTIAL |
 | Frontend production build | 통과, 1,458 modules |
 | Frontend 회귀 스크립트 | 6개 스크립트 모두 통과. 고객 처리 결과 렌더링 7개, 보고서 응답→파싱→SSR 5개 및 표시/JSON/채팅 경합 검사 포함 |
 | 사건 맥락 CSS 정리 | production build·회귀 34개 재검증, CSS 구문/패널 범위·버튼 상태 등 정적 검사 13개 통과. 브라우저 연결 불가로 실제 시각 검증은 미수행 |

@@ -13,6 +13,7 @@ from uuid import uuid4
 
 import pymysql
 import aiomysql
+from pymysql.constants import CLIENT
 
 from ai_api.app.domains.diagnosis import DiagnosisService
 from ai_api.app.domains.diagnosis.extractor import EventExtraction, _local_safety_events, parse_turns
@@ -25,6 +26,7 @@ from general_api.app.domains.cases.case_context_v2_repository import (
 )
 from general_api.app.domains.cases.mysql_repository import MySqlCaseRepository
 from general_api.app.main import build_repository
+from scripts.apply_migrations import execute_all
 
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -105,7 +107,7 @@ class MySqlCaseRepositoryIntegrationTest(unittest.IsolatedAsyncioTestCase):
                     self.case_ids,
                 )
                 cursor.execute(f"DELETE FROM case_context_item_history WHERE item_id IN (SELECT item_id FROM case_context_items WHERE case_id IN ({placeholders}))", self.case_ids)
-                for table in ("case_context_v2_history", "case_decisions", "case_tasks", "case_ai_suggestions", "case_gaps", "case_context_facts_v2", "case_context_items", "case_context_projections", "personal_notes", "case_facts", "customer_questions", "case_presence", "case_members", "messages", "verification_tasks", "actions", "context_features", "analysis_segments", "case_inputs", "case_events", "case_reports"):
+                for table in ("case_context_v2_history", "case_decisions", "case_tasks", "case_ai_suggestions", "case_gaps", "case_context_facts_v2", "case_context_items", "case_context_projections", "personal_notes", "case_facts", "customer_questions", "case_presence", "case_members", "message_context_extractions", "messages", "verification_tasks", "actions", "context_features", "analysis_segments", "case_inputs", "case_events", "case_reports"):
                     cursor.execute(f"DELETE FROM {table} WHERE case_id IN ({placeholders})", self.case_ids)
                 cursor.execute(f"DELETE FROM cases WHERE case_id IN ({placeholders})", self.case_ids)
             connection.commit()
@@ -132,6 +134,7 @@ class MySqlCaseRepositoryIntegrationTest(unittest.IsolatedAsyncioTestCase):
                         "transcript_segments", "verification_tasks", "voice_sessions", "case_context_items",
                         "case_context_item_history", "case_context_projections", "case_context_facts_v2",
                         "case_gaps", "case_ai_suggestions", "case_tasks", "case_decisions", "case_context_v2_history",
+                        "message_context_extractions",
                     },
                 )
                 cursor.execute(
@@ -538,15 +541,17 @@ class MySqlCaseRepositoryIntegrationTest(unittest.IsolatedAsyncioTestCase):
             await self.repository.create(await self._record(case_id=case_id, client_request_id=uuid4().hex))
         first, second = self.case_ids
         batches = await asyncio.gather(
-            self.repository.queue_customer_questions(first, [question], "test"),
-            self.repository.queue_customer_questions(first, [question], "test"),
-            self.repository.queue_customer_questions(second, [question], "test"),
+            self.repository.queue_customer_questions(first, [{**question, "options": ["single-option"], "allow_multi_select": True}], "test"),
+            self.repository.queue_customer_questions(first, [{**question, "options": ["single-option"], "allow_multi_select": True}], "test"),
+            self.repository.queue_customer_questions(second, [{**question, "options": ["single-option"], "allow_multi_select": True}], "test"),
         )
         ids = [row["question_id"] for batch in batches for row in batch]
         self.assertEqual(len(ids), 2)
         self.assertEqual(len(set(ids)), 2)
         self.assertNotIn("q_transfer_status", ids)
-        self.assertEqual(len(await self.repository.list_customer_questions(first)), 1)
+        persisted = await self.repository.list_customer_questions(first)
+        self.assertEqual(len(persisted), 1)
+        self.assertTrue(persisted[0]["allow_multi_select"])
         delivered = await asyncio.gather(
             self.repository.dispatch_next_customer_question(first),
             self.repository.dispatch_next_customer_question(first),
@@ -589,6 +594,56 @@ class MySqlCaseRepositoryIntegrationTest(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(ValueError, 'CUSTOMER_ANSWER_CONFLICT'):
             await self.repository.submit_customer_answer(case_id, question_id, '예', 'customer', '고객')
         self.assertEqual(len(await self.repository.list_messages(case_id)), len(before) + 2)
+
+
+class ContextPanelV3MigrationRollbackTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.database = f"aix_context_v3_rollback_{uuid4().hex[:12]}"
+        cls.environment = mysql_test_environment(cls.database)
+        subprocess.run([sys.executable, "scripts/apply_migrations.py"], cwd=BACKEND_DIR, env=cls.environment, check=True, capture_output=True, text=True)
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        connection = pymysql.connect(host=cls.environment["MYSQL_HOST"], port=int(cls.environment.get("MYSQL_PORT", "3306")),
+                                     user=cls.environment["MYSQL_USER"], password=cls.environment["MYSQL_PASSWORD"], autocommit=True)
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(f"DROP DATABASE IF EXISTS `{cls.database}`")
+        finally:
+            connection.close()
+
+    def test_context_v3_migration_rolls_back_and_reapplies(self) -> None:
+        connection = pymysql.connect(host=self.environment["MYSQL_HOST"], port=int(self.environment.get("MYSQL_PORT", "3306")),
+                                     user=self.environment["MYSQL_USER"], password=self.environment["MYSQL_PASSWORD"],
+                                     database=self.database, client_flag=CLIENT.MULTI_STATEMENTS, autocommit=False)
+        try:
+            with connection.cursor() as cursor:
+                execute_all(cursor, (BACKEND_DIR / "migrations/rollback/015_context_panel_v3.sql").read_text(encoding="utf-8"))
+            connection.commit()
+            with connection.cursor() as cursor:
+                cursor.execute("SHOW TABLES LIKE 'message_context_extractions'")
+                self.assertIsNone(cursor.fetchone())
+                cursor.execute("SHOW COLUMNS FROM customer_questions LIKE 'answer_payload_json'")
+                self.assertIsNone(cursor.fetchone())
+                cursor.execute("SHOW COLUMNS FROM customer_questions LIKE 'allow_multi_select'")
+                self.assertIsNone(cursor.fetchone())
+        finally:
+            connection.close()
+        subprocess.run([sys.executable, "scripts/apply_migrations.py", "--only", "015_context_panel_v3.sql"],
+                       cwd=BACKEND_DIR, env=self.environment, check=True, capture_output=True, text=True)
+        connection = pymysql.connect(host=self.environment["MYSQL_HOST"], port=int(self.environment.get("MYSQL_PORT", "3306")),
+                                     user=self.environment["MYSQL_USER"], password=self.environment["MYSQL_PASSWORD"], database=self.database)
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SHOW TABLES LIKE 'message_context_extractions'")
+                self.assertIsNotNone(cursor.fetchone())
+                cursor.execute("SHOW COLUMNS FROM customer_questions LIKE 'answer_payload_json'")
+                self.assertIsNotNone(cursor.fetchone())
+                cursor.execute("SHOW COLUMNS FROM customer_questions LIKE 'allow_multi_select'")
+                self.assertIsNotNone(cursor.fetchone())
+        finally:
+            connection.close()
 
 
 class RepositorySelectionTest(unittest.TestCase):

@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Literal
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,13 +25,14 @@ from .domains.cases.context_items import Section, ContextItemChange, ContextItem
 from .domains.cases.context_item_repository import ContextItemRepository, InMemoryContextItemRepository
 
 from contracts.diagnosis import AnalyzeTextRequest
+from contracts.ai_internal.context_fact_extraction import ContextFactExtractionInput, ContextFactExtractionMessage, ExistingContextFact
 from contracts.public_api.customer_progress import CustomerProgressItem, ProgressStep, UpdateCustomerProgress
 from .domains.cases.customer_progress import PREFIX as PROGRESS_PREFIX, ProgressConflict, progress_items as build_customer_progress, progress_ai_context, actions_for_ai
 from request_trace import install_request_trace
 from contracts.ai_internal.work_card import CaseWorkCardOutput, WorkCardType
 from contracts.user_text import user_text
 from .domains.cases.context_workspace import build_workspace, legacy_gap_details
-from .domains.cases.case_retrieval import collect_records, retrieve_context, similar_question, staff_context, workspace_records, merge_support_records
+from .domains.cases.case_retrieval import SEMANTIC_FIELDS, collect_records, retrieve_context, similar_question, staff_context, workspace_records, merge_support_records
 from contracts.public_api.case_analyze import (
     PublicAnalyzeCaseRequest,
     PublicAnalyzeCaseResponse,
@@ -47,6 +48,7 @@ from contracts.public_api.case_context_v2 import (
     PublicCaseFactV2,
     PublicCaseGapV2,
     PublicCaseTaskV2,
+    PublicContextPanelV3,
     PublicCompleteTaskV2Request,
     PublicCreateDecisionV2Request,
     PublicCreateFactV2Request,
@@ -101,6 +103,7 @@ from contracts.public_api.case_workflow import (
     PublicVerificationResponse,
     to_public_customer_question,
     to_public_customer_question_view,
+    question_option_items,
     to_public_action,
     to_public_verification,
 )
@@ -128,6 +131,8 @@ from .domains.cases.case_context_v2_repository import (
     MySqlCaseContextV2Repository,
 )
 from .domains.cases.mysql_repository import MySqlCaseRepository
+from .domains.cases.context_v3.semantic_keys import ALLOWED_SEMANTIC_KEYS, proposal_dedupe_key
+from .domains.cases.context_v3.panel import build_context_panel_v3
 from .domains.cases.service import AnalyzeCaseService, InvalidCaseTransitionError, transition_case
 
 
@@ -344,7 +349,13 @@ async def public_analyze_validation_error(request: Request, exc: RequestValidati
 async def analyze_case(request: PublicAnalyzeCaseRequest) -> PublicAnalyzeCaseResponse | JSONResponse:
     internal_request = AnalyzeTextRequest.model_validate(request.model_dump())
     try:
-        return to_public_analyze_response(await service.analyze(internal_request))
+        result = await service.analyze(internal_request)
+        if result.disposition == "CASE_CREATED" and result.case_id:
+            try:
+                await seed_initial_context_facts(result.case_id)
+            except Exception:
+                logger.exception("Case was committed but initial Context V3 facts could not be seeded")
+        return to_public_analyze_response(result)
     except ValueError as exc:
         failure = public_failed_response("INVALID_INPUT", str(exc), retryable=False)
         return JSONResponse(status_code=400, content=failure.model_dump(mode="json"))
@@ -498,6 +509,93 @@ async def require_case(case_id: str) -> None:
         raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."})
 
 
+def _message_is_context_extractable(message: dict) -> bool:
+    return (
+        message.get("actor_type") in {"CUSTOMER", "BANK_STAFF"}
+        and message.get("message_kind", "CHAT") == "CHAT"
+        and message.get("visibility") != "AI_PRIVATE"
+        and bool(str(message.get("content", "")).strip())
+    )
+
+
+async def process_message_context_extraction(case_id: str, message_id: str) -> None:
+    """Process one durable extraction job; failures remain available for bounded retry."""
+    job = await repository.claim_message_extraction(message_id)
+    if job is None:
+        return
+    try:
+        message = next((item for item in await repository.list_messages(case_id) if item.get("message_id") == message_id), None)
+        if message is None or not _message_is_context_extractable(message):
+            await repository.complete_message_extraction(message_id, "not-applicable", "context-fact-v1")
+            return
+        store = case_context_v2_repository()
+        resources = await store.list_resources(case_id)
+        existing = [
+            ExistingContextFact(fact_id=item.fact_id, semantic_key=item.semantic_key, value=item.value, status=item.status)
+            for item in resources.facts if item.semantic_key in ALLOWED_SEMANTIC_KEYS
+        ]
+        output = await service.ai_client.extract_context_facts(ContextFactExtractionInput(
+            message=ContextFactExtractionMessage(
+                message_id=message_id, case_id=case_id, actor_type=message["actor_type"],
+                content=message["content"], created_at=message.get("created_at"),
+            ), existing_facts=existing,
+        ))
+        for proposal in output.proposals:
+            if proposal.semantic_key not in ALLOWED_SEMANTIC_KEYS or proposal.evidence_message_id != message_id:
+                raise ValueError("AI extraction returned an out-of-contract proposal")
+            await store.create_fact(case_id, {
+                "client_request_id": proposal_dedupe_key(message_id, proposal.semantic_key, proposal.value),
+                "semantic_key": proposal.semantic_key, "display_label": proposal.display_label,
+                "value": proposal.value, "display_value": proposal.display_value,
+                "confidence": proposal.confidence,
+                "evidence_refs": [{"type": "MESSAGE", "id": message_id}], "visibility": "BANK_INTERNAL",
+            }, message.get("actor_user_id") or "context-extractor",
+                source_kind="CUSTOMER_STATEMENT" if message["actor_type"] == "CUSTOMER" else "STAFF_OBSERVATION")
+        await repository.complete_message_extraction(message_id, output.model_version, output.prompt_version)
+    except Exception as exc:
+        logger.exception("Context fact extraction failed for message %s", message_id)
+        await repository.fail_message_extraction(message_id, str(exc))
+
+
+async def enqueue_context_extraction(record: dict, background_tasks: BackgroundTasks | None = None) -> None:
+    if not _message_is_context_extractable(record):
+        return
+    await repository.enqueue_message_extraction(record["case_id"], record["message_id"])
+    if background_tasks is not None:
+        background_tasks.add_task(process_message_context_extraction, record["case_id"], record["message_id"])
+
+
+async def seed_initial_context_facts(case_id: str) -> None:
+    """Seed reviewable canonical facts from the persisted diagnosis, never from discarded raw input."""
+    case = await repository.get(case_id)
+    if not case:
+        return
+    diagnosis = case.get("diagnosis") or {}
+    context = diagnosis.get("context") or {}
+    evidence_id = str((case.get("initial_report") or {}).get("report_id") or case_id)
+    candidates: list[tuple[str, str, dict, str]] = []
+    transfer = case.get("victim_transfer_status")
+    if transfer in {"YES", "NO"}:
+        candidates.append(("transfer.actual.status", "실제 이체 여부", {"status": "TRANSFERRED" if transfer == "YES" else "NOT_TRANSFERRED"}, "이체함" if transfer == "YES" else "이체하지 않음"))
+    for key, label, values in (
+        ("offender.incident_claim", "상대방 주장", context.get("offender_claims", [])),
+        ("circumstance.demand", "상대방 요구", context.get("offender_demands", [])),
+        ("circumstance.tactic", "압박·조작 수법", context.get("manipulation_tactics", [])),
+    ):
+        for value in values[:8]:
+            text = str(value).strip()
+            if text:
+                candidates.append((key, label, {"text": text}, text))
+    store = case_context_v2_repository()
+    for key, label, value, display in candidates:
+        digest = hashlib.sha256(f"{case_id}|{key}|{display}".encode()).hexdigest()[:36]
+        await store.create_fact(case_id, {
+            "client_request_id": f"initial-{digest}", "semantic_key": key, "display_label": label,
+            "value": value, "display_value": display, "confidence": None,
+            "evidence_refs": [{"type": "STRUCTURED_SIGNAL", "id": evidence_id}], "visibility": "BANK_INTERNAL",
+        }, "system:initial-diagnosis", source_kind="AI_EXTRACTION")
+
+
 def build_customer_question_candidates(case: dict, queued: list[dict]) -> list[PublicQuestionCandidateResponse]:
     """Deterministic MVP candidates. AI may replace this source, not the queue contract."""
     already_handled = {item["target_field"] for item in queued if item.get("status") in {"PENDING", "ASKED", "ANSWERED"}}
@@ -537,6 +635,29 @@ def build_question_recommendation_context(facts: list[dict], questions: list[dic
         "answered_question_fields": [normalize_target_field(item["target_field"]) for item in questions if item.get("status") == "ANSWERED" and normalize_target_field(item.get("target_field", "")) in valid_fields],
         "answered_question_ids": [item["question_id"] for item in questions if item.get("status") == "ANSWERED"],
     }
+
+
+def question_fields_answered_by_messages(messages: list[dict]) -> set[str]:
+    """Conservative pre-extraction guard against asking for an answer already stated by a human."""
+    answered: set[str] = set()
+    for message in messages:
+        if message.get("actor_type") not in {"CUSTOMER", "BANK_STAFF"} or message.get("message_kind", "CHAT") != "CHAT":
+            continue
+        text = re.sub(r"\s+", "", str(message.get("content", ""))).casefold()
+        asserted = any(term in text for term in ("했", "보냈", "알려", "제공", "설치", "깔았", "안했", "않았", "없어요", "없습니다"))
+        if not asserted:
+            continue
+        if any(term in text for term in ("송금", "이체", "입금", "돈을보")):
+            answered.add("transfer_status")
+        if any(term in text for term in ("원격제어", "원격앱", "애니데스크", "팀뷰어")):
+            answered.add("remote_control_app")
+        if any(term in text for term in ("otp", "인증번호", "비밀번호", "보안코드")):
+            answered.add("authentication_information_exposure")
+        if any(term in text for term in ("주민등록번호", "계좌번호", "개인정보")):
+            answered.add("personal_information_exposure")
+        if any(term in text for term in ("검찰", "경찰", "금감원", "금융감독원", "은행직원")) and any(term in text for term in ("사칭", "이라고", "라며", "전화")):
+            answered.add("claimed_organization")
+    return answered
 
 
 def normalize_question_text(value: str) -> str:
@@ -784,7 +905,9 @@ async def list_customer_question_candidates(case_id: str) -> list[PublicQuestion
     case = await repository.get(case_id)
     if case is None:
         raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."})
-    queued = await repository.list_customer_questions(case_id)
+    queued, messages = await asyncio.gather(repository.list_customer_questions(case_id), repository.list_messages(case_id))
+    # Some compatibility repositories may not expose message history while upgrading.
+    messages = messages if isinstance(messages, list) else []
     snapshot = await get_case_support_snapshot(case_id)
     # AI 장애 시에도 기존 deterministic 후보로 고객 확인 흐름을 멈추지 않는다.
     fallback_candidates = build_customer_question_candidates(case, queued)
@@ -796,8 +919,14 @@ async def list_customer_question_candidates(case_id: str) -> list[PublicQuestion
     resources = await case_context_v2_repository().list_resources(case_id)
     facts, _ = merge_support_records(resources, facts, [])
     confirmed = set(build_question_recommendation_context(facts, queued, case)["confirmed_fields"])
+    review_first = {
+        normalize_target_field(SEMANTIC_FIELDS[item.semantic_key])
+        for item in resources.facts
+        if item.status == "PROPOSED" and item.source_kind in {"CUSTOMER_STATEMENT", "STAFF_OBSERVATION"} and item.semantic_key in SEMANTIC_FIELDS
+    }
+    already_stated = question_fields_answered_by_messages(messages)
     return [candidate for candidate in exclude_handled_question_candidates(candidates, queued)
-            if normalize_target_field(candidate.target_field) not in confirmed]
+            if normalize_target_field(candidate.target_field) not in confirmed | review_first | already_stated]
 
 
 @app.get("/api/cases/{case_id}/customer-questions", response_model=list[PublicCustomerQuestionResponse | PublicCustomerQuestionView])
@@ -874,15 +1003,42 @@ async def dispatch_next_customer_question_message(case_id: str) -> PublicMessage
 
 
 @app.post("/api/cases/{case_id}/customer-questions/{question_id}/answer", response_model=PublicCustomerQuestionResponse)
-async def answer_customer_question(case_id: str, question_id: str, request: PublicAnswerCustomerQuestionRequest) -> PublicCustomerQuestionResponse:
+async def answer_customer_question(case_id: str, question_id: str, request: PublicAnswerCustomerQuestionRequest, background_tasks: BackgroundTasks) -> PublicCustomerQuestionResponse:
     await require_case(case_id)
+    question = next((item for item in await repository.list_customer_questions(case_id) if item["question_id"] == question_id), None) if request.raw_answer is None else None
+    if request.raw_answer is None and question is None:
+        raise HTTPException(status_code=404, detail={"code": "CUSTOMER_QUESTION_NOT_FOUND", "message": "답변할 질문을 찾을 수 없습니다."})
+    current_version = int((question or {}).get("question_version", 1))
+    if request.raw_answer is None and request.question_version is not None and request.question_version != current_version:
+        raise HTTPException(status_code=409, detail={"code": "QUESTION_VERSION_CONFLICT", "message": "질문이 변경되었습니다.", "current_version": current_version})
+    answer_payload = None
+    answer_text = request.raw_answer
+    if request.raw_answer is None:
+        option_map = {item["option_id"]: item["label"] for item in question_option_items(question_id, (question or {}).get("options", []))}
+        if any(item not in option_map for item in request.selected_option_ids):
+            raise HTTPException(status_code=422, detail={"code": "INVALID_QUESTION_OPTION", "message": "현재 질문에 없는 선택지입니다."})
+        if len(request.selected_option_ids) > 1 and not (question or {}).get("allow_multi_select", False):
+            raise HTTPException(status_code=422, detail={"code": "MULTI_SELECT_NOT_ALLOWED", "message": "이 질문은 복수 선택을 지원하지 않습니다."})
+        labels = [option_map[item] for item in request.selected_option_ids]
+        free_text = (request.free_text or "").strip() or None
+        answer_payload = {"selected_option_ids": request.selected_option_ids, "selected_option_labels": labels, "free_text": free_text}
+        answer_text = "\n".join([*labels, *([free_text] if free_text else [])])
     try:
-        answered = await repository.submit_customer_answer(case_id, question_id, request.raw_answer, request.actor_user_id, request.actor_display_name)
+        if request.raw_answer is not None:
+            answered = await repository.submit_customer_answer(case_id, question_id, answer_text, request.actor_user_id, request.actor_display_name)
+        else:
+            answered = await repository.submit_customer_answer(case_id, question_id, answer_text or "", request.actor_user_id, request.actor_display_name, answer_payload, request.question_version or current_version)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail={"code": "CUSTOMER_QUESTION_NOT_FOUND", "message": "응답 대기 중인 질문을 찾을 수 없습니다."}) from exc
     except ValueError as exc:
         raise HTTPException(status_code=409, detail={"code": "CUSTOMER_ANSWER_CONFLICT", "message": "이미 다른 답변이 저장된 질문입니다. 최신 내용을 확인해 주세요."}) from exc
-    if _answer_reports_customer_loss(answered, request.raw_answer):
+    try:
+        message = next((item for item in await repository.list_messages(case_id) if item.get("message_id") == answered.get("answer_message_id")), None)
+        if message:
+            await enqueue_context_extraction(message, background_tasks)
+    except Exception:
+        logger.exception("Could not enqueue customer answer context extraction")
+    if _answer_reports_customer_loss(answered, answer_text or ""):
         await _activate_customer_recovery(
             case_id,
             request.actor_user_id,
@@ -1133,7 +1289,7 @@ async def start_customer_emergency(case_id: str, request: PublicCustomerEmergenc
 
 
 @app.post("/api/cases/{case_id}/messages", response_model=PublicMessageResponse, status_code=201)
-async def create_case_message(case_id: str, request: PublicCreateMessageRequest) -> PublicMessageResponse:
+async def create_case_message(case_id: str, request: PublicCreateMessageRequest, background_tasks: BackgroundTasks) -> PublicMessageResponse:
     await require_case(case_id)
     if request.client_request_id:
         existing = await repository.find_message_by_client_request_id(case_id, request.client_request_id)
@@ -1145,6 +1301,10 @@ async def create_case_message(case_id: str, request: PublicCreateMessageRequest)
         raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."}) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail={"code": "ATTACHMENT_NOT_FOUND", "message": "메시지에 연결할 첨부 파일을 찾을 수 없습니다."}) from exc
+    try:
+        await enqueue_context_extraction(record, background_tasks)
+    except Exception:
+        logger.exception("Message was committed but its context extraction could not be queued")
     if (
         request.actor_type == "CUSTOMER"
         and request.channel == "CUSTOMER"
@@ -1487,6 +1647,8 @@ async def proactive_case_worker() -> None:
 async def reconcile_changed_cases_once() -> int:
     """Run one durable-revision scan; exposed separately for contract tests."""
     reconciled = 0
+    for job in await repository.list_retryable_message_extractions():
+        await process_message_context_extraction(str(job["case_id"]), str(job["message_id"]))
     for case in await repository.list():
         case_id = str(case.get("case_id", ""))
         if not case_id or case.get("status") == "CLOSED" or case.get("mode") == "CLOSED":
@@ -1547,7 +1709,17 @@ async def share_ai_message_to_team(case_id: str, message_id: str, request: Publi
 async def update_case_verification(case_id: str, verification_task_id: str, request: PublicUpdateVerificationRequest) -> PublicVerificationResponse:
     await require_case(case_id)
     try:
-        return to_public_verification(await repository.update_verification(case_id, verification_task_id, request.expected_version, request.status, request.model_dump(exclude={"expected_version", "status"}, exclude_none=True)))
+        updated = await repository.update_verification(case_id, verification_task_id, request.expected_version, request.status, request.model_dump(exclude={"expected_version", "status"}, exclude_none=True))
+        if request.status == "COMPLETED" and updated.get("result_summary"):
+            await case_context_v2_repository().create_fact(case_id, {
+                "client_request_id": f"verification-result-{verification_task_id}-{updated.get('version', 1)}",
+                "semantic_key": "offender.claimed_organization", "display_label": "기관 확인 결과",
+                "value": {"target": updated.get("target"), "result": updated.get("result_summary")},
+                "display_value": f"{updated.get('target')}: {updated.get('result_summary')}",
+                "evidence_refs": [{"type": "VERIFICATION_RESULT", "id": verification_task_id, "revision": updated.get("version", 1)}],
+                "visibility": "BANK_INTERNAL", "confidence": 1.0,
+            }, request.verified_by or "verification-reviewer", source_kind="OFFICIAL_VERIFICATION")
+        return to_public_verification(updated)
     except CaseVersionConflictError as exc:
         raise HTTPException(status_code=409, detail={"code": "VERSION_CONFLICT", "message": "Verification task has changed.", "current_version": exc.current_version}) from exc
     except KeyError as exc:
@@ -1647,6 +1819,26 @@ def case_context_v2_repository():
     if isinstance(repository, MySqlCaseRepository):
         return MySqlCaseContextV2Repository(repository)
     return InMemoryCaseContextV2Repository(repository)
+
+
+@app.get("/api/cases/{case_id}/context-v2/panel", response_model=PublicContextPanelV3)
+async def get_context_panel_v3(case_id: str, view: Literal["bank", "customer"] = "bank", actor_user_id: str | None = None) -> PublicContextPanelV3:
+    case = await repository.get(case_id)
+    if case is None:
+        raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case not found."})
+    if view == "bank":
+        if not actor_user_id:
+            raise HTTPException(status_code=401, detail={"code": "ACTOR_REQUIRED", "message": "은행 화면 조회자 정보가 필요합니다."})
+        await require_context_v2_member(case_id, actor_user_id, access="READ")
+    display_store = await context_display_repository(case_id)
+    resources, verifications, actions, messages, display_items = await asyncio.gather(
+        case_context_v2_repository().list_resources(case_id), repository.list_verifications(case_id),
+        repository.list_actions(case_id), repository.list_messages(case_id), display_store.list_items(case_id, include_deleted=True),
+    )
+    return build_context_panel_v3(
+        case, resources, view=view, verifications=verifications, actions=actions,
+        messages=messages, progress=build_customer_progress(actions), display_items=display_items,
+    )
 
 
 async def read_staff_context_records(case_id: str):
@@ -1769,7 +1961,13 @@ async def create_case_context_v2_fact(case_id: str, actor_user_id: str, request:
 async def review_case_context_v2_fact(case_id: str, fact_id: str, actor_user_id: str, request: PublicReviewFactV2Request) -> PublicCaseFactV2:
     store = await require_context_v2_member(case_id, actor_user_id, access="REVIEW")
     try:
-        return await store.review_fact(case_id, fact_id, request.expected_version, request.decision, request.reason, actor_user_id)
+        fact = await store.review_fact(case_id, fact_id, request.expected_version, request.decision, request.reason, actor_user_id, request.supersedes_fact_id)
+        if fact.status == "CONFIRMED":
+            resources = await store.list_resources(case_id)
+            for gap in resources.gaps:
+                if gap.semantic_key == fact.semantic_key and gap.status not in {"RESOLVED", "DISMISSED"}:
+                    await store.update_gap(case_id, gap.gap_id, gap.version, "RESOLVED", "확정 사실로 해소", fact.fact_id, actor_user_id)
+        return fact
     except (KeyError, ContextV2TransitionError, ContextV2ConflictError) as exc:
         raise_context_v2_error(exc)
 

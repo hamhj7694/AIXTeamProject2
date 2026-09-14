@@ -123,6 +123,32 @@ class CaseContextV2EndpointTest(unittest.TestCase):
         self.assertEqual(confirmed.json()["status"], "CONFIRMED")
         self.assertEqual(confirmed.json()["confirmed_by"], "owner")
 
+    def test_conflicting_proposal_can_supersede_without_overwriting_confirmed_history(self):
+        first = self.create_fact().json()
+        confirmed = self.client.patch(
+            f"{self.base}/facts/{first['fact_id']}/review?actor_user_id=owner",
+            json={"expected_version": 1, "decision": "CONFIRM", "reason": "최초 확인"},
+        ).json()
+        second = self.client.post(f"{self.base}/facts?actor_user_id=operator", json={
+            "client_request_id": "request-fact-conflict-002", "semantic_key": "transfer.actual.status",
+            "display_label": "실제 송금 여부", "value": {"status": "NO"}, "display_value": "송금하지 않았다고 정정",
+            "evidence_refs": [{"type": "MESSAGE", "id": "msg-2"}],
+        }).json()
+        self.assertEqual(second["status"], "PROPOSED")
+        self.assertEqual(confirmed["status"], "CONFIRMED")
+
+        replacement = self.client.patch(
+            f"{self.base}/facts/{second['fact_id']}/review?actor_user_id=owner",
+            json={"expected_version": 1, "decision": "CONFIRM", "reason": "정정 진술 확인", "supersedes_fact_id": first["fact_id"]},
+        )
+
+        self.assertEqual(replacement.status_code, 200, replacement.text)
+        self.assertEqual(replacement.json()["status"], "CONFIRMED")
+        stored_first = self.repository._context_v2_facts[("VP-V2", first["fact_id"])]
+        self.assertEqual(stored_first.status, "SUPERSEDED")
+        fact_history = [item for item in self.repository._context_v2_history if item["entity_type"] == "FACT"]
+        self.assertTrue(any(item["operation"] == "SUPERSEDE" for item in fact_history))
+
     def test_idempotency_and_version_conflict_are_enforced(self):
         first = self.create_fact()
         second = self.create_fact()
@@ -167,9 +193,11 @@ class CaseContextV2EndpointTest(unittest.TestCase):
                 "reason": "확정 사실 연결",
             },
         )
-        self.assertEqual(resolved.status_code, 200, resolved.text)
-        self.assertEqual(resolved.json()["status"], "RESOLVED")
-        self.assertIsNone(resolved.json()["dismissal_reason"])
+        self.assertEqual(resolved.status_code, 409, resolved.text)
+        self.assertEqual(resolved.json()["detail"]["current_version"], 2)
+        workspace = self.client.get(f"{self.base}/workspace?actor_user_id=operator").json()
+        auto_resolved = next(item for item in workspace["archived_gaps"] if item["gap_id"] == gap.json()["gap_id"])
+        self.assertEqual(auto_resolved["resolution_fact_id"], fact["fact_id"])
 
     def test_gap_edit_and_dismiss_keep_row_and_expose_audit_history(self):
         created = self.client.post(f"{self.base}/gaps?actor_user_id=operator", json={

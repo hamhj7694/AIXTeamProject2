@@ -38,6 +38,11 @@ class CaseRepository(Protocol):
     async def append_message(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]: ...
     async def find_message_by_client_request_id(self, case_id: str, client_request_id: str) -> dict[str, Any] | None: ...
     async def list_messages(self, case_id: str, channel: str | None = None) -> list[dict[str, Any]]: ...
+    async def enqueue_message_extraction(self, case_id: str, message_id: str) -> dict[str, Any]: ...
+    async def claim_message_extraction(self, message_id: str) -> dict[str, Any] | None: ...
+    async def complete_message_extraction(self, message_id: str, model_version: str, prompt_version: str) -> None: ...
+    async def fail_message_extraction(self, message_id: str, error: str) -> None: ...
+    async def list_retryable_message_extractions(self, limit: int = 20) -> list[dict[str, Any]]: ...
     async def create_attachment(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]: ...
     async def get_attachment(self, case_id: str, attachment_id: str) -> dict[str, Any] | None: ...
     async def list_attachments(self, case_id: str) -> list[dict[str, Any]]: ...
@@ -67,7 +72,7 @@ class CaseRepository(Protocol):
     async def dispatch_next_customer_question(self, case_id: str) -> dict[str, Any] | None: ...
     async def link_customer_question_message(self, case_id: str, question_id: str, message_id: str) -> None: ...
     async def answer_customer_question(self, case_id: str, question_id: str, message_id: str, answer_text: str) -> dict[str, Any]: ...
-    async def submit_customer_answer(self, case_id: str, question_id: str, answer_text: str, actor_user_id: str, actor_display_name: str) -> dict[str, Any]: ...
+    async def submit_customer_answer(self, case_id: str, question_id: str, answer_text: str, actor_user_id: str, actor_display_name: str, answer_payload: dict[str, Any] | None = None, answer_question_version: int | None = None) -> dict[str, Any]: ...
     async def list_case_facts(self, case_id: str) -> list[dict[str, Any]]: ...
     async def propose_case_fact(self, case_id: str, question_id: str, value: str, evidence_message_id: str | None) -> dict[str, Any]: ...
     async def confirm_case_fact(self, case_id: str, fact_id: str, confirmed_by: str) -> dict[str, Any]: ...
@@ -112,6 +117,7 @@ class InMemoryCaseRepository:
         self._customer_questions: list[dict[str, Any]] = []
         self._case_facts: list[dict[str, Any]] = []
         self._personal_notes: list[dict[str, Any]] = []
+        self._message_extractions: list[dict[str, Any]] = []
         self._lock = asyncio.Lock()
 
     def _touch_case(self, case_id: str, occurred_at: str, *, semantic: bool = True) -> None:
@@ -136,6 +142,7 @@ class InMemoryCaseRepository:
         self._customer_questions = [item for item in self._customer_questions if item.get("case_id") != case_id]
         self._case_facts = [item for item in self._case_facts if item.get("case_id") != case_id]
         self._personal_notes = [item for item in self._personal_notes if item.get("case_id") != case_id]
+        self._message_extractions = [item for item in self._message_extractions if item.get("case_id") != case_id]
 
     def _purge_expired_trash(self) -> None:
         cutoff = datetime.now(timezone.utc) - timedelta(days=30)
@@ -290,6 +297,39 @@ class InMemoryCaseRepository:
 
     async def list_messages(self, case_id: str, channel: str | None = None) -> list[dict[str, Any]]:
         return [deepcopy(item) for item in self._messages if item["case_id"] == case_id and (channel is None or item.get("channel") == channel)]
+
+    async def enqueue_message_extraction(self, case_id: str, message_id: str) -> dict[str, Any]:
+        async with self._lock:
+            existing = next((item for item in self._message_extractions if item["message_id"] == message_id), None)
+            if existing:
+                return deepcopy(existing)
+            now = datetime.now(timezone.utc).isoformat()
+            job = {"extraction_id": f"extract-{uuid4().hex}", "case_id": case_id, "message_id": message_id,
+                   "status": "PENDING", "attempts": 0, "last_error": None, "created_at": now, "updated_at": now}
+            self._message_extractions.append(job)
+            return deepcopy(job)
+
+    async def claim_message_extraction(self, message_id: str) -> dict[str, Any] | None:
+        async with self._lock:
+            job = next((item for item in self._message_extractions if item["message_id"] == message_id), None)
+            if not job or job["status"] in {"COMPLETED", "SKIPPED", "PROCESSING"} or int(job["attempts"]) >= 3:
+                return None
+            job.update(status="PROCESSING", attempts=int(job["attempts"]) + 1, updated_at=datetime.now(timezone.utc).isoformat())
+            return deepcopy(job)
+
+    async def complete_message_extraction(self, message_id: str, model_version: str, prompt_version: str) -> None:
+        async with self._lock:
+            job = next(item for item in self._message_extractions if item["message_id"] == message_id)
+            now = datetime.now(timezone.utc).isoformat()
+            job.update(status="COMPLETED", model_version=model_version, prompt_version=prompt_version, last_error=None, updated_at=now, completed_at=now)
+
+    async def fail_message_extraction(self, message_id: str, error: str) -> None:
+        async with self._lock:
+            job = next(item for item in self._message_extractions if item["message_id"] == message_id)
+            job.update(status="FAILED", last_error=error[:1000], updated_at=datetime.now(timezone.utc).isoformat())
+
+    async def list_retryable_message_extractions(self, limit: int = 20) -> list[dict[str, Any]]:
+        return [deepcopy(item) for item in self._message_extractions if item["status"] in {"PENDING", "FAILED"} and int(item["attempts"]) < 3][:limit]
 
     async def list_events(self, case_id: str, after: int | None = None) -> list[dict[str, Any]]:
         return [deepcopy(item) for item in self._events if item["case_id"] == case_id and (after is None or item["event_id"] > after)]
@@ -575,6 +615,10 @@ class InMemoryCaseRepository:
                     "customer_explanation": question.get("customer_explanation"),
                     "answer_mode": question.get("answer_mode", "CHOICE_OR_TEXT"),
                     "allow_free_text": question.get("allow_free_text", True),
+                    "allow_multi_select": bool(question.get("allow_multi_select", False)),
+                    "question_version": 1,
+                    "answer_payload": None,
+                    "answer_question_version": None,
                     "status": "PENDING", "sequence": sequence,
                     "requested_by": requested_by, "asked_at": None, "answered_at": None, "answer_text": None,
                     "created_at": now,
@@ -639,7 +683,7 @@ class InMemoryCaseRepository:
             self._touch_case(case_id, now)
             return deepcopy(item)
 
-    async def submit_customer_answer(self, case_id: str, question_id: str, answer_text: str, actor_user_id: str, actor_display_name: str) -> dict[str, Any]:
+    async def submit_customer_answer(self, case_id: str, question_id: str, answer_text: str, actor_user_id: str, actor_display_name: str, answer_payload: dict[str, Any] | None = None, answer_question_version: int | None = None) -> dict[str, Any]:
         """Commit the answer, public message, fact candidate and private receipt together."""
         async with self._lock:
             if not any(r['case_id'] == case_id and not r.get('deleted_at') for r in self._records):
@@ -648,7 +692,7 @@ class InMemoryCaseRepository:
             if question is None:
                 raise KeyError(question_id)
             if question['status'] == 'ANSWERED':
-                if question.get('answer_text') == answer_text:
+                if question.get('answer_text') == answer_text and (answer_payload is None or question.get('answer_payload') == answer_payload):
                     return deepcopy(question)
                 raise ValueError('CUSTOMER_ANSWER_CONFLICT')
             if question['status'] != 'ASKED':
@@ -675,7 +719,8 @@ class InMemoryCaseRepository:
                 existing.update(fact)
             else:
                 self._case_facts.append(fact)
-            question.update(status='ANSWERED', answered_at=now, answer_message_id=message_id, answer_text=answer_text)
+            question.update(status='ANSWERED', answered_at=now, answer_message_id=message_id, answer_text=answer_text,
+                            answer_payload=deepcopy(answer_payload), answer_question_version=answer_question_version)
             for event_type, actor, payload in [
                 ('CUSTOMER_QUESTION_ANSWERED', 'CUSTOMER', {'question_id': question_id, 'message_id': message_id}),
                 ('CASE_FACT_PROPOSED', 'CUSTOMER_AGENT', {'fact_id': fact['fact_id'], 'field': field}),
