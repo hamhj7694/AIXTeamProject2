@@ -1,36 +1,57 @@
 import React, { useState } from 'react';
-import { Check, Circle, HelpCircle } from 'lucide-react';
-import type { CaseBundle, ProgressStep } from '../api/types';
+import { Check, CheckCircle2, Circle, CircleDot, Clock3, HelpCircle, Minus } from 'lucide-react';
+import type { CaseBundle, CustomerProgressItem, ProgressStatus, ProgressStep } from '../api/types';
+
+const statusLabels: Record<ProgressStatus, string> = {
+  UNKNOWN: '확인 전', IN_PROGRESS: '처리 중', SUBMITTED: '제출 확인 · 결과 대기',
+  COMPLETED: '완료', NOT_APPLICABLE: '해당 없음',
+};
+
+const StatusIcon: React.FC<{ status: ProgressStatus }> = ({ status }) => {
+  if (status === 'COMPLETED') return <CheckCircle2 size={18} aria-hidden="true"/>;
+  if (status === 'IN_PROGRESS') return <CircleDot size={18} aria-hidden="true"/>;
+  if (status === 'SUBMITTED') return <Clock3 size={18} aria-hidden="true"/>;
+  if (status === 'NOT_APPLICABLE') return <Minus size={18} aria-hidden="true"/>;
+  return <Circle size={18} aria-hidden="true"/>;
+};
+
+const meaningfulSummary = (item: CustomerProgressItem) => item.revision > 0 && Boolean(item.summary.trim());
 
 export const CustomerProgressPanel: React.FC<{
   bundle: CaseBundle; recovery: boolean;
   onRequestConfirmation: (step: ProgressStep) => Promise<void>;
-}> = ({ bundle, recovery, onRequestConfirmation }) => {
+}> = ({ bundle, onRequestConfirmation }) => {
   const [pending, setPending] = useState<ProgressStep | null>(null);
-  const [error, setError] = useState('');
+  const [error, setError] = useState<{ step: ProgressStep; message: string } | null>(null);
   const items = bundle.customer_progress ?? [];
   const waiting = bundle.questions.filter((question) => ['ASKED', 'PENDING'].includes(question.status)).length;
+  const actionItems = items.filter((item) => ['IN_PROGRESS', 'SUBMITTED'].includes(item.status) && item.next_action.trim());
+  const primaryAction = actionItems.length === 1 ? actionItems[0] : null;
   const request = async (step: ProgressStep) => {
-    setPending(step); setError('');
+    setPending(step); setError(null);
     try { await onRequestConfirmation(step); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : '확인 요청을 저장하지 못했습니다. 다시 시도해 주세요.'); }
+    catch (reason) { setError({ step, message: reason instanceof Error ? reason.message : '확인 요청을 저장하지 못했습니다. 다시 시도해 주세요.' }); }
     finally { setPending(null); }
   };
   return <section className="customer-side-card customer-progress">
-    <div className="customer-side-title"><h2>현재 진행 상황</h2><span>{recovery ? '피해 대응' : '상황 확인'}</span></div>
-    <p className="customer-progress-summary">이 상담에 기록된 처리 결과입니다. 안내를 열거나 채팅을 보내는 것만으로 신청·신고가 접수되지는 않습니다.</p>
-    <div className="public-progress-list">{items.map((item) => <article key={item.step} className={item.status === 'COMPLETED' ? 'is-confirmed' : ''}>
-      <header>{item.status === 'COMPLETED' ? <Check size={15}/> : <Circle size={12}/>}<strong>{item.label}</strong></header>
-      <b>{item.status_label}</b><p>{item.summary}</p>
-      {item.next_action && <p className="progress-next"><strong>지금 할 일</strong> {item.next_action}</p>}
-      {item.reference && <small>확인 근거: {item.reference}</small>}
-      {item.confirmed_at && <small>확인 시각: {new Date(item.confirmed_at).toLocaleString('ko-KR')}</small>}
-      {item.confirmation_requested ? <><button type="button" disabled><Check size={13}/> 담당자 확인 요청됨</button><p role="status">고객·은행 채팅에 요청이 기록됐습니다. 담당자 답변 대기 중입니다.</p></> :
-        <button type="button" disabled={pending !== null} onClick={() => void request(item.step)}>{pending === item.step ? '요청 저장 중…' : '담당자에게 확인 요청'}</button>}
-    </article>)}</div>
-    {!items.length && <p className="customer-progress-summary">처리 결과를 아직 불러오지 못했습니다. 완료 여부는 확인되지 않았습니다.</p>}
-    {error && <p role="alert" className="progress-error">{error}</p>}
-    {waiting > 0 && <p className="customer-progress-summary">답변이 필요한 질문 {waiting}건</p>}
+    <div className="customer-side-title"><h2>현재 진행 상황</h2>{waiting > 0 && <span className="customer-progress-questions">답변할 질문 {waiting}개</span>}</div>
+    {items.length > 0 ? <ul className="customer-progress-list">{items.map((item) => {
+      const active = item.status === 'IN_PROGRESS' || item.status === 'SUBMITTED';
+      const canRequestConfirmation = !['COMPLETED', 'NOT_APPLICABLE'].includes(item.status);
+      return <li key={item.step} className={`customer-progress-step is-${item.status.toLowerCase()} ${active ? 'is-active' : ''}`}>
+        <div className="customer-progress-row"><span className="customer-progress-icon"><StatusIcon status={item.status}/></span><strong>{item.label}</strong><span className="customer-progress-status">{statusLabels[item.status]}</span></div>
+        <details><summary aria-label={`${item.label} 단계 상세 정보`}>상세 보기</summary><div className="customer-progress-detail">
+          {meaningfulSummary(item) && <p><strong>처리 내용</strong>{item.summary}</p>}
+          {item.next_action && <p><strong>고객이 할 일</strong>{item.next_action}</p>}
+          {item.reference && <p><strong>확인 근거</strong>{item.reference}</p>}
+          {item.confirmed_at && <p><strong>확인 시각</strong>{new Date(item.confirmed_at).toLocaleString('ko-KR')}</p>}
+          {item.confirmation_requested ? <p className="customer-progress-requested" role="status"><Check size={14}/>담당자 확인 요청됨 · 답변 대기 중</p> : canRequestConfirmation && <button type="button" className="customer-progress-confirm" aria-label={`${item.label} 단계 담당자 확인 요청`} disabled={pending !== null} onClick={() => void request(item.step)}>{pending === item.step ? '요청 저장 중…' : '담당자에게 확인 요청'}</button>}
+          {error?.step === item.step && <p role="alert" className="progress-error">{error.message}</p>}
+        </div></details>
+      </li>;
+    })}</ul> : <p className="customer-progress-empty">아직 확인된 진행 정보가 없습니다. 완료 여부는 확인되지 않았습니다.</p>}
+    {primaryAction && <div className="customer-progress-primary-action"><strong>지금 할 일</strong><p>{primaryAction.next_action}</p></div>}
+    <p className="customer-progress-disclaimer">안내나 채팅만으로 신청·신고가 접수되지는 않습니다.</p>
   </section>;
 };
 

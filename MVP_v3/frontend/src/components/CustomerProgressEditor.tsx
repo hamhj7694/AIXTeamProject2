@@ -36,8 +36,8 @@ export const CustomerProgressEditor: React.FC<{
     finally { setBusy(false); }
   };
   return <section className="context-section public-progress-editor">
-    <h3>고객에게 공유할 처리 결과</h3>
-    <p className="context-section-description">실제 확인한 결과와 고객이 할 일을 기록하세요. 저장하면 고객 화면과 AI 상담에 반영됩니다.</p>
+    <h3>고객 진행 상태·담당자 처리 결과</h3>
+    <p className="context-section-description">여기서 저장한 진행 상태, 처리 결과와 고객이 할 일은 고객 화면에 공개되며 고객 상담 AI의 참고 정보로도 사용됩니다.</p>
     <div className="public-progress-list">{items.map((item) => <article key={item.step} className={editing?.step === item.step ? 'is-editing' : ''}>
       <header><strong>{item.label}</strong><button type="button" disabled={busy} onClick={() => edit(item)}>결과 기록</button></header>
       <b>{item.status_label}</b><p>{item.summary}</p>
