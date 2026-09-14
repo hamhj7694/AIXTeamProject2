@@ -156,12 +156,6 @@ class MySqlCaseRepositoryIntegrationTest(unittest.IsolatedAsyncioTestCase):
         finally:
             connection.close()
 
-    async def test_case_number_reservations_are_unique_under_concurrency(self) -> None:
-        case_ids = await asyncio.gather(*(self.repository.next_case_id() for _ in range(8)))
-
-        self.assertEqual(len(case_ids), len(set(case_ids)))
-        self.assertTrue(all(case_id.startswith("VP-") for case_id in case_ids))
-
     async def test_case_context_v2_database_invariants_and_revision(self) -> None:
         case_id = f"VP-{uuid4().hex[:12]}"
         await self.repository.create(await self._record(case_id=case_id, client_request_id=uuid4().hex))

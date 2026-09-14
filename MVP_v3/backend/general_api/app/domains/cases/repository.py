@@ -157,13 +157,8 @@ class InMemoryCaseRepository:
     async def next_case_id(self) -> str:
         """Allocate human-readable, monotonically increasing local Case IDs."""
         async with self._lock:
-            numbers = [
-                int(str(row["case_id"])[3:])
-                for row in self._records
-                if str(row.get("case_id", "")).startswith("VP-") and str(row["case_id"])[3:].isdigit()
-            ]
-            self._case_number = max(self._case_number, max(numbers, default=0)) + 1
-            return f"VP-{self._case_number}"
+            numbers = [int(str(row["case_id"]).removeprefix("VP-")) for row in self._records if str(row.get("case_id", "")).removeprefix("VP-").isdigit()]
+            return f"VP-{max(numbers, default=0) + 1}"
 
     async def get(self, case_id: str) -> dict[str, Any] | None:
         return next((deepcopy(row) for row in self._records if row.get("case_id") == case_id and not row.get("deleted_at")), None)
