@@ -38,8 +38,8 @@ export const casesApi = {
     method: 'POST', body: JSON.stringify({ expected_version: expectedVersion, password }),
   }),
   finalReportDownloadUrl: (caseId: string, format: 'pdf' | 'docx') => apiUrl(`/api/cases/${encodeURIComponent(caseId)}/reports/final/export?format=${format}`),
-  analyze: (text: string) => request<AnalyzeCaseResponse>('/api/cases/analyze', {
-    method: 'POST', body: JSON.stringify({ text, client_request_id: generateUuid() }),
+  analyze: (text: string, clientRequestId: string) => request<AnalyzeCaseResponse>('/api/cases/analyze', {
+    method: 'POST', body: JSON.stringify({ text, client_request_id: clientRequestId }),
   }),
   get: (caseId: string) => request<StoredCase>(`/api/cases/${encodeURIComponent(caseId)}`),
   bundle: (caseId: string) => request<CaseBundle>(`/api/cases/${encodeURIComponent(caseId)}/bundle?view=bank`),

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://csr.local/schemas/judge-manifest-v1.json",
+  "title": "CSR Judge Explorer AUTO Manifest",
+  "type": "object",
+  "required": ["manifest_version", "manifest_type"],
+  "properties": {
+    "manifest_version": {"type": "string", "const": "1.0.0"},
+    "manifest_type": {
+      "type": "string",
+      "enum": ["architecture", "technologies", "api", "ai", "deployment", "database", "build_snapshot"]
+    }
+  },
+  "allOf": [
+    {"if": {"properties": {"manifest_type": {"const": "architecture"}}}, "then": {"required": ["components", "edges"]}},
+    {"if": {"properties": {"manifest_type": {"const": "technologies"}}}, "then": {"required": ["technologies"]}},
+    {"if": {"properties": {"manifest_type": {"const": "api"}}}, "then": {"required": ["services", "endpoints"]}},
+    {"if": {"properties": {"manifest_type": {"const": "ai"}}}, "then": {"required": ["services", "retrieval", "ml_artifact"]}},
+    {"if": {"properties": {"manifest_type": {"const": "deployment"}}}, "then": {"required": ["services", "dockerfiles", "nginx"]}},
+    {"if": {"properties": {"manifest_type": {"const": "database"}}}, "then": {"required": ["tables", "migrations"]}},
+    {"if": {"properties": {"manifest_type": {"const": "build_snapshot"}}}, "then": {"required": ["git_commit", "metadata_generated_at", "manifest_hash", "hash_scope"]}}
+  ]
+}

@@ -1,0 +1,287 @@
+{
+  "manifest_type": "ai",
+  "manifest_version": "1.0.0",
+  "ml_artifact": {
+    "evidence": [
+      {
+        "reason": "Artifact filename, expected hash and runtime guard",
+        "source_path": "backend/ai_api/app/domains/diagnosis/model_adapter.py"
+      },
+      {
+        "reason": "Artifact SHA-256 calculated without deserialization",
+        "source_path": "backend/ai_api/models/WINDOW_LOGISTIC_DASHBOARD_EXPERIMENTAL_SAMPLE_v1.pkl"
+      }
+    ],
+    "expected_sha256": "662db2a9351dc4ca2c453776ae6f45750e465234cc9abcecc65b58a6b047c5fc",
+    "hash_matches_code": true,
+    "inspection": "FILE_METADATA_AND_SHA256_ONLY",
+    "name": "WINDOW_LOGISTIC_DASHBOARD_EXPERIMENTAL_SAMPLE_v1.pkl",
+    "required_sklearn_version": "1.6.1",
+    "sha256": "662db2a9351dc4ca2c453776ae6f45750e465234cc9abcecc65b58a6b047c5fc",
+    "source_path": "backend/ai_api/models/WINDOW_LOGISTIC_DASHBOARD_EXPERIMENTAL_SAMPLE_v1.pkl",
+    "status": "EXPERIMENTAL"
+  },
+  "retrieval": {
+    "component_id": "general-api",
+    "consumer": "ai-api",
+    "evidence": [
+      {
+        "line": 55,
+        "reason": "Authorized Case-local character n-gram retrieval",
+        "source_path": "backend/general_api/app/domains/cases/case_retrieval.py"
+      }
+    ],
+    "id": "case-lexical-retrieval",
+    "implementation_kind": "TF_IDF_CHARACTER_NGRAM",
+    "name": "Case-scoped lexical retrieval",
+    "source_paths": [
+      "backend/general_api/app/domains/cases/case_retrieval.py"
+    ],
+    "status": "CURRENT"
+  },
+  "safety_facts": {
+    "case_support_snapshot": "RULE_BASED_PROJECTION",
+    "inactive_case_brief_llm_path": true,
+    "lexical_retrieval_owner": "general-api",
+    "raw_input_storage_detected": true
+  },
+  "services": [
+    {
+      "component_id": "ai-api",
+      "endpoint": "/ai/case-copilot/replies",
+      "evidence": [
+        {
+          "line": 86,
+          "reason": "POST /ai/case-copilot/replies",
+          "source_path": "backend/ai_api/app/main.py"
+        },
+        {
+          "reason": "LLM implementation",
+          "source_path": "backend/ai_api/app/domains/case_support/copilot_service.py"
+        }
+      ],
+      "human_review": true,
+      "id": "case-copilot",
+      "implementation_kind": "LLM",
+      "method": "POST",
+      "name": "Case Copilot",
+      "source_paths": [
+        "backend/ai_api/app/domains/case_support/copilot_service.py",
+        "backend/ai_api/app/main.py"
+      ],
+      "status": "CURRENT"
+    },
+    {
+      "component_id": "ai-api",
+      "endpoint": "/ai/case-support/snapshot",
+      "evidence": [
+        {
+          "line": 74,
+          "reason": "POST /ai/case-support/snapshot",
+          "source_path": "backend/ai_api/app/main.py"
+        },
+        {
+          "reason": "RULE_BASED_PROJECTION implementation",
+          "source_path": "backend/ai_api/app/domains/case_support/case_snapshot_adapter.py"
+        }
+      ],
+      "human_review": true,
+      "id": "case-support-snapshot",
+      "implementation_kind": "RULE_BASED_PROJECTION",
+      "method": "POST",
+      "name": "Case Support Snapshot",
+      "source_paths": [
+        "backend/ai_api/app/domains/case_support/case_snapshot_adapter.py",
+        "backend/ai_api/app/main.py"
+      ],
+      "status": "CURRENT"
+    },
+    {
+      "component_id": "general-api",
+      "endpoint": "/api/cases/{case_id}/ai/customer-replies",
+      "evidence": [
+        {
+          "line": 1380,
+          "reason": "POST /api/cases/{case_id}/ai/customer-replies",
+          "source_path": "backend/general_api/app/main.py"
+        },
+        {
+          "reason": "LLM_ORCHESTRATION implementation",
+          "source_path": "backend/ai_api/app/domains/case_support/copilot_service.py"
+        }
+      ],
+      "human_review": true,
+      "id": "customer-support",
+      "implementation_kind": "LLM_ORCHESTRATION",
+      "method": "POST",
+      "name": "Customer Support",
+      "source_paths": [
+        "backend/ai_api/app/domains/case_support/copilot_service.py",
+        "backend/general_api/app/main.py"
+      ],
+      "status": "CURRENT"
+    },
+    {
+      "component_id": "ai-api",
+      "endpoint": "/ai/features/extract",
+      "evidence": [
+        {
+          "line": 129,
+          "reason": "POST /ai/features/extract",
+          "source_path": "backend/ai_api/app/main.py"
+        },
+        {
+          "reason": "STRUCTURED_FEATURE implementation",
+          "source_path": "backend/ai_api/app/domains/diagnosis/features.py"
+        }
+      ],
+      "human_review": false,
+      "id": "feature-extraction",
+      "implementation_kind": "STRUCTURED_FEATURE",
+      "method": "POST",
+      "name": "Feature Extraction",
+      "source_paths": [
+        "backend/ai_api/app/domains/diagnosis/features.py",
+        "backend/ai_api/app/main.py"
+      ],
+      "status": "CURRENT"
+    },
+    {
+      "component_id": "ai-api",
+      "endpoint": "/ai/final-reports/generate",
+      "evidence": [
+        {
+          "line": 112,
+          "reason": "POST /ai/final-reports/generate",
+          "source_path": "backend/ai_api/app/main.py"
+        },
+        {
+          "reason": "LLM implementation",
+          "source_path": "backend/ai_api/app/domains/case_support/final_report_service.py"
+        }
+      ],
+      "human_review": true,
+      "id": "final-report",
+      "implementation_kind": "LLM",
+      "method": "POST",
+      "name": "Final Report",
+      "source_paths": [
+        "backend/ai_api/app/domains/case_support/final_report_service.py",
+        "backend/ai_api/app/main.py"
+      ],
+      "status": "CURRENT"
+    },
+    {
+      "component_id": "ai-api",
+      "endpoint": "/ai/risk/predict",
+      "evidence": [
+        {
+          "line": 134,
+          "reason": "POST /ai/risk/predict",
+          "source_path": "backend/ai_api/app/main.py"
+        },
+        {
+          "reason": "ML implementation",
+          "source_path": "backend/ai_api/app/domains/diagnosis/model_adapter.py"
+        }
+      ],
+      "human_review": false,
+      "id": "risk-prediction",
+      "implementation_kind": "ML",
+      "method": "POST",
+      "name": "Risk Prediction",
+      "source_paths": [
+        "backend/ai_api/app/domains/diagnosis/model_adapter.py",
+        "backend/ai_api/app/main.py"
+      ],
+      "status": "CURRENT"
+    },
+    {
+      "component_id": "ai-api",
+      "endpoint": "/ai/analyze/text",
+      "evidence": [
+        {
+          "line": 53,
+          "reason": "POST /ai/analyze/text",
+          "source_path": "backend/ai_api/app/main.py"
+        },
+        {
+          "reason": "LLM_ML_HYBRID implementation",
+          "source_path": "backend/ai_api/app/domains/diagnosis/service.py"
+        }
+      ],
+      "human_review": true,
+      "id": "text-analysis",
+      "implementation_kind": "LLM_ML_HYBRID",
+      "method": "POST",
+      "name": "Text Analysis",
+      "source_paths": [
+        "backend/ai_api/app/domains/diagnosis/service.py",
+        "backend/ai_api/app/main.py"
+      ],
+      "status": "CURRENT"
+    },
+    {
+      "component_id": "ai-api",
+      "endpoint": "/ai/analyze/windows",
+      "evidence": [
+        {
+          "line": 124,
+          "reason": "POST /ai/analyze/windows",
+          "source_path": "backend/ai_api/app/main.py"
+        },
+        {
+          "reason": "LLM_ML_HYBRID implementation",
+          "source_path": "backend/ai_api/app/domains/diagnosis/window_ai/service.py"
+        }
+      ],
+      "human_review": false,
+      "id": "window-analysis",
+      "implementation_kind": "LLM_ML_HYBRID",
+      "method": "POST",
+      "name": "Window Analysis",
+      "source_paths": [
+        "backend/ai_api/app/domains/diagnosis/window_ai/service.py",
+        "backend/ai_api/app/main.py"
+      ],
+      "status": "CURRENT"
+    },
+    {
+      "component_id": "ai-api",
+      "endpoint": "/ai/work-cards/generate",
+      "evidence": [
+        {
+          "line": 100,
+          "reason": "POST /ai/work-cards/generate",
+          "source_path": "backend/ai_api/app/main.py"
+        },
+        {
+          "reason": "LLM implementation",
+          "source_path": "backend/ai_api/app/domains/case_support/work_card_service.py"
+        }
+      ],
+      "human_review": true,
+      "id": "work-card",
+      "implementation_kind": "LLM",
+      "method": "POST",
+      "name": "Work Card",
+      "source_paths": [
+        "backend/ai_api/app/domains/case_support/work_card_service.py",
+        "backend/ai_api/app/main.py"
+      ],
+      "status": "CURRENT"
+    }
+  ],
+  "unimplemented_domains": [
+    {
+      "name": "knowledge",
+      "reason": "No Python implementation files",
+      "status": "UNVERIFIED"
+    },
+    {
+      "name": "voice",
+      "reason": "No Python implementation files",
+      "status": "UNVERIFIED"
+    }
+  ]
+}

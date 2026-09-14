@@ -1,12 +1,14 @@
-import React, { FormEvent, useState } from 'react';
+import React, { FormEvent, useRef, useState } from 'react';
 import { AlertCircle, ArrowLeftRight, BrainCircuit, CheckCircle2, ChevronRight, FileSearch, MessageSquareText, Play, ShieldAlert, ShieldCheck, Sparkles, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { casesApi } from '../api/cases';
 import type { AnalyzeCaseResponse, StoredCase } from '../api/types';
 import { caseState, caseStateLabel, caseStateTone } from '../presentation';
+import { generateUuid } from '../uuid';
 
 type AnalysisState = 'INPUT' | 'ANALYZING' | 'CREATED' | 'NO_CASE' | 'ERROR';
 type SampleType = 'PHISHING' | 'FINANCE' | 'DAILY';
+type AnalysisRequest = { requestId: string; submittedText: string };
 
 const CALL_SAMPLES: Record<SampleType, string[]> = {
   PHISHING: [
@@ -71,22 +73,32 @@ export const HomePage: React.FC = () => {
   const [caseItem, setCaseItem] = useState<StoredCase | undefined>();
   const [error, setError] = useState('');
   const [lastSample, setLastSample] = useState<Partial<Record<SampleType, number>>>({});
+  const analysisRequestRef = useRef<AnalysisRequest | null>(null);
   const applySample = (type: SampleType) => {
     const samples = CALL_SAMPLES[type];
     const previous = lastSample[type];
     let index = Math.floor(Math.random() * samples.length);
     if (samples.length > 1 && index === previous) index = (index + 1 + Math.floor(Math.random() * (samples.length - 1))) % samples.length;
     setLastSample((current) => ({ ...current, [type]: index }));
+    analysisRequestRef.current = null;
     setText(samples[index]); setError(''); setState('INPUT');
   };
-  const reset = () => { setText(''); setResult(null); setCaseItem(undefined); setError(''); setState('INPUT'); setOpen(true); };
+  const reset = () => { analysisRequestRef.current = null; setText(''); setResult(null); setCaseItem(undefined); setError(''); setState('INPUT'); setOpen(true); };
   const close = () => { setOpen(false); setError(''); };
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!text.trim() || state === 'ANALYZING') return;
+    const submittedText = text.trim();
+    if (!submittedText || state === 'ANALYZING') return;
+    const previousRequest = analysisRequestRef.current;
+    const analysisRequest = previousRequest?.submittedText === submittedText
+      ? previousRequest
+      : { requestId: generateUuid(), submittedText };
+    // state가 반영되기 전 같은 handler가 다시 실행돼도 동일한 논리 요청 ID를 사용한다.
+    analysisRequestRef.current = analysisRequest;
     setState('ANALYZING'); setError(''); setResult(null); setCaseItem(undefined);
     try {
-      const response = await casesApi.analyze(text.trim());
+      const response = await casesApi.analyze(submittedText, analysisRequest.requestId);
+      analysisRequestRef.current = null;
       // The source transcript is intentionally transient in this screen too.
       setText('');
       setResult(response);
@@ -101,8 +113,8 @@ export const HomePage: React.FC = () => {
     } catch (reason) { setState('ERROR'); setError(reason instanceof Error ? reason.message : '통화 내용을 분석하지 못했습니다.'); }
   };
   return <section className={`home-empty ${open ? 'analysis-open' : ''}`}>
-    {!open ? <><div className="home-mark"><ShieldCheck size={26}/></div><p className="eyebrow">CSR | Case Share Room</p><h1>대응할 사건을 선택하세요.</h1><p>통화 맥락, 고객 대화, 기관 확인과 대응 업무를 하나의 Shared Case에서 이어서 확인할 수 있습니다.</p><div className="home-principles"><span><MessageSquareText size={17}/>대화와 업무 기록을 한 흐름으로</span><span><ArrowLeftRight size={17}/>고객 응답과 Case 맥락을 양방향으로</span></div><button className="start-analysis-button" type="button" onClick={() => setOpen(true)}><FileSearch size={17}/>새 통화 분석하기</button></> : <div className="home-analysis-panel">
+    {!open ? <><div className="home-mark"><ShieldCheck size={26}/></div><p className="eyebrow">CSR | Case Share Room</p><h1>대응할 사건을 선택하세요.</h1><p>통화 맥락, 고객 대화, 기관 확인과 대응 업무를 하나의 Shared Case에서 이어서 확인할 수 있습니다.</p><div className="home-principles"><span><MessageSquareText size={17}/>대화와 업무 기록을 한 흐름으로</span><span><ArrowLeftRight size={17}/>고객 응답과 Case 맥락을 양방향으로</span></div><button className="start-analysis-button" type="button" onClick={() => setOpen(true)}><FileSearch size={17}/>새 통화 분석하기</button><a className="judge-guide-link" href="/judge/index.html">심사위원 안내 · 프로젝트 먼저 보기 →</a></> : <div className="home-analysis-panel">
       <header><div><p className="eyebrow">NEW SHARED CASE</p><h1>새 통화 분석하기</h1><span>ML이 문장 단위로 신호를 추출한 뒤, LLM은 구조화된 핵심 피처만으로 Case 초기 정보를 정리합니다.</span></div><button type="button" onClick={close} aria-label="새 통화 분석 닫기"><X size={19}/></button></header>
-      {state === 'INPUT' || state === 'ANALYZING' || state === 'ERROR' ? <form onSubmit={submit}><label htmlFor="call-transcript">통화 내용 텍스트</label><div className="analysis-sample-row"><span>샘플 입력</span><button type="button" disabled={state === 'ANALYZING'} onClick={() => applySample('PHISHING')}>보이스피싱 사례 샘플</button><button type="button" disabled={state === 'ANALYZING'} onClick={() => applySample('FINANCE')}>정상 금융 상담 샘플</button><button type="button" disabled={state === 'ANALYZING'} onClick={() => applySample('DAILY')}>일상 통화 샘플</button></div><textarea id="call-transcript" value={text} disabled={state === 'ANALYZING'} onChange={(event) => setText(event.target.value)} placeholder={'통화 내용이나 대화 기록을 붙여 넣으세요.\n문장 또는 줄바꿈 단위로 ML이 위험 신호를 추출하고, LLM은 구조화된 핵심 피처만으로 Case 초기 정보를 정리합니다.'}/><div className="analysis-input-meta"><span>최대 50,000자</span></div><p className="analysis-privacy-note">원문은 분석 요청 중에만 사용되며, Shared Case에는 원문 대신 핵심 위험 피처와 집계 결과만 저장됩니다.</p>{error && <p className="analysis-error"><AlertCircle size={15}/>{error}</p>}<footer><button type="button" onClick={close} disabled={state === 'ANALYZING'}>취소</button><button type="submit" className="primary" disabled={!text.trim() || state === 'ANALYZING'}>{state === 'ANALYZING' ? <><span className="spinner"/>문장별 ML·피처 기반 LLM 분석 중</> : <><Play size={16}/>통화 분석하고 Case 만들기</>}</button></footer></form> : result && <AnalysisResult result={result} caseItem={caseItem} onOpenCase={() => result.case_id && navigate(`/cases/${encodeURIComponent(result.case_id)}`)} onRestart={reset}/>}</div>}
+      {state === 'INPUT' || state === 'ANALYZING' || state === 'ERROR' ? <form onSubmit={submit}><label htmlFor="call-transcript">통화 내용 텍스트</label><div className="analysis-sample-row"><span>샘플 입력</span><button type="button" disabled={state === 'ANALYZING'} onClick={() => applySample('PHISHING')}>보이스피싱 사례 샘플</button><button type="button" disabled={state === 'ANALYZING'} onClick={() => applySample('FINANCE')}>정상 금융 상담 샘플</button><button type="button" disabled={state === 'ANALYZING'} onClick={() => applySample('DAILY')}>일상 통화 샘플</button></div><textarea id="call-transcript" value={text} disabled={state === 'ANALYZING'} onChange={(event) => { const nextText = event.target.value; if (analysisRequestRef.current?.submittedText !== nextText.trim()) analysisRequestRef.current = null; setText(nextText); }} placeholder={'통화 내용이나 대화 기록을 붙여 넣으세요.\n문장 또는 줄바꿈 단위로 ML이 위험 신호를 추출하고, LLM은 구조화된 핵심 피처만으로 Case 초기 정보를 정리합니다.'}/><div className="analysis-input-meta"><span>최대 50,000자</span></div><p className="analysis-privacy-note">원문은 분석 요청 중에만 사용되며, Shared Case에는 원문 대신 핵심 위험 피처와 집계 결과만 저장됩니다.</p>{error && <p className="analysis-error"><AlertCircle size={15}/>{error}</p>}<footer><button type="button" onClick={close} disabled={state === 'ANALYZING'}>취소</button><button type="submit" className="primary" disabled={!text.trim() || state === 'ANALYZING'}>{state === 'ANALYZING' ? <><span className="spinner"/>문장별 ML·피처 기반 LLM 분석 중</> : <><Play size={16}/>통화 분석하고 Case 만들기</>}</button></footer></form> : result && <AnalysisResult result={result} caseItem={caseItem} onOpenCase={() => result.case_id && navigate(`/cases/${encodeURIComponent(result.case_id)}`)} onRestart={reset}/>}</div>}
   </section>;
 };

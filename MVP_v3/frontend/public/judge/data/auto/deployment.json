@@ -1,0 +1,182 @@
+{
+  "dockerfiles": [
+    {
+      "exposed_ports": [
+        80
+      ],
+      "images": [
+        "node:20-alpine",
+        "nginx:1.27-alpine"
+      ],
+      "source_path": "frontend/Dockerfile"
+    },
+    {
+      "exposed_ports": [
+        8100
+      ],
+      "images": [
+        "python:3.11-slim"
+      ],
+      "source_path": "backend/Dockerfile.general-api"
+    },
+    {
+      "exposed_ports": [
+        8101
+      ],
+      "images": [
+        "python:3.11-slim"
+      ],
+      "source_path": "backend/Dockerfile.ai-api"
+    }
+  ],
+  "evidence": [
+    {
+      "reason": "Docker Compose services, ports, volumes and healthchecks",
+      "source_path": "docker-compose.yml"
+    },
+    {
+      "line": 5,
+      "reason": "Production static root, API proxy and SPA fallback",
+      "source_path": "frontend/nginx.conf"
+    },
+    {
+      "reason": "Container runtime image and exposed port",
+      "source_path": "frontend/Dockerfile"
+    },
+    {
+      "reason": "Container runtime image and exposed port",
+      "source_path": "backend/Dockerfile.general-api"
+    },
+    {
+      "reason": "Container runtime image and exposed port",
+      "source_path": "backend/Dockerfile.ai-api"
+    }
+  ],
+  "manifest_type": "deployment",
+  "manifest_version": "1.0.0",
+  "nginx": {
+    "api_proxy": "http://general-api:8100",
+    "listen_port": 80,
+    "source_path": "frontend/nginx.conf",
+    "spa_fallback": "$uri $uri/ /index.html",
+    "static_root": "/usr/share/nginx/html"
+  },
+  "services": [
+    {
+      "dockerfile": null,
+      "environment_variables": [
+        "MYSQL_DATABASE",
+        "MYSQL_PASSWORD",
+        "MYSQL_ROOT_PASSWORD",
+        "MYSQL_USER",
+        "TZ"
+      ],
+      "healthcheck": true,
+      "id": "mysql",
+      "image": "mysql:8.4",
+      "ports": [
+        "mysql-data:/var/lib/mysql",
+        "./database/01_mysql_csr_schema.sql:/docker-entrypoint-initdb.d/01_mysql_csr_schema.sql:ro",
+        "./backend/migrations/014_case_context_v2_foundation.sql:/docker-entrypoint-initdb.d/02_case_context_v2_foundation.sql:ro"
+      ],
+      "volumes": [
+        "mysql-data:/var/lib/mysql",
+        "./database/01_mysql_csr_schema.sql:/docker-entrypoint-initdb.d/01_mysql_csr_schema.sql:ro",
+        "./backend/migrations/014_case_context_v2_foundation.sql:/docker-entrypoint-initdb.d/02_case_context_v2_foundation.sql:ro"
+      ]
+    },
+    {
+      "dockerfile": "Dockerfile.ai-api",
+      "environment_variables": [
+        "CASE_COPILOT_MAX_INPUT_CHARS",
+        "CUSTOMER_AI_MAX_CALLS_PER_DAY",
+        "CUSTOMER_AI_MAX_CALLS_PER_MINUTE",
+        "CUSTOMER_AI_MAX_CONCURRENCY",
+        "DIAGNOSIS_MAX_INPUT_CHARS",
+        "DIAGNOSIS_MAX_TURNS",
+        "OPENAI_API_KEY",
+        "OPENAI_BANK_COPILOT_MODEL",
+        "OPENAI_CASE_BRIEF_MODEL",
+        "OPENAI_CASE_COPILOT_MAX_OUTPUT_TOKENS",
+        "OPENAI_CASE_COPILOT_MODEL",
+        "OPENAI_CASE_WORK_CARD_MAX_OUTPUT_TOKENS",
+        "OPENAI_CASE_WORK_CARD_MODEL",
+        "OPENAI_CONTEXT_MAX_OUTPUT_TOKENS",
+        "OPENAI_CONTEXT_MODEL",
+        "OPENAI_CUSTOMER_AI_MAX_OUTPUT_TOKENS",
+        "OPENAI_CUSTOMER_SUPPORT_MODEL",
+        "OPENAI_EVENT_MAX_OUTPUT_TOKENS",
+        "OPENAI_EVENT_MODEL",
+        "OPENAI_FINAL_REPORT_MODEL",
+        "OPENAI_MAX_CALLS_PER_DIAGNOSIS",
+        "OPENAI_MAX_TOTAL_TOKENS_PER_DIAGNOSIS",
+        "OPENAI_TIMEOUT_SECONDS",
+        "WINDOW_TURNS"
+      ],
+      "healthcheck": false,
+      "id": "ai-api",
+      "image": null,
+      "ports": [],
+      "volumes": []
+    },
+    {
+      "dockerfile": "Dockerfile.general-api",
+      "environment_variables": [
+        "AI_API_BASE_URL",
+        "AI_API_TIMEOUT_SECONDS",
+        "ATTACHMENT_STORAGE_ROOT",
+        "CASE_ADMIN_DELETE_PASSWORD",
+        "CASE_REPOSITORY",
+        "CORS_ALLOWED_ORIGINS",
+        "MAX_ATTACHMENT_BYTES",
+        "MVP_OPEN_PERMISSIONS",
+        "MYSQL_CONNECT_TIMEOUT_SECONDS",
+        "MYSQL_DATABASE",
+        "MYSQL_HOST",
+        "MYSQL_PASSWORD",
+        "MYSQL_PORT",
+        "MYSQL_USER",
+        "PROACTIVE_CASE_POLL_SECONDS",
+        "PROACTIVE_QUESTION_AUTOMATION"
+      ],
+      "healthcheck": false,
+      "id": "general-api",
+      "image": null,
+      "ports": [
+        "attachment-data:/app/data/uploads"
+      ],
+      "volumes": [
+        "attachment-data:/app/data/uploads"
+      ]
+    },
+    {
+      "dockerfile": "Dockerfile",
+      "environment_variables": [],
+      "healthcheck": false,
+      "id": "frontend",
+      "image": null,
+      "ports": [
+        "${APP_PORT:-80}:80"
+      ],
+      "volumes": []
+    },
+    {
+      "dockerfile": null,
+      "environment_variables": [],
+      "healthcheck": false,
+      "id": "mysql-data",
+      "image": null,
+      "ports": [],
+      "volumes": []
+    },
+    {
+      "dockerfile": null,
+      "environment_variables": [],
+      "healthcheck": false,
+      "id": "attachment-data",
+      "image": null,
+      "ports": [],
+      "volumes": []
+    }
+  ]
+}

@@ -1,0 +1,100 @@
+{
+  "site": {
+    "service_purpose": "탐지 이후 고객 확인, 사실 검증, 은행 대응을 하나의 Shared Case로 연결합니다.",
+    "judge_explanation": "CSR은 탐지 시스템이나 금융조치 시스템을 대체하지 않습니다. 위험 신호가 발견된 뒤 사람이 확인하고 대응하는 과정을 구조화합니다."
+  },
+  "intro_steps": [
+    {
+      "id": "need",
+      "label": "STEP 1",
+      "purpose": "왜 필요한가",
+      "title": "탐지 이후에도, 대응은 끝나지 않습니다.",
+      "description": "위험을 발견한 뒤에도 은행은 사건을 파악하고, 고객에게 확인하고, 사실을 검증하고 대응해야 합니다.",
+      "items": ["사건 파악", "고객 확인", "사실 검증", "대응"],
+      "visual": "sequence"
+    },
+    {
+      "id": "shared-case",
+      "label": "STEP 2",
+      "purpose": "CSR이 무엇인가",
+      "title": "고객과 은행이 같은 사건을 함께 확인합니다.",
+      "description": "CSR은 고객의 답변, 은행의 확인, AI 업무지원을 하나의 Shared Case에 연결합니다.",
+      "items": ["은행 담당자", "Shared Case", "고객"],
+      "visual": "relationship",
+      "images": [
+        {"src": "./assets/screenshots/bank-case-room.png", "label": "은행 담당자 화면"},
+        {"src": "./assets/screenshots/customer-chat.png", "label": "고객 화면"}
+      ]
+    },
+    {
+      "id": "target",
+      "label": "STEP 3",
+      "purpose": "실제 어디에 적용되는가",
+      "title": "실제 금융서비스에서는 이렇게 연결됩니다.",
+      "description": "은행 업무환경과 고객의 은행 App에 연결하는 적용 방향입니다.",
+      "badge": "TARGET SERVICE",
+      "items": ["FDS / Fraud Monitoring → CSR Bank Case Room", "Bank App / 송금 Flow → CSR 안전확인 Chatbot → Shared Case"],
+      "warning": "현재 MVP는 실제 FDS·송금 시스템과 연동된 상태가 아닙니다.",
+      "visual": "target"
+    },
+    {
+      "id": "mvp",
+      "label": "STEP 4",
+      "purpose": "이번 MVP",
+      "title": "이번 MVP에서는 이 흐름을 직접 확인할 수 있습니다.",
+      "description": "외부 위험 Trigger 대신 통화 Text를 입력하고, 생성된 Shared Case에서 고객과 은행의 확인·대응 흐름을 살펴봅니다.",
+      "items": ["통화 Text 입력", "AI·ML 분석", "Shared Case 생성", "고객 ↔ 은행 확인·대응", "사건 기록 / Report"],
+      "visual": "sequence"
+    }
+  ],
+  "components": {
+    "frontend": {"simple_description": "고객과 은행 담당자가 Shared Case를 확인하고 대화하는 화면입니다.", "where": "고객·은행의 웹 화면", "role": "같은 사건을 서로 다른 공개 범위로 보여줍니다."},
+    "nginx": {"simple_description": "화면 파일을 제공하고 API 요청을 서비스 내부로 전달하는 입구입니다.", "where": "웹 서비스의 가장 앞단", "role": "하나의 주소에서 화면과 API 요청을 연결합니다."},
+    "general-api": {"simple_description": "사용자 요청을 받고 Shared Case 상태와 데이터 변경을 관리하며 필요한 AI 기능을 호출합니다.", "where": "서비스 제어 영역", "role": "사건 흐름과 저장 절차를 통제합니다."},
+    "lexical-retrieval": {"simple_description": "같은 사건 안에서 질문과 관련된 근거를 찾습니다.", "where": "General Backend 내부", "role": "사건과 공개 범위를 벗어나지 않는 근거를 선별합니다."},
+    "ai-api": {"simple_description": "통화 맥락을 구조화하고 확인 질문과 업무 정리를 지원합니다.", "where": "AI 지원 서비스", "role": "선별된 사건 정보를 바탕으로 AI 기능을 제공합니다."},
+    "ml-engine": {"simple_description": "구조화된 위험 신호에서 위험 확률을 계산하는 실험 모델입니다.", "where": "AI API 내부", "role": "Window Feature를 Logistic Model로 계산합니다."},
+    "mysql": {"simple_description": "Shared Case와 대화, 확인 업무, 보고서를 저장합니다.", "where": "서비스 데이터 영역", "role": "고객과 은행의 대응 기록을 사건 단위로 유지합니다."},
+    "docker-runtime": {"simple_description": "화면과 두 API, 데이터베이스를 함께 실행하는 환경입니다.", "where": "개발·시연 실행환경", "role": "각 서비스를 같은 구성으로 재현합니다."}
+  },
+  "technology_roles": {
+    "react": {"where": "고객·은행 화면", "role": "양쪽 사용자 UI 구성"},
+    "nginx": {"where": "웹 서비스 입구", "role": "정적 화면 제공과 API 전달"},
+    "fastapi": {"where": "General / AI API", "role": "API와 서비스 로직"},
+    "openai": {"where": "AI 지원", "role": "대화 구조화와 업무지원"},
+    "scikit-learn": {"where": "위험확률 계산", "role": "Window Logistic 추론"},
+    "tf-idf": {"where": "General Backend", "role": "Case 내부 관련 정보 검색"},
+    "mysql": {"where": "Shared Case Data", "role": "사건과 업무 기록 저장"},
+    "docker": {"where": "서비스 실행환경", "role": "서비스 구성과 실행"}
+  },
+  "target_service": {
+    "bank": {
+      "label": "BANK SIDE",
+      "title": "은행 직원은 기존 모니터링 업무에서 연결합니다.",
+      "description": "은행 직원용 CSR은 FDS·사기대응 모니터링 이후 고객 확인과 대응이 필요한 업무 구간에 연결됩니다.",
+      "steps": ["FDS / 이상거래 모니터링", "위험 Alert", "CSR Bank Case Room", "사건 파악 · 고객 확인 · 검증 · 대응"]
+    },
+    "customer": {
+      "label": "CUSTOMER SIDE",
+      "title": "고객은 은행 App의 송금 흐름에서 만납니다.",
+      "description": "고위험 송금 상황에서 안전확인 Chatbot이 추가 확인을 돕고, 고객의 답변을 은행 담당자의 같은 Case와 연결합니다.",
+      "steps": ["은행 App · 송금 시도", "위험 Trigger · 추가 확인", "CSR 안전확인 Chatbot", "고객 확인"]
+    },
+    "notice": "현재 MVP에서는 실제 FDS·송금 시스템 연동과 자동 지급정지가 구현되지 않았습니다."
+  },
+  "demo_flow": [
+    {"title": "통화 내용 입력", "description": "보이스피싱 의심 통화 Text를 입력합니다.", "image": "new-analysis.png", "alt": "통화 Text가 입력된 New Shared Case 화면"},
+    {"title": "AI·ML 분석", "description": "통화 맥락과 위험신호를 결합해 초기 정보를 구성합니다.", "image": "analysis-result.png", "alt": "AI와 ML 분석 결과 화면"},
+    {"title": "Shared Case 생성", "description": "분석된 위험정보를 하나의 사건으로 연결합니다.", "image": "bank-case-room.png", "alt": "생성된 Shared Case의 Bank Case Room 화면"},
+    {"title": "고객 ↔ 은행 확인·대응", "description": "고객 답변과 담당자 확인 업무가 같은 Case에서 이어집니다.", "image": "customer-chat.png", "alt": "고객 확인과 대화가 이어지는 Customer Case Chat 화면"},
+    {"title": "사건 맥락·업무 기록", "description": "확인 정보와 남은 업무를 보고 필요하면 Report로 이어갑니다.", "image": "context-panel.png", "alt": "사건 맥락과 업무 기록 패널"}
+  ],
+  "implementation_boundaries": [
+    {"badge": "현재 구현", "title": "Shared Case 협업", "description": "Text 분석, 고객·은행 화면, 확인·업무 기록과 Report 흐름을 직접 체험할 수 있습니다."},
+    {"badge": "실험 구현", "title": "Window Logistic", "description": "Feature Vector와 Logistic Model의 predict_proba로 위험 확률을 계산합니다."},
+    {"badge": "현재 구현", "title": "사건 내부 근거 검색", "description": "General API가 같은 Case 안에서 관련 근거를 선별하고 AI API는 retrieved_context를 소비합니다."},
+    {"badge": "일부 구현", "title": "규칙 기반 사건 요약", "description": "Case Support Snapshot은 현재 LLM Agent가 아니라 규칙 기반 projection입니다."},
+    {"badge": "향후 연동", "title": "외부 금융서비스", "description": "실제 FDS·ASAP·송금·지급정지 시스템 연동과 Voice/STT AI는 현재 구현 범위가 아닙니다."},
+    {"badge": "현재 구현", "title": "입력 Text 저장", "description": "분석 요청의 input_text 저장 경로가 현재 코드에 존재합니다."}
+  ]
+}

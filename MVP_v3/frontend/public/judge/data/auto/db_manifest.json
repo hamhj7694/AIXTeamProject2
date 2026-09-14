@@ -1,0 +1,215 @@
+{
+  "base_schema": "database/01_mysql_csr_schema.sql",
+  "base_schema_migration_markers": [
+    "001_core_case_diagnosis.sql",
+    "002_initial_live_report.sql",
+    "003_expand_risk_score_precision.sql",
+    "004_case_messages_and_event_actor.sql",
+    "005_verification_actions.sql",
+    "006_case_version.sql",
+    "007_voice_sessions.sql",
+    "008_collaboration_channels.sql",
+    "009_case_attachments.sql",
+    "009_mysql_parity_workflow.sql",
+    "010_case_fact_question_link.sql",
+    "012_context_items.sql",
+    "013_context_projection_revision.sql"
+  ],
+  "engine": "MySQL",
+  "evidence": [
+    {
+      "reason": "New database baseline schema and migration markers",
+      "source_path": "database/01_mysql_csr_schema.sql"
+    },
+    {
+      "reason": "Additive migration files discovered by filename",
+      "source_path": "backend/migrations/"
+    }
+  ],
+  "manifest_type": "database",
+  "manifest_version": "1.0.0",
+  "marker_gaps": [
+    "011_message_idempotency.sql",
+    "014_case_context_v2_foundation.sql"
+  ],
+  "migration_count": 15,
+  "migrations": [
+    {
+      "created_tables": [
+        "analysis_segments",
+        "case_events",
+        "case_inputs",
+        "cases",
+        "context_features"
+      ],
+      "has_alter_table": false,
+      "name": "001_core_case_diagnosis.sql",
+      "source_path": "backend/migrations/001_core_case_diagnosis.sql",
+      "trigger_count": 0
+    },
+    {
+      "created_tables": [
+        "case_report_sections",
+        "case_reports"
+      ],
+      "has_alter_table": false,
+      "name": "002_initial_live_report.sql",
+      "source_path": "backend/migrations/002_initial_live_report.sql",
+      "trigger_count": 0
+    },
+    {
+      "created_tables": [],
+      "has_alter_table": true,
+      "name": "003_expand_risk_score_precision.sql",
+      "source_path": "backend/migrations/003_expand_risk_score_precision.sql",
+      "trigger_count": 0
+    },
+    {
+      "created_tables": [
+        "messages"
+      ],
+      "has_alter_table": true,
+      "name": "004_case_messages_and_event_actor.sql",
+      "source_path": "backend/migrations/004_case_messages_and_event_actor.sql",
+      "trigger_count": 0
+    },
+    {
+      "created_tables": [
+        "actions",
+        "verification_tasks"
+      ],
+      "has_alter_table": false,
+      "name": "005_verification_actions.sql",
+      "source_path": "backend/migrations/005_verification_actions.sql",
+      "trigger_count": 0
+    },
+    {
+      "created_tables": [],
+      "has_alter_table": true,
+      "name": "006_case_version.sql",
+      "source_path": "backend/migrations/006_case_version.sql",
+      "trigger_count": 0
+    },
+    {
+      "created_tables": [
+        "transcript_segments",
+        "voice_sessions"
+      ],
+      "has_alter_table": false,
+      "name": "007_voice_sessions.sql",
+      "source_path": "backend/migrations/007_voice_sessions.sql",
+      "trigger_count": 0
+    },
+    {
+      "created_tables": [
+        "case_members",
+        "case_presence"
+      ],
+      "has_alter_table": true,
+      "name": "008_collaboration_channels.sql",
+      "source_path": "backend/migrations/008_collaboration_channels.sql",
+      "trigger_count": 0
+    },
+    {
+      "created_tables": [
+        "case_attachments",
+        "message_attachments"
+      ],
+      "has_alter_table": false,
+      "name": "009_case_attachments.sql",
+      "source_path": "backend/migrations/009_case_attachments.sql",
+      "trigger_count": 0
+    },
+    {
+      "created_tables": [
+        "case_facts",
+        "customer_questions",
+        "personal_notes"
+      ],
+      "has_alter_table": true,
+      "name": "009_mysql_parity_workflow.sql",
+      "source_path": "backend/migrations/009_mysql_parity_workflow.sql",
+      "trigger_count": 0
+    },
+    {
+      "created_tables": [],
+      "has_alter_table": true,
+      "name": "010_case_fact_question_link.sql",
+      "source_path": "backend/migrations/010_case_fact_question_link.sql",
+      "trigger_count": 0
+    },
+    {
+      "created_tables": [],
+      "has_alter_table": true,
+      "name": "011_message_idempotency.sql",
+      "source_path": "backend/migrations/011_message_idempotency.sql",
+      "trigger_count": 0
+    },
+    {
+      "created_tables": [
+        "case_context_item_history",
+        "case_context_items"
+      ],
+      "has_alter_table": false,
+      "name": "012_context_items.sql",
+      "source_path": "backend/migrations/012_context_items.sql",
+      "trigger_count": 0
+    },
+    {
+      "created_tables": [
+        "case_context_projections"
+      ],
+      "has_alter_table": true,
+      "name": "013_context_projection_revision.sql",
+      "source_path": "backend/migrations/013_context_projection_revision.sql",
+      "trigger_count": 15
+    },
+    {
+      "created_tables": [
+        "case_ai_suggestions",
+        "case_context_facts_v2",
+        "case_context_v2_history",
+        "case_decisions",
+        "case_gaps",
+        "case_tasks"
+      ],
+      "has_alter_table": false,
+      "name": "014_case_context_v2_foundation.sql",
+      "source_path": "backend/migrations/014_case_context_v2_foundation.sql",
+      "trigger_count": 14
+    }
+  ],
+  "table_count": 29,
+  "tables": [
+    "actions",
+    "analysis_segments",
+    "case_ai_suggestions",
+    "case_attachments",
+    "case_context_facts_v2",
+    "case_context_item_history",
+    "case_context_items",
+    "case_context_projections",
+    "case_context_v2_history",
+    "case_decisions",
+    "case_events",
+    "case_facts",
+    "case_gaps",
+    "case_inputs",
+    "case_members",
+    "case_presence",
+    "case_report_sections",
+    "case_reports",
+    "case_tasks",
+    "cases",
+    "context_features",
+    "customer_questions",
+    "message_attachments",
+    "messages",
+    "personal_notes",
+    "schema_migrations",
+    "transcript_segments",
+    "verification_tasks",
+    "voice_sessions"
+  ],
+  "trigger_count": 29
+}

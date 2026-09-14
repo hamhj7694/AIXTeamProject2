@@ -1,10 +1,11 @@
 """Exercise the real SQL repository's commit/rollback boundary without touching a DB."""
+import asyncio
 import unittest
 from unittest.mock import AsyncMock, MagicMock
 
 from pymysql.err import IntegrityError
 from general_api.app.domains.cases.mysql_repository import MySqlCaseRepository
-from general_api.app.domains.cases.repository import CaseCreationConflictError
+from general_api.app.domains.cases.repository import CaseCreationConflictError, InMemoryCaseRepository
 
 
 class CreationTransactionTest(unittest.IsolatedAsyncioTestCase):
@@ -54,3 +55,67 @@ class CreationTransactionTest(unittest.IsolatedAsyncioTestCase):
             await self.repository.create(self.record)
         self.connection.rollback.assert_awaited_once()
         self.connection.commit.assert_not_awaited()
+
+
+class CaseNumberAllocationTest(unittest.IsolatedAsyncioTestCase):
+    async def test_in_memory_concurrent_reservations_are_unique(self):
+        repository = InMemoryCaseRepository()
+
+        case_ids = await asyncio.gather(*(repository.next_case_id() for _ in range(8)))
+
+        self.assertEqual(set(case_ids), {f"VP-{number}" for number in range(1, 9)})
+
+    async def test_in_memory_counter_follows_existing_ids_and_never_moves_back(self):
+        repository = InMemoryCaseRepository()
+        repository._records = [
+            {"case_id": "VP-001"}, {"case_id": "VP-3"}, {"case_id": "VP-8"},
+            {"case_id": "100"}, {"case_id": "TEST-100"}, {"case_id": "VP-X"},
+        ]
+
+        self.assertEqual(await repository.next_case_id(), "VP-9")
+        repository._records.clear()  # 영구삭제되어도 이미 예약한 번호는 다시 쓰지 않는다.
+        self.assertEqual(await repository.next_case_id(), "VP-10")
+
+    async def test_mysql_reservation_locks_updates_and_commits_on_one_connection(self):
+        cursor = AsyncMock()
+        cursor.fetchone.return_value = (40,)
+        connection = MagicMock()
+        connection.begin = AsyncMock()
+        connection.commit = AsyncMock()
+        connection.rollback = AsyncMock()
+        connection.cursor.return_value.__aenter__ = AsyncMock(return_value=cursor)
+        connection.cursor.return_value.__aexit__ = AsyncMock(return_value=False)
+        pool = MagicMock()
+        pool.acquire.return_value.__aenter__ = AsyncMock(return_value=connection)
+        pool.acquire.return_value.__aexit__ = AsyncMock(return_value=False)
+        repository = MySqlCaseRepository()
+        repository._get_pool = AsyncMock(return_value=pool)
+
+        self.assertEqual(await repository.next_case_id(), "VP-41")
+
+        connection.begin.assert_awaited_once()
+        self.assertIn("FOR UPDATE", cursor.execute.await_args_list[0].args[0])
+        self.assertIn("UPDATE case_number_sequences", cursor.execute.await_args_list[1].args[0])
+        connection.commit.assert_awaited_once()
+        connection.rollback.assert_not_awaited()
+
+    async def test_mysql_missing_sequence_rolls_back_without_max_fallback(self):
+        cursor = AsyncMock()
+        cursor.fetchone.return_value = None
+        connection = MagicMock()
+        connection.begin = AsyncMock()
+        connection.commit = AsyncMock()
+        connection.rollback = AsyncMock()
+        connection.cursor.return_value.__aenter__ = AsyncMock(return_value=cursor)
+        connection.cursor.return_value.__aexit__ = AsyncMock(return_value=False)
+        pool = MagicMock()
+        pool.acquire.return_value.__aenter__ = AsyncMock(return_value=connection)
+        pool.acquire.return_value.__aexit__ = AsyncMock(return_value=False)
+        repository = MySqlCaseRepository()
+        repository._get_pool = AsyncMock(return_value=pool)
+
+        with self.assertRaisesRegex(RuntimeError, "015_case_number_sequence.sql"):
+            await repository.next_case_id()
+
+        connection.rollback.assert_awaited_once()
+        connection.commit.assert_not_awaited()

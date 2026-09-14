@@ -134,7 +134,7 @@ class MySqlCaseRepositoryIntegrationTest(unittest.IsolatedAsyncioTestCase):
                         "transcript_segments", "verification_tasks", "voice_sessions", "case_context_items",
                         "case_context_item_history", "case_context_projections", "case_context_facts_v2",
                         "case_gaps", "case_ai_suggestions", "case_tasks", "case_decisions", "case_context_v2_history",
-                        "message_context_extractions",
+                        "message_context_extractions", "case_number_sequences",
                     },
                 )
                 cursor.execute(
@@ -155,6 +155,12 @@ class MySqlCaseRepositoryIntegrationTest(unittest.IsolatedAsyncioTestCase):
                 self.assertGreaterEqual(cursor.fetchone()[0], 16)
         finally:
             connection.close()
+
+    async def test_case_number_reservations_are_unique_under_concurrency(self) -> None:
+        case_ids = await asyncio.gather(*(self.repository.next_case_id() for _ in range(8)))
+
+        self.assertEqual(len(case_ids), len(set(case_ids)))
+        self.assertTrue(all(case_id.startswith("VP-") for case_id in case_ids))
 
     async def test_case_context_v2_database_invariants_and_revision(self) -> None:
         case_id = f"VP-{uuid4().hex[:12]}"
