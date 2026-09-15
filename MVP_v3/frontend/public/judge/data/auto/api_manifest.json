@@ -3,7 +3,7 @@
     {
       "component_id": "ai-api",
       "handler": "root",
-      "line": 43,
+      "line": 46,
       "method": "GET",
       "path": "/",
       "response_model": null,
@@ -13,7 +13,7 @@
     {
       "component_id": "ai-api",
       "handler": "analyze_text",
-      "line": 53,
+      "line": 56,
       "method": "POST",
       "path": "/ai/analyze/text",
       "response_model": "DiagnosisResult",
@@ -23,7 +23,7 @@
     {
       "component_id": "ai-api",
       "handler": "analyze_windows",
-      "line": 124,
+      "line": 138,
       "method": "POST",
       "path": "/ai/analyze/windows",
       "response_model": "list",
@@ -33,7 +33,7 @@
     {
       "component_id": "ai-api",
       "handler": "generate_case_copilot_reply",
-      "line": 86,
+      "line": 100,
       "method": "POST",
       "path": "/ai/case-copilot/replies",
       "response_model": "CaseCopilotOutput",
@@ -43,7 +43,7 @@
     {
       "component_id": "ai-api",
       "handler": "build_case_support_snapshot",
-      "line": 74,
+      "line": 77,
       "method": "POST",
       "path": "/ai/case-support/snapshot",
       "response_model": "CaseSnapshotPresentation",
@@ -52,8 +52,18 @@
     },
     {
       "component_id": "ai-api",
+      "handler": "extract_context_facts",
+      "line": 89,
+      "method": "POST",
+      "path": "/ai/context/facts/extract",
+      "response_model": "ContextFactExtractionOutput",
+      "source_path": "backend/ai_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "ai-api",
       "handler": "extract_features",
-      "line": 129,
+      "line": 143,
       "method": "POST",
       "path": "/ai/features/extract",
       "response_model": "dict",
@@ -63,7 +73,7 @@
     {
       "component_id": "ai-api",
       "handler": "generate_final_case_report",
-      "line": 112,
+      "line": 126,
       "method": "POST",
       "path": "/ai/final-reports/generate",
       "response_model": "FinalCaseReportOutput",
@@ -73,7 +83,7 @@
     {
       "component_id": "ai-api",
       "handler": "predict_risk",
-      "line": 134,
+      "line": 148,
       "method": "POST",
       "path": "/ai/risk/predict",
       "response_model": "dict",
@@ -83,7 +93,7 @@
     {
       "component_id": "ai-api",
       "handler": "generate_case_work_card",
-      "line": 100,
+      "line": 114,
       "method": "POST",
       "path": "/ai/work-cards/generate",
       "response_model": "CaseWorkCardOutput",
@@ -93,7 +103,7 @@
     {
       "component_id": "ai-api",
       "handler": "health",
-      "line": 48,
+      "line": 51,
       "method": "GET",
       "path": "/health",
       "response_model": null,
@@ -103,7 +113,7 @@
     {
       "component_id": "general-api",
       "handler": "root",
-      "line": 314,
+      "line": 319,
       "method": "GET",
       "path": "/",
       "response_model": null,
@@ -113,7 +123,7 @@
     {
       "component_id": "general-api",
       "handler": "list_cases",
-      "line": 385,
+      "line": 396,
       "method": "GET",
       "path": "/api/cases",
       "response_model": "list[PublicCaseReadResponse]",
@@ -122,708 +132,8 @@
     },
     {
       "component_id": "general-api",
-      "handler": "move_case_to_trash_legacy",
-      "line": 418,
-      "method": "DELETE",
-      "path": "/api/cases/{case_id}",
-      "response_model": null,
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": 204
-    },
-    {
-      "component_id": "general-api",
-      "handler": "get_case",
-      "line": 452,
-      "method": "GET",
-      "path": "/api/cases/{case_id}",
-      "response_model": "PublicCaseReadResponse",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "patch_case",
-      "line": 460,
-      "method": "PATCH",
-      "path": "/api/cases/{case_id}",
-      "response_model": "PublicCaseReadResponse",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "list_case_actions",
-      "line": 1572,
-      "method": "GET",
-      "path": "/api/cases/{case_id}/actions",
-      "response_model": "list[PublicActionResponse]",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "create_case_action",
-      "line": 1952,
-      "method": "POST",
-      "path": "/api/cases/{case_id}/actions",
-      "response_model": "PublicActionResponse",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": 201
-    },
-    {
-      "component_id": "general-api",
-      "handler": "update_case_action",
-      "line": 1963,
-      "method": "PATCH",
-      "path": "/api/cases/{case_id}/actions/{action_id}",
-      "response_model": "PublicActionResponse",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "read_case_support_snapshot",
-      "line": 777,
-      "method": "GET",
-      "path": "/api/cases/{case_id}/ai/case-support",
-      "response_model": "PublicCaseSupportSnapshotResponse",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "invoke_customer_support_ai",
-      "line": 1380,
-      "method": "POST",
-      "path": "/api/cases/{case_id}/ai/customer-replies",
-      "response_model": "PublicMessageResponse",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": 201
-    },
-    {
-      "component_id": "general-api",
-      "handler": "invoke_case_copilot",
-      "line": 1297,
-      "method": "POST",
-      "path": "/api/cases/{case_id}/ai/invocations",
-      "response_model": "PublicAiInvocationResponse",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": 201
-    },
-    {
-      "component_id": "general-api",
-      "handler": "share_ai_message_to_team",
-      "line": 1529,
-      "method": "POST",
-      "path": "/api/cases/{case_id}/ai/messages/{message_id}/share",
-      "response_model": "PublicMessageResponse",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": 201
-    },
-    {
-      "component_id": "general-api",
-      "handler": "generate_case_work_card",
-      "line": 1218,
-      "method": "POST",
-      "path": "/api/cases/{case_id}/ai/work-cards",
-      "response_model": "CaseWorkCardOutput",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "set_case_primary_assignee",
-      "line": 1183,
-      "method": "PUT",
-      "path": "/api/cases/{case_id}/assignee",
-      "response_model": "PublicPrimaryAssigneeResponse",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "list_case_attachments",
-      "line": 997,
-      "method": "GET",
-      "path": "/api/cases/{case_id}/attachments",
-      "response_model": "list[PublicAttachmentResponse]",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "upload_case_attachment",
-      "line": 941,
-      "method": "POST",
-      "path": "/api/cases/{case_id}/attachments",
-      "response_model": "PublicAttachmentResponse",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": 201
-    },
-    {
-      "component_id": "general-api",
-      "handler": "download_case_attachment",
-      "line": 1013,
-      "method": "GET",
-      "path": "/api/cases/{case_id}/attachments/{attachment_id}/content",
-      "response_model": null,
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "get_case_bundle",
-      "line": 2001,
-      "method": "GET",
-      "path": "/api/cases/{case_id}/bundle",
-      "response_model": "PublicCaseBundleResponse",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "read_context_display",
-      "line": 1872,
-      "method": "GET",
-      "path": "/api/cases/{case_id}/context-display",
-      "response_model": null,
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "edit_context_display",
-      "line": 1889,
-      "method": "PATCH",
-      "path": "/api/cases/{case_id}/context-display/{section}",
-      "response_model": null,
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "create_case_context_v2_decision",
-      "line": 1863,
-      "method": "POST",
-      "path": "/api/cases/{case_id}/context-v2/decisions",
-      "response_model": "PublicDecisionRecordV2",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": 201
-    },
-    {
-      "component_id": "general-api",
-      "handler": "create_case_context_v2_fact",
-      "line": 1758,
-      "method": "POST",
-      "path": "/api/cases/{case_id}/context-v2/facts",
-      "response_model": "PublicCaseFactV2",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": 201
-    },
-    {
-      "component_id": "general-api",
-      "handler": "review_case_context_v2_fact",
-      "line": 1768,
-      "method": "PATCH",
-      "path": "/api/cases/{case_id}/context-v2/facts/{fact_id}/review",
-      "response_model": "PublicCaseFactV2",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "create_case_context_v2_gap",
-      "line": 1777,
-      "method": "POST",
-      "path": "/api/cases/{case_id}/context-v2/gaps",
-      "response_model": "PublicCaseGapV2",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": 201
-    },
-    {
-      "component_id": "general-api",
-      "handler": "update_case_context_v2_gap",
-      "line": 1786,
-      "method": "PATCH",
-      "path": "/api/cases/{case_id}/context-v2/gaps/{gap_id}",
-      "response_model": "PublicCaseGapV2",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "update_legacy_context_gap",
-      "line": 1795,
-      "method": "POST",
-      "path": "/api/cases/{case_id}/context-v2/legacy-gaps/{action_id}",
-      "response_model": "PublicCaseGapV2",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "review_legacy_context_suggestion",
-      "line": 1737,
-      "method": "POST",
-      "path": "/api/cases/{case_id}/context-v2/legacy-suggestions/{action_id}/review",
-      "response_model": "PublicSuggestionReviewResultV2",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "read_case_context_v2_resources",
-      "line": 1710,
-      "method": "GET",
-      "path": "/api/cases/{case_id}/context-v2/resources",
-      "response_model": "PublicCaseContextResourcesV2",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "review_case_context_v2_suggestion",
-      "line": 1817,
-      "method": "PATCH",
-      "path": "/api/cases/{case_id}/context-v2/suggestions/{suggestion_id}/review",
-      "response_model": "PublicSuggestionReviewResultV2",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "create_case_context_v2_task",
-      "line": 1827,
-      "method": "POST",
-      "path": "/api/cases/{case_id}/context-v2/tasks",
-      "response_model": "PublicCaseTaskV2",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": 201
-    },
-    {
-      "component_id": "general-api",
-      "handler": "update_case_context_v2_task",
-      "line": 1836,
-      "method": "PATCH",
-      "path": "/api/cases/{case_id}/context-v2/tasks/{task_id}",
-      "response_model": "PublicCaseTaskV2",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "cancel_case_context_v2_task",
-      "line": 1854,
-      "method": "POST",
-      "path": "/api/cases/{case_id}/context-v2/tasks/{task_id}/cancel",
-      "response_model": "PublicCaseTaskV2",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "complete_case_context_v2_task",
-      "line": 1845,
-      "method": "POST",
-      "path": "/api/cases/{case_id}/context-v2/tasks/{task_id}/complete",
-      "response_model": "PublicCaseTaskV2",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "read_context_workspace",
-      "line": 1719,
-      "method": "GET",
-      "path": "/api/cases/{case_id}/context-v2/workspace",
-      "response_model": null,
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "start_customer_emergency",
-      "line": 1124,
-      "method": "POST",
-      "path": "/api/cases/{case_id}/customer-emergency",
-      "response_model": "PublicMessageResponse",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": 201
-    },
-    {
-      "component_id": "general-api",
-      "handler": "get_customer_progress",
-      "line": 1578,
-      "method": "GET",
-      "path": "/api/cases/{case_id}/customer-progress",
-      "response_model": "list[CustomerProgressItem]",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "update_customer_progress",
-      "line": 1912,
-      "method": "PUT",
-      "path": "/api/cases/{case_id}/customer-progress/{step}",
-      "response_model": "list[CustomerProgressItem]",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "request_progress_confirmation",
-      "line": 1924,
-      "method": "POST",
-      "path": "/api/cases/{case_id}/customer-progress/{step}/confirmation-request",
-      "response_model": "list[CustomerProgressItem]",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "list_customer_question_candidates",
-      "line": 782,
-      "method": "GET",
-      "path": "/api/cases/{case_id}/customer-question-candidates",
-      "response_model": "list[PublicQuestionCandidateResponse]",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "list_customer_questions",
-      "line": 803,
-      "method": "GET",
-      "path": "/api/cases/{case_id}/customer-questions",
-      "response_model": "list[PublicCustomerQuestionResponse | PublicCustomerQuestionView]",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "queue_customer_questions",
-      "line": 812,
-      "method": "POST",
-      "path": "/api/cases/{case_id}/customer-questions",
-      "response_model": "list[PublicCustomerQuestionResponse]",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": 201
-    },
-    {
-      "component_id": "general-api",
-      "handler": "answer_customer_question",
-      "line": 876,
-      "method": "POST",
-      "path": "/api/cases/{case_id}/customer-questions/{question_id}/answer",
-      "response_model": "PublicCustomerQuestionResponse",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "list_case_events",
-      "line": 1162,
-      "method": "GET",
-      "path": "/api/cases/{case_id}/events",
-      "response_model": "list[PublicCaseEventResponse]",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "list_case_facts",
-      "line": 896,
-      "method": "GET",
-      "path": "/api/cases/{case_id}/facts",
-      "response_model": "list[PublicCaseFactResponse]",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "confirm_case_fact",
-      "line": 902,
-      "method": "POST",
-      "path": "/api/cases/{case_id}/facts/{fact_id}/confirm",
-      "response_model": "PublicCaseFactResponse",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "list_case_members",
-      "line": 1168,
-      "method": "GET",
-      "path": "/api/cases/{case_id}/members",
-      "response_model": "list[PublicCaseMemberResponse]",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "upsert_case_member",
-      "line": 1174,
-      "method": "POST",
-      "path": "/api/cases/{case_id}/members",
-      "response_model": "PublicCaseMemberResponse",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": 201
-    },
-    {
-      "component_id": "general-api",
-      "handler": "list_case_messages",
-      "line": 1027,
-      "method": "GET",
-      "path": "/api/cases/{case_id}/messages",
-      "response_model": "list[PublicMessageResponse]",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "create_case_message",
-      "line": 1135,
-      "method": "POST",
-      "path": "/api/cases/{case_id}/messages",
-      "response_model": "PublicMessageResponse",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": 201
-    },
-    {
-      "component_id": "general-api",
-      "handler": "update_case_outcome",
-      "line": 482,
-      "method": "PUT",
-      "path": "/api/cases/{case_id}/outcome",
-      "response_model": "PublicCaseReadResponse",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "list_personal_notes",
-      "line": 911,
-      "method": "GET",
-      "path": "/api/cases/{case_id}/personal-notes",
-      "response_model": "list[PublicPersonalNoteResponse]",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "create_personal_note",
-      "line": 917,
-      "method": "POST",
-      "path": "/api/cases/{case_id}/personal-notes",
-      "response_model": "PublicPersonalNoteResponse",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": 201
-    },
-    {
-      "component_id": "general-api",
-      "handler": "delete_personal_note",
-      "line": 932,
-      "method": "DELETE",
-      "path": "/api/cases/{case_id}/personal-notes/{note_id}",
-      "response_model": null,
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": 204
-    },
-    {
-      "component_id": "general-api",
-      "handler": "update_personal_note",
-      "line": 923,
-      "method": "PATCH",
-      "path": "/api/cases/{case_id}/personal-notes/{note_id}",
-      "response_model": "PublicPersonalNoteResponse",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "list_case_presence",
-      "line": 1192,
-      "method": "GET",
-      "path": "/api/cases/{case_id}/presence",
-      "response_model": "list[PublicCasePresenceResponse]",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "heartbeat_case_presence",
-      "line": 1198,
-      "method": "POST",
-      "path": "/api/cases/{case_id}/presence/heartbeat",
-      "response_model": "PublicCasePresenceResponse",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "reopen_closed_case",
-      "line": 2184,
-      "method": "POST",
-      "path": "/api/cases/{case_id}/reopen",
-      "response_model": "PublicCaseReadResponse",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "get_final_case_report",
-      "line": 2198,
-      "method": "GET",
-      "path": "/api/cases/{case_id}/reports/final",
-      "response_model": "PublicReportResponse",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "export_final_case_report",
-      "line": 2229,
-      "method": "GET",
-      "path": "/api/cases/{case_id}/reports/final/export",
-      "response_model": null,
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "finalize_case_report",
-      "line": 2099,
-      "method": "POST",
-      "path": "/api/cases/{case_id}/reports/finalize",
-      "response_model": "PublicReportResponse",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "get_live_report",
-      "line": 2091,
-      "method": "GET",
-      "path": "/api/cases/{case_id}/reports/live",
-      "response_model": null,
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "restore_case_from_trash",
-      "line": 424,
-      "method": "POST",
-      "path": "/api/cases/{case_id}/restore",
-      "response_model": null,
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": 204
-    },
-    {
-      "component_id": "general-api",
-      "handler": "resume_ai",
-      "line": 1996,
-      "method": "POST",
-      "path": "/api/cases/{case_id}/resume",
-      "response_model": "PublicActionResponse",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": 201
-    },
-    {
-      "component_id": "general-api",
-      "handler": "start_human_takeover",
-      "line": 1991,
-      "method": "POST",
-      "path": "/api/cases/{case_id}/takeover",
-      "response_model": "PublicActionResponse",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": 201
-    },
-    {
-      "component_id": "general-api",
-      "handler": "move_case_to_trash",
-      "line": 408,
-      "method": "POST",
-      "path": "/api/cases/{case_id}/trash",
-      "response_model": null,
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": 204
-    },
-    {
-      "component_id": "general-api",
-      "handler": "list_case_verifications",
-      "line": 1557,
-      "method": "GET",
-      "path": "/api/cases/{case_id}/verifications",
-      "response_model": "list[PublicVerificationResponse]",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "create_case_verification",
-      "line": 1563,
-      "method": "POST",
-      "path": "/api/cases/{case_id}/verifications",
-      "response_model": "PublicVerificationResponse",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": 201
-    },
-    {
-      "component_id": "general-api",
-      "handler": "update_case_verification",
-      "line": 1546,
-      "method": "PATCH",
-      "path": "/api/cases/{case_id}/verifications/{verification_task_id}",
-      "response_model": "PublicVerificationResponse",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "create_voice_session",
-      "line": 2058,
-      "method": "POST",
-      "path": "/api/cases/{case_id}/voice-sessions",
-      "response_model": "PublicVoiceSessionResponse",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": 201
-    },
-    {
-      "component_id": "general-api",
-      "handler": "update_voice_session",
-      "line": 2067,
-      "method": "PATCH",
-      "path": "/api/cases/{case_id}/voice-sessions/{session_id}",
-      "response_model": "PublicVoiceSessionResponse",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "list_voice_transcript",
-      "line": 2076,
-      "method": "GET",
-      "path": "/api/cases/{case_id}/voice-sessions/{session_id}/transcript",
-      "response_model": "list[PublicTranscriptResponse]",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": null
-    },
-    {
-      "component_id": "general-api",
-      "handler": "append_voice_transcript",
-      "line": 2082,
-      "method": "POST",
-      "path": "/api/cases/{case_id}/voice-sessions/{session_id}/transcript",
-      "response_model": "PublicTranscriptResponse",
-      "source_path": "backend/general_api/app/main.py",
-      "status_code": 201
-    },
-    {
-      "component_id": "general-api",
       "handler": "verify_admin_password",
-      "line": 398,
+      "line": 409,
       "method": "POST",
       "path": "/api/cases/admin/verify-password",
       "response_model": null,
@@ -833,7 +143,7 @@
     {
       "component_id": "general-api",
       "handler": "analyze_case",
-      "line": 343,
+      "line": 348,
       "method": "POST",
       "path": "/api/cases/analyze",
       "response_model": "PublicAnalyzeCaseResponse",
@@ -843,7 +153,7 @@
     {
       "component_id": "general-api",
       "handler": "list_trashed_cases",
-      "line": 403,
+      "line": 414,
       "method": "GET",
       "path": "/api/cases/trash",
       "response_model": "list[PublicCaseReadResponse]",
@@ -853,7 +163,7 @@
     {
       "component_id": "general-api",
       "handler": "permanently_delete_trashed_case",
-      "line": 433,
+      "line": 444,
       "method": "DELETE",
       "path": "/api/cases/trash/{case_id}",
       "response_model": null,
@@ -862,8 +172,718 @@
     },
     {
       "component_id": "general-api",
+      "handler": "move_case_to_trash_legacy",
+      "line": 429,
+      "method": "DELETE",
+      "path": "/api/cases/{case_id}",
+      "response_model": null,
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": 204
+    },
+    {
+      "component_id": "general-api",
+      "handler": "get_case",
+      "line": 463,
+      "method": "GET",
+      "path": "/api/cases/{case_id}",
+      "response_model": "PublicCaseReadResponse",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "patch_case",
+      "line": 471,
+      "method": "PATCH",
+      "path": "/api/cases/{case_id}",
+      "response_model": "PublicCaseReadResponse",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "list_case_actions",
+      "line": 1744,
+      "method": "GET",
+      "path": "/api/cases/{case_id}/actions",
+      "response_model": "list[PublicActionResponse]",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "create_case_action",
+      "line": 2150,
+      "method": "POST",
+      "path": "/api/cases/{case_id}/actions",
+      "response_model": "PublicActionResponse",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": 201
+    },
+    {
+      "component_id": "general-api",
+      "handler": "update_case_action",
+      "line": 2161,
+      "method": "PATCH",
+      "path": "/api/cases/{case_id}/actions/{action_id}",
+      "response_model": "PublicActionResponse",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "read_case_support_snapshot",
+      "line": 898,
+      "method": "GET",
+      "path": "/api/cases/{case_id}/ai/case-support",
+      "response_model": "PublicCaseSupportSnapshotResponse",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "invoke_customer_support_ai",
+      "line": 1540,
+      "method": "POST",
+      "path": "/api/cases/{case_id}/ai/customer-replies",
+      "response_model": "PublicMessageResponse",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": 201
+    },
+    {
+      "component_id": "general-api",
+      "handler": "invoke_case_copilot",
+      "line": 1457,
+      "method": "POST",
+      "path": "/api/cases/{case_id}/ai/invocations",
+      "response_model": "PublicAiInvocationResponse",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": 201
+    },
+    {
+      "component_id": "general-api",
+      "handler": "share_ai_message_to_team",
+      "line": 1691,
+      "method": "POST",
+      "path": "/api/cases/{case_id}/ai/messages/{message_id}/share",
+      "response_model": "PublicMessageResponse",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": 201
+    },
+    {
+      "component_id": "general-api",
+      "handler": "generate_case_work_card",
+      "line": 1378,
+      "method": "POST",
+      "path": "/api/cases/{case_id}/ai/work-cards",
+      "response_model": "CaseWorkCardOutput",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "set_case_primary_assignee",
+      "line": 1343,
+      "method": "PUT",
+      "path": "/api/cases/{case_id}/assignee",
+      "response_model": "PublicPrimaryAssigneeResponse",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "list_case_attachments",
+      "line": 1153,
+      "method": "GET",
+      "path": "/api/cases/{case_id}/attachments",
+      "response_model": "list[PublicAttachmentResponse]",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "upload_case_attachment",
+      "line": 1097,
+      "method": "POST",
+      "path": "/api/cases/{case_id}/attachments",
+      "response_model": "PublicAttachmentResponse",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": 201
+    },
+    {
+      "component_id": "general-api",
+      "handler": "download_case_attachment",
+      "line": 1169,
+      "method": "GET",
+      "path": "/api/cases/{case_id}/attachments/{attachment_id}/content",
+      "response_model": null,
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "get_case_bundle",
+      "line": 2199,
+      "method": "GET",
+      "path": "/api/cases/{case_id}/bundle",
+      "response_model": "PublicCaseBundleResponse",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "read_context_display",
+      "line": 2070,
+      "method": "GET",
+      "path": "/api/cases/{case_id}/context-display",
+      "response_model": null,
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "edit_context_display",
+      "line": 2087,
+      "method": "PATCH",
+      "path": "/api/cases/{case_id}/context-display/{section}",
+      "response_model": null,
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "create_case_context_v2_decision",
+      "line": 2061,
+      "method": "POST",
+      "path": "/api/cases/{case_id}/context-v2/decisions",
+      "response_model": "PublicDecisionRecordV2",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": 201
+    },
+    {
+      "component_id": "general-api",
+      "handler": "create_case_context_v2_fact",
+      "line": 1950,
+      "method": "POST",
+      "path": "/api/cases/{case_id}/context-v2/facts",
+      "response_model": "PublicCaseFactV2",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": 201
+    },
+    {
+      "component_id": "general-api",
+      "handler": "review_case_context_v2_fact",
+      "line": 1960,
+      "method": "PATCH",
+      "path": "/api/cases/{case_id}/context-v2/facts/{fact_id}/review",
+      "response_model": "PublicCaseFactV2",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "create_case_context_v2_gap",
+      "line": 1975,
+      "method": "POST",
+      "path": "/api/cases/{case_id}/context-v2/gaps",
+      "response_model": "PublicCaseGapV2",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": 201
+    },
+    {
+      "component_id": "general-api",
+      "handler": "update_case_context_v2_gap",
+      "line": 1984,
+      "method": "PATCH",
+      "path": "/api/cases/{case_id}/context-v2/gaps/{gap_id}",
+      "response_model": "PublicCaseGapV2",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "update_legacy_context_gap",
+      "line": 1993,
+      "method": "POST",
+      "path": "/api/cases/{case_id}/context-v2/legacy-gaps/{action_id}",
+      "response_model": "PublicCaseGapV2",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "review_legacy_context_suggestion",
+      "line": 1929,
+      "method": "POST",
+      "path": "/api/cases/{case_id}/context-v2/legacy-suggestions/{action_id}/review",
+      "response_model": "PublicSuggestionReviewResultV2",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "get_context_panel_v3",
+      "line": 1824,
+      "method": "GET",
+      "path": "/api/cases/{case_id}/context-v2/panel",
+      "response_model": "PublicContextPanelV3",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "read_case_context_v2_resources",
+      "line": 1902,
+      "method": "GET",
+      "path": "/api/cases/{case_id}/context-v2/resources",
+      "response_model": "PublicCaseContextResourcesV2",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "review_case_context_v2_suggestion",
+      "line": 2015,
+      "method": "PATCH",
+      "path": "/api/cases/{case_id}/context-v2/suggestions/{suggestion_id}/review",
+      "response_model": "PublicSuggestionReviewResultV2",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "create_case_context_v2_task",
+      "line": 2025,
+      "method": "POST",
+      "path": "/api/cases/{case_id}/context-v2/tasks",
+      "response_model": "PublicCaseTaskV2",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": 201
+    },
+    {
+      "component_id": "general-api",
+      "handler": "update_case_context_v2_task",
+      "line": 2034,
+      "method": "PATCH",
+      "path": "/api/cases/{case_id}/context-v2/tasks/{task_id}",
+      "response_model": "PublicCaseTaskV2",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "cancel_case_context_v2_task",
+      "line": 2052,
+      "method": "POST",
+      "path": "/api/cases/{case_id}/context-v2/tasks/{task_id}/cancel",
+      "response_model": "PublicCaseTaskV2",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "complete_case_context_v2_task",
+      "line": 2043,
+      "method": "POST",
+      "path": "/api/cases/{case_id}/context-v2/tasks/{task_id}/complete",
+      "response_model": "PublicCaseTaskV2",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "read_context_workspace",
+      "line": 1911,
+      "method": "GET",
+      "path": "/api/cases/{case_id}/context-v2/workspace",
+      "response_model": null,
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "start_customer_emergency",
+      "line": 1280,
+      "method": "POST",
+      "path": "/api/cases/{case_id}/customer-emergency",
+      "response_model": "PublicMessageResponse",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": 201
+    },
+    {
+      "component_id": "general-api",
+      "handler": "get_customer_progress",
+      "line": 1750,
+      "method": "GET",
+      "path": "/api/cases/{case_id}/customer-progress",
+      "response_model": "list[CustomerProgressItem]",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "update_customer_progress",
+      "line": 2110,
+      "method": "PUT",
+      "path": "/api/cases/{case_id}/customer-progress/{step}",
+      "response_model": "list[CustomerProgressItem]",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "request_progress_confirmation",
+      "line": 2122,
+      "method": "POST",
+      "path": "/api/cases/{case_id}/customer-progress/{step}/confirmation-request",
+      "response_model": "list[CustomerProgressItem]",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "list_customer_question_candidates",
+      "line": 903,
+      "method": "GET",
+      "path": "/api/cases/{case_id}/customer-question-candidates",
+      "response_model": "list[PublicQuestionCandidateResponse]",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "list_customer_questions",
+      "line": 932,
+      "method": "GET",
+      "path": "/api/cases/{case_id}/customer-questions",
+      "response_model": "list[PublicCustomerQuestionResponse | PublicCustomerQuestionView]",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "queue_customer_questions",
+      "line": 941,
+      "method": "POST",
+      "path": "/api/cases/{case_id}/customer-questions",
+      "response_model": "list[PublicCustomerQuestionResponse]",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": 201
+    },
+    {
+      "component_id": "general-api",
+      "handler": "answer_customer_question",
+      "line": 1005,
+      "method": "POST",
+      "path": "/api/cases/{case_id}/customer-questions/{question_id}/answer",
+      "response_model": "PublicCustomerQuestionResponse",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "list_case_events",
+      "line": 1322,
+      "method": "GET",
+      "path": "/api/cases/{case_id}/events",
+      "response_model": "list[PublicCaseEventResponse]",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "list_case_facts",
+      "line": 1052,
+      "method": "GET",
+      "path": "/api/cases/{case_id}/facts",
+      "response_model": "list[PublicCaseFactResponse]",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "confirm_case_fact",
+      "line": 1058,
+      "method": "POST",
+      "path": "/api/cases/{case_id}/facts/{fact_id}/confirm",
+      "response_model": "PublicCaseFactResponse",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "list_case_members",
+      "line": 1328,
+      "method": "GET",
+      "path": "/api/cases/{case_id}/members",
+      "response_model": "list[PublicCaseMemberResponse]",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "upsert_case_member",
+      "line": 1334,
+      "method": "POST",
+      "path": "/api/cases/{case_id}/members",
+      "response_model": "PublicCaseMemberResponse",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": 201
+    },
+    {
+      "component_id": "general-api",
+      "handler": "list_case_messages",
+      "line": 1183,
+      "method": "GET",
+      "path": "/api/cases/{case_id}/messages",
+      "response_model": "list[PublicMessageResponse]",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "create_case_message",
+      "line": 1291,
+      "method": "POST",
+      "path": "/api/cases/{case_id}/messages",
+      "response_model": "PublicMessageResponse",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": 201
+    },
+    {
+      "component_id": "general-api",
+      "handler": "update_case_outcome",
+      "line": 493,
+      "method": "PUT",
+      "path": "/api/cases/{case_id}/outcome",
+      "response_model": "PublicCaseReadResponse",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "list_personal_notes",
+      "line": 1067,
+      "method": "GET",
+      "path": "/api/cases/{case_id}/personal-notes",
+      "response_model": "list[PublicPersonalNoteResponse]",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "create_personal_note",
+      "line": 1073,
+      "method": "POST",
+      "path": "/api/cases/{case_id}/personal-notes",
+      "response_model": "PublicPersonalNoteResponse",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": 201
+    },
+    {
+      "component_id": "general-api",
+      "handler": "delete_personal_note",
+      "line": 1088,
+      "method": "DELETE",
+      "path": "/api/cases/{case_id}/personal-notes/{note_id}",
+      "response_model": null,
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": 204
+    },
+    {
+      "component_id": "general-api",
+      "handler": "update_personal_note",
+      "line": 1079,
+      "method": "PATCH",
+      "path": "/api/cases/{case_id}/personal-notes/{note_id}",
+      "response_model": "PublicPersonalNoteResponse",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "list_case_presence",
+      "line": 1352,
+      "method": "GET",
+      "path": "/api/cases/{case_id}/presence",
+      "response_model": "list[PublicCasePresenceResponse]",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "heartbeat_case_presence",
+      "line": 1358,
+      "method": "POST",
+      "path": "/api/cases/{case_id}/presence/heartbeat",
+      "response_model": "PublicCasePresenceResponse",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "reopen_closed_case",
+      "line": 2382,
+      "method": "POST",
+      "path": "/api/cases/{case_id}/reopen",
+      "response_model": "PublicCaseReadResponse",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "get_final_case_report",
+      "line": 2396,
+      "method": "GET",
+      "path": "/api/cases/{case_id}/reports/final",
+      "response_model": "PublicReportResponse",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "export_final_case_report",
+      "line": 2427,
+      "method": "GET",
+      "path": "/api/cases/{case_id}/reports/final/export",
+      "response_model": null,
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "finalize_case_report",
+      "line": 2297,
+      "method": "POST",
+      "path": "/api/cases/{case_id}/reports/finalize",
+      "response_model": "PublicReportResponse",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "get_live_report",
+      "line": 2289,
+      "method": "GET",
+      "path": "/api/cases/{case_id}/reports/live",
+      "response_model": null,
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "restore_case_from_trash",
+      "line": 435,
+      "method": "POST",
+      "path": "/api/cases/{case_id}/restore",
+      "response_model": null,
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": 204
+    },
+    {
+      "component_id": "general-api",
+      "handler": "resume_ai",
+      "line": 2194,
+      "method": "POST",
+      "path": "/api/cases/{case_id}/resume",
+      "response_model": "PublicActionResponse",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": 201
+    },
+    {
+      "component_id": "general-api",
+      "handler": "start_human_takeover",
+      "line": 2189,
+      "method": "POST",
+      "path": "/api/cases/{case_id}/takeover",
+      "response_model": "PublicActionResponse",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": 201
+    },
+    {
+      "component_id": "general-api",
+      "handler": "move_case_to_trash",
+      "line": 419,
+      "method": "POST",
+      "path": "/api/cases/{case_id}/trash",
+      "response_model": null,
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": 204
+    },
+    {
+      "component_id": "general-api",
+      "handler": "list_case_verifications",
+      "line": 1729,
+      "method": "GET",
+      "path": "/api/cases/{case_id}/verifications",
+      "response_model": "list[PublicVerificationResponse]",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "create_case_verification",
+      "line": 1735,
+      "method": "POST",
+      "path": "/api/cases/{case_id}/verifications",
+      "response_model": "PublicVerificationResponse",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": 201
+    },
+    {
+      "component_id": "general-api",
+      "handler": "update_case_verification",
+      "line": 1708,
+      "method": "PATCH",
+      "path": "/api/cases/{case_id}/verifications/{verification_task_id}",
+      "response_model": "PublicVerificationResponse",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "create_voice_session",
+      "line": 2256,
+      "method": "POST",
+      "path": "/api/cases/{case_id}/voice-sessions",
+      "response_model": "PublicVoiceSessionResponse",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": 201
+    },
+    {
+      "component_id": "general-api",
+      "handler": "update_voice_session",
+      "line": 2265,
+      "method": "PATCH",
+      "path": "/api/cases/{case_id}/voice-sessions/{session_id}",
+      "response_model": "PublicVoiceSessionResponse",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "list_voice_transcript",
+      "line": 2274,
+      "method": "GET",
+      "path": "/api/cases/{case_id}/voice-sessions/{session_id}/transcript",
+      "response_model": "list[PublicTranscriptResponse]",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": null
+    },
+    {
+      "component_id": "general-api",
+      "handler": "append_voice_transcript",
+      "line": 2280,
+      "method": "POST",
+      "path": "/api/cases/{case_id}/voice-sessions/{session_id}/transcript",
+      "response_model": "PublicTranscriptResponse",
+      "source_path": "backend/general_api/app/main.py",
+      "status_code": 201
+    },
+    {
+      "component_id": "general-api",
       "handler": "list_case_attachments_for_ai",
-      "line": 1006,
+      "line": 1162,
       "method": "GET",
       "path": "/api/internal/cases/{case_id}/attachments",
       "response_model": "list[PublicAttachmentResponse]",
@@ -873,7 +893,7 @@
     {
       "component_id": "general-api",
       "handler": "read_runtime_config",
-      "line": 1630,
+      "line": 1802,
       "method": "GET",
       "path": "/api/runtime-config",
       "response_model": null,
@@ -883,7 +903,7 @@
     {
       "component_id": "general-api",
       "handler": "health",
-      "line": 319,
+      "line": 324,
       "method": "GET",
       "path": "/health",
       "response_model": null,
@@ -900,7 +920,7 @@
         {
           "component_id": "general-api",
           "handler": "root",
-          "line": 314,
+          "line": 319,
           "method": "GET",
           "path": "/",
           "response_model": null,
@@ -910,7 +930,7 @@
         {
           "component_id": "general-api",
           "handler": "list_cases",
-          "line": 385,
+          "line": 396,
           "method": "GET",
           "path": "/api/cases",
           "response_model": "list[PublicCaseReadResponse]",
@@ -919,708 +939,8 @@
         },
         {
           "component_id": "general-api",
-          "handler": "move_case_to_trash_legacy",
-          "line": 418,
-          "method": "DELETE",
-          "path": "/api/cases/{case_id}",
-          "response_model": null,
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": 204
-        },
-        {
-          "component_id": "general-api",
-          "handler": "get_case",
-          "line": 452,
-          "method": "GET",
-          "path": "/api/cases/{case_id}",
-          "response_model": "PublicCaseReadResponse",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "patch_case",
-          "line": 460,
-          "method": "PATCH",
-          "path": "/api/cases/{case_id}",
-          "response_model": "PublicCaseReadResponse",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "list_case_actions",
-          "line": 1572,
-          "method": "GET",
-          "path": "/api/cases/{case_id}/actions",
-          "response_model": "list[PublicActionResponse]",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "create_case_action",
-          "line": 1952,
-          "method": "POST",
-          "path": "/api/cases/{case_id}/actions",
-          "response_model": "PublicActionResponse",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": 201
-        },
-        {
-          "component_id": "general-api",
-          "handler": "update_case_action",
-          "line": 1963,
-          "method": "PATCH",
-          "path": "/api/cases/{case_id}/actions/{action_id}",
-          "response_model": "PublicActionResponse",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "read_case_support_snapshot",
-          "line": 777,
-          "method": "GET",
-          "path": "/api/cases/{case_id}/ai/case-support",
-          "response_model": "PublicCaseSupportSnapshotResponse",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "invoke_customer_support_ai",
-          "line": 1380,
-          "method": "POST",
-          "path": "/api/cases/{case_id}/ai/customer-replies",
-          "response_model": "PublicMessageResponse",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": 201
-        },
-        {
-          "component_id": "general-api",
-          "handler": "invoke_case_copilot",
-          "line": 1297,
-          "method": "POST",
-          "path": "/api/cases/{case_id}/ai/invocations",
-          "response_model": "PublicAiInvocationResponse",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": 201
-        },
-        {
-          "component_id": "general-api",
-          "handler": "share_ai_message_to_team",
-          "line": 1529,
-          "method": "POST",
-          "path": "/api/cases/{case_id}/ai/messages/{message_id}/share",
-          "response_model": "PublicMessageResponse",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": 201
-        },
-        {
-          "component_id": "general-api",
-          "handler": "generate_case_work_card",
-          "line": 1218,
-          "method": "POST",
-          "path": "/api/cases/{case_id}/ai/work-cards",
-          "response_model": "CaseWorkCardOutput",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "set_case_primary_assignee",
-          "line": 1183,
-          "method": "PUT",
-          "path": "/api/cases/{case_id}/assignee",
-          "response_model": "PublicPrimaryAssigneeResponse",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "list_case_attachments",
-          "line": 997,
-          "method": "GET",
-          "path": "/api/cases/{case_id}/attachments",
-          "response_model": "list[PublicAttachmentResponse]",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "upload_case_attachment",
-          "line": 941,
-          "method": "POST",
-          "path": "/api/cases/{case_id}/attachments",
-          "response_model": "PublicAttachmentResponse",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": 201
-        },
-        {
-          "component_id": "general-api",
-          "handler": "download_case_attachment",
-          "line": 1013,
-          "method": "GET",
-          "path": "/api/cases/{case_id}/attachments/{attachment_id}/content",
-          "response_model": null,
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "get_case_bundle",
-          "line": 2001,
-          "method": "GET",
-          "path": "/api/cases/{case_id}/bundle",
-          "response_model": "PublicCaseBundleResponse",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "read_context_display",
-          "line": 1872,
-          "method": "GET",
-          "path": "/api/cases/{case_id}/context-display",
-          "response_model": null,
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "edit_context_display",
-          "line": 1889,
-          "method": "PATCH",
-          "path": "/api/cases/{case_id}/context-display/{section}",
-          "response_model": null,
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "create_case_context_v2_decision",
-          "line": 1863,
-          "method": "POST",
-          "path": "/api/cases/{case_id}/context-v2/decisions",
-          "response_model": "PublicDecisionRecordV2",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": 201
-        },
-        {
-          "component_id": "general-api",
-          "handler": "create_case_context_v2_fact",
-          "line": 1758,
-          "method": "POST",
-          "path": "/api/cases/{case_id}/context-v2/facts",
-          "response_model": "PublicCaseFactV2",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": 201
-        },
-        {
-          "component_id": "general-api",
-          "handler": "review_case_context_v2_fact",
-          "line": 1768,
-          "method": "PATCH",
-          "path": "/api/cases/{case_id}/context-v2/facts/{fact_id}/review",
-          "response_model": "PublicCaseFactV2",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "create_case_context_v2_gap",
-          "line": 1777,
-          "method": "POST",
-          "path": "/api/cases/{case_id}/context-v2/gaps",
-          "response_model": "PublicCaseGapV2",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": 201
-        },
-        {
-          "component_id": "general-api",
-          "handler": "update_case_context_v2_gap",
-          "line": 1786,
-          "method": "PATCH",
-          "path": "/api/cases/{case_id}/context-v2/gaps/{gap_id}",
-          "response_model": "PublicCaseGapV2",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "update_legacy_context_gap",
-          "line": 1795,
-          "method": "POST",
-          "path": "/api/cases/{case_id}/context-v2/legacy-gaps/{action_id}",
-          "response_model": "PublicCaseGapV2",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "review_legacy_context_suggestion",
-          "line": 1737,
-          "method": "POST",
-          "path": "/api/cases/{case_id}/context-v2/legacy-suggestions/{action_id}/review",
-          "response_model": "PublicSuggestionReviewResultV2",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "read_case_context_v2_resources",
-          "line": 1710,
-          "method": "GET",
-          "path": "/api/cases/{case_id}/context-v2/resources",
-          "response_model": "PublicCaseContextResourcesV2",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "review_case_context_v2_suggestion",
-          "line": 1817,
-          "method": "PATCH",
-          "path": "/api/cases/{case_id}/context-v2/suggestions/{suggestion_id}/review",
-          "response_model": "PublicSuggestionReviewResultV2",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "create_case_context_v2_task",
-          "line": 1827,
-          "method": "POST",
-          "path": "/api/cases/{case_id}/context-v2/tasks",
-          "response_model": "PublicCaseTaskV2",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": 201
-        },
-        {
-          "component_id": "general-api",
-          "handler": "update_case_context_v2_task",
-          "line": 1836,
-          "method": "PATCH",
-          "path": "/api/cases/{case_id}/context-v2/tasks/{task_id}",
-          "response_model": "PublicCaseTaskV2",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "cancel_case_context_v2_task",
-          "line": 1854,
-          "method": "POST",
-          "path": "/api/cases/{case_id}/context-v2/tasks/{task_id}/cancel",
-          "response_model": "PublicCaseTaskV2",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "complete_case_context_v2_task",
-          "line": 1845,
-          "method": "POST",
-          "path": "/api/cases/{case_id}/context-v2/tasks/{task_id}/complete",
-          "response_model": "PublicCaseTaskV2",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "read_context_workspace",
-          "line": 1719,
-          "method": "GET",
-          "path": "/api/cases/{case_id}/context-v2/workspace",
-          "response_model": null,
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "start_customer_emergency",
-          "line": 1124,
-          "method": "POST",
-          "path": "/api/cases/{case_id}/customer-emergency",
-          "response_model": "PublicMessageResponse",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": 201
-        },
-        {
-          "component_id": "general-api",
-          "handler": "get_customer_progress",
-          "line": 1578,
-          "method": "GET",
-          "path": "/api/cases/{case_id}/customer-progress",
-          "response_model": "list[CustomerProgressItem]",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "update_customer_progress",
-          "line": 1912,
-          "method": "PUT",
-          "path": "/api/cases/{case_id}/customer-progress/{step}",
-          "response_model": "list[CustomerProgressItem]",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "request_progress_confirmation",
-          "line": 1924,
-          "method": "POST",
-          "path": "/api/cases/{case_id}/customer-progress/{step}/confirmation-request",
-          "response_model": "list[CustomerProgressItem]",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "list_customer_question_candidates",
-          "line": 782,
-          "method": "GET",
-          "path": "/api/cases/{case_id}/customer-question-candidates",
-          "response_model": "list[PublicQuestionCandidateResponse]",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "list_customer_questions",
-          "line": 803,
-          "method": "GET",
-          "path": "/api/cases/{case_id}/customer-questions",
-          "response_model": "list[PublicCustomerQuestionResponse | PublicCustomerQuestionView]",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "queue_customer_questions",
-          "line": 812,
-          "method": "POST",
-          "path": "/api/cases/{case_id}/customer-questions",
-          "response_model": "list[PublicCustomerQuestionResponse]",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": 201
-        },
-        {
-          "component_id": "general-api",
-          "handler": "answer_customer_question",
-          "line": 876,
-          "method": "POST",
-          "path": "/api/cases/{case_id}/customer-questions/{question_id}/answer",
-          "response_model": "PublicCustomerQuestionResponse",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "list_case_events",
-          "line": 1162,
-          "method": "GET",
-          "path": "/api/cases/{case_id}/events",
-          "response_model": "list[PublicCaseEventResponse]",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "list_case_facts",
-          "line": 896,
-          "method": "GET",
-          "path": "/api/cases/{case_id}/facts",
-          "response_model": "list[PublicCaseFactResponse]",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "confirm_case_fact",
-          "line": 902,
-          "method": "POST",
-          "path": "/api/cases/{case_id}/facts/{fact_id}/confirm",
-          "response_model": "PublicCaseFactResponse",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "list_case_members",
-          "line": 1168,
-          "method": "GET",
-          "path": "/api/cases/{case_id}/members",
-          "response_model": "list[PublicCaseMemberResponse]",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "upsert_case_member",
-          "line": 1174,
-          "method": "POST",
-          "path": "/api/cases/{case_id}/members",
-          "response_model": "PublicCaseMemberResponse",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": 201
-        },
-        {
-          "component_id": "general-api",
-          "handler": "list_case_messages",
-          "line": 1027,
-          "method": "GET",
-          "path": "/api/cases/{case_id}/messages",
-          "response_model": "list[PublicMessageResponse]",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "create_case_message",
-          "line": 1135,
-          "method": "POST",
-          "path": "/api/cases/{case_id}/messages",
-          "response_model": "PublicMessageResponse",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": 201
-        },
-        {
-          "component_id": "general-api",
-          "handler": "update_case_outcome",
-          "line": 482,
-          "method": "PUT",
-          "path": "/api/cases/{case_id}/outcome",
-          "response_model": "PublicCaseReadResponse",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "list_personal_notes",
-          "line": 911,
-          "method": "GET",
-          "path": "/api/cases/{case_id}/personal-notes",
-          "response_model": "list[PublicPersonalNoteResponse]",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "create_personal_note",
-          "line": 917,
-          "method": "POST",
-          "path": "/api/cases/{case_id}/personal-notes",
-          "response_model": "PublicPersonalNoteResponse",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": 201
-        },
-        {
-          "component_id": "general-api",
-          "handler": "delete_personal_note",
-          "line": 932,
-          "method": "DELETE",
-          "path": "/api/cases/{case_id}/personal-notes/{note_id}",
-          "response_model": null,
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": 204
-        },
-        {
-          "component_id": "general-api",
-          "handler": "update_personal_note",
-          "line": 923,
-          "method": "PATCH",
-          "path": "/api/cases/{case_id}/personal-notes/{note_id}",
-          "response_model": "PublicPersonalNoteResponse",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "list_case_presence",
-          "line": 1192,
-          "method": "GET",
-          "path": "/api/cases/{case_id}/presence",
-          "response_model": "list[PublicCasePresenceResponse]",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "heartbeat_case_presence",
-          "line": 1198,
-          "method": "POST",
-          "path": "/api/cases/{case_id}/presence/heartbeat",
-          "response_model": "PublicCasePresenceResponse",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "reopen_closed_case",
-          "line": 2184,
-          "method": "POST",
-          "path": "/api/cases/{case_id}/reopen",
-          "response_model": "PublicCaseReadResponse",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "get_final_case_report",
-          "line": 2198,
-          "method": "GET",
-          "path": "/api/cases/{case_id}/reports/final",
-          "response_model": "PublicReportResponse",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "export_final_case_report",
-          "line": 2229,
-          "method": "GET",
-          "path": "/api/cases/{case_id}/reports/final/export",
-          "response_model": null,
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "finalize_case_report",
-          "line": 2099,
-          "method": "POST",
-          "path": "/api/cases/{case_id}/reports/finalize",
-          "response_model": "PublicReportResponse",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "get_live_report",
-          "line": 2091,
-          "method": "GET",
-          "path": "/api/cases/{case_id}/reports/live",
-          "response_model": null,
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "restore_case_from_trash",
-          "line": 424,
-          "method": "POST",
-          "path": "/api/cases/{case_id}/restore",
-          "response_model": null,
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": 204
-        },
-        {
-          "component_id": "general-api",
-          "handler": "resume_ai",
-          "line": 1996,
-          "method": "POST",
-          "path": "/api/cases/{case_id}/resume",
-          "response_model": "PublicActionResponse",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": 201
-        },
-        {
-          "component_id": "general-api",
-          "handler": "start_human_takeover",
-          "line": 1991,
-          "method": "POST",
-          "path": "/api/cases/{case_id}/takeover",
-          "response_model": "PublicActionResponse",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": 201
-        },
-        {
-          "component_id": "general-api",
-          "handler": "move_case_to_trash",
-          "line": 408,
-          "method": "POST",
-          "path": "/api/cases/{case_id}/trash",
-          "response_model": null,
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": 204
-        },
-        {
-          "component_id": "general-api",
-          "handler": "list_case_verifications",
-          "line": 1557,
-          "method": "GET",
-          "path": "/api/cases/{case_id}/verifications",
-          "response_model": "list[PublicVerificationResponse]",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "create_case_verification",
-          "line": 1563,
-          "method": "POST",
-          "path": "/api/cases/{case_id}/verifications",
-          "response_model": "PublicVerificationResponse",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": 201
-        },
-        {
-          "component_id": "general-api",
-          "handler": "update_case_verification",
-          "line": 1546,
-          "method": "PATCH",
-          "path": "/api/cases/{case_id}/verifications/{verification_task_id}",
-          "response_model": "PublicVerificationResponse",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "create_voice_session",
-          "line": 2058,
-          "method": "POST",
-          "path": "/api/cases/{case_id}/voice-sessions",
-          "response_model": "PublicVoiceSessionResponse",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": 201
-        },
-        {
-          "component_id": "general-api",
-          "handler": "update_voice_session",
-          "line": 2067,
-          "method": "PATCH",
-          "path": "/api/cases/{case_id}/voice-sessions/{session_id}",
-          "response_model": "PublicVoiceSessionResponse",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "list_voice_transcript",
-          "line": 2076,
-          "method": "GET",
-          "path": "/api/cases/{case_id}/voice-sessions/{session_id}/transcript",
-          "response_model": "list[PublicTranscriptResponse]",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": null
-        },
-        {
-          "component_id": "general-api",
-          "handler": "append_voice_transcript",
-          "line": 2082,
-          "method": "POST",
-          "path": "/api/cases/{case_id}/voice-sessions/{session_id}/transcript",
-          "response_model": "PublicTranscriptResponse",
-          "source_path": "backend/general_api/app/main.py",
-          "status_code": 201
-        },
-        {
-          "component_id": "general-api",
           "handler": "verify_admin_password",
-          "line": 398,
+          "line": 409,
           "method": "POST",
           "path": "/api/cases/admin/verify-password",
           "response_model": null,
@@ -1630,7 +950,7 @@
         {
           "component_id": "general-api",
           "handler": "analyze_case",
-          "line": 343,
+          "line": 348,
           "method": "POST",
           "path": "/api/cases/analyze",
           "response_model": "PublicAnalyzeCaseResponse",
@@ -1640,7 +960,7 @@
         {
           "component_id": "general-api",
           "handler": "list_trashed_cases",
-          "line": 403,
+          "line": 414,
           "method": "GET",
           "path": "/api/cases/trash",
           "response_model": "list[PublicCaseReadResponse]",
@@ -1650,7 +970,7 @@
         {
           "component_id": "general-api",
           "handler": "permanently_delete_trashed_case",
-          "line": 433,
+          "line": 444,
           "method": "DELETE",
           "path": "/api/cases/trash/{case_id}",
           "response_model": null,
@@ -1659,8 +979,718 @@
         },
         {
           "component_id": "general-api",
+          "handler": "move_case_to_trash_legacy",
+          "line": 429,
+          "method": "DELETE",
+          "path": "/api/cases/{case_id}",
+          "response_model": null,
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": 204
+        },
+        {
+          "component_id": "general-api",
+          "handler": "get_case",
+          "line": 463,
+          "method": "GET",
+          "path": "/api/cases/{case_id}",
+          "response_model": "PublicCaseReadResponse",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "patch_case",
+          "line": 471,
+          "method": "PATCH",
+          "path": "/api/cases/{case_id}",
+          "response_model": "PublicCaseReadResponse",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "list_case_actions",
+          "line": 1744,
+          "method": "GET",
+          "path": "/api/cases/{case_id}/actions",
+          "response_model": "list[PublicActionResponse]",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "create_case_action",
+          "line": 2150,
+          "method": "POST",
+          "path": "/api/cases/{case_id}/actions",
+          "response_model": "PublicActionResponse",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": 201
+        },
+        {
+          "component_id": "general-api",
+          "handler": "update_case_action",
+          "line": 2161,
+          "method": "PATCH",
+          "path": "/api/cases/{case_id}/actions/{action_id}",
+          "response_model": "PublicActionResponse",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "read_case_support_snapshot",
+          "line": 898,
+          "method": "GET",
+          "path": "/api/cases/{case_id}/ai/case-support",
+          "response_model": "PublicCaseSupportSnapshotResponse",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "invoke_customer_support_ai",
+          "line": 1540,
+          "method": "POST",
+          "path": "/api/cases/{case_id}/ai/customer-replies",
+          "response_model": "PublicMessageResponse",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": 201
+        },
+        {
+          "component_id": "general-api",
+          "handler": "invoke_case_copilot",
+          "line": 1457,
+          "method": "POST",
+          "path": "/api/cases/{case_id}/ai/invocations",
+          "response_model": "PublicAiInvocationResponse",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": 201
+        },
+        {
+          "component_id": "general-api",
+          "handler": "share_ai_message_to_team",
+          "line": 1691,
+          "method": "POST",
+          "path": "/api/cases/{case_id}/ai/messages/{message_id}/share",
+          "response_model": "PublicMessageResponse",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": 201
+        },
+        {
+          "component_id": "general-api",
+          "handler": "generate_case_work_card",
+          "line": 1378,
+          "method": "POST",
+          "path": "/api/cases/{case_id}/ai/work-cards",
+          "response_model": "CaseWorkCardOutput",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "set_case_primary_assignee",
+          "line": 1343,
+          "method": "PUT",
+          "path": "/api/cases/{case_id}/assignee",
+          "response_model": "PublicPrimaryAssigneeResponse",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "list_case_attachments",
+          "line": 1153,
+          "method": "GET",
+          "path": "/api/cases/{case_id}/attachments",
+          "response_model": "list[PublicAttachmentResponse]",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "upload_case_attachment",
+          "line": 1097,
+          "method": "POST",
+          "path": "/api/cases/{case_id}/attachments",
+          "response_model": "PublicAttachmentResponse",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": 201
+        },
+        {
+          "component_id": "general-api",
+          "handler": "download_case_attachment",
+          "line": 1169,
+          "method": "GET",
+          "path": "/api/cases/{case_id}/attachments/{attachment_id}/content",
+          "response_model": null,
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "get_case_bundle",
+          "line": 2199,
+          "method": "GET",
+          "path": "/api/cases/{case_id}/bundle",
+          "response_model": "PublicCaseBundleResponse",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "read_context_display",
+          "line": 2070,
+          "method": "GET",
+          "path": "/api/cases/{case_id}/context-display",
+          "response_model": null,
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "edit_context_display",
+          "line": 2087,
+          "method": "PATCH",
+          "path": "/api/cases/{case_id}/context-display/{section}",
+          "response_model": null,
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "create_case_context_v2_decision",
+          "line": 2061,
+          "method": "POST",
+          "path": "/api/cases/{case_id}/context-v2/decisions",
+          "response_model": "PublicDecisionRecordV2",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": 201
+        },
+        {
+          "component_id": "general-api",
+          "handler": "create_case_context_v2_fact",
+          "line": 1950,
+          "method": "POST",
+          "path": "/api/cases/{case_id}/context-v2/facts",
+          "response_model": "PublicCaseFactV2",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": 201
+        },
+        {
+          "component_id": "general-api",
+          "handler": "review_case_context_v2_fact",
+          "line": 1960,
+          "method": "PATCH",
+          "path": "/api/cases/{case_id}/context-v2/facts/{fact_id}/review",
+          "response_model": "PublicCaseFactV2",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "create_case_context_v2_gap",
+          "line": 1975,
+          "method": "POST",
+          "path": "/api/cases/{case_id}/context-v2/gaps",
+          "response_model": "PublicCaseGapV2",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": 201
+        },
+        {
+          "component_id": "general-api",
+          "handler": "update_case_context_v2_gap",
+          "line": 1984,
+          "method": "PATCH",
+          "path": "/api/cases/{case_id}/context-v2/gaps/{gap_id}",
+          "response_model": "PublicCaseGapV2",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "update_legacy_context_gap",
+          "line": 1993,
+          "method": "POST",
+          "path": "/api/cases/{case_id}/context-v2/legacy-gaps/{action_id}",
+          "response_model": "PublicCaseGapV2",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "review_legacy_context_suggestion",
+          "line": 1929,
+          "method": "POST",
+          "path": "/api/cases/{case_id}/context-v2/legacy-suggestions/{action_id}/review",
+          "response_model": "PublicSuggestionReviewResultV2",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "get_context_panel_v3",
+          "line": 1824,
+          "method": "GET",
+          "path": "/api/cases/{case_id}/context-v2/panel",
+          "response_model": "PublicContextPanelV3",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "read_case_context_v2_resources",
+          "line": 1902,
+          "method": "GET",
+          "path": "/api/cases/{case_id}/context-v2/resources",
+          "response_model": "PublicCaseContextResourcesV2",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "review_case_context_v2_suggestion",
+          "line": 2015,
+          "method": "PATCH",
+          "path": "/api/cases/{case_id}/context-v2/suggestions/{suggestion_id}/review",
+          "response_model": "PublicSuggestionReviewResultV2",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "create_case_context_v2_task",
+          "line": 2025,
+          "method": "POST",
+          "path": "/api/cases/{case_id}/context-v2/tasks",
+          "response_model": "PublicCaseTaskV2",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": 201
+        },
+        {
+          "component_id": "general-api",
+          "handler": "update_case_context_v2_task",
+          "line": 2034,
+          "method": "PATCH",
+          "path": "/api/cases/{case_id}/context-v2/tasks/{task_id}",
+          "response_model": "PublicCaseTaskV2",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "cancel_case_context_v2_task",
+          "line": 2052,
+          "method": "POST",
+          "path": "/api/cases/{case_id}/context-v2/tasks/{task_id}/cancel",
+          "response_model": "PublicCaseTaskV2",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "complete_case_context_v2_task",
+          "line": 2043,
+          "method": "POST",
+          "path": "/api/cases/{case_id}/context-v2/tasks/{task_id}/complete",
+          "response_model": "PublicCaseTaskV2",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "read_context_workspace",
+          "line": 1911,
+          "method": "GET",
+          "path": "/api/cases/{case_id}/context-v2/workspace",
+          "response_model": null,
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "start_customer_emergency",
+          "line": 1280,
+          "method": "POST",
+          "path": "/api/cases/{case_id}/customer-emergency",
+          "response_model": "PublicMessageResponse",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": 201
+        },
+        {
+          "component_id": "general-api",
+          "handler": "get_customer_progress",
+          "line": 1750,
+          "method": "GET",
+          "path": "/api/cases/{case_id}/customer-progress",
+          "response_model": "list[CustomerProgressItem]",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "update_customer_progress",
+          "line": 2110,
+          "method": "PUT",
+          "path": "/api/cases/{case_id}/customer-progress/{step}",
+          "response_model": "list[CustomerProgressItem]",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "request_progress_confirmation",
+          "line": 2122,
+          "method": "POST",
+          "path": "/api/cases/{case_id}/customer-progress/{step}/confirmation-request",
+          "response_model": "list[CustomerProgressItem]",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "list_customer_question_candidates",
+          "line": 903,
+          "method": "GET",
+          "path": "/api/cases/{case_id}/customer-question-candidates",
+          "response_model": "list[PublicQuestionCandidateResponse]",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "list_customer_questions",
+          "line": 932,
+          "method": "GET",
+          "path": "/api/cases/{case_id}/customer-questions",
+          "response_model": "list[PublicCustomerQuestionResponse | PublicCustomerQuestionView]",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "queue_customer_questions",
+          "line": 941,
+          "method": "POST",
+          "path": "/api/cases/{case_id}/customer-questions",
+          "response_model": "list[PublicCustomerQuestionResponse]",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": 201
+        },
+        {
+          "component_id": "general-api",
+          "handler": "answer_customer_question",
+          "line": 1005,
+          "method": "POST",
+          "path": "/api/cases/{case_id}/customer-questions/{question_id}/answer",
+          "response_model": "PublicCustomerQuestionResponse",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "list_case_events",
+          "line": 1322,
+          "method": "GET",
+          "path": "/api/cases/{case_id}/events",
+          "response_model": "list[PublicCaseEventResponse]",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "list_case_facts",
+          "line": 1052,
+          "method": "GET",
+          "path": "/api/cases/{case_id}/facts",
+          "response_model": "list[PublicCaseFactResponse]",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "confirm_case_fact",
+          "line": 1058,
+          "method": "POST",
+          "path": "/api/cases/{case_id}/facts/{fact_id}/confirm",
+          "response_model": "PublicCaseFactResponse",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "list_case_members",
+          "line": 1328,
+          "method": "GET",
+          "path": "/api/cases/{case_id}/members",
+          "response_model": "list[PublicCaseMemberResponse]",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "upsert_case_member",
+          "line": 1334,
+          "method": "POST",
+          "path": "/api/cases/{case_id}/members",
+          "response_model": "PublicCaseMemberResponse",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": 201
+        },
+        {
+          "component_id": "general-api",
+          "handler": "list_case_messages",
+          "line": 1183,
+          "method": "GET",
+          "path": "/api/cases/{case_id}/messages",
+          "response_model": "list[PublicMessageResponse]",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "create_case_message",
+          "line": 1291,
+          "method": "POST",
+          "path": "/api/cases/{case_id}/messages",
+          "response_model": "PublicMessageResponse",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": 201
+        },
+        {
+          "component_id": "general-api",
+          "handler": "update_case_outcome",
+          "line": 493,
+          "method": "PUT",
+          "path": "/api/cases/{case_id}/outcome",
+          "response_model": "PublicCaseReadResponse",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "list_personal_notes",
+          "line": 1067,
+          "method": "GET",
+          "path": "/api/cases/{case_id}/personal-notes",
+          "response_model": "list[PublicPersonalNoteResponse]",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "create_personal_note",
+          "line": 1073,
+          "method": "POST",
+          "path": "/api/cases/{case_id}/personal-notes",
+          "response_model": "PublicPersonalNoteResponse",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": 201
+        },
+        {
+          "component_id": "general-api",
+          "handler": "delete_personal_note",
+          "line": 1088,
+          "method": "DELETE",
+          "path": "/api/cases/{case_id}/personal-notes/{note_id}",
+          "response_model": null,
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": 204
+        },
+        {
+          "component_id": "general-api",
+          "handler": "update_personal_note",
+          "line": 1079,
+          "method": "PATCH",
+          "path": "/api/cases/{case_id}/personal-notes/{note_id}",
+          "response_model": "PublicPersonalNoteResponse",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "list_case_presence",
+          "line": 1352,
+          "method": "GET",
+          "path": "/api/cases/{case_id}/presence",
+          "response_model": "list[PublicCasePresenceResponse]",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "heartbeat_case_presence",
+          "line": 1358,
+          "method": "POST",
+          "path": "/api/cases/{case_id}/presence/heartbeat",
+          "response_model": "PublicCasePresenceResponse",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "reopen_closed_case",
+          "line": 2382,
+          "method": "POST",
+          "path": "/api/cases/{case_id}/reopen",
+          "response_model": "PublicCaseReadResponse",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "get_final_case_report",
+          "line": 2396,
+          "method": "GET",
+          "path": "/api/cases/{case_id}/reports/final",
+          "response_model": "PublicReportResponse",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "export_final_case_report",
+          "line": 2427,
+          "method": "GET",
+          "path": "/api/cases/{case_id}/reports/final/export",
+          "response_model": null,
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "finalize_case_report",
+          "line": 2297,
+          "method": "POST",
+          "path": "/api/cases/{case_id}/reports/finalize",
+          "response_model": "PublicReportResponse",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "get_live_report",
+          "line": 2289,
+          "method": "GET",
+          "path": "/api/cases/{case_id}/reports/live",
+          "response_model": null,
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "restore_case_from_trash",
+          "line": 435,
+          "method": "POST",
+          "path": "/api/cases/{case_id}/restore",
+          "response_model": null,
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": 204
+        },
+        {
+          "component_id": "general-api",
+          "handler": "resume_ai",
+          "line": 2194,
+          "method": "POST",
+          "path": "/api/cases/{case_id}/resume",
+          "response_model": "PublicActionResponse",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": 201
+        },
+        {
+          "component_id": "general-api",
+          "handler": "start_human_takeover",
+          "line": 2189,
+          "method": "POST",
+          "path": "/api/cases/{case_id}/takeover",
+          "response_model": "PublicActionResponse",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": 201
+        },
+        {
+          "component_id": "general-api",
+          "handler": "move_case_to_trash",
+          "line": 419,
+          "method": "POST",
+          "path": "/api/cases/{case_id}/trash",
+          "response_model": null,
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": 204
+        },
+        {
+          "component_id": "general-api",
+          "handler": "list_case_verifications",
+          "line": 1729,
+          "method": "GET",
+          "path": "/api/cases/{case_id}/verifications",
+          "response_model": "list[PublicVerificationResponse]",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "create_case_verification",
+          "line": 1735,
+          "method": "POST",
+          "path": "/api/cases/{case_id}/verifications",
+          "response_model": "PublicVerificationResponse",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": 201
+        },
+        {
+          "component_id": "general-api",
+          "handler": "update_case_verification",
+          "line": 1708,
+          "method": "PATCH",
+          "path": "/api/cases/{case_id}/verifications/{verification_task_id}",
+          "response_model": "PublicVerificationResponse",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "create_voice_session",
+          "line": 2256,
+          "method": "POST",
+          "path": "/api/cases/{case_id}/voice-sessions",
+          "response_model": "PublicVoiceSessionResponse",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": 201
+        },
+        {
+          "component_id": "general-api",
+          "handler": "update_voice_session",
+          "line": 2265,
+          "method": "PATCH",
+          "path": "/api/cases/{case_id}/voice-sessions/{session_id}",
+          "response_model": "PublicVoiceSessionResponse",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "list_voice_transcript",
+          "line": 2274,
+          "method": "GET",
+          "path": "/api/cases/{case_id}/voice-sessions/{session_id}/transcript",
+          "response_model": "list[PublicTranscriptResponse]",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "general-api",
+          "handler": "append_voice_transcript",
+          "line": 2280,
+          "method": "POST",
+          "path": "/api/cases/{case_id}/voice-sessions/{session_id}/transcript",
+          "response_model": "PublicTranscriptResponse",
+          "source_path": "backend/general_api/app/main.py",
+          "status_code": 201
+        },
+        {
+          "component_id": "general-api",
           "handler": "list_case_attachments_for_ai",
-          "line": 1006,
+          "line": 1162,
           "method": "GET",
           "path": "/api/internal/cases/{case_id}/attachments",
           "response_model": "list[PublicAttachmentResponse]",
@@ -1670,7 +1700,7 @@
         {
           "component_id": "general-api",
           "handler": "read_runtime_config",
-          "line": 1630,
+          "line": 1802,
           "method": "GET",
           "path": "/api/runtime-config",
           "response_model": null,
@@ -1680,7 +1710,7 @@
         {
           "component_id": "general-api",
           "handler": "health",
-          "line": 319,
+          "line": 324,
           "method": "GET",
           "path": "/health",
           "response_model": null,
@@ -1696,7 +1726,7 @@
         {
           "component_id": "ai-api",
           "handler": "root",
-          "line": 43,
+          "line": 46,
           "method": "GET",
           "path": "/",
           "response_model": null,
@@ -1706,7 +1736,7 @@
         {
           "component_id": "ai-api",
           "handler": "analyze_text",
-          "line": 53,
+          "line": 56,
           "method": "POST",
           "path": "/ai/analyze/text",
           "response_model": "DiagnosisResult",
@@ -1716,7 +1746,7 @@
         {
           "component_id": "ai-api",
           "handler": "analyze_windows",
-          "line": 124,
+          "line": 138,
           "method": "POST",
           "path": "/ai/analyze/windows",
           "response_model": "list",
@@ -1726,7 +1756,7 @@
         {
           "component_id": "ai-api",
           "handler": "generate_case_copilot_reply",
-          "line": 86,
+          "line": 100,
           "method": "POST",
           "path": "/ai/case-copilot/replies",
           "response_model": "CaseCopilotOutput",
@@ -1736,7 +1766,7 @@
         {
           "component_id": "ai-api",
           "handler": "build_case_support_snapshot",
-          "line": 74,
+          "line": 77,
           "method": "POST",
           "path": "/ai/case-support/snapshot",
           "response_model": "CaseSnapshotPresentation",
@@ -1745,8 +1775,18 @@
         },
         {
           "component_id": "ai-api",
+          "handler": "extract_context_facts",
+          "line": 89,
+          "method": "POST",
+          "path": "/ai/context/facts/extract",
+          "response_model": "ContextFactExtractionOutput",
+          "source_path": "backend/ai_api/app/main.py",
+          "status_code": null
+        },
+        {
+          "component_id": "ai-api",
           "handler": "extract_features",
-          "line": 129,
+          "line": 143,
           "method": "POST",
           "path": "/ai/features/extract",
           "response_model": "dict",
@@ -1756,7 +1796,7 @@
         {
           "component_id": "ai-api",
           "handler": "generate_final_case_report",
-          "line": 112,
+          "line": 126,
           "method": "POST",
           "path": "/ai/final-reports/generate",
           "response_model": "FinalCaseReportOutput",
@@ -1766,7 +1806,7 @@
         {
           "component_id": "ai-api",
           "handler": "predict_risk",
-          "line": 134,
+          "line": 148,
           "method": "POST",
           "path": "/ai/risk/predict",
           "response_model": "dict",
@@ -1776,7 +1816,7 @@
         {
           "component_id": "ai-api",
           "handler": "generate_case_work_card",
-          "line": 100,
+          "line": 114,
           "method": "POST",
           "path": "/ai/work-cards/generate",
           "response_model": "CaseWorkCardOutput",
@@ -1786,7 +1826,7 @@
         {
           "component_id": "ai-api",
           "handler": "health",
-          "line": 48,
+          "line": 51,
           "method": "GET",
           "path": "/health",
           "response_model": null,

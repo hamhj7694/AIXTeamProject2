@@ -18,8 +18,33 @@ const statusLabels: Record<string, string> = {
   UNCACHED: '확인 필요', OPEN: '확인 필요',
 };
 
-export const SourceBadge: React.FC<{ source: string }> = ({ source }) => <span className="context-source-badge" title={sourceLabels[source] ? undefined : source}>{sourceLabels[source] ?? '기타 출처'}</span>;
-export const StatusBadge: React.FC<{ status: string }> = ({ status }) => <span className={`context-status-badge tone-${statusLabels[status] ? status.toLowerCase() : 'unknown'}`} title={statusLabels[status] ? undefined : status}>{statusLabels[status] ?? '상태 확인 필요'}</span>;
+const evidenceLabels: Record<string, string> = {
+  MESSAGE: '대화 기록', QUESTION_ANSWER: '고객 답변', BANK_TRANSACTION: '거래 기록',
+  VERIFICATION_RESULT: '기관 확인 결과', ATTACHMENT: '첨부 자료',
+  STRUCTURED_SIGNAL: '분석 근거', STAFF_RECORD: '담당자 기록',
+};
+
+const internalDisplayLabels: Record<string, string> = {
+  TRANSFERRED: '이체함', NOT_TRANSFERRED: '이체하지 않음', UNKNOWN: '확인 필요',
+  YES: '예', NO: '아니요', PARTIAL: '일부 해당',
+};
+
+export const staffDisplayValue = (item: ContextPanelItemV3): string => {
+  const typedStatus = typeof item.value?.status === 'string' ? item.value.status : '';
+  return internalDisplayLabels[item.display_value] ?? internalDisplayLabels[typedStatus] ?? item.display_value;
+};
+
+export const evidenceSummaries = (refs: ContextPanelItemV3['evidence_refs']): string[] => {
+  const counts = new Map<string, number>();
+  refs.forEach((ref) => {
+    const label = evidenceLabels[ref.type] ?? '기타 근거';
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  });
+  return [...counts].map(([label, count]) => `${label} ${count}건`);
+};
+
+export const SourceBadge: React.FC<{ source: string }> = ({ source }) => <span className="context-source-badge">{sourceLabels[source] ?? '기타 출처'}</span>;
+export const StatusBadge: React.FC<{ status: string }> = ({ status }) => <span className={`context-status-badge tone-${statusLabels[status] ? status.toLowerCase() : 'unknown'}`}>{statusLabels[status] ?? '상태 확인 필요'}</span>;
 
 export const MoreMenu: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => {
   const [open, setOpen] = useState(false);
@@ -47,19 +72,21 @@ export const MoreMenu: React.FC<{ label: string; children: React.ReactNode }> = 
 const Evidence: React.FC<{ item: ContextPanelItemV3; compact?: boolean }> = ({ item, compact = false }) => {
   const [open, setOpen] = useState(false);
   const detailsId = useId();
-  if (compact) return <>{item.evidence_refs.length === 0 ? <span className="context-evidence-empty" aria-disabled="true"><FileSearch size={12}/>근거 없음</span> : <button type="button" className="context-evidence-toggle" aria-expanded={open} aria-controls={detailsId} onClick={() => setOpen((value) => !value)}><FileSearch size={12}/>근거 {item.evidence_refs.length}건</button>}{open && item.evidence_refs.length > 0 && <div id={detailsId} className="context-compact-evidence-panel">{item.masked && <p>화면 마스킹 적용</p>}<ul>{item.evidence_refs.map((ref) => <li key={`${ref.type}-${ref.id}`}>{ref.type} · {ref.id}{ref.revision ? ` · r${ref.revision}` : ''}</li>)}</ul>{item.confidence != null && <p>AI 신뢰도 {Math.round(item.confidence * 100)}%</p>}</div>}</>;
-  return <details className="context-item-details"><summary><FileSearch size={12}/>근거와 상세 정보</summary><div><SourceBadge source={item.source_kind}/>{item.masked && <span>화면 마스킹 적용</span>}</div>{item.evidence_refs.length > 0 ? <ul>{item.evidence_refs.map((ref) => <li key={`${ref.type}-${ref.id}`}>{ref.type} · {ref.id}{ref.revision ? ` · r${ref.revision}` : ''}</li>)}</ul> : <p>연결된 근거 참조가 없습니다.</p>}{item.confidence != null && <p>AI 신뢰도 {Math.round(item.confidence * 100)}%</p>}</details>;
+  const summaries = evidenceSummaries(item.evidence_refs);
+  const summaryList = summaries.length > 0 ? <ul>{summaries.map((summary) => <li key={summary}>{summary}</li>)}</ul> : null;
+  if (compact) return <>{item.evidence_refs.length === 0 ? <span className="context-evidence-empty" aria-disabled="true"><FileSearch size={12}/>근거 없음</span> : <button type="button" className="context-evidence-toggle" aria-expanded={open} aria-controls={detailsId} onClick={() => setOpen((value) => !value)}><FileSearch size={12}/>근거 {item.evidence_refs.length}건</button>}{open && summaryList && <div id={detailsId} className="context-compact-evidence-panel">{item.masked && <p>민감정보가 가려진 화면용 근거입니다.</p>}{summaryList}</div>}</>;
+  return <details className="context-item-details"><summary><FileSearch size={12}/>근거와 상세 정보</summary><div><SourceBadge source={item.source_kind}/>{item.masked && <span>민감정보 가림 적용</span>}</div>{summaryList ?? <p>연결된 근거가 없습니다.</p>}</details>;
 };
 
-type FactProps = { item: ContextPanelItemV3; busy: boolean; onConfirm: () => void; onReject: () => void };
-export const FactRow: React.FC<FactProps> = ({ item, busy, onConfirm, onReject }) => {
+type FactProps = { item: ContextPanelItemV3; busy: boolean; onConfirm: () => void; onReject: () => void; onCorrect: () => void; onUnconfirm: () => void; onInvalidate: () => void };
+export const FactRow: React.FC<FactProps> = ({ item, busy, onConfirm, onReject, onCorrect, onUnconfirm, onInvalidate }) => {
   const proposed = item.status === 'PROPOSED';
   const confirmed = item.status === 'CONFIRMED';
   const terminalLabel = item.status === 'REJECTED' ? '검토에서 제외된 정보' : item.status === 'SUPERSEDED' ? '새 정보로 대체된 기록' : '읽기 전용 정보';
   const lowConfidence = item.source_kind === 'AI_EXTRACTION' && item.confidence != null && item.confidence < .7;
   const tone = statusLabels[item.status] ? item.status.toLowerCase() : 'unknown';
   return <article className={`context-fact-row is-${tone}`}>
-    <div className="context-fact-main"><span className="context-fact-marker" aria-hidden="true">{confirmed ? <Check size={13}/> : proposed ? <AlertCircle size={13}/> : '·'}</span><p><strong>{item.label}</strong><span>·</span><span>{item.display_value}</span></p><div className="context-fact-actions">{proposed && <button className="context-primary-action" disabled={busy} onClick={onConfirm}><Check size={13}/>확정</button>}{proposed && <MoreMenu label={`${item.label} 추가 작업`}><button disabled={busy} onClick={onReject}><X size={13}/>잘못된 정보로 제외</button></MoreMenu>}</div></div>
+    <div className="context-fact-main"><span className="context-fact-marker" aria-hidden="true">{confirmed ? <Check size={13}/> : proposed ? <AlertCircle size={13}/> : '·'}</span><p><strong>{item.label}</strong><span>·</span><span>{staffDisplayValue(item)}</span></p><div className="context-fact-actions">{proposed && <button className="context-primary-action" disabled={busy} onClick={onConfirm}><Check size={13}/>확정</button>}{(proposed || confirmed) && <MoreMenu label={`${item.label} 추가 작업`}>{confirmed && <button disabled={busy} onClick={onCorrect}><Pencil size={13}/>정보 정정</button>}{confirmed && <button disabled={busy} onClick={onUnconfirm}><RotateCcw size={13}/>확정 취소</button>}<button disabled={busy} onClick={confirmed ? onInvalidate : onReject}><X size={13}/>잘못된 정보로 제외</button></MoreMenu>}</div></div>
     <div className="context-fact-meta"><SourceBadge source={item.source_kind}/><StatusBadge status={item.status}/><Evidence item={item} compact/></div>
     {!proposed && !confirmed && <span className="context-readonly-note">{terminalLabel}</span>}
     {lowConfidence && <div className="context-confidence-warning"><AlertCircle size={12}/>AI 추출 · 확인 필요</div>}
@@ -73,10 +100,10 @@ export const VerificationCard: React.FC<{ item: ContextPanelItemV3; busy: boolea
 
 export const SuggestionCard: React.FC<{ item: ContextPanelItemV3; busy: boolean; onAccept: () => void; onDismiss: () => void }> = ({ item, busy, onAccept, onDismiss }) => <article className="context-domain-card suggestion-card"><header><div><strong>{item.label}</strong><SourceBadge source={item.source_kind}/></div><StatusBadge status={item.status}/></header><p>{item.display_value}</p>{item.status === 'PROPOSED' && <footer><button className="context-primary-action" disabled={busy} onClick={onAccept}><Check size={13}/>업무로 채택</button><MoreMenu label={`${item.label} 제안 작업`}><button disabled={busy} onClick={onDismiss}><X size={13}/>제안 제외</button></MoreMenu></footer>}<Evidence item={item}/></article>;
 
-export const TaskCard: React.FC<{ item: ContextPanelItemV3; busy: boolean; onStart: () => void; onComplete: () => void; onBlock: () => void; onCancel: () => void }> = ({ item, busy, onStart, onComplete, onBlock, onCancel }) => {
+export const TaskCard: React.FC<{ item: ContextPanelItemV3; busy: boolean; onStart: () => void; onComplete: () => void; onBlock: () => void; onCancel: () => void; onEdit: () => void }> = ({ item, busy, onStart, onComplete, onBlock, onCancel, onEdit }) => {
   const actionable = ['TODO', 'IN_PROGRESS', 'BLOCKED'].includes(item.status);
   const primary = item.status === 'TODO' || item.status === 'BLOCKED' ? { label: item.status === 'BLOCKED' ? '재개' : '시작', icon: <Play size={13}/>, run: onStart } : item.status === 'IN_PROGRESS' ? { label: '완료', icon: <Check size={13}/>, run: onComplete } : null;
-  return <article className={`context-domain-card task-card is-${item.status.toLowerCase()}`}><header><div><strong>{item.label}</strong><SourceBadge source={item.source_kind}/></div><StatusBadge status={item.status}/></header><p>{item.display_value}</p>{actionable && <footer>{primary && <button className="context-primary-action" disabled={busy} onClick={primary.run}>{primary.icon}{primary.label}</button>}<MoreMenu label={`${item.label} 업무 작업`}>{item.status === 'IN_PROGRESS' && <button disabled={busy} onClick={onBlock}><Pause size={13}/>보류</button>}<button disabled={busy} onClick={onCancel}><X size={13}/>업무 취소</button></MoreMenu></footer>}<Evidence item={item}/></article>;
+  return <article className={`context-domain-card task-card is-${item.status.toLowerCase()}`}><header><div><strong>{item.label}</strong><SourceBadge source={item.source_kind}/></div><StatusBadge status={item.status}/></header><p>{item.display_value}</p>{actionable && <footer>{primary && <button className="context-primary-action" disabled={busy} onClick={primary.run}>{primary.icon}{primary.label}</button>}<MoreMenu label={`${item.label} 업무 작업`}><button disabled={busy} onClick={onEdit}><Pencil size={13}/>업무 수정</button>{item.status === 'IN_PROGRESS' && <button disabled={busy} onClick={onBlock}><Pause size={13}/>보류</button>}<button disabled={busy} onClick={onCancel}><X size={13}/>업무 취소</button></MoreMenu></footer>}<Evidence item={item}/></article>;
 };
 
 export const SectionShell: React.FC<{ id: string; title: string; count?: number; attention?: number; open: boolean; onOpenChange: (open: boolean) => void; action?: React.ReactNode; children: React.ReactNode }> = ({ id, title, count, attention = 0, open, onOpenChange, action, children }) => {
@@ -87,4 +114,12 @@ export const SectionShell: React.FC<{ id: string; title: string; count?: number;
   </section>;
 };
 
-export const HistoryHint: React.FC<{ count: number; label?: string }> = ({ count, label = '완료·취소·제외 항목' }) => count > 0 ? <p className="context-history-summary">{label} {count}건</p> : null;
+export const HistoryHint: React.FC<{ items: ContextPanelItemV3[]; busy: boolean; onRestore: (item: ContextPanelItemV3) => void; kind?: 'task' | 'fact' }> = ({ items, busy, onRestore, kind = 'task' }) => {
+  const [open, setOpen] = useState(false);
+  const contentId = useId();
+  if (items.length === 0 && kind === 'task') return null;
+  return <section className="context-archive-history">
+    <button type="button" className="context-history-summary" aria-expanded={open} aria-controls={contentId} onClick={() => setOpen((value) => !value)}><RotateCcw size={13}/><span>{kind === 'fact' ? '제외된 정보' : '완료·취소 업무'} {items.length}건</span><ChevronDown size={14}/></button>
+    {open && <div id={contentId} className="context-archive-list"><p>{items.length === 0 ? '제외된 정보가 없습니다.' : kind === 'fact' ? '검토에서 제외한 정보입니다. 복구하면 다시 확인 필요 상태로 돌아갑니다.' : '완료하거나 취소한 업무입니다. 복구하면 대기 상태의 현재 업무로 돌아갑니다.'}</p>{items.map((item) => <article key={item.item_id}><header><strong>{item.label}</strong><StatusBadge status={item.status}/></header><p>{staffDisplayValue(item)}</p><footer><SourceBadge source={item.source_kind}/><button type="button" disabled={busy} onClick={() => onRestore(item)}><RotateCcw size={12}/>{kind === 'fact' ? '정보 복구' : '업무 복구'}</button></footer></article>)}</div>}
+  </section>;
+};

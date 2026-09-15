@@ -47,7 +47,18 @@ def build_context_panel_v3(
 
     if view == "bank":
         for fact in resources.facts:
-            if fact.status in {"REJECTED", "SUPERSEDED"}:
+            if fact.status == "REJECTED":
+                target = section_for_key(fact.semantic_key)
+                masked = fact.semantic_key in SENSITIVE_KEYS
+                display = mask_sensitive_text(fact.display_value) if masked else fact.display_value
+                sections[target].groups.setdefault("archived", []).append(_item(
+                    item_id=fact.fact_id, semantic_key=fact.semantic_key, label=fact.display_label,
+                    display_value=display, value=fact.value, source_kind=fact.source_kind, status=fact.status,
+                    confidence=fact.confidence, evidence_refs=fact.evidence_refs, visibility=fact.visibility,
+                    masked=masked, version=fact.version,
+                ))
+                continue
+            if fact.status == "SUPERSEDED":
                 continue
             masked = fact.semantic_key in SENSITIVE_KEYS
             display = mask_sensitive_text(fact.display_value) if masked else fact.display_value

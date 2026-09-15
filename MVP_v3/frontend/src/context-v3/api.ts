@@ -7,12 +7,12 @@ export const loadContextPanelV3 = (caseId: string, signal?: AbortSignal) => requ
   { signal },
 );
 
-export const reviewContextFact = (caseId: string, factId: string, version: number, decision: 'CONFIRM' | 'REJECT', reason: string, supersedesFactId?: string) => request(
+export const reviewContextFact = (caseId: string, factId: string, version: number, decision: 'CONFIRM' | 'REJECT' | 'RESTORE' | 'UNCONFIRM' | 'INVALIDATE', reason: string, supersedesFactId?: string) => request(
   `/api/cases/${encodeURIComponent(caseId)}/context-v2/facts/${encodeURIComponent(factId)}/review?actor_user_id=${encodeURIComponent(CURRENT_BANK_USER.user_id)}`,
   { method: 'PATCH', body: JSON.stringify({ expected_version: version, decision, reason, ...(supersedesFactId ? { supersedes_fact_id: supersedesFactId } : {}) }) },
 );
 
-export const createContextFact = (caseId: string, input: { client_request_id: string; semantic_key: string; display_label: string; value: Record<string, unknown>; display_value: string; visibility?: 'BANK_INTERNAL' | 'CUSTOMER_SHARED' }) => request(
+export const createContextFact = (caseId: string, input: { client_request_id: string; semantic_key: string; display_label: string; value: Record<string, unknown>; display_value: string; visibility?: 'BANK_INTERNAL' | 'CUSTOMER_SHARED'; supersedes_fact_id?: string }) => request(
   `/api/cases/${encodeURIComponent(caseId)}/context-v2/facts?actor_user_id=${encodeURIComponent(CURRENT_BANK_USER.user_id)}`,
   { method: 'POST', body: JSON.stringify({ ...input, evidence_refs: [], visibility: input.visibility ?? 'BANK_INTERNAL' }) },
 );
@@ -25,6 +25,11 @@ export const reviewContextSuggestion = (caseId: string, suggestionId: string, ve
 export const updateContextTask = (caseId: string, taskId: string, version: number, status: 'TODO' | 'IN_PROGRESS' | 'BLOCKED') => request(
   `/api/cases/${encodeURIComponent(caseId)}/context-v2/tasks/${encodeURIComponent(taskId)}?actor_user_id=${encodeURIComponent(CURRENT_BANK_USER.user_id)}`,
   { method: 'PATCH', body: JSON.stringify({ expected_version: version, status }) },
+);
+
+export const editContextTask = (caseId: string, taskId: string, version: number, title: string, description: string) => request(
+  `/api/cases/${encodeURIComponent(caseId)}/context-v2/tasks/${encodeURIComponent(taskId)}?actor_user_id=${encodeURIComponent(CURRENT_BANK_USER.user_id)}`,
+  { method: 'PATCH', body: JSON.stringify({ expected_version: version, title, description }) },
 );
 
 export const completeContextTask = (caseId: string, taskId: string, version: number, resultSummary: string) => request(

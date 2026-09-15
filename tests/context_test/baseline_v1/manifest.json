@@ -1,0 +1,27 @@
+{
+  "run_id": "context-reconstruction-20260906-baseline-v1",
+  "executed_at": "2026-09-06T18:03:10.104681+09:00",
+  "git_commit": "UNKNOWN",
+  "branch": "UNKNOWN",
+  "dataset_version": "baseline_v1",
+  "dataset_path": "tests/context_test/baseline_v1/dataset.json",
+  "dataset_hash": "8524f09eb63710f5826b5244e01b569fc4a7752a508a201fa916c0270530f2d0",
+  "sample_count": 30,
+  "evaluator_version": "legacy-context-reconstruction.v1-cached",
+  "evaluator_hash": "10f6f4d49df6793d4f2f7319f6ca434c09ceced4a4b87c13ecd68980050958a6",
+  "comparison_evaluator_path": "tests/context_test/evaluate.py",
+  "comparison_evaluator_hash": "60f274bf951f0a26fe963453d99c1dcf5f383e81a7e6e6acfe084f498a25d977",
+  "feature_schema_hash": "UNKNOWN",
+  "prompt_version_hash": "UNKNOWN",
+  "model_artifact_hash": "662db2a9351dc4ca2c453776ae6f45750e465234cc9abcecc65b58a6b047c5fc",
+  "llm_model": "UNKNOWN",
+  "embedding_model": "text-embedding-3-small",
+  "execution_mode": "live-historical",
+  "raw_result_path": "tests/context_test/baseline_v1/raw_results.json",
+  "raw_result_hash": "aa5732a5a1e1b2c5b85d13e647e007612a2fce8f0180905dd6a7ed1a2640395d",
+  "feature_inventory_path": "tests/context_test/baseline_v1/feature_inventory.csv",
+  "feature_inventory_hash": "a7cfccc83f1514566dbdfcb1971788b61ec6a7c69671575077a0c9f650f5ea38",
+  "production_db_writes": 0,
+  "paid_api_calls": "UNKNOWN"
+}
+

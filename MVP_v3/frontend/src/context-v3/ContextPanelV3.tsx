@@ -3,7 +3,7 @@ import { AlertCircle, PanelRightClose, RefreshCw, X } from 'lucide-react';
 import type { CaseBundle, CustomerProgressItem, StoredCase, VerificationTask } from '../api/types';
 import { CustomerProgressEditor } from '../components/CustomerProgressEditor';
 import { generateUuid } from '../uuid';
-import { createContextFact, cancelContextTask, completeContextTask, createContextTask, loadContextPanelV3, loadSummaryDisplayOverride, resetSummaryDisplayOverride, reviewContextFact, reviewContextSuggestion, saveSummaryDisplayOverride, updateContextTask } from './api';
+import { createContextFact, cancelContextTask, completeContextTask, createContextTask, editContextTask, loadContextPanelV3, loadSummaryDisplayOverride, resetSummaryDisplayOverride, reviewContextFact, reviewContextSuggestion, saveSummaryDisplayOverride, updateContextTask } from './api';
 import { ContextQuickNav } from './ContextQuickNav';
 import { CustomerShareSection, ExposureSection, FactVerificationSection, FraudCircumstanceSection, ImpersonationSection, StaffActionSection, SummarySection, visibleSummaryItems, type WorkflowAction } from './sections';
 import type { ContextPanelItemV3, ContextPanelSectionV3, ContextPanelV3 as ContextPanelData } from './types';
@@ -61,6 +61,7 @@ export const ContextPanelV3: React.FC<Props> = (props) => {
   const [factDraft, setFactDraft] = useState<{ section: FactOption['section']; key: string; value: string } | null>(null);
   const [factFormError, setFactFormError] = useState('');
   const [taskDraft, setTaskDraft] = useState<{ title: string; description: string } | null>(null);
+  const [taskEdit, setTaskEdit] = useState<{ item: ContextPanelItemV3; title: string; description: string } | null>(null);
   const [taskFormError, setTaskFormError] = useState('');
   const [openSections, setOpenSections] = useState<Set<SectionId>>(() => new Set());
   const [activeSection, setActiveSection] = useState<SectionId | null>(null);
@@ -101,16 +102,21 @@ export const ContextPanelV3: React.FC<Props> = (props) => {
   const getSection = (id: ContextPanelSectionV3['section_id']) => normalizedSections.find((item) => item.section_id === id) ?? { section_id: id, title: id, items: [], groups: {} } as ContextPanelSectionV3;
   const missingSections = useMemo(() => visibleData ? expectedSections.filter(({ id }) => !visibleData.sections.some((item) => item.section_id === id)).map(({ title }) => title) : [], [visibleData]);
   const availableOptions = useMemo(() => factDraft ? factOptions.filter((item) => item.section === factDraft.section) : [], [factDraft]);
-  const review = async (item: ContextPanelItemV3, decision: 'CONFIRM' | 'REJECT') => {
+  const review = async (item: ContextPanelItemV3, decision: 'CONFIRM' | 'REJECT' | 'RESTORE' | 'UNCONFIRM' | 'INVALIDATE') => {
+    if (decision === 'RESTORE' && !window.confirm('이 정보를 다시 확인 필요 상태로 복구할까요? 기존 제외 기록은 변경 이력에 남습니다.')) return;
+    if (decision === 'UNCONFIRM' && !window.confirm('확정을 취소하고 다시 확인 필요 상태로 변경할까요? 기존 확정 기록은 변경 이력에 남습니다.')) return;
+    const invalidationReason = decision === 'INVALIDATE' ? window.prompt('확정된 정보를 제외하는 사유를 입력하세요.')?.trim() ?? '' : '';
+    if (decision === 'INVALIDATE' && !invalidationReason) return;
     setBusy(true); setError('');
     try {
-      await reviewContextFact(props.caseItem.case_id, item.item_id, item.version, decision, decision === 'CONFIRM' ? '담당자 확인' : '잘못된 정보로 제외');
+      await reviewContextFact(props.caseItem.case_id, item.item_id, item.version, decision, decision === 'CONFIRM' ? '담당자 확인' : decision === 'RESTORE' ? '직원이 제외 항목 복구' : decision === 'UNCONFIRM' ? '직원이 확정 취소' : invalidationReason || '잘못된 정보로 제외');
       await load();
     } catch (reason) { setError(reason instanceof Error ? reason.message : '검토 결과를 저장하지 못했습니다. 최신 상태를 다시 불러와 주세요.'); }
     finally { setBusy(false); }
   };
   const workflow = async (item: ContextPanelItemV3, action: WorkflowAction) => {
     let note = '';
+    if (action === 'RESTORE' && !window.confirm('이 업무를 대기 상태로 복구할까요? 기존 완료 결과 또는 취소 사유는 변경 이력에 남고 현재 업무에서는 초기화됩니다.')) return;
     if (action === 'DISMISS') note = window.prompt('제안 제외 사유를 입력하세요.')?.trim() ?? '';
     if (action === 'COMPLETE') note = window.prompt('완료한 업무 결과를 입력하세요.')?.trim() ?? '';
     if (action === 'CANCEL') note = window.prompt('업무 취소 사유를 입력하세요.')?.trim() ?? '';
@@ -119,6 +125,7 @@ export const ContextPanelV3: React.FC<Props> = (props) => {
     try {
       if (action === 'ACCEPT' || action === 'DISMISS') await reviewContextSuggestion(props.caseItem.case_id, item.item_id, item.version, action, note);
       else if (action === 'START') await updateContextTask(props.caseItem.case_id, item.item_id, item.version, 'IN_PROGRESS');
+      else if (action === 'RESTORE') await updateContextTask(props.caseItem.case_id, item.item_id, item.version, 'TODO');
       else if (action === 'BLOCK') await updateContextTask(props.caseItem.case_id, item.item_id, item.version, 'BLOCKED');
       else if (action === 'COMPLETE') await completeContextTask(props.caseItem.case_id, item.item_id, item.version, note);
       else await cancelContextTask(props.caseItem.case_id, item.item_id, item.version, note);
@@ -131,6 +138,20 @@ export const ContextPanelV3: React.FC<Props> = (props) => {
     if (!task) return;
     const resumesVerification = ['PENDING', 'ON_HOLD', 'FAILED'].includes(task.status);
     props.onEditVerification(resumesVerification ? { ...task, status: 'IN_PROGRESS' } : task);
+  };
+  const correctFact = async (item: ContextPanelItemV3) => {
+    const option = factOptions.find((candidate) => candidate.key === item.semantic_key);
+    if (!option) { window.alert('이 정보 종류는 아직 안전한 정정 입력 형식을 지원하지 않습니다. 확정 취소 후 새 정보를 등록해 주세요.'); return; }
+    const nextValue = window.prompt(`${item.label}의 정정할 값을 입력하세요.`, item.display_value)?.trim() ?? '';
+    if (!nextValue || nextValue === item.display_value) return;
+    if (option.kind === 'amount' && (!Number.isFinite(Number(nextValue.replace(/,/g, ''))) || Number(nextValue.replace(/,/g, '')) < 0)) { window.alert('금액은 0 이상의 숫자로 입력해 주세요.'); return; }
+    if (option.kind === 'transfer-status' && !['TRANSFERRED', 'NOT_TRANSFERRED', 'UNKNOWN'].includes(nextValue)) { window.alert('이체 여부는 TRANSFERRED, NOT_TRANSFERRED, UNKNOWN 중 하나로 입력해 주세요.'); return; }
+    setBusy(true); setError('');
+    try {
+      await createContextFact(props.caseItem.case_id, { client_request_id: generateUuid(), semantic_key: option.key, display_label: option.label, value: typedValue(option, nextValue), display_value: option.kind === 'amount' ? `${Number(nextValue.replace(/,/g, '')).toLocaleString('ko-KR')}원` : nextValue, visibility: item.visibility === 'CUSTOMER_SHARED' ? 'CUSTOMER_SHARED' : 'BANK_INTERNAL', supersedes_fact_id: item.item_id });
+      await load();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : '정정 제안을 저장하지 못했습니다.'); }
+    finally { setBusy(false); }
   };
   const toggleTaskForm = () => {
     setFactDraft(null); setFactFormError(''); setTaskFormError('');
@@ -145,6 +166,16 @@ export const ContextPanelV3: React.FC<Props> = (props) => {
     setBusy(true); setTaskFormError('');
     try { await createContextTask(props.caseItem.case_id, generateUuid(), title, description); setTaskDraft(null); await load(); }
     catch (reason) { setTaskFormError(reason instanceof Error ? reason.message : '담당자 업무를 추가하지 못했습니다.'); }
+    finally { setBusy(false); }
+  };
+  const openTaskEdit = (item: ContextPanelItemV3) => { setTaskEdit({ item, title: item.label, description: item.display_value }); setTaskFormError(''); setSectionOpen('STAFF_ACTIONS', true); };
+  const saveTaskEdit = async () => {
+    if (!taskEdit || busy) return;
+    const title = taskEdit.title.trim(); const description = taskEdit.description.trim();
+    if (!title || !description) { setTaskFormError('업무 제목과 내용을 모두 입력해 주세요.'); return; }
+    setBusy(true); setTaskFormError('');
+    try { await editContextTask(props.caseItem.case_id, taskEdit.item.item_id, taskEdit.item.version, title, description); setTaskEdit(null); await load(); }
+    catch (reason) { setTaskFormError(reason instanceof Error ? reason.message : '업무를 수정하지 못했습니다.'); }
     finally { setBusy(false); }
   };
   const startSummaryEdit = async () => {
@@ -185,12 +216,13 @@ export const ContextPanelV3: React.FC<Props> = (props) => {
     catch (reason) { setFactFormError(reason instanceof Error ? reason.message : '정보 제안을 저장하지 못했습니다.'); }
     finally { setBusy(false); }
   };
-  const factEditor = factDraft && <form id={`context-create-${factDraft.section.toLowerCase()}`} className="context-fact-form context-inline-create-form" onSubmit={(event) => { event.preventDefault(); void saveFact(); }}><header><strong>직원 정보 제안</strong><button type="button" onClick={() => { setFactDraft(null); setFactFormError(''); }} aria-label="정보 입력 닫기"><X size={14}/></button></header><label>정보 종류<select value={factDraft.key} onChange={(event) => { setFactDraft({ ...factDraft, key: event.target.value, value: '' }); setFactFormError(''); }}>{availableOptions.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}</select></label>{factOptions.find((item) => item.key === factDraft.key)?.kind === 'transfer-status' ? <label>실제 이체 여부<select value={factDraft.value} onChange={(event) => { setFactDraft({ ...factDraft, value: event.target.value }); setFactFormError(''); }}><option value="">선택</option><option value="TRANSFERRED">이체함</option><option value="NOT_TRANSFERRED">이체하지 않음</option><option value="UNKNOWN">확인 필요</option></select></label> : <label>내용<input value={factDraft.value} onChange={(event) => { setFactDraft({ ...factDraft, value: event.target.value }); setFactFormError(''); }} placeholder="확인한 내용을 입력하세요"/></label>}{factFormError && <p className="context-inline-form-error" role="alert">{factFormError}</p>}<p>저장 후 PROPOSED 상태로 등록되며 별도 확정이 필요합니다.</p><footer><button type="button" onClick={() => { setFactDraft(null); setFactFormError(''); }}>취소</button><button type="submit" disabled={busy || !factDraft.value.trim()}>정보 제안 저장</button></footer></form>;
+  const factEditor = factDraft && <form id={`context-create-${factDraft.section.toLowerCase()}`} className="context-fact-form context-inline-create-form" onSubmit={(event) => { event.preventDefault(); void saveFact(); }}><header><strong>직원 정보 제안</strong><button type="button" onClick={() => { setFactDraft(null); setFactFormError(''); }} aria-label="정보 입력 닫기"><X size={14}/></button></header><label>정보 종류<select value={factDraft.key} onChange={(event) => { setFactDraft({ ...factDraft, key: event.target.value, value: '' }); setFactFormError(''); }}>{availableOptions.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}</select></label>{factOptions.find((item) => item.key === factDraft.key)?.kind === 'transfer-status' ? <label>실제 이체 여부<select value={factDraft.value} onChange={(event) => { setFactDraft({ ...factDraft, value: event.target.value }); setFactFormError(''); }}><option value="">선택</option><option value="TRANSFERRED">이체함</option><option value="NOT_TRANSFERRED">이체하지 않음</option><option value="UNKNOWN">확인 필요</option></select></label> : <label>내용<input value={factDraft.value} onChange={(event) => { setFactDraft({ ...factDraft, value: event.target.value }); setFactFormError(''); }} placeholder="확인한 내용을 입력하세요"/></label>}{factFormError && <p className="context-inline-form-error" role="alert">{factFormError}</p>}<p>저장 후 ‘확인 필요’ 상태로 등록되며 별도 확정이 필요합니다.</p><footer><button type="button" onClick={() => { setFactDraft(null); setFactFormError(''); }}>취소</button><button type="submit" disabled={busy || !factDraft.value.trim()}>정보 제안 저장</button></footer></form>;
   const taskEditor = taskDraft && <form id="context-create-staff_actions" className="context-fact-form context-inline-create-form context-task-form" onSubmit={(event) => { event.preventDefault(); void saveTask(); }}><header><strong>새 담당자 업무</strong><button type="button" onClick={() => { setTaskDraft(null); setTaskFormError(''); }} aria-label="업무 입력 닫기"><X size={14}/></button></header><label>업무 제목<input value={taskDraft.title} maxLength={300} onChange={(event) => { setTaskDraft({ ...taskDraft, title: event.target.value }); setTaskFormError(''); }} placeholder="수행할 업무 제목을 입력하세요"/></label><label>업무 내용<textarea value={taskDraft.description} maxLength={3000} rows={3} onChange={(event) => { setTaskDraft({ ...taskDraft, description: event.target.value }); setTaskFormError(''); }} placeholder="업무 내용과 확인 기준을 입력하세요"/></label>{taskFormError && <p className="context-inline-form-error" role="alert">{taskFormError}</p>}<footer><button type="button" onClick={() => { setTaskDraft(null); setTaskFormError(''); }}>취소</button><button type="submit" disabled={busy || !taskDraft.title.trim() || !taskDraft.description.trim()}>업무 저장</button></footer></form>;
 
+  const taskEditForm = taskEdit && <form className="context-fact-form context-inline-create-form context-task-form" onSubmit={(event) => { event.preventDefault(); void saveTaskEdit(); }}><header><strong>업무 수정</strong><button type="button" onClick={() => { setTaskEdit(null); setTaskFormError(''); }} aria-label="업무 수정 닫기"><X size={14}/></button></header><label>업무 제목<input value={taskEdit.title} maxLength={300} onChange={(event) => { setTaskEdit({ ...taskEdit, title: event.target.value }); setTaskFormError(''); }}/></label><label>업무 내용<textarea value={taskEdit.description} maxLength={3000} rows={3} onChange={(event) => { setTaskEdit({ ...taskEdit, description: event.target.value }); setTaskFormError(''); }}/></label>{taskFormError && <p className="context-inline-form-error" role="alert">{taskFormError}</p>}<footer><button type="button" onClick={() => { setTaskEdit(null); setTaskFormError(''); }}>취소</button><button type="submit" disabled={busy || !taskEdit.title.trim() || !taskEdit.description.trim()}>수정 저장</button></footer></form>;
   const projectionLabel = visibleData?.projection_status === 'CURRENT' ? '최신' : visibleData?.projection_status === 'UPDATING' ? '갱신 중' : visibleData?.projection_status === 'STALE' ? '오래된 정보' : '확인 필요';
   return <aside className={`context-panel context-panel-v3 ${props.open ? 'is-open' : ''}`} aria-label="사건 맥락 V3">
-    <div className="context-header context-v3-sticky-header"><div><p className="eyebrow">CASE CONTEXT</p><h2>사건 맥락</h2>{visibleData && <small>사건 정보 {visibleData.source_revision}차 · {projectionLabel}</small>}</div><div><button type="button" className="context-open context-header-toggle" onClick={props.onToggle} aria-label="사건 맥락 닫기"><PanelRightClose size={17}/></button></div></div>
+    <div className="context-header context-v3-sticky-header"><div><p className="eyebrow">사건 정보</p><h2>사건 맥락</h2>{visibleData && <small>사건 정보 {visibleData.source_revision}차 · {projectionLabel}</small>}</div><div><button type="button" className="context-open context-header-toggle" onClick={props.onToggle} aria-label="사건 맥락 닫기"><PanelRightClose size={17}/></button></div></div>
     {visibleData && <ContextQuickNav
       sections={normalizedSections} activeSection={activeSection} onNavigate={navigateToSection}
     />}
@@ -200,11 +232,11 @@ export const ContextPanelV3: React.FC<Props> = (props) => {
       {missingSections.length > 0 && <div className="context-edit-error context-panel-error"><AlertCircle size={14}/><p>서버 응답에서 누락된 영역을 빈 상태로 표시합니다: {missingSections.join(', ')}</p></div>}
       {visibleData && <Fragment key={props.caseItem.case_id}>
         <SummarySection section={getSection('SUMMARY')} caseRisk={props.caseItem.risk} caseStatus={props.caseItem.status} projectionStatus={visibleData.projection_status} editing={Boolean(summaryEdit)} onEdit={() => void startSummaryEdit()} onReset={() => void resetSummary()} editor={<div className="context-v3-summary-edit"><textarea value={summaryEdit?.text ?? ''} onChange={(event) => summaryEdit && setSummaryEdit({ ...summaryEdit, text: event.target.value })}/><div><button disabled={busy} onClick={() => setSummaryEdit(null)}>취소</button><button disabled={busy || !summaryEdit?.text.trim()} onClick={() => void saveSummary()}>표시 요약 저장</button></div></div>}/>
-        <ExposureSection section={getSection('EXPOSURE')} busy={busy} onReview={review} open={openSections.has('EXPOSURE')} onOpenChange={(next) => setSectionOpen('EXPOSURE', next)} onAdd={() => toggleFactForm('EXPOSURE')} addOpen={factDraft?.section === 'EXPOSURE'} createForm={factDraft?.section === 'EXPOSURE' ? factEditor : null}/>
-        <ImpersonationSection section={getSection('IMPERSONATION_CONTACT')} busy={busy} onReview={review} open={openSections.has('IMPERSONATION_CONTACT')} onOpenChange={(next) => setSectionOpen('IMPERSONATION_CONTACT', next)} onAdd={() => toggleFactForm('IMPERSONATION_CONTACT')} addOpen={factDraft?.section === 'IMPERSONATION_CONTACT'} createForm={factDraft?.section === 'IMPERSONATION_CONTACT' ? factEditor : null}/>
-        <FraudCircumstanceSection section={getSection('FRAUD_CIRCUMSTANCES')} busy={busy} onReview={review} open={openSections.has('FRAUD_CIRCUMSTANCES')} onOpenChange={(next) => setSectionOpen('FRAUD_CIRCUMSTANCES', next)} onAdd={() => toggleFactForm('FRAUD_CIRCUMSTANCES')} addOpen={factDraft?.section === 'FRAUD_CIRCUMSTANCES'} createForm={factDraft?.section === 'FRAUD_CIRCUMSTANCES' ? factEditor : null}/>
-        <FactVerificationSection section={getSection('FACT_VERIFICATION')} busy={busy} onReview={review} open={openSections.has('FACT_VERIFICATION')} onOpenChange={(next) => setSectionOpen('FACT_VERIFICATION', next)} onOpenVerification={openVerification} onCreateVerification={props.onCreateVerification}/>
-        <StaffActionSection section={getSection('STAFF_ACTIONS')} busy={busy} onWorkflow={workflow} open={openSections.has('STAFF_ACTIONS')} onOpenChange={(next) => setSectionOpen('STAFF_ACTIONS', next)} onAddTask={toggleTaskForm} addOpen={Boolean(taskDraft)} createForm={taskEditor}/>
+        <ExposureSection section={getSection('EXPOSURE')} busy={busy} onReview={review} onCorrect={correctFact} open={openSections.has('EXPOSURE')} onOpenChange={(next) => setSectionOpen('EXPOSURE', next)} onAdd={() => toggleFactForm('EXPOSURE')} addOpen={factDraft?.section === 'EXPOSURE'} createForm={factDraft?.section === 'EXPOSURE' ? factEditor : null}/>
+        <ImpersonationSection section={getSection('IMPERSONATION_CONTACT')} busy={busy} onReview={review} onCorrect={correctFact} open={openSections.has('IMPERSONATION_CONTACT')} onOpenChange={(next) => setSectionOpen('IMPERSONATION_CONTACT', next)} onAdd={() => toggleFactForm('IMPERSONATION_CONTACT')} addOpen={factDraft?.section === 'IMPERSONATION_CONTACT'} createForm={factDraft?.section === 'IMPERSONATION_CONTACT' ? factEditor : null}/>
+        <FraudCircumstanceSection section={getSection('FRAUD_CIRCUMSTANCES')} busy={busy} onReview={review} onCorrect={correctFact} open={openSections.has('FRAUD_CIRCUMSTANCES')} onOpenChange={(next) => setSectionOpen('FRAUD_CIRCUMSTANCES', next)} onAdd={() => toggleFactForm('FRAUD_CIRCUMSTANCES')} addOpen={factDraft?.section === 'FRAUD_CIRCUMSTANCES'} createForm={factDraft?.section === 'FRAUD_CIRCUMSTANCES' ? factEditor : null}/>
+        <FactVerificationSection section={getSection('FACT_VERIFICATION')} busy={busy} onReview={review} onCorrect={correctFact} open={openSections.has('FACT_VERIFICATION')} onOpenChange={(next) => setSectionOpen('FACT_VERIFICATION', next)} onOpenVerification={openVerification} onCreateVerification={props.onCreateVerification}/>
+        <StaffActionSection section={getSection('STAFF_ACTIONS')} busy={busy} onWorkflow={workflow} onEditTask={openTaskEdit} open={openSections.has('STAFF_ACTIONS')} onOpenChange={(next) => setSectionOpen('STAFF_ACTIONS', next)} onAddTask={toggleTaskForm} addOpen={Boolean(taskDraft)} createForm={taskEditor} editForm={taskEditForm}/>
         <CustomerShareSection section={getSection('CUSTOMER_SHARE')} open={openSections.has('CUSTOMER_SHARE')} onOpenChange={(next) => setSectionOpen('CUSTOMER_SHARE', next)} progressEditor={<CustomerProgressEditor caseId={props.caseItem.case_id} items={props.bundle.customer_progress ?? []} onSaved={props.onProgressSaved}/>}/>
       </Fragment>}
     </div>

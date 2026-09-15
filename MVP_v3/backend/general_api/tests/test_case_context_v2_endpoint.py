@@ -123,6 +123,25 @@ class CaseContextV2EndpointTest(unittest.TestCase):
         self.assertEqual(confirmed.json()["status"], "CONFIRMED")
         self.assertEqual(confirmed.json()["confirmed_by"], "owner")
 
+    def test_rejected_fact_can_be_restored_for_review_without_losing_history(self):
+        created = self.create_fact().json()
+        rejected = self.client.patch(
+            f"{self.base}/facts/{created['fact_id']}/review?actor_user_id=owner",
+            json={"expected_version": 1, "decision": "REJECT", "reason": "잘못된 정보"},
+        )
+        self.assertEqual(rejected.status_code, 200, rejected.text)
+        self.assertEqual(rejected.json()["status"], "REJECTED")
+
+        restored = self.client.patch(
+            f"{self.base}/facts/{created['fact_id']}/review?actor_user_id=owner",
+            json={"expected_version": 2, "decision": "RESTORE", "reason": "직원이 제외 항목 복구"},
+        )
+        self.assertEqual(restored.status_code, 200, restored.text)
+        self.assertEqual(restored.json()["status"], "PROPOSED")
+        self.assertIsNone(restored.json()["rejection_reason"])
+        self.assertEqual(restored.json()["version"], 3)
+        self.assertEqual(self.repository._context_v2_history[-1]["operation"], "RESTORE")
+
     def test_conflicting_proposal_can_supersede_without_overwriting_confirmed_history(self):
         first = self.create_fact().json()
         confirmed = self.client.patch(
@@ -148,6 +167,49 @@ class CaseContextV2EndpointTest(unittest.TestCase):
         self.assertEqual(stored_first.status, "SUPERSEDED")
         fact_history = [item for item in self.repository._context_v2_history if item["entity_type"] == "FACT"]
         self.assertTrue(any(item["operation"] == "SUPERSEDE" for item in fact_history))
+
+    def test_correction_proposal_remembers_replaced_fact_and_confirmation_supersedes_it(self):
+        first = self.create_fact().json()
+        self.client.patch(
+            f"{self.base}/facts/{first['fact_id']}/review?actor_user_id=owner",
+            json={"expected_version": 1, "decision": "CONFIRM", "reason": "최초 확인"},
+        )
+        correction = self.client.post(f"{self.base}/facts?actor_user_id=operator", json={
+            "client_request_id": "request-correction-001", "semantic_key": first["semantic_key"],
+            "display_label": first["display_label"], "value": {"status": "NO"},
+            "display_value": "이체하지 않음", "supersedes_fact_id": first["fact_id"],
+        }).json()
+        self.assertEqual(correction["supersedes_fact_id"], first["fact_id"])
+        confirmed = self.client.patch(
+            f"{self.base}/facts/{correction['fact_id']}/review?actor_user_id=owner",
+            json={"expected_version": 1, "decision": "CONFIRM", "reason": "정정 확인"},
+        )
+        self.assertEqual(confirmed.status_code, 200, confirmed.text)
+        self.assertEqual(self.repository._context_v2_facts[("VP-V2", first["fact_id"])].status, "SUPERSEDED")
+
+    def test_confirmed_fact_can_be_unconfirmed_or_invalidated_with_history(self):
+        first = self.create_fact().json()
+        confirmed = self.client.patch(
+            f"{self.base}/facts/{first['fact_id']}/review?actor_user_id=owner",
+            json={"expected_version": 1, "decision": "CONFIRM", "reason": "확인"},
+        ).json()
+        unconfirmed = self.client.patch(
+            f"{self.base}/facts/{first['fact_id']}/review?actor_user_id=owner",
+            json={"expected_version": confirmed["version"], "decision": "UNCONFIRM", "reason": "확정 취소"},
+        ).json()
+        self.assertEqual(unconfirmed["status"], "PROPOSED")
+        self.assertIsNone(unconfirmed["confirmed_by"])
+        reconfirmed = self.client.patch(
+            f"{self.base}/facts/{first['fact_id']}/review?actor_user_id=owner",
+            json={"expected_version": unconfirmed["version"], "decision": "CONFIRM", "reason": "재확인"},
+        ).json()
+        invalidated = self.client.patch(
+            f"{self.base}/facts/{first['fact_id']}/review?actor_user_id=owner",
+            json={"expected_version": reconfirmed["version"], "decision": "INVALIDATE", "reason": "오정보"},
+        ).json()
+        self.assertEqual(invalidated["status"], "REJECTED")
+        self.assertEqual(invalidated["rejection_reason"], "오정보")
+        self.assertEqual(self.repository._context_v2_history[-1]["operation"], "INVALIDATE")
 
     def test_idempotency_and_version_conflict_are_enforced(self):
         first = self.create_fact()

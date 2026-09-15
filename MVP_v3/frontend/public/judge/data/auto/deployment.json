@@ -31,7 +31,7 @@
   ],
   "evidence": [
     {
-      "reason": "Docker Compose services, ports, volumes and healthchecks",
+      "reason": "Docker Compose services, dependencies, ports and volumes",
       "source_path": "docker-compose.yml"
     },
     {
@@ -63,6 +63,7 @@
   },
   "services": [
     {
+      "dependencies": [],
       "dockerfile": null,
       "environment_variables": [
         "MYSQL_DATABASE",
@@ -74,18 +75,16 @@
       "healthcheck": true,
       "id": "mysql",
       "image": "mysql:8.4",
-      "ports": [
-        "mysql-data:/var/lib/mysql",
-        "./database/01_mysql_csr_schema.sql:/docker-entrypoint-initdb.d/01_mysql_csr_schema.sql:ro",
-        "./backend/migrations/014_case_context_v2_foundation.sql:/docker-entrypoint-initdb.d/02_case_context_v2_foundation.sql:ro"
-      ],
+      "ports": [],
       "volumes": [
-        "mysql-data:/var/lib/mysql",
+        "./backend/migrations/014_case_context_v2_foundation.sql:/docker-entrypoint-initdb.d/02_case_context_v2_foundation.sql:ro",
+        "./backend/migrations/015_case_number_sequence.sql:/docker-entrypoint-initdb.d/03_case_number_sequence.sql:ro",
         "./database/01_mysql_csr_schema.sql:/docker-entrypoint-initdb.d/01_mysql_csr_schema.sql:ro",
-        "./backend/migrations/014_case_context_v2_foundation.sql:/docker-entrypoint-initdb.d/02_case_context_v2_foundation.sql:ro"
+        "mysql-data:/var/lib/mysql"
       ]
     },
     {
+      "dependencies": [],
       "dockerfile": "Dockerfile.ai-api",
       "environment_variables": [
         "CASE_COPILOT_MAX_INPUT_CHARS",
@@ -120,6 +119,10 @@
       "volumes": []
     },
     {
+      "dependencies": [
+        "ai-api",
+        "mysql"
+      ],
       "dockerfile": "Dockerfile.general-api",
       "environment_variables": [
         "AI_API_BASE_URL",
@@ -142,14 +145,15 @@
       "healthcheck": false,
       "id": "general-api",
       "image": null,
-      "ports": [
-        "attachment-data:/app/data/uploads"
-      ],
+      "ports": [],
       "volumes": [
         "attachment-data:/app/data/uploads"
       ]
     },
     {
+      "dependencies": [
+        "general-api"
+      ],
       "dockerfile": "Dockerfile",
       "environment_variables": [],
       "healthcheck": false,
@@ -158,24 +162,6 @@
       "ports": [
         "${APP_PORT:-80}:80"
       ],
-      "volumes": []
-    },
-    {
-      "dockerfile": null,
-      "environment_variables": [],
-      "healthcheck": false,
-      "id": "mysql-data",
-      "image": null,
-      "ports": [],
-      "volumes": []
-    },
-    {
-      "dockerfile": null,
-      "environment_variables": [],
-      "healthcheck": false,
-      "id": "attachment-data",
-      "image": null,
-      "ports": [],
       "volumes": []
     }
   ]

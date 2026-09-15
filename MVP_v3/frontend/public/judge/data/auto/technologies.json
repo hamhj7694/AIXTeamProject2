@@ -48,22 +48,22 @@
       },
       {
         "interval_ms": 5000,
-        "line": 195,
+        "line": 204,
         "source_path": "frontend/src/pages/CaseRoomPage.tsx"
       },
       {
         "interval_ms": 30000,
-        "line": 196,
+        "line": 205,
         "source_path": "frontend/src/pages/CaseRoomPage.tsx"
       },
       {
         "interval_ms": 4000,
-        "line": 104,
+        "line": 103,
         "source_path": "frontend/src/pages/CustomerCaseRoomPage.tsx"
       },
       {
         "interval_ms": 30000,
-        "line": 105,
+        "line": 104,
         "source_path": "frontend/src/pages/CustomerCaseRoomPage.tsx"
       }
     ],

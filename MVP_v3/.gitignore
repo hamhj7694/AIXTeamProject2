@@ -1,2 +1,9 @@
 .runtime-logs/
 .venv/
+.pytest_cache/
+__pycache__/
+*.py[cod]
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/*.tsbuildinfo

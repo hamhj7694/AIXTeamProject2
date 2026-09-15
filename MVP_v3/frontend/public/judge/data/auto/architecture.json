@@ -40,7 +40,7 @@
       ],
       "evidence": [
         {
-          "reason": "Four-service runtime",
+          "reason": "Docker Compose services, dependencies, ports and volumes",
           "source_path": "docker-compose.yml"
         }
       ],
@@ -175,7 +175,7 @@
           "source_path": "backend/ai_api/app/domains/diagnosis/model_adapter.py"
         },
         {
-          "reason": "Artifact SHA-256 calculated without deserialization",
+          "reason": "Artifact file exists and SHA-256 was calculated without deserialization",
           "source_path": "backend/ai_api/models/WINDOW_LOGISTIC_DASHBOARD_EXPERIMENTAL_SAMPLE_v1.pkl"
         }
       ],
@@ -238,7 +238,8 @@
       ],
       "evidence": [
         {
-          "reason": "Production static root and API proxy",
+          "line": 5,
+          "reason": "Production static root, API proxy and SPA fallback",
           "source_path": "frontend/nginx.conf"
         }
       ],

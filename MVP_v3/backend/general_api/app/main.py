@@ -1721,9 +1721,9 @@ async def update_case_verification(case_id: str, verification_task_id: str, requ
             }, request.verified_by or "verification-reviewer", source_kind="OFFICIAL_VERIFICATION")
         return to_public_verification(updated)
     except CaseVersionConflictError as exc:
-        raise HTTPException(status_code=409, detail={"code": "VERSION_CONFLICT", "message": "Verification task has changed.", "current_version": exc.current_version}) from exc
+        raise HTTPException(status_code=409, detail={"code": "VERSION_CONFLICT", "message": "기관 확인 내용이 변경되었습니다. 최신 내용을 확인해 주세요.", "current_version": exc.current_version}) from exc
     except KeyError as exc:
-        raise HTTPException(status_code=404, detail={"code": "VERIFICATION_NOT_FOUND", "message": "Verification task not found."}) from exc
+        raise HTTPException(status_code=404, detail={"code": "VERIFICATION_NOT_FOUND", "message": "기관 확인 항목을 찾을 수 없습니다."}) from exc
 
 
 @app.get("/api/cases/{case_id}/verifications", response_model=list[PublicVerificationResponse])
@@ -1825,7 +1825,7 @@ def case_context_v2_repository():
 async def get_context_panel_v3(case_id: str, view: Literal["bank", "customer"] = "bank", actor_user_id: str | None = None) -> PublicContextPanelV3:
     case = await repository.get(case_id)
     if case is None:
-        raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case not found."})
+        raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "사건을 찾을 수 없습니다."})
     if view == "bank":
         if not actor_user_id:
             raise HTTPException(status_code=401, detail={"code": "ACTOR_REQUIRED", "message": "은행 화면 조회자 정보가 필요합니다."})

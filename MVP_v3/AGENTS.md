@@ -4,10 +4,10 @@
 
 ## 작업 시작 전
 
-1. `docs/03_IMPLEMENTATION_STATUS.md`를 가장 먼저 읽는다.
+1. `docs/CURRENT_STATUS.md`를 가장 먼저 읽는다.
 2. 요청과 관련된 `PRD.md`, `CUSTOMER_PRD.md`, 설계 문서를 확인한다.
 3. 문서만 믿지 말고 실제 Frontend·General API·AI API·DB 계약과 테스트를 대조한다.
-4. `docs/03_IMPLEMENTATION_STATUS.md`의 서비스 원칙과 P0 → P1 → P2 순서를 기본 우선순위로 삼는다.
+4. `docs/CURRENT_STATUS.md`의 서비스 원칙과 P0 → P1 → P2 순서를 기본 우선순위로 삼는다.
 
 ## 구현 원칙
 
@@ -25,5 +25,5 @@
 1. 변경 범위에 맞는 Backend 테스트와 Frontend typecheck/build를 실행한다.
 2. 필요한 기능은 실제 브라우저·MySQL 통합 검증까지 수행한다.
 3. 실제로 검증하지 않은 LLM, RAG, 인증, 외부 시스템 기능을 완료로 표시하지 않는다.
-4. `docs/03_IMPLEMENTATION_STATUS.md`의 완료 범위, 다음 작업, 검증 수치, 남은 경고를 갱신한다.
-5. 세부 체크 이력이 필요하면 `docs/02_DETAILED_TODO.md`도 함께 갱신한다.
+4. `docs/CURRENT_STATUS.md`의 완료 범위, 다음 작업, 검증 수치, 남은 경고를 갱신한다.
+5. 새 중간 보고서를 누적하지 말고 지속적으로 필요한 계약만 `docs/README.md`에 등록한다.

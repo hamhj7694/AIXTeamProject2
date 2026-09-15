@@ -12,8 +12,10 @@
     "009_case_attachments.sql",
     "009_mysql_parity_workflow.sql",
     "010_case_fact_question_link.sql",
+    "011_message_idempotency.sql",
     "012_context_items.sql",
-    "013_context_projection_revision.sql"
+    "013_context_projection_revision.sql",
+    "015_context_panel_v3.sql"
   ],
   "engine": "MySQL",
   "evidence": [
@@ -29,10 +31,10 @@
   "manifest_type": "database",
   "manifest_version": "1.0.0",
   "marker_gaps": [
-    "011_message_idempotency.sql",
-    "014_case_context_v2_foundation.sql"
+    "014_case_context_v2_foundation.sql",
+    "015_case_number_sequence.sql"
   ],
-  "migration_count": 15,
+  "migration_count": 17,
   "migrations": [
     {
       "created_tables": [
@@ -177,9 +179,27 @@
       "name": "014_case_context_v2_foundation.sql",
       "source_path": "backend/migrations/014_case_context_v2_foundation.sql",
       "trigger_count": 14
+    },
+    {
+      "created_tables": [
+        "case_number_sequences"
+      ],
+      "has_alter_table": false,
+      "name": "015_case_number_sequence.sql",
+      "source_path": "backend/migrations/015_case_number_sequence.sql",
+      "trigger_count": 0
+    },
+    {
+      "created_tables": [
+        "message_context_extractions"
+      ],
+      "has_alter_table": true,
+      "name": "015_context_panel_v3.sql",
+      "source_path": "backend/migrations/015_context_panel_v3.sql",
+      "trigger_count": 1
     }
   ],
-  "table_count": 29,
+  "table_count": 31,
   "tables": [
     "actions",
     "analysis_segments",
@@ -196,6 +216,7 @@
     "case_gaps",
     "case_inputs",
     "case_members",
+    "case_number_sequences",
     "case_presence",
     "case_report_sections",
     "case_reports",
@@ -204,6 +225,7 @@
     "context_features",
     "customer_questions",
     "message_attachments",
+    "message_context_extractions",
     "messages",
     "personal_notes",
     "schema_migrations",

@@ -1,0 +1,172 @@
+﻿대분류,실제 Feature/Field명,한국어 의미,값 형태,어떤 정보인가,Extractor 후보,ML 입력 여부,LLM 입력 여부,전달 규칙,자연어 생성 시 사용 예
+사칭 주체,imp_present,사칭 존재,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,O,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+사칭 주체,imp_event_count_raw_qc,사칭 이벤트 횟수 원시 품질확인,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+사칭 주체,imp_public,사칭 공공기관,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+사칭 주체,imp_financial,사칭 금융기관,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,O,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+사칭 주체,imp_family,사칭 패밀리,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+사칭 주체,imp_acquaintance,사칭 지인,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+사칭 주체,imp_telecom,사칭 통신사,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+사칭 주체,imp_delivery_logistics,사칭 배송 물류,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+사칭 주체,imp_other,사칭 기타,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,O,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+사칭 주체,imp_prosecution,사칭 검찰,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+사칭 주체,imp_police,사칭 경찰,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+사칭 주체,imp_fss,사칭 금융감독원,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+사칭 주체,imp_court,사칭 법원,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+사칭 주체,imp_post_office,사칭 우체국 기관,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+사칭 주체,imp_government_other,사칭 정부기관 기타,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+사칭 주체,imp_bank,사칭 은행,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,O,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+사칭 주체,imp_card_company,사칭 카드사 회사,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+사칭 주체,imp_loan_company,사칭 대출업체 회사,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+사칭 주체,imp_capital_company,사칭 캐피탈 회사,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+사칭 주체,imp_savings_bank,사칭 저축은행 은행,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+사칭 주체,imp_financial_other,사칭 금융기관 기타,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+사칭 주체,imp_family_subtype,사칭 패밀리 세부유형,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+사칭 주체,imp_acquaintance_subtype,사칭 지인 세부유형,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+사칭 주체,imp_telecom_subtype,사칭 통신사 세부유형,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+사칭 주체,imp_delivery_subtype,사칭 배송 세부유형,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+사칭 주체,imp_other_subtype,사칭 기타 세부유형,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+사칭 주체,imp_group_diversity_qc,사칭 그룹 유형 다양성 품질확인,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+사칭 주체,imp_subtype_diversity_qc,사칭 세부유형 유형 다양성 품질확인,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+심리 압박,strategy_authority_present,심리전략 권위 존재,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,O,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+심리 압박,strategy_authority_repeat,심리전략 권위 반복,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+심리 압박,strategy_authority_accel_tri,심리전략 권위 가속 삼각 누적,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+심리 압박,strategy_authority_count_qc,심리전략 권위 횟수 품질확인,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+공포,strategy_fear_present,심리전략 공포 존재,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,O,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+공포,strategy_fear_repeat,심리전략 공포 반복,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+공포,strategy_fear_accel_tri,심리전략 공포 가속 삼각 누적,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+공포,strategy_fear_count_qc,심리전략 공포 횟수 품질확인,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+긴급성,strategy_urgency_present,심리전략 긴급성 존재,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,O,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+긴급성,strategy_urgency_repeat,심리전략 긴급성 반복,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+긴급성,strategy_urgency_accel_tri,심리전략 긴급성 가속 삼각 누적,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+긴급성,strategy_urgency_count_qc,심리전략 긴급성 횟수 품질확인,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+심리 압박,strategy_legitimacy_present,심리전략 정당성 존재,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,O,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+심리 압박,strategy_legitimacy_repeat,심리전략 정당성 반복,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+심리 압박,strategy_legitimacy_accel_tri,심리전략 정당성 가속 삼각 누적,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+심리 압박,strategy_legitimacy_count_qc,심리전략 정당성 횟수 품질확인,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+심리 압박,strategy_info_extraction_present,심리전략 정보 탈취 존재,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,O,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+심리 압박,strategy_info_extraction_repeat,심리전략 정보 탈취 반복,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,O,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+심리 압박,strategy_info_extraction_accel_tri,심리전략 정보 탈취 가속 삼각 누적,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+심리 압박,strategy_info_extraction_count_qc,심리전략 정보 탈취 횟수 품질확인,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+고립 유도,strategy_isolation_present,심리전략 고립 존재,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+고립 유도,strategy_isolation_repeat,심리전략 고립 반복,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+고립 유도,strategy_isolation_accel_tri,심리전략 고립 가속 삼각 누적,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+고립 유도,strategy_isolation_count_qc,심리전략 고립 횟수 품질확인,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+심리 압박,strategy_money_request_strategy_present,심리전략 금전이동 요구 심리전략 존재,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+심리 압박,strategy_money_request_strategy_repeat,심리전략 금전이동 요구 심리전략 반복,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+심리 압박,strategy_money_request_strategy_accel_tri,심리전략 금전이동 요구 심리전략 가속 삼각 누적,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+심리 압박,strategy_money_request_strategy_count_qc,심리전략 금전이동 요구 심리전략 횟수 품질확인,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+심리 압박,strategy_benefit_present,심리전략 이익 존재,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+심리 압박,strategy_benefit_repeat,심리전략 이익 반복,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+심리 압박,strategy_benefit_accel_tri,심리전략 이익 가속 삼각 누적,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+심리 압박,strategy_benefit_count_qc,심리전략 이익 횟수 품질확인,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+심리 압박,strategy_resistance_handling_present,심리전략 저항 무마 존재,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+심리 압박,strategy_resistance_handling_repeat,심리전략 저항 무마 반복,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+심리 압박,strategy_resistance_handling_accel_tri,심리전략 저항 무마 가속 삼각 누적,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+심리 압박,strategy_resistance_handling_count_qc,심리전략 저항 무마 횟수 품질확인,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+심리 압박,strategy_behavior_control_present,심리전략 행동 통제 존재,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+심리 압박,strategy_behavior_control_repeat,심리전략 행동 통제 반복,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+심리 압박,strategy_behavior_control_accel_tri,심리전략 행동 통제 가속 삼각 누적,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+심리 압박,strategy_behavior_control_count_qc,심리전략 행동 통제 횟수 품질확인,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+심리 압박,strategy_diversity,심리전략 유형 다양성,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,O,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+심리 압박,strategy_event_count_qc,심리전략 이벤트 횟수 품질확인,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+개인정보·인증정보 요구,action_sensitive_info_present,행동요구 민감정보 정보 존재,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,O,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+개인정보·인증정보 요구,action_sensitive_info_repeat,행동요구 민감정보 정보 반복,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,O,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+개인정보·인증정보 요구,action_sensitive_info_accel_tri,행동요구 민감정보 정보 가속 삼각 누적,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+개인정보·인증정보 요구,action_sensitive_info_count_qc,행동요구 민감정보 정보 횟수 품질확인,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+개인정보·인증정보 요구,action_auth_info_present,행동요구 인증정보 정보 존재,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+개인정보·인증정보 요구,action_auth_info_repeat,행동요구 인증정보 정보 반복,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+개인정보·인증정보 요구,action_auth_info_accel_tri,행동요구 인증정보 정보 가속 삼각 누적,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+개인정보·인증정보 요구,action_auth_info_count_qc,행동요구 인증정보 정보 횟수 품질확인,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+행동 요구,action_device_control_present,행동요구 기기 통제 존재,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+행동 요구,action_device_control_repeat,행동요구 기기 통제 반복,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+행동 요구,action_device_control_accel_tri,행동요구 기기 통제 가속 삼각 누적,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+행동 요구,action_device_control_count_qc,행동요구 기기 통제 횟수 품질확인,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+행동 요구,action_contact_restriction_present,행동요구 접촉 제한 존재,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,O,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+행동 요구,action_contact_restriction_repeat,행동요구 접촉 제한 반복,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+행동 요구,action_contact_restriction_accel_tri,행동요구 접촉 제한 가속 삼각 누적,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+행동 요구,action_contact_restriction_count_qc,행동요구 접촉 제한 횟수 품질확인,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+행동 요구,action_card_handover_present,행동요구 카드사 전달 존재,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+행동 요구,action_card_handover_repeat,행동요구 카드사 전달 반복,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+행동 요구,action_card_handover_accel_tri,행동요구 카드사 전달 가속 삼각 누적,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+행동 요구,action_card_handover_count_qc,행동요구 카드사 전달 횟수 품질확인,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+행동 요구,action_account_rental_present,행동요구 계좌 대여 존재,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+행동 요구,action_account_rental_repeat,행동요구 계좌 대여 반복,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+행동 요구,action_account_rental_accel_tri,행동요구 계좌 대여 가속 삼각 누적,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+행동 요구,action_account_rental_count_qc,행동요구 계좌 대여 횟수 품질확인,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+행동 요구,action_other_high_risk_action_present,행동요구 기타 고위험 위험 행동요구 존재,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,O,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+행동 요구,action_other_high_risk_action_repeat,행동요구 기타 고위험 위험 행동요구 반복,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,O,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+행동 요구,action_other_high_risk_action_accel_tri,행동요구 기타 고위험 위험 행동요구 가속 삼각 누적,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+행동 요구,action_other_high_risk_action_count_qc,행동요구 기타 고위험 위험 행동요구 횟수 품질확인,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+행동 요구,action_diversity,행동요구 유형 다양성,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,O,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+행동 요구,action_event_count_qc,행동요구 이벤트 횟수 품질확인,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+금전 요구,money_movement_present,금전이동 이동 존재,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,O,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+금전 요구,money_movement_repeat,금전이동 이동 반복,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,O,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+금전 요구,money_movement_accel_tri,금전이동 이동 가속 삼각 누적,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+금전 요구,money_movement_count_qc,금전이동 이동 횟수 품질확인,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+금전 요구,money_transfer_present,금전이동 이체 존재,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,O,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+금전 요구,money_transfer_repeat,금전이동 이체 반복,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+금전 요구,money_transfer_accel_tri,금전이동 이체 가속 삼각 누적,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+금전 요구,money_transfer_count_qc,금전이동 이체 횟수 품질확인,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+금전 요구,money_withdrawal_present,금전이동 인출 존재,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+금전 요구,money_withdrawal_repeat,금전이동 인출 반복,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+금전 요구,money_withdrawal_accel_tri,금전이동 인출 가속 삼각 누적,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+금전 요구,money_withdrawal_count_qc,금전이동 인출 횟수 품질확인,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+금전 요구,money_cash_handoff_present,금전이동 현금 handoff 존재,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+금전 요구,money_cash_handoff_repeat,금전이동 현금 handoff 반복,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+금전 요구,money_cash_handoff_accel_tri,금전이동 현금 handoff 가속 삼각 누적,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+금전 요구,money_cash_handoff_count_qc,금전이동 현금 handoff 횟수 품질확인,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+금전 요구,money_fee_payment_present,금전이동 수수료 납부 존재,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+금전 요구,money_fee_payment_repeat,금전이동 수수료 납부 반복,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+금전 요구,money_fee_payment_accel_tri,금전이동 수수료 납부 가속 삼각 누적,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+금전 요구,money_fee_payment_count_qc,금전이동 수수료 납부 횟수 품질확인,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+금전 요구,money_repayment_present,금전이동 상환 존재,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+금전 요구,money_repayment_repeat,금전이동 상환 반복,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+금전 요구,money_repayment_accel_tri,금전이동 상환 가속 삼각 누적,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+금전 요구,money_repayment_count_qc,금전이동 상환 횟수 품질확인,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+금전 요구,money_other_money_movement_present,금전이동 기타 금전이동 이동 존재,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+금전 요구,money_other_money_movement_repeat,금전이동 기타 금전이동 이동 반복,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+금전 요구,money_other_money_movement_accel_tri,금전이동 기타 금전이동 이동 가속 삼각 누적,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+금전 요구,money_other_money_movement_count_qc,금전이동 기타 금전이동 이동 횟수 품질확인,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+금전 요구,money_action_diversity,금전이동 행동요구 유형 다양성,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,O,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+금전 요구,money_event_count_qc,금전이동 이벤트 횟수 품질확인,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+금액,amount_mentioned_present,amount 언급 존재,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+금액,amount_event_count_qc,amount 이벤트 횟수 품질확인,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+금액,amount_requested_present,amount 요구됨 존재,0/1,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+금액,amount_request_repeat,amount 요구 반복,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+금액,amount_request_accel_tri,amount 요구 가속 삼각 누적,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+금액,amount_request_count_qc,amount 요구 횟수 품질확인,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+금액,requested_amount_max,요구됨 amount 최대,number (KRW),Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+금액,requested_amount_sum,요구됨 amount 합계,number (KRW),Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+금액,requested_amount_log1p_max,요구됨 amount 로그변환 최대,number,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+금액,requested_amount_log1p_sum,요구됨 amount 로그변환 합계,number,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+금액,mentioned_amount_max_qc,언급 amount 최대 품질확인,number (KRW),Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+신호 집계,signal_family_count,신호 패밀리 횟수,integer,Window 이벤트에서 계산되는 숫자 후보 Feature,O,O,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+상호작용,ix_imp_authority,상호작용 사칭 권위,number,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+상호작용,ix_public_authority,상호작용 공공기관 권위,number,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+상호작용,ix_financial_authority,상호작용 금융기관 권위,number,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+상호작용,ix_authority_urgency,상호작용 권위 긴급성,number,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+상호작용,ix_fear_urgency,상호작용 공포 긴급성,number,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+상호작용,ix_info_sensitive,상호작용 정보 민감정보,number,Window 이벤트에서 계산되는 숫자 후보 Feature,O,O,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+상호작용,ix_info_auth,상호작용 정보 인증정보,number,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+상호작용,ix_moneystrategy_movement,상호작용 moneystrategy 이동,number,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+상호작용,ix_fear_money,상호작용 공포 금전이동,number,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+상호작용,ix_isolation_contact,상호작용 고립 접촉,number,Window 이벤트에서 계산되는 숫자 후보 Feature,O,X,X,ML 선택 목록이면 0도 전달,직접 사용 안 함
+LLM 구조화 Context,case_context_features.claimed_actor_types,사칭 주체 코드 목록,list[str],ROLE_ 관찰 중 부인되지 않은 코드,Context Extractor,X,O,활성 코드만,사칭 주체 코드 목록을 근거로 요약·주장·요구를 생성
+LLM 구조화 Context,case_context_features.claim_codes,범죄자 주장 코드 목록,list[str],CLAIM_ 관찰 중 부인되지 않은 코드,Context Extractor,X,O,활성 코드만,범죄자 주장 코드 목록을 근거로 요약·주장·요구를 생성
+LLM 구조화 Context,case_context_features.requested_action_codes,행동 요구 코드 목록,list[str],REQUEST_ 관찰 중 부인되지 않은 코드,Context Extractor,X,O,활성 코드만,행동 요구 코드 목록을 근거로 요약·주장·요구를 생성
+LLM 구조화 Context,case_context_features.manipulation_tactic_codes,심리 조작 코드 목록,list[str],TACTIC_ 관찰 중 부인되지 않은 코드,Context Extractor,X,O,활성 코드만,심리 조작 코드 목록을 근거로 요약·주장·요구를 생성
+LLM 구조화 Context,case_context_features.exposure_risk_codes,노출 위험 코드 목록,list[str],독립 Extractor 경로에서는 기본 빈 목록,Context Extractor,X,O,빈 목록도 전달,노출 위험 코드 목록을 근거로 요약·주장·요구를 생성
+LLM 구조화 Context,case_context_features.amount_values_krw,금액 목록(원),list[float],독립 Extractor 경로에서는 기본 빈 목록,Context Extractor,X,O,빈 목록도 전달,금액 목록(원)을 근거로 요약·주장·요구를 생성
+LLM 구조화 Context,case_context_features.chronology,턴별 관찰 연대기,list[str],T{turn}:{status}:{code},Context Extractor,X,O,활성·부인 관찰,턴별 관찰 연대기을 근거로 요약·주장·요구를 생성
+LLM 구조화 Context,case_context_features.unknown_fields,추가 확인 필요 필드,list[str],독립 Extractor 경로에서는 기본 빈 목록,Context Extractor,X,O,빈 목록도 전달,추가 확인 필요 필드을 근거로 요약·주장·요구를 생성
+LLM 구조화 Context,case_context_features.source,구조화 입력 출처,string,항상 STRUCTURED_CONTEXT_FEATURES_ONLY,Context Extractor,X,O,항상 전달,구조화 입력 출처을 근거로 요약·주장·요구를 생성
+LLM 구조화 Context,case_context_features.schema_version,Context 스키마 버전,string,현재 case_context_features.v2,Context Extractor,X,O,항상 전달,Context 스키마 버전을 근거로 요약·주장·요구를 생성
+LLM 구조화 Context,case_context_features.observations,상태·턴 포함 전체 관찰,list[object],"code, turn, status 객체",Context Extractor,X,O,활성·부인 관찰,상태·턴 포함 전체 관찰을 근거로 요약·주장·요구를 생성
+LLM 구조화 Context,case_context_features.extraction_method,추출 방식,string,현재 LLM_INDEPENDENT,Context Extractor,X,O,항상 전달,추출 방식을 근거로 요약·주장·요구를 생성
+LLM 이벤트 Context,signals[].signal,사용자 표시용 신호 라벨,string,event를 privacy-safe 라벨로 변환,Event Extractor,X,O,활성 이벤트만 전달,활성 신호의 맥락을 자연어로 요약
+LLM 이벤트 Context,signals[].event_family,이벤트 대분류,enum,IMPERSONATION 등 5개 family,Event Extractor,X,O,활성 이벤트만 전달,활성 신호의 맥락을 자연어로 요약
+LLM 이벤트 Context,signals[].subtype,이벤트 세부 유형,string|null,각 family subtype,Event Extractor,X,O,활성 이벤트만 전달,활성 신호의 맥락을 자연어로 요약
+LLM 이벤트 Context,signals[].impersonation_group,사칭 그룹,string|null,공공기관·금융기관·가족 등,Event Extractor,X,O,활성 이벤트만 전달,활성 신호의 맥락을 자연어로 요약
+LLM 이벤트 Context,signals[].turn,발견 턴,integer,원문 대신 턴 번호,Event Extractor,X,O,활성 이벤트만 전달,활성 신호의 맥락을 자연어로 요약
+LLM 이벤트 Context,signals[].amount_krw,이벤트 금액,number,금액이 있을 때만 조건부 전달,Event Extractor,X,O,활성 이벤트만 전달,활성 신호의 맥락을 자연어로 요약
+LLM 이벤트 Context,signals[].is_requested,요구 여부,boolean,값이 있을 때만 조건부 전달,Event Extractor,X,O,활성 이벤트만 전달,활성 신호의 맥락을 자연어로 요약

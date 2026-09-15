@@ -240,7 +240,7 @@ class PublicSuggestionReviewResultV2(CaseContextV2Model):
 
 class PublicReviewFactV2Request(CaseContextV2Model):
     expected_version: int = Field(ge=1)
-    decision: Literal["CONFIRM", "REJECT"]
+    decision: Literal["CONFIRM", "REJECT", "RESTORE", "UNCONFIRM", "INVALIDATE"]
     reason: str = Field(min_length=1, max_length=1000)
     supersedes_fact_id: str | None = Field(default=None, max_length=64)
 
@@ -288,6 +288,7 @@ class PublicCreateFactV2Request(CaseContextV2Model):
     display_value: str = Field(min_length=1, max_length=3000)
     evidence_refs: list[PublicEvidenceRef] = Field(default_factory=list)
     visibility: InternalVisibility = "BANK_INTERNAL"
+    supersedes_fact_id: str | None = Field(default=None, max_length=64)
 
 
 class PublicCreateGapV2Request(CaseContextV2Model):

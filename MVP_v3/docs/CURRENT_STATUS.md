@@ -1,6 +1,6 @@
 # MVP v3 현재 구현 상태
 
-최종 갱신: 2026-09-14
+최종 갱신: 2026-09-15
 역할: 개발·점검 작업을 시작할 때 확인하는 단일 최신 상태 문서
 
 > 실제 코드와 최신 테스트 결과가 이 문서보다 우선한다. 완료하지 않은 기능은 구현된 것처럼 표시하지 않는다.
@@ -53,6 +53,14 @@ React Frontend :5176
 - Context Quick Nav, 최근 사건 기록 Drawer, projection 오류·재시도 UI를 제공한다.
 
 ### 최근 Frontend 단순화
+- 좁은 화면에서도 은행 Context Panel 토글과 고객 화면 이동 링크를 유지한다. 고객 화면의 현재 진행 상황은 980px 이하에서 헤더 토글로 여는 off-canvas panel로 제공한다.
+- Context Quick Nav는 모든 아코디언을 펼쳐도 세로로 축소되지 않으며, 아래 Context 본문만 독립적으로 스크롤된다.
+- Context 본문 스크롤바가 생겨도 카드 폭이 흔들리지 않으며, 좁은 카드 헤더의 한글 제목은 글자 단위로 쪼개지지 않고 액션이 필요한 경우 다음 행으로 배치된다.
+- 사건 요약 카드가 좁아지면 편집 액션의 문구만 아이콘으로 축약해 제목·상태·액션을 한 행에 유지한다.
+- 사건 요약 편집기는 카드 헤더 아래 독립 블록으로 배치하며, textarea와 취소·저장 버튼에 Context V3 전용 스타일을 적용한다.
+- Context V3 본문은 좁은 패널에서 카드 가용 폭을 확보하도록 전용 스크롤 영역의 좌우 padding을 4px로 사용한다.
+- Context 근거 상세는 내부 enum·UUID·revision·일반 confidence 수치를 노출하지 않고 대화 기록·고객 답변·기관 확인 결과 등 직원용 근거 종류와 건수로 표시한다.
+- Context Panel은 `TRANSFERRED`·`PROPOSED` 같은 내부 상태와 미등록 source/status/event/actor 값을 직원 화면에 노출하지 않고 한국어 표시값 또는 안전한 일반 문구를 사용한다.
 
 - 은행 `고객 공유 결과` Section은 `CustomerProgressEditor`를 바로 표시한다. 중복 notice, lane, count, empty state를 제거했다.
 - Summary의 중복 `위험도 · 진행 상태` 문구는 구조화 Case metadata와 정확히 일치하는 deterministic item만 표시에서 제외한다. Case의 risk/status 데이터는 유지한다.
@@ -144,3 +152,10 @@ React Frontend :5176
 - 고객 진행 상태와 AI: `07_CUSTOMER_PROGRESS_AND_AI.md`
 - Case Context 데이터 계약: `09_CASE_CONTEXT_DATA_CONTRACT.md`
 - 사건 종결 보고서 계약: `10_FINAL_CASE_REPORT_CONTRACT.md`
+## 2026-09-15 Context 종료 업무 UI 보완
+
+- 담당자 조치 Section의 `완료·취소 업무 N건` 요약을 누르면 종료 업무 목록과 상태·결과를 확인할 수 있다.
+- 각 업무는 확인 후 기존 Backend 계약에 따라 대기(`TODO`) 업무로 복구할 수 있으며, 기존 변경 이력은 유지된다.
+- 피해·노출, 사칭·접촉 정보, 사기 정황, 사실·확인 현황은 제외된 정보가 있을 때 하단 기록 요약을 제공하며, 해당 정보를 기존 이력을 보존한 채 `PROPOSED` 상태로 복구할 수 있다.
+- 확정 Fact는 정정 제안을 만들거나 확정을 취소하거나 잘못된 정보로 제외할 수 있다. 정정안은 별도 `PROPOSED` Fact로 검토되며 확정될 때 기존 Fact를 `SUPERSEDED`로 보존한다.
+- 얼럿 UI 전환 전 현재 입력·확인·오류 동작 기준선은 `docs/17_CONTEXT_DIALOG_MIGRATION_BASELINE.md`에 고정했다. 이번 단계에서는 런타임 동작을 변경하지 않았다.
