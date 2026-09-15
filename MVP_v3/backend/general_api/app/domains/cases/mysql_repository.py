@@ -447,6 +447,13 @@ class MySqlCaseRepository:
             await cursor.execute("SELECT * FROM message_context_extractions WHERE status IN ('PENDING','FAILED') AND attempts<3 ORDER BY updated_at LIMIT %s", (limit,))
             return [dict(row) for row in await cursor.fetchall()]
 
+    async def get_message_extraction(self, case_id: str, message_id: str) -> dict[str, Any] | None:
+        pool = await self._get_pool()
+        async with pool.acquire() as connection, connection.cursor(aiomysql.DictCursor) as cursor:
+            await cursor.execute("SELECT * FROM message_context_extractions WHERE case_id=%s AND message_id=%s", (case_id, message_id))
+            row = await cursor.fetchone()
+            return dict(row) if row else None
+
     async def create_attachment(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]:
         pool = await self._get_pool()
         attachment_id = f"att-{uuid.uuid4().hex}"

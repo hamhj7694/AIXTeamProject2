@@ -11,10 +11,11 @@ class ChecklistStaffControlTest(unittest.TestCase):
     def setUp(self):
         self.repository = InMemoryCaseRepository()
         self.repository._records = [{"case_id": "VP-CHECKLIST"}]
+        self.repository._members = [{"case_id": "VP-CHECKLIST", "user_id": "staff", "role": "CASE_OWNER", "status": "ACTIVE"}]
         self.patch = patch.object(main, "repository", self.repository)
         self.patch.start()
         self.client = TestClient(main.app)
-        created = self.client.post("/api/cases/VP-CHECKLIST/actions", json={
+        created = self.client.post("/api/cases/VP-CHECKLIST/actions?actor_user_id=staff", json={
             "action_type": "AI_CHECKLIST:P0:transfer_status",
             "actor_type": "SYSTEM",
             "note": "실제 송금 여부 확인 필요",
@@ -28,7 +29,7 @@ class ChecklistStaffControlTest(unittest.TestCase):
         self.patch.stop()
 
     def change(self, **values):
-        return self.client.patch(self.url, json={"updated_by": "은행 담당자", **values})
+        return self.client.patch(self.url + "?actor_user_id=staff", json={"updated_by": "은행 담당자", **values})
 
     def test_staff_can_edit_exclude_restore_and_complete_ai_suggestion(self):
         edited = self.change(note="송금 시각과 금액을 고객에게 확인")

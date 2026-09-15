@@ -128,7 +128,7 @@ React Frontend :5176
 | 검증 | 최신 확인 결과 |
 |---|---|
 | LLM Context baseline | 합성 30건 재집계: Context Feature Recall 0.4145, Critical Fact Recall 0.3137, contradiction 7건, hallucination 76건 |
-| Context V3 General API | 전체 174개 통과 기록. 이번 정리 후 customer progress·panel·vertical slice 15개 재통과 |
+| Context V3 General API | Prework Step 1에서 MySQL integration 제외 `general_api/tests` 168개와 별도 ActorContext 테스트 9개 통과. 실제 MySQL integration은 미실행 |
 | Context V3 AI API | 전체 106개 통과 기록. 이번 정리 후 bounded Fact extraction 8개 재통과 |
 | Migration | 격리 MySQL에서 Context Panel V3 migration apply→rollback→reapply 통과 기록 |
 | Frontend | typecheck PASS, production build 1,462 modules PASS, `scripts/test-*.cjs` 13개 전부 PASS; 실제 브라우저 E2E는 미실행 |
@@ -173,3 +173,87 @@ React Frontend :5176
 
 - Added `docs/18_CHAT_CONTEXT_SYNC_AUDIT.md` documenting the current resource ownership, projection paths, refresh rules, and known central-card/Context-panel gaps.
 - No runtime or API contract changes were made in this audit step.
+## 2026-09-15 Common Resource contract draft
+
+- Added `docs/19_COMMON_RESOURCE_CONTRACT_DRAFT.md` covering shared identifiers, actor/source, visibility, versioning, lifecycle states, audit history, and central-card/Context-panel usage rules.
+- This is a contract draft only; no runtime, schema, or API changes were made.
+## 2026-09-15 Action contract migration plan
+
+- Added `docs/20_ACTION_CONTRACT_MIGRATION_PLAN.md` defining the compatible title/content split, DTO/repository/migration order, fallback behavior, and version/visibility rules.
+- No runtime, schema, or API code was changed in this planning step.
+## 2026-09-15 Activity Event contract
+
+- Added `docs/21_ACTIVITY_EVENT_CONTRACT.md` defining shared change events for central timeline and Context Panel projection, including actor, visibility, revision, idempotency, and failure rules.
+- No runtime, schema, or API implementation was changed in this design step.
+## 2026-09-15 Central timeline connection
+
+- Added `docs/23_CENTRAL_TIMELINE_CONNECTION.md` documenting current Timeline composition, Context Panel separation, Activity Event insertion point, and visibility/duplication rules.
+- No runtime or API changes were made in this design step.
+## 2026-09-15 Mutation synchronization rules
+
+- Added `docs/24_MUTATION_SYNC_RULES.md` documenting per-resource mutation APIs, central bundle refresh, Context projection refresh, and target consistency/visibility regression rules.
+- No runtime or API contract changes were made in this documentation step.
+## 2026-09-15 Actor·권한·Visibility 기준 (Step 8)
+
+- `docs/25_ACTOR_PERMISSION_VISIBILITY_RULES.md`에 Actor 분류, 역할별 operation 권한, 은행/고객 Visibility 규칙을 정리했다.
+- 은행 패널 mutation의 READ/WRITE/REVIEW 검사는 확인했으며, 고객 패널 조회의 인증·사건 소유권 검사가 후속 GAP으로 기록되었다.
+- 이번 단계에서는 인증·권한 runtime 동작과 API를 변경하지 않았다.
+
+## 2026-09-15 ActorContext 계약 초안 (Step 9)
+
+- `docs/26_ACTOR_CONTEXT_CONTRACT.md`에 공통 ActorContext 구조, 기존 actor_user_id 호환 계층, 권한·감사 필드를 정의했다.
+- 서버가 actor type/역할/권한을 계산하고 클라이언트 입력은 권한 판정에 사용하지 않는 원칙을 고정했다.
+- 고객 사건 소유권 검증과 서비스 토큰 기반 AI/System mutation은 다음 구현 단계로 남겼다.
+
+## 2026-09-15 ActorContext 공통 모듈 (Step 10)
+
+- `backend/general_api/app/core/actor_context.py`에 레거시 actor 필드 정규화, 역할별 권한 계산, AI/System 서비스 토큰 제한을 추가했다.
+- 기존 endpoint 시그니처는 유지하며, 라우트가 점진적으로 `ActorContext`를 사용하도록 순수 모듈로 분리했다.
+- `test_actor_context.py`에서 직원 역할·위조 actor_type·AI 서비스 토큰 규칙을 검증한다.
+- `main.py`의 `require_context_v2_member`가 기존 `actor_user_id`를 `ActorContext`로 정규화한 뒤 사건 멤버 역할로 권한을 판정하도록 연결했다.
+- 기존 API query 계약과 데모 권한 동작은 유지하며, 빈 actor는 명시적인 401 응답으로 처리한다.
+- 고객 패널 인증·소유권 검증과 세션 토큰 주입은 후속 단계에서 적용한다.
+- 고객 Context Panel 조회에도 `actor_user_id`를 요구하고 활성 `CUSTOMER` 사건 멤버만 고객 projection을 조회하도록 검증을 추가했다.
+- 중앙 타임라인의 action id와 우측 패널 `ACTION_RECORD` 투영, 고객 projection 비노출 규칙을 검증하는 `test_context_timeline_panel_sync.py`를 추가했다.
+- `docs/27_FINAL_ACTOR_MIGRATION_CHECKLIST.md`에 1~15단계의 최종 완료 범위와 세션 인증 도입 전환 조건을 정리했다.
+- 현재 MVP 환경에는 세션 인증 공급자가 없어 레거시 `actor_user_id`를 제거하지 않고 호환 상태로 마무리했다.
+
+## 2026-09-15 Prework Step 1 공통 Backend 기준선
+
+- `ActorContext`는 actor type만으로 사건 역할을 부여하지 않고, 활성 사건 멤버십에서 가져온 역할과 `case_id`를 결합해 READ/WRITE/REVIEW 권한을 계산한다.
+- 고객 Context Panel은 활성 `CUSTOMER` 멤버만 자신의 사건에서 조회할 수 있으며, 미등록·비활성·다른 고객과 AI/System actor는 거부한다.
+- `MVP_OPEN_PERMISSIONS=1`에서도 고객 멤버가 은행 Context Panel 또는 은행 전용 Context 표시 편집 경로로 우회하지 못하도록 경계를 고정했다.
+- legacy Action의 DB `action_id`가 생성·수정 event payload와 Context Panel `ACTION_RECORD.item_id`에서 동일하게 유지되고, 기본 visibility가 `BANK_INTERNAL`임을 회귀 테스트로 고정했다.
+- MySQL integration을 제외한 General API 테스트 168개, 별도 ActorContext 테스트 9개, Python AST parse 54개를 통과했다. 실제 MySQL과 브라우저 E2E는 이번 단계에서 실행하지 않았다.
+- 실제 세션 인증, 전체 endpoint ActorContext 전환, canonical resource 결정, AI runtime 및 seed/extraction 계약은 이번 단계 밖의 후속 작업이다.
+
+## 2026-09-15 Prework Step 3 Canonical Work Resource Contract
+
+- `docs/29_CANONICAL_WORK_RESOURCE_CONTRACT.md`에서 Legacy Action, V2 Task, AI Suggestion의 현재 저장·API·UI 관계를 대조하고 Model B(`Suggestion → Task`, Action 독립 실제 조치 기록)를 확정했다.
+- canonical source, lifecycle, human-in-control, timeline/history, STAFF_ACTIONS/customer projection, ABC ownership, migration/frontend impact를 기록했다.
+- 이번 단계에서는 문서만 추가했으며 Frontend/Backend/AI runtime, DB schema, migration, data movement, commit/push는 수행하지 않았다.
+
+## 2026-09-15 Prework Step 4 Actor Permission Visibility Contract
+
+- `docs/30_ACTOR_PERMISSION_VISIBILITY_CONTRACT.md`에 Actor type·Case role·operation 분리, Resource permission matrix, visibility matrix, AI/System 경계를 확정했다.
+- Context V2 Suggestion review는 `REVIEW` 권한을 사용하고, Legacy Action list/create/update는 명시적 actor와 active Case membership을 요구하도록 Backend 경계를 보완했다.
+- Frontend, DB migration, session/token IAM, AI runtime fallback은 변경하지 않았다.
+
+## 2026-09-15 Prework Step 4 Final Verification
+
+- `MVP_v3/.venv/Scripts/python.exe`의 pytest 9.1.1로 General API non-MySQL 회귀를 실행했다.
+- Legacy Action 및 Customer Progress 테스트 fixture에 현재 actor ownership 계약을 반영했다.
+- General API non-MySQL: 168 passed, 43 subtests passed. MySQL integration은 실행하지 않았다.
+- Step 4 permission 경계를 완화하지 않았으며 최종 판정은 `STEP_4_COMPLETE`, `READY_FOR_STEP_5`다.
+
+## 2026-09-15 Prework Step 2 Frontend Freeze Contract
+
+- `docs/28_FRONTEND_FREEZE_CONTRACT.md`에 현재 Frontend 구현을 기준으로 Context Panel 7개 Section, Fact/Verification/Question/Progress/Action 계약, visibility, version/revision, mutation reload 규칙을 고정했다.
+- 현재 Backend/AI와 일치하는 계약과 후속 Backend/AI Gap을 분리해 기록했다.
+- Action title 수정값이 legacy Action API로 전달되지 않는 `FRONTEND_FREEZE_EXCEPTION`을 확인했으며 이번 단계에서는 수정하지 않았다.
+- Frontend, Backend business logic, AI, DB migration은 이번 단계에서 변경하지 않았다.
+- Step 5에서 `contracts/public_api/ai_runtime.py` 공통 오류 코드·retryable 계약, AI readiness endpoint, General/AI 경계 테스트를 추가했다.
+- 외부 AI live 호출은 실행하지 않았고, provider 실패 시 가짜 Fact/Action/Task/Report를 생성하지 않는 정책을 `docs/31_AI_RUNTIME_ERROR_CONTRACT.md`에 기록했다.
+- Step 5 결과: `STEP_5_COMPLETE` / `READY_FOR_STEP_6`. AI runtime targeted tests와 AI API targeted tests는 통과했으며, 전체 General API 실행은 기존 MySQL schema test의 `case_number_sequences` 누락 1건으로 실패했다(이번 변경과 무관한 기존 환경/마이그레이션 상태).
+- Step 6에서 Diagnosis 구조화 신호의 최소 seed bridge, Message extraction 상태 조회 endpoint, deterministic extractor/provenance/visibility 계약을 추가했다.
+- `docs/32_CONTEXT_POPULATION_EXTRACTION_CONTRACT.md` 기준으로 `STEP_6_COMPLETE`·`PREWORK_COMPLETE_READY_FOR_PARALLEL`을 기록했다. 외부 AI 호출과 DB migration은 수행하지 않았다.

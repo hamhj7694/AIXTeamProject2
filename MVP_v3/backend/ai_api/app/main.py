@@ -12,6 +12,7 @@ from contracts.ai_internal.final_report import FinalCaseReportInput, FinalCaseRe
 from contracts.ai_internal.work_card import CaseWorkCardInput, CaseWorkCardOutput
 from contracts.ai_internal.context_fact_extraction import ContextFactExtractionInput, ContextFactExtractionOutput
 from contracts.diagnosis import AnalyzeTextRequest, DiagnosisResult
+from contracts.public_api.ai_runtime import runtime_error
 from request_trace import install_request_trace
 
 from .domains.case_support import CaseSnapshotAiAdapter
@@ -53,6 +54,17 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/readiness")
+async def readiness() -> dict[str, object]:
+    """Local readiness only; never spends a provider request or credits."""
+    import os
+    return {
+        "status": "ready" if os.getenv("OPENAI_API_KEY") else "degraded",
+        "provider_configured": bool(os.getenv("OPENAI_API_KEY")),
+        "provider_live_check": False,
+    }
+
+
 @app.post("/ai/analyze/text", response_model=DiagnosisResult)
 async def analyze_text(request: AnalyzeTextRequest) -> DiagnosisResult:
     try:
@@ -66,12 +78,16 @@ async def analyze_text(request: AnalyzeTextRequest) -> DiagnosisResult:
     except (AiProviderAuthenticationError, AuthenticationError) as exc:
         raise HTTPException(status_code=401, detail={"code": "OPENAI_AUTHENTICATION_FAILED", "message": str(exc)}) from exc
     except APIConnectionError as exc:
-        raise HTTPException(status_code=503, detail={
-            "code": "AI_PROVIDER_CONNECTION_FAILED",
-            "message": "AI 서버에서 외부 AI 서비스에 연결하지 못했습니다. 네트워크 연결을 확인해 주세요.",
-        }) from exc
+        raise HTTPException(status_code=503, detail=runtime_error(
+            "AI_PROVIDER_UNAVAILABLE",
+            "AI 서버에서 외부 AI 서비스에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+            retryable=True, legacy_code="AI_PROVIDER_CONNECTION_FAILED",
+        )) from exc
     except Exception as exc:
-        raise HTTPException(status_code=503, detail={"code": "AI_ANALYSIS_FAILED", "message": str(exc)}) from exc
+        raise HTTPException(status_code=503, detail=runtime_error(
+            "AI_SERVICE_UNAVAILABLE", "AI 분석을 완료하지 못했습니다. 다시 시도해 주세요.",
+            retryable=True, legacy_code="AI_ANALYSIS_FAILED",
+        )) from exc
 
 
 @app.post("/ai/case-support/snapshot", response_model=CaseSnapshotPresentation)
