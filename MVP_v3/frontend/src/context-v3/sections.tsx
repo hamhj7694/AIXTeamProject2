@@ -19,7 +19,7 @@ export const visibleSummaryItems = (section: ContextPanelSectionV3, risk: string
 
 export const SummarySection: React.FC<{ section: ContextPanelSectionV3; caseRisk: string; caseStatus: string; projectionStatus: string; editing: boolean; onEdit: () => void; onReset: () => void; editor: React.ReactNode }> = ({ section, caseRisk, caseStatus, projectionStatus, editing, onEdit, onReset, editor }) => <section id="context-section-summary" className="context-summary-area">
   <header><div><span>현재 사건 요약</span><StatusBadge status={projectionStatus}/></div>{!editing && <div className="context-summary-actions"><button type="button" onClick={onEdit} aria-label="표시 요약 편집" title="표시 요약 편집"><Pencil size={13}/><span>표시 요약 편집</span></button><MoreMenu label="요약 추가 작업"><button onClick={onReset}><RotateCcw size={13}/>자동 요약으로 복원</button></MoreMenu></div>}</header>
-  {editing ? editor : <div className="context-summary-copy">{visibleSummaryItems(section, caseRisk, caseStatus).map((item) => <p key={item.item_id}>{item.display_value}</p>)}</div>}
+  {editing ? editor : <div className="context-summary-copy">{visibleSummaryItems(section, caseRisk, caseStatus).filter((item, index, items) => !/^확정 사실 \d+건 · 검토 대기 \d+건$/.test(item.display_value) || items.findIndex((candidate) => candidate.display_value === item.display_value) === index).map((item) => <p key={item.item_id}>{item.display_value}</p>)}</div>}
   <footer><span>사건 정보 기준 자동 요약</span></footer>
 </section>;
 

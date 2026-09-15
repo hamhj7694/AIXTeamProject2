@@ -509,6 +509,14 @@ p, h1, h2, h3 { margin: 0; }
 
 /* Preserve the compact icon while giving Fact overflow actions a safer target. */
 .context-fact-row .context-more-trigger { width: 30px; height: 30px; }
+/* Context Panel readability scale: approximately +10%, scoped to the bank panel. */
+.context-panel-v3 .context-section-toggle strong { font-size: 13px; }
+.context-panel-v3 .context-section-toggle em { font-size: 10px; }
+.context-panel-v3 .context-domain-card strong, .context-panel-v3 .context-domain-card > p { font-size: 12px; }
+.context-panel-v3 .context-fact-main > p, .context-panel-v3 .context-fact-main > p strong { font-size: 11px; }
+.context-panel-v3 .context-fact-meta, .context-panel-v3 .context-evidence-toggle, .context-panel-v3 .context-evidence-empty { font-size: 10px; }
+.context-panel-v3 .context-section-description, .context-panel-v3 .context-empty { font-size: 11px; }
+.context-panel-v3 .context-summary-fact-metadata { margin-top: 8px; padding-top: 7px; border-top: 1px solid #dbe4f0; color: #667085; font-size: 11px; font-weight: 700; }
 .context-history-summary { color: #667085; font-size: 9px; font-weight: 800; }
 
 .context-archive-history {
@@ -594,3 +602,20 @@ p, h1, h2, h3 { margin: 0; }
 
 .context-archive-list article > footer button:hover:not(:disabled) { background: #dbe8ff; }
 .context-archive-list article > footer button:disabled { cursor: default; opacity: 0.5; }
+
+.context-dialog-backdrop { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 16px; background: rgba(16,24,40,.42); }
+.context-action-modal { width: min(100%, 420px); max-height: min(90vh, 620px); display: grid; grid-template-rows: auto minmax(0,1fr) auto; overflow: hidden; border: 1px solid #d0d5dd; border-radius: 12px; background: #fff; box-shadow: 0 18px 45px rgba(16,24,40,.2); }
+.context-action-modal > header, .context-action-modal > footer { display: flex; align-items: center; gap: 8px; padding: 14px 16px; }
+.context-action-modal > header { justify-content: space-between; border-bottom: 1px solid #eef1f4; }
+.context-action-modal > header h3 { color: #1d2939; font-size: 14px; font-weight: 900; }
+.context-action-modal > header p { margin-top: 4px; color: #667085; font-size: 10px; line-height: 1.5; }
+.context-dialog-close { display: grid; width: 28px; height: 28px; place-items: center; border: 1px solid #d0d5dd; border-radius: 7px; color: #667085; background: #fff; }
+.context-dialog-body { min-height: 0; overflow: auto; padding: 14px 16px; }
+.context-dialog-field { display: grid; gap: 6px; color: #344054; font-size: 10px; font-weight: 850; }
+.context-dialog-field textarea { box-sizing: border-box; width: 100%; min-height: 110px; resize: vertical; border: 1px solid #d0d5dd; border-radius: 8px; padding: 9px; color: #1d2939; background: #fff; font: inherit; font-size: 11px; line-height: 1.55; }
+.context-dialog-field textarea:focus { border-color: #2463eb; outline: 0; box-shadow: 0 0 0 3px #dbeafe; }
+.context-dialog-error { margin-top: 8px; }
+.context-action-modal > footer { justify-content: flex-end; border-top: 1px solid #eef1f4; }
+.context-dialog-cancel { border: 1px solid #d0d5dd; border-radius: 7px; padding: 7px 10px; color: #344054; background: #fff; font-size: 10px; font-weight: 850; }
+.context-dialog-confirm-copy { color: #475467; font-size: 11px; line-height: 1.6; }
+@media (max-width: 520px) { .context-dialog-backdrop { align-items: end; padding: 8px; }.context-action-modal { max-height: 86vh; border-radius: 12px 12px 8px 8px; } }

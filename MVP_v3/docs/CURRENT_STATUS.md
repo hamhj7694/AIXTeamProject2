@@ -159,3 +159,17 @@ React Frontend :5176
 - 피해·노출, 사칭·접촉 정보, 사기 정황, 사실·확인 현황은 제외된 정보가 있을 때 하단 기록 요약을 제공하며, 해당 정보를 기존 이력을 보존한 채 `PROPOSED` 상태로 복구할 수 있다.
 - 확정 Fact는 정정 제안을 만들거나 확정을 취소하거나 잘못된 정보로 제외할 수 있다. 정정안은 별도 `PROPOSED` Fact로 검토되며 확정될 때 기존 Fact를 `SUPERSEDED`로 보존한다.
 - 얼럿 UI 전환 전 현재 입력·확인·오류 동작 기준선은 `docs/17_CONTEXT_DIALOG_MIGRATION_BASELINE.md`에 고정했다. 이번 단계에서는 런타임 동작을 변경하지 않았다.
+## 2026-09-15 Context Dialog Migration Step 2
+
+- Added reusable Context Panel UI primitives: `ContextActionModal`, `ContextConfirmModal`, `ContextTextArea`, and `ContextInlineError`.
+- Existing `prompt`/`confirm`/`alert` runtime behavior remains unchanged until the next migration step.
+- Typecheck, production build, and Context V3 regression passed.
+## 2026-09-15 Context Dialog Migration Step 5
+
+- Safety verification completed for the reusable dialog foundation.
+- Frontend typecheck, production build, Context V3 regression, and diff check passed.
+- Runtime prompt/confirm/alert migration remains pending for the next implementation step.
+## 2026-09-15 Chat/Context synchronization audit
+
+- Added `docs/18_CHAT_CONTEXT_SYNC_AUDIT.md` documenting the current resource ownership, projection paths, refresh rules, and known central-card/Context-panel gaps.
+- No runtime or API contract changes were made in this audit step.

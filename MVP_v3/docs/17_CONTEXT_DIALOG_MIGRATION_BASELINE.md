@@ -61,3 +61,6 @@
 ## 다음 단계 진입 조건
 
 공통 `ContextActionModal`, `ContextTextArea`, `ContextConfirmModal`, `ContextInlineError`를 만든 뒤 업무 수정부터 단계적으로 교체한다. 이 문서의 표와 현재 테스트를 변경 전·후 회귀 비교 기준으로 사용한다.
+## Step 6 audit update (2026-09-15)
+
+The current inventory was rechecked. Context Panel still contains the listed legacy prompt/confirm/alert calls; the only non-Context-panel call found is personal-note deletion in `frontend/src/components/BankPersonalNotes.tsx`. No runtime migration was performed in this step.

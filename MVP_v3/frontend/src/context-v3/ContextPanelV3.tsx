@@ -1,10 +1,12 @@
 import React, { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertCircle, PanelRightClose, RefreshCw, X } from 'lucide-react';
 import type { CaseBundle, CustomerProgressItem, StoredCase, VerificationTask } from '../api/types';
+import { casesApi } from '../api/cases';
 import { CustomerProgressEditor } from '../components/CustomerProgressEditor';
 import { generateUuid } from '../uuid';
 import { createContextFact, cancelContextTask, completeContextTask, createContextTask, editContextTask, loadContextPanelV3, loadSummaryDisplayOverride, resetSummaryDisplayOverride, reviewContextFact, reviewContextSuggestion, saveSummaryDisplayOverride, updateContextTask } from './api';
 import { ContextQuickNav } from './ContextQuickNav';
+import { ContextActionModal, ContextTextArea } from './ContextActionModal';
 import { CustomerShareSection, ExposureSection, FactVerificationSection, FraudCircumstanceSection, ImpersonationSection, StaffActionSection, SummarySection, visibleSummaryItems, type WorkflowAction } from './sections';
 import type { ContextPanelItemV3, ContextPanelSectionV3, ContextPanelV3 as ContextPanelData } from './types';
 
@@ -14,6 +16,9 @@ interface Props {
 }
 
 type SectionId = ContextPanelSectionV3['section_id'];
+type ContextDialog =
+  | { kind: 'confirm'; title: string; description: string; primaryLabel: string; onConfirm: () => void }
+  | { kind: 'input'; title: string; description?: string; value: string; primaryLabel: string; onSubmit: (value: string) => void; error?: string };
 
 type FactOption = { key: string; label: string; section: 'EXPOSURE' | 'IMPERSONATION_CONTACT' | 'FRAUD_CIRCUMSTANCES'; kind: 'amount' | 'transfer-status' | 'exposure' | 'occurred' | 'name' | 'role' | 'text' };
 const factOptions: FactOption[] = [
@@ -66,6 +71,7 @@ export const ContextPanelV3: React.FC<Props> = (props) => {
   const [openSections, setOpenSections] = useState<Set<SectionId>>(() => new Set());
   const [activeSection, setActiveSection] = useState<SectionId | null>(null);
   const [scrollRequest, setScrollRequest] = useState<{ sectionId: SectionId; requestId: number } | null>(null);
+  const [contextDialog, setContextDialog] = useState<ContextDialog | null>(null);
 
   useEffect(() => {
     setData(null); setError(''); setSummaryEdit(null); setFactDraft(null); setFactFormError(''); setTaskDraft(null); setTaskFormError(''); setOpenSections(new Set()); setActiveSection(null); setScrollRequest(null); setLoading(true);
@@ -102,10 +108,14 @@ export const ContextPanelV3: React.FC<Props> = (props) => {
   const getSection = (id: ContextPanelSectionV3['section_id']) => normalizedSections.find((item) => item.section_id === id) ?? { section_id: id, title: id, items: [], groups: {} } as ContextPanelSectionV3;
   const missingSections = useMemo(() => visibleData ? expectedSections.filter(({ id }) => !visibleData.sections.some((item) => item.section_id === id)).map(({ title }) => title) : [], [visibleData]);
   const availableOptions = useMemo(() => factDraft ? factOptions.filter((item) => item.section === factDraft.section) : [], [factDraft]);
-  const review = async (item: ContextPanelItemV3, decision: 'CONFIRM' | 'REJECT' | 'RESTORE' | 'UNCONFIRM' | 'INVALIDATE') => {
-    if (decision === 'RESTORE' && !window.confirm('이 정보를 다시 확인 필요 상태로 복구할까요? 기존 제외 기록은 변경 이력에 남습니다.')) return;
-    if (decision === 'UNCONFIRM' && !window.confirm('확정을 취소하고 다시 확인 필요 상태로 변경할까요? 기존 확정 기록은 변경 이력에 남습니다.')) return;
-    const invalidationReason = decision === 'INVALIDATE' ? window.prompt('확정된 정보를 제외하는 사유를 입력하세요.')?.trim() ?? '' : '';
+  const review = async (item: ContextPanelItemV3, decision: 'CONFIRM' | 'REJECT' | 'RESTORE' | 'UNCONFIRM' | 'INVALIDATE', reasonOverride = '', confirmed = false) => {
+    if (decision === 'RESTORE' && !confirmed) { setContextDialog({ kind: 'confirm', title: '정보 복구', description: '이 정보를 다시 확인 필요 상태로 복구할까요?', primaryLabel: '복구', onConfirm: () => { setContextDialog(null); void review(item, decision, reasonOverride, true); } }); return; }
+    if (decision === 'UNCONFIRM' && !confirmed) { setContextDialog({ kind: 'confirm', title: '확정 취소', description: '확정을 취소하고 다시 확인 필요 상태로 변경할까요?', primaryLabel: '확정 취소', onConfirm: () => { setContextDialog(null); void review(item, decision, reasonOverride, true); } }); return; }
+    if (decision === 'INVALIDATE' && !reasonOverride) {
+      setContextDialog({ kind: 'input', title: '확정 정보 제외', description: '제외 사유를 입력하세요.', value: '', primaryLabel: '제외 처리', onSubmit: (value) => { setContextDialog(null); void review(item, decision, value.trim()); } });
+      return;
+    }
+    const invalidationReason = reasonOverride.trim();
     if (decision === 'INVALIDATE' && !invalidationReason) return;
     setBusy(true); setError('');
     try {
@@ -114,16 +124,18 @@ export const ContextPanelV3: React.FC<Props> = (props) => {
     } catch (reason) { setError(reason instanceof Error ? reason.message : '검토 결과를 저장하지 못했습니다. 최신 상태를 다시 불러와 주세요.'); }
     finally { setBusy(false); }
   };
-  const workflow = async (item: ContextPanelItemV3, action: WorkflowAction) => {
+  const workflow = async (item: ContextPanelItemV3, action: WorkflowAction, confirmed = false, noteOverride = '') => {
     let note = '';
-    if (action === 'RESTORE' && !window.confirm('이 업무를 대기 상태로 복구할까요? 기존 완료 결과 또는 취소 사유는 변경 이력에 남고 현재 업무에서는 초기화됩니다.')) return;
-    if (action === 'DISMISS') note = window.prompt('제안 제외 사유를 입력하세요.')?.trim() ?? '';
-    if (action === 'COMPLETE') note = window.prompt('완료한 업무 결과를 입력하세요.')?.trim() ?? '';
-    if (action === 'CANCEL') note = window.prompt('업무 취소 사유를 입력하세요.')?.trim() ?? '';
+    if (action === 'RESTORE' && !confirmed) { setContextDialog({ kind: 'confirm', title: '업무 복구', description: '이 업무를 대기 상태로 복구할까요?', primaryLabel: '복구', onConfirm: () => { setContextDialog(null); void workflow(item, action, true); } }); return; }
+    if (['DISMISS', 'COMPLETE', 'CANCEL'].includes(action) && !noteOverride) { const title = action === 'DISMISS' ? '제안 제외 사유' : action === 'COMPLETE' ? '업무 완료 결과' : '업무 취소 사유'; setContextDialog({ kind: 'input', title, description: '내용을 입력하세요.', value: '', primaryLabel: '저장', onSubmit: (value) => { setContextDialog(null); void workflow(item, action, confirmed, value.trim()); } }); return; }
+    if (noteOverride) note = noteOverride.trim();
     if (['DISMISS', 'COMPLETE', 'CANCEL'].includes(action) && !note) return;
     setBusy(true); setError('');
     try {
-      if (action === 'ACCEPT' || action === 'DISMISS') await reviewContextSuggestion(props.caseItem.case_id, item.item_id, item.version, action, note);
+      if (item.source_kind === 'ACTION_RECORD') {
+        const status = action === 'COMPLETE' ? 'COMPLETED' : action === 'CANCEL' ? 'CANCELLED' : action === 'RESTORE' ? 'REQUESTED' : undefined;
+        if (status) await casesApi.updateAction(props.caseItem.case_id, item.item_id, { status, note: note || undefined });
+      } else if (action === 'ACCEPT' || action === 'DISMISS') await reviewContextSuggestion(props.caseItem.case_id, item.item_id, item.version, action, note);
       else if (action === 'START') await updateContextTask(props.caseItem.case_id, item.item_id, item.version, 'IN_PROGRESS');
       else if (action === 'RESTORE') await updateContextTask(props.caseItem.case_id, item.item_id, item.version, 'TODO');
       else if (action === 'BLOCK') await updateContextTask(props.caseItem.case_id, item.item_id, item.version, 'BLOCKED');
@@ -139,19 +151,20 @@ export const ContextPanelV3: React.FC<Props> = (props) => {
     const resumesVerification = ['PENDING', 'ON_HOLD', 'FAILED'].includes(task.status);
     props.onEditVerification(resumesVerification ? { ...task, status: 'IN_PROGRESS' } : task);
   };
+  const correctFactValue = async (item: ContextPanelItemV3, option: FactOption, rawValue: string) => {
+    const nextValue = rawValue.trim();
+    if (!nextValue || nextValue === item.display_value) return;
+    if (option.kind === 'amount' && (!Number.isFinite(Number(nextValue.replace(/,/g, ''))) || Number(nextValue.replace(/,/g, '')) < 0)) { setError('금액은 0 이상의 숫자로 입력해 주세요.'); return; }
+    if (option.kind === 'transfer-status' && !['TRANSFERRED', 'NOT_TRANSFERRED', 'UNKNOWN'].includes(nextValue)) { setError('이체 여부는 TRANSFERRED, NOT_TRANSFERRED, UNKNOWN 중 하나로 입력해 주세요.'); return; }
+    setBusy(true); setError('');
+    try { await createContextFact(props.caseItem.case_id, { client_request_id: generateUuid(), semantic_key: option.key, display_label: option.label, value: typedValue(option, nextValue), display_value: option.kind === 'amount' ? `${Number(nextValue.replace(/,/g, '')).toLocaleString('ko-KR')}원` : nextValue, visibility: item.visibility === 'CUSTOMER_SHARED' ? 'CUSTOMER_SHARED' : 'BANK_INTERNAL', supersedes_fact_id: item.item_id }); await load(); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : '정정 정보를 저장하지 못했습니다.'); }
+    finally { setBusy(false); }
+  };
   const correctFact = async (item: ContextPanelItemV3) => {
     const option = factOptions.find((candidate) => candidate.key === item.semantic_key);
-    if (!option) { window.alert('이 정보 종류는 아직 안전한 정정 입력 형식을 지원하지 않습니다. 확정 취소 후 새 정보를 등록해 주세요.'); return; }
-    const nextValue = window.prompt(`${item.label}의 정정할 값을 입력하세요.`, item.display_value)?.trim() ?? '';
-    if (!nextValue || nextValue === item.display_value) return;
-    if (option.kind === 'amount' && (!Number.isFinite(Number(nextValue.replace(/,/g, ''))) || Number(nextValue.replace(/,/g, '')) < 0)) { window.alert('금액은 0 이상의 숫자로 입력해 주세요.'); return; }
-    if (option.kind === 'transfer-status' && !['TRANSFERRED', 'NOT_TRANSFERRED', 'UNKNOWN'].includes(nextValue)) { window.alert('이체 여부는 TRANSFERRED, NOT_TRANSFERRED, UNKNOWN 중 하나로 입력해 주세요.'); return; }
-    setBusy(true); setError('');
-    try {
-      await createContextFact(props.caseItem.case_id, { client_request_id: generateUuid(), semantic_key: option.key, display_label: option.label, value: typedValue(option, nextValue), display_value: option.kind === 'amount' ? `${Number(nextValue.replace(/,/g, '')).toLocaleString('ko-KR')}원` : nextValue, visibility: item.visibility === 'CUSTOMER_SHARED' ? 'CUSTOMER_SHARED' : 'BANK_INTERNAL', supersedes_fact_id: item.item_id });
-      await load();
-    } catch (reason) { setError(reason instanceof Error ? reason.message : '정정 제안을 저장하지 못했습니다.'); }
-    finally { setBusy(false); }
+    if (!option) { setError('이 정보 종류는 아직 안전한 정정 입력 형식을 지원하지 않습니다. 확정 취소 후 새 정보를 등록해 주세요.'); return; }
+    setContextDialog({ kind: 'input', title: `${item.label} 정정`, description: '정정할 값을 입력하세요.', value: item.display_value, primaryLabel: '정정 저장', onSubmit: (value) => { setContextDialog(null); void correctFactValue(item, option, value); } });
   };
   const toggleTaskForm = () => {
     setFactDraft(null); setFactFormError(''); setTaskFormError('');
@@ -174,7 +187,7 @@ export const ContextPanelV3: React.FC<Props> = (props) => {
     const title = taskEdit.title.trim(); const description = taskEdit.description.trim();
     if (!title || !description) { setTaskFormError('업무 제목과 내용을 모두 입력해 주세요.'); return; }
     setBusy(true); setTaskFormError('');
-    try { await editContextTask(props.caseItem.case_id, taskEdit.item.item_id, taskEdit.item.version, title, description); setTaskEdit(null); await load(); }
+    try { if (taskEdit.item.source_kind === 'ACTION_RECORD') await casesApi.updateAction(props.caseItem.case_id, taskEdit.item.item_id, { note: description }); else await editContextTask(props.caseItem.case_id, taskEdit.item.item_id, taskEdit.item.version, title, description); setTaskEdit(null); await load(); }
     catch (reason) { setTaskFormError(reason instanceof Error ? reason.message : '업무를 수정하지 못했습니다.'); }
     finally { setBusy(false); }
   };
@@ -240,5 +253,6 @@ export const ContextPanelV3: React.FC<Props> = (props) => {
         <CustomerShareSection section={getSection('CUSTOMER_SHARE')} open={openSections.has('CUSTOMER_SHARE')} onOpenChange={(next) => setSectionOpen('CUSTOMER_SHARE', next)} progressEditor={<CustomerProgressEditor caseId={props.caseItem.case_id} items={props.bundle.customer_progress ?? []} onSaved={props.onProgressSaved}/>}/>
       </Fragment>}
     </div>
+    {contextDialog && <ContextActionModal title={contextDialog.title} description={contextDialog.description} primaryLabel={contextDialog.primaryLabel} onPrimary={() => contextDialog.kind === 'confirm' ? contextDialog.onConfirm() : contextDialog.onSubmit(contextDialog.value)} onClose={() => setContextDialog(null)}>{contextDialog.kind === 'input' ? <ContextTextArea label="내용" value={contextDialog.value} onChange={(event) => setContextDialog({ ...contextDialog, value: event.target.value })} /> : <p>{contextDialog.description}</p>}</ContextActionModal>}
   </aside>;
 };

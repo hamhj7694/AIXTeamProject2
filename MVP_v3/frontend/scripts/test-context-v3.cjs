@@ -18,6 +18,7 @@ const room = source('src/pages/CaseRoomPage.tsx');
 const question = source('src/customer/CustomerQuestionCard.tsx');
 const progressEditorSource = source('src/components/CustomerProgressEditor.tsx');
 const styles = source('src/styles.css');
+const contextDialog = source('src/context-v3/ContextActionModal.tsx');
 
 for (const section of ['SUMMARY', 'EXPOSURE', 'IMPERSONATION_CONTACT', 'FRAUD_CIRCUMSTANCES', 'FACT_VERIFICATION', 'STAFF_ACTIONS', 'CUSTOMER_SHARE']) {
   assert.match(types, new RegExp(`\\b${section}\\b`));
@@ -78,6 +79,13 @@ assert.match(styles, /\.context-fact-main > p \{[^}]*padding-top: 4px;[^}]*font-
 assert.match(styles, /\.context-fact-meta \{[^}]*grid-template-columns: max-content max-content minmax\(0,1fr\)/);
 assert.match(styles, /\.context-compact-evidence-panel \{[^}]*grid-column: 1 \/ -1/);
 assert.match(styles, /\.context-fact-row \.context-more-trigger \{[^}]*width: 30px;[^}]*height: 30px/);
+assert.match(contextDialog, /export const ContextActionModal/);
+assert.match(contextDialog, /export const ContextConfirmModal/);
+assert.match(contextDialog, /export const ContextTextArea/);
+assert.match(contextDialog, /export const ContextInlineError/);
+assert.match(contextDialog, /role="dialog"/);
+assert.match(styles, /\.context-action-modal/);
+assert.match(styles, /\.context-dialog-field/);
 assert.match(styles, /\.context-more-trigger \{[^}]*display: inline-flex;[^}]*align-items: center;[^}]*justify-content: center;[^}]*padding: 0;[^}]*line-height: 0/);
 assert.match(styles, /\.context-more-trigger svg \{[^}]*display: block;[^}]*width: 15px;[^}]*height: 15px/);
 assert.match(styles, /\.context-section-toggle strong \{[^}]*font-size: 12px/);

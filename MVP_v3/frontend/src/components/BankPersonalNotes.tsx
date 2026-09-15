@@ -19,6 +19,7 @@ export const BankPersonalNotes: React.FC<Props> = ({ caseId, open, onClose }) =>
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
 
