@@ -206,7 +206,8 @@ class InMemoryCaseContextV2Repository:
                 display_label=data["display_label"], value=data["value"], display_value=data["display_value"],
                 source_kind=source_kind, status="PROPOSED", evidence_refs=data.get("evidence_refs", []),
                 confidence=data.get("confidence"),
-                visibility=data.get("visibility", "BANK_INTERNAL"), version=1, created_at=now, updated_at=now,
+                visibility=data.get("visibility", "BANK_INTERNAL"), supersedes_fact_id=data.get("supersedes_fact_id"),
+                version=1, created_at=now, updated_at=now,
             )
             self.cases._context_v2_facts[(case_id, item.fact_id)] = item
             self.cases._context_v2_requests[(case_id, "FACT", data.get("client_request_id"))] = item.fact_id
@@ -221,12 +222,36 @@ class InMemoryCaseContextV2Repository:
                 raise KeyError(fact_id)
             if before.version != expected_version:
                 raise ContextV2ConflictError(before.version)
+            if decision == "RESTORE":
+                if before.status != "REJECTED":
+                    raise ContextV2TransitionError("제외된 사실만 확인 필요 상태로 복구할 수 있습니다.")
+                now = _now()
+                after = before.model_copy(update={"status": "PROPOSED", "rejection_reason": None, "version": before.version + 1, "updated_at": now})
+                self.cases._context_v2_facts[(case_id, fact_id)] = after
+                self._history(case_id, "FACT", fact_id, after.version, decision, actor, before, after)
+                self._touch(case_id, now)
+                return deepcopy(after)
+            if decision in {"UNCONFIRM", "INVALIDATE"}:
+                if before.status != "CONFIRMED":
+                    raise ContextV2TransitionError("확정된 사실만 확정을 취소하거나 제외할 수 있습니다.")
+                now = _now()
+                update = {"confirmed_by": None, "confirmed_at": None, "version": before.version + 1, "updated_at": now}
+                if decision == "UNCONFIRM":
+                    update.update(status="PROPOSED", rejection_reason=None)
+                else:
+                    update.update(status="REJECTED", rejection_reason=reason)
+                after = before.model_copy(update=update)
+                self.cases._context_v2_facts[(case_id, fact_id)] = after
+                self._history(case_id, "FACT", fact_id, after.version, decision, actor, before, after)
+                self._touch(case_id, now)
+                return deepcopy(after)
             if before.status != "PROPOSED":
                 raise ContextV2TransitionError("검토 대기 중인 사실만 확정하거나 제외할 수 있습니다.")
             now = _now()
             update = {"version": before.version + 1, "updated_at": now}
             if decision == "CONFIRM":
                 update.update(status="CONFIRMED", confirmed_by=actor, confirmed_at=now)
+                supersedes_fact_id = supersedes_fact_id or before.supersedes_fact_id
                 if supersedes_fact_id:
                     old = self.cases._context_v2_facts.get((case_id, supersedes_fact_id))
                     if old is None or old.status != "CONFIRMED" or old.semantic_key != before.semantic_key:
@@ -517,11 +542,11 @@ class MySqlCaseContextV2Repository:
                     await cursor.execute(
                         """INSERT INTO case_context_facts_v2
                         (fact_id,case_id,semantic_key,display_label,value_json,display_value,source_kind,status,confidence,
-                         evidence_refs_json,visibility,client_request_id,version,created_at,updated_at)
-                        VALUES (%s,%s,%s,%s,%s,%s,%s,'PROPOSED',%s,%s,%s,%s,1,%s,%s)""",
+                         evidence_refs_json,visibility,supersedes_fact_id,client_request_id,version,created_at,updated_at)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,'PROPOSED',%s,%s,%s,%s,%s,1,%s,%s)""",
                         (fact_id, case_id, data["semantic_key"], data["display_label"], _json_dump(data["value"]),
                          data["display_value"], source_kind, data.get("confidence"), _json_dump(data.get("evidence_refs", [])),
-                         data.get("visibility", "BANK_INTERNAL"), data["client_request_id"], _naive_utc(now), _naive_utc(now)),
+                         data.get("visibility", "BANK_INTERNAL"), data.get("supersedes_fact_id"), data["client_request_id"], _naive_utc(now), _naive_utc(now)),
                     )
                     row = await self._one(cursor, "case_context_facts_v2", "fact_id", case_id, fact_id)
                     item = _fact(row)
@@ -544,10 +569,32 @@ class MySqlCaseContextV2Repository:
                     before = _fact(row)
                     if before.version != expected_version:
                         raise ContextV2ConflictError(before.version)
+                    if decision == "RESTORE":
+                        if before.status != "REJECTED":
+                            raise ContextV2TransitionError("제외된 사실만 확인 필요 상태로 복구할 수 있습니다.")
+                        now = _now()
+                        await cursor.execute("UPDATE case_context_facts_v2 SET status='PROPOSED',rejection_reason=NULL,version=version+1,updated_at=%s WHERE fact_id=%s", (_naive_utc(now), fact_id))
+                        after = _fact(await self._one(cursor, "case_context_facts_v2", "fact_id", case_id, fact_id))
+                        await self._history(cursor, case_id, "FACT", fact_id, after.version, decision, actor, before, after)
+                        await connection.commit()
+                        return after
+                    if decision in {"UNCONFIRM", "INVALIDATE"}:
+                        if before.status != "CONFIRMED":
+                            raise ContextV2TransitionError("확정된 사실만 확정을 취소하거나 제외할 수 있습니다.")
+                        now = _now()
+                        if decision == "UNCONFIRM":
+                            await cursor.execute("UPDATE case_context_facts_v2 SET status='PROPOSED',confirmed_by=NULL,confirmed_at=NULL,rejection_reason=NULL,version=version+1,updated_at=%s WHERE fact_id=%s", (_naive_utc(now), fact_id))
+                        else:
+                            await cursor.execute("UPDATE case_context_facts_v2 SET status='REJECTED',confirmed_by=NULL,confirmed_at=NULL,rejection_reason=%s,version=version+1,updated_at=%s WHERE fact_id=%s", (reason, _naive_utc(now), fact_id))
+                        after = _fact(await self._one(cursor, "case_context_facts_v2", "fact_id", case_id, fact_id))
+                        await self._history(cursor, case_id, "FACT", fact_id, after.version, decision, actor, before, after)
+                        await connection.commit()
+                        return after
                     if before.status != "PROPOSED":
                         raise ContextV2TransitionError("검토 대기 중인 사실만 확정하거나 제외할 수 있습니다.")
                     now = _now()
                     if decision == "CONFIRM":
+                        supersedes_fact_id = supersedes_fact_id or before.supersedes_fact_id
                         if supersedes_fact_id:
                             old_row = await self._one(cursor, "case_context_facts_v2", "fact_id", case_id, supersedes_fact_id, lock=True)
                             old = _fact(old_row) if old_row else None

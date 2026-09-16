@@ -16,10 +16,14 @@ class CustomerProgressTest(unittest.TestCase):
         self.repo._records.append({'case_id': 'VP-TEST', 'mode': 'RECOVERY', 'status': 'CLOSED',
             'risk': 'HIGH', 'initial_brief': '', 'created_at': '2026-09-05T10:00:00+09:00',
             'updated_at': '2026-09-05T10:00:00+09:00'})
+        self.repo._members.append({'case_id': 'VP-TEST', 'user_id': 'customer', 'role': 'CUSTOMER', 'status': 'ACTIVE'})
         self.patch = patch.object(main, 'repository', self.repo)
         self.patch.start()
         self.client = TestClient(main.app)
         self.url = '/api/cases/VP-TEST/customer-progress'
+
+    def endpoint(self, suffix=''):
+        return self.url + suffix + '?actor_user_id=customer'
 
     def tearDown(self):
         self.client.close()
@@ -32,18 +36,18 @@ class CustomerProgressTest(unittest.TestCase):
 
     def test_guide_click_and_closed_case_do_not_complete_procedures(self):
         self.repo._messages.append({'content': '피해구제 단계 확인: 구제 신청'})
-        response = self.client.get(self.url)
+        response = self.client.get(self.endpoint())
         self.assertEqual(response.status_code, 200)
         self.assertTrue(all(item['status'] == 'UNKNOWN' for item in response.json()))
 
     def test_completion_requires_evidence(self):
         for fields in ({'reference': ''}, {'confirmed_at': None}, {'summary': '  '}):
-            response = self.client.put(self.url + '/RELIEF', json=self.values(**fields))
+            response = self.client.put(self.endpoint('/RELIEF'), json=self.values(**fields))
             self.assertEqual(response.status_code, 422)
         self.assertEqual(self.repo._actions, [])
 
     def test_only_recorded_step_completes_and_customer_bank_agree(self):
-        response = self.client.put(self.url + '/RELIEF', json=self.values())
+        response = self.client.put(self.endpoint('/RELIEF'), json=self.values())
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual([item['step'] for item in response.json() if item['status'] == 'COMPLETED'], ['RELIEF'])
         for view in ('customer', 'bank'):
@@ -54,7 +58,7 @@ class CustomerProgressTest(unittest.TestCase):
 
     def test_duplicate_confirmation_requests_are_idempotent_and_do_not_complete(self):
         for _ in range(3):
-            response = self.client.post(self.url + '/RELIEF/confirmation-request')
+            response = self.client.post(self.endpoint('/RELIEF/confirmation-request'))
             self.assertEqual(response.status_code, 200)
         relief = response.json()[-1]
         self.assertEqual(relief['status'], 'UNKNOWN')
@@ -72,31 +76,31 @@ class CustomerProgressTest(unittest.TestCase):
         self.assertTrue(any('담당자에게 전달했습니다' in item['content'] for item in customer_bundle['recent_messages']))
         self.assertFalse(any('담당자 결과 등록이 필요합니다' in item['content'] for item in customer_bundle['recent_messages']))
         self.assertTrue(any('담당자 결과 등록이 필요합니다' in item['content'] for item in bank_bundle['recent_messages']))
-        response = self.client.put(self.url + '/RELIEF', json=self.values(1))
+        response = self.client.put(self.endpoint('/RELIEF'), json=self.values(1))
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.json()[-1]['confirmation_requested'])
 
     def test_stale_edit_conflicts_and_latest_correction_wins(self):
-        self.client.put(self.url + '/RELIEF', json=self.values())
-        self.assertEqual(self.client.put(self.url + '/RELIEF', json=self.values()).status_code, 409)
-        response = self.client.put(self.url + '/RELIEF', json=self.values(1, status='UNKNOWN', summary='접수 여부 재확인 중', reference='', confirmed_at=None))
+        self.client.put(self.endpoint('/RELIEF'), json=self.values())
+        self.assertEqual(self.client.put(self.endpoint('/RELIEF'), json=self.values()).status_code, 409)
+        response = self.client.put(self.endpoint('/RELIEF'), json=self.values(1, status='UNKNOWN', summary='접수 여부 재확인 중', reference='', confirmed_at=None))
         self.assertEqual(response.json()[-1]['status'], 'UNKNOWN')
         self.assertEqual(len(self.repo._actions), 2)
 
     def test_generic_action_api_cannot_forge_or_change_progress(self):
         response = self.client.post('/api/cases/VP-TEST/actions', json={'action_type': PREFIX + 'RELIEF', 'note': '{}', 'actor_type': 'BANK_STAFF'})
         self.assertEqual(response.status_code, 422)
-        self.client.put(self.url + '/RELIEF', json=self.values())
+        self.client.put(self.endpoint('/RELIEF'), json=self.values())
         action_id = self.repo._actions[0]['action_id']
         response = self.client.patch('/api/cases/VP-TEST/actions/' + action_id, json={'status': 'COMPLETED', 'updated_by': '직원'})
         self.assertEqual(response.status_code, 422)
 
     def test_unknown_case_and_step_are_rejected(self):
-        self.assertEqual(self.client.get('/api/cases/missing/customer-progress').status_code, 404)
-        self.assertEqual(self.client.post(self.url + '/FAKE/confirmation-request').status_code, 422)
+        self.assertEqual(self.client.get('/api/cases/missing/customer-progress?actor_user_id=customer').status_code, 404)
+        self.assertEqual(self.client.post(self.endpoint('/FAKE/confirmation-request')).status_code, 422)
 
     def test_ai_reads_same_progress_and_only_published_information(self):
-        self.client.put(self.url + '/RELIEF', json=self.values())
+        self.client.put(self.endpoint('/RELIEF'), json=self.values())
         self.repo._verifications.extend([
             {'case_id': 'VP-TEST', 'target': '공개 기관', 'status': 'COMPLETED', 'customer_visible': True, 'result_summary': '공개 확인 결과'},
             {'case_id': 'VP-TEST', 'target': '비공개 기관', 'status': 'COMPLETED', 'customer_visible': False, 'result_summary': '내부 비밀'},

@@ -384,6 +384,7 @@ INSERT IGNORE INTO schema_migrations (migration_name) VALUES
     ('009_case_attachments.sql'),
     ('009_mysql_parity_workflow.sql'),
     ('010_case_fact_question_link.sql'),
+    ('011_message_idempotency.sql'),
     ('012_context_items.sql'),
     ('013_context_projection_revision.sql');
 INSERT IGNORE INTO schema_migrations (migration_name) VALUES ('015_context_panel_v3.sql');

@@ -1,12 +1,12 @@
-# 사건 맥락 v2 목표 데이터 계약
+# 사건 맥락 v2 기반 데이터 계약
 
-상태: **저장소·General API·은행 업무 화면 연결 완료 / 실제 LLM projection과 기존 사실 자동 이관은 후속**
+상태: **Context Panel V3 저장소·General API·은행 화면 연결 완료 / 전체 legacy backfill과 실제 LLM 종합 projection은 후속**
 작성일: 2026-09-05
 적용 대상: 은행 화면의 사건 맥락, AI 질문·업무 추천, 직원 업무 처리, 향후 LLM/RAG 입력·출력
 
 승인 상태: **제품 책임자 승인 완료·단계적 구현 허용 (2026-09-05)**
 
-> 이 문서는 목표 계약을 정의한다. Public/AI Pydantic 계약, 개발 DB migration과 저장·조회 API, 은행 화면의 분리된 업무 처리를 연결했다. 기존 사실·판단 기록은 호환 조회로 보존하고 기존 AI 체크리스트는 명시적 검토 시 새 업무로 채택한다. 기존 고객 답변 자동 이관과 실제 LLM projection은 아직 후속 단계다.
+> 이 문서는 Context V3가 사용하는 v2 기반 저장 계약을 정의한다. Public/AI Pydantic 계약, migration, 저장·조회 API와 은행 화면이 연결됐다. 신규 CHAT과 구조화 고객 답변은 Fact proposal로 연결하지만 기존 전체 기록의 자동 이관과 실제 LLM 종합 projection은 아직 후속 단계다.
 
 ## 1. 해결하려는 문제
 

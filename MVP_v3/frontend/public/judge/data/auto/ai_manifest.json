@@ -8,7 +8,7 @@
         "source_path": "backend/ai_api/app/domains/diagnosis/model_adapter.py"
       },
       {
-        "reason": "Artifact SHA-256 calculated without deserialization",
+        "reason": "Artifact file exists and SHA-256 was calculated without deserialization",
         "source_path": "backend/ai_api/models/WINDOW_LOGISTIC_DASHBOARD_EXPERIMENTAL_SAMPLE_v1.pkl"
       }
     ],
@@ -51,7 +51,7 @@
       "endpoint": "/ai/case-copilot/replies",
       "evidence": [
         {
-          "line": 86,
+          "line": 100,
           "reason": "POST /ai/case-copilot/replies",
           "source_path": "backend/ai_api/app/main.py"
         },
@@ -76,7 +76,7 @@
       "endpoint": "/ai/case-support/snapshot",
       "evidence": [
         {
-          "line": 74,
+          "line": 77,
           "reason": "POST /ai/case-support/snapshot",
           "source_path": "backend/ai_api/app/main.py"
         },
@@ -101,7 +101,7 @@
       "endpoint": "/api/cases/{case_id}/ai/customer-replies",
       "evidence": [
         {
-          "line": 1380,
+          "line": 1540,
           "reason": "POST /api/cases/{case_id}/ai/customer-replies",
           "source_path": "backend/general_api/app/main.py"
         },
@@ -126,13 +126,9 @@
       "endpoint": "/ai/features/extract",
       "evidence": [
         {
-          "line": 129,
+          "line": 143,
           "reason": "POST /ai/features/extract",
           "source_path": "backend/ai_api/app/main.py"
-        },
-        {
-          "reason": "STRUCTURED_FEATURE implementation",
-          "source_path": "backend/ai_api/app/domains/diagnosis/features.py"
         }
       ],
       "human_review": false,
@@ -141,7 +137,6 @@
       "method": "POST",
       "name": "Feature Extraction",
       "source_paths": [
-        "backend/ai_api/app/domains/diagnosis/features.py",
         "backend/ai_api/app/main.py"
       ],
       "status": "CURRENT"
@@ -151,7 +146,7 @@
       "endpoint": "/ai/final-reports/generate",
       "evidence": [
         {
-          "line": 112,
+          "line": 126,
           "reason": "POST /ai/final-reports/generate",
           "source_path": "backend/ai_api/app/main.py"
         },
@@ -176,7 +171,7 @@
       "endpoint": "/ai/risk/predict",
       "evidence": [
         {
-          "line": 134,
+          "line": 148,
           "reason": "POST /ai/risk/predict",
           "source_path": "backend/ai_api/app/main.py"
         },
@@ -201,13 +196,9 @@
       "endpoint": "/ai/analyze/text",
       "evidence": [
         {
-          "line": 53,
+          "line": 56,
           "reason": "POST /ai/analyze/text",
           "source_path": "backend/ai_api/app/main.py"
-        },
-        {
-          "reason": "LLM_ML_HYBRID implementation",
-          "source_path": "backend/ai_api/app/domains/diagnosis/service.py"
         }
       ],
       "human_review": true,
@@ -216,7 +207,6 @@
       "method": "POST",
       "name": "Text Analysis",
       "source_paths": [
-        "backend/ai_api/app/domains/diagnosis/service.py",
         "backend/ai_api/app/main.py"
       ],
       "status": "CURRENT"
@@ -226,13 +216,9 @@
       "endpoint": "/ai/analyze/windows",
       "evidence": [
         {
-          "line": 124,
+          "line": 138,
           "reason": "POST /ai/analyze/windows",
           "source_path": "backend/ai_api/app/main.py"
-        },
-        {
-          "reason": "LLM_ML_HYBRID implementation",
-          "source_path": "backend/ai_api/app/domains/diagnosis/window_ai/service.py"
         }
       ],
       "human_review": false,
@@ -241,7 +227,6 @@
       "method": "POST",
       "name": "Window Analysis",
       "source_paths": [
-        "backend/ai_api/app/domains/diagnosis/window_ai/service.py",
         "backend/ai_api/app/main.py"
       ],
       "status": "CURRENT"
@@ -251,7 +236,7 @@
       "endpoint": "/ai/work-cards/generate",
       "evidence": [
         {
-          "line": 100,
+          "line": 114,
           "reason": "POST /ai/work-cards/generate",
           "source_path": "backend/ai_api/app/main.py"
         },

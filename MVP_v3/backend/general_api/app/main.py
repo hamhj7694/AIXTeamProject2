@@ -23,6 +23,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, model_validator
 from .domains.cases.context_items import Section, ContextItemChange, ContextItemConflictError
 from .domains.cases.context_item_repository import ContextItemRepository, InMemoryContextItemRepository
+from .core.actor_context import normalize_legacy_actor
 
 from contracts.diagnosis import AnalyzeTextRequest
 from contracts.ai_internal.context_fact_extraction import ContextFactExtractionInput, ContextFactExtractionMessage, ExistingContextFact
@@ -577,6 +578,19 @@ async def seed_initial_context_facts(case_id: str) -> None:
     transfer = case.get("victim_transfer_status")
     if transfer in {"YES", "NO"}:
         candidates.append(("transfer.actual.status", "실제 이체 여부", {"status": "TRANSFERRED" if transfer == "YES" else "NOT_TRANSFERRED"}, "이체함" if transfer == "YES" else "이체하지 않음"))
+    features = diagnosis.get("features") or {}
+    requested_amount = int(float(features.get("requested_amount_max") or 0))
+    if requested_amount > 0:
+        candidates.append(("transfer.requested.amount", "요구 금액", {"amount_krw": requested_amount, "currency": "KRW"}, f"{requested_amount:,}원 요구"))
+    actual_amount = int(float(case.get("actual_loss_amount_krw") or 0))
+    if transfer == "YES" and actual_amount > 0:
+        candidates.append(("transfer.actual.amount", "실제 이체 금액", {"amount_krw": actual_amount, "currency": "KRW"}, f"{actual_amount:,}원 이체"))
+    context_features = diagnosis.get("case_context_features") or {}
+    requested_codes = {str(code).upper() for code in context_features.get("requested_action_codes", [])}
+    if any("AUTH" in code or "OTP" in code for code in requested_codes):
+        candidates.append(("exposure.authentication_information", "인증정보 노출", {"status": "REQUESTED"}, "인증정보 제공 요구"))
+    if any("REMOTE" in code for code in requested_codes):
+        candidates.append(("device.remote_control_app", "원격제어 앱", {"status": "REQUESTED"}, "원격제어 앱 설치 요구"))
     for key, label, values in (
         ("offender.incident_claim", "상대방 주장", context.get("offender_claims", [])),
         ("circumstance.demand", "상대방 요구", context.get("offender_demands", [])),
@@ -1721,9 +1735,9 @@ async def update_case_verification(case_id: str, verification_task_id: str, requ
             }, request.verified_by or "verification-reviewer", source_kind="OFFICIAL_VERIFICATION")
         return to_public_verification(updated)
     except CaseVersionConflictError as exc:
-        raise HTTPException(status_code=409, detail={"code": "VERSION_CONFLICT", "message": "Verification task has changed.", "current_version": exc.current_version}) from exc
+        raise HTTPException(status_code=409, detail={"code": "VERSION_CONFLICT", "message": "기관 확인 내용이 변경되었습니다. 최신 내용을 확인해 주세요.", "current_version": exc.current_version}) from exc
     except KeyError as exc:
-        raise HTTPException(status_code=404, detail={"code": "VERIFICATION_NOT_FOUND", "message": "Verification task not found."}) from exc
+        raise HTTPException(status_code=404, detail={"code": "VERIFICATION_NOT_FOUND", "message": "기관 확인 항목을 찾을 수 없습니다."}) from exc
 
 
 @app.get("/api/cases/{case_id}/verifications", response_model=list[PublicVerificationResponse])
@@ -1742,14 +1756,15 @@ async def create_case_verification(case_id: str, request: PublicCreateVerificati
 
 
 @app.get("/api/cases/{case_id}/actions", response_model=list[PublicActionResponse])
-async def list_case_actions(case_id: str) -> list[PublicActionResponse]:
-    await require_case(case_id)
+async def list_case_actions(case_id: str, actor_user_id: str | None = None) -> list[PublicActionResponse]:
+    await require_context_v2_member(case_id, actor_user_id or "", access="READ")
     return [to_public_action(record) for record in await repository.list_actions(case_id) if not record['action_type'].startswith(PROGRESS_PREFIX)]
 
 
 @app.get('/api/cases/{case_id}/customer-progress', response_model=list[CustomerProgressItem])
-async def get_customer_progress(case_id: str):
+async def get_customer_progress(case_id: str, actor_user_id: str | None = None):
     await require_case(case_id)
+    await require_customer_context_member(case_id, actor_user_id)
     return build_customer_progress(await repository.list_actions(case_id))
 
 
@@ -1806,13 +1821,8 @@ async def read_runtime_config() -> dict:
 
 
 async def bank_display_repository(case_id, actor_user_id):
-    store = await context_display_repository(case_id)
-    if mvp_context_permissions(actor_user_id):
-        return store
-    members = await repository.list_members(case_id)
-    if not any(item.get('user_id') == actor_user_id and item.get('role') in {'CASE_OWNER', 'CHAT_OPERATOR', 'REVIEWER'} for item in members):
-        raise HTTPException(status_code=403, detail='이 사건의 담당자 또는 검토자만 맥락을 편집할 수 있습니다.')
-    return store
+    await require_context_v2_member(case_id, actor_user_id, access="WRITE")
+    return await context_display_repository(case_id)
 
 
 def case_context_v2_repository():
@@ -1825,11 +1835,13 @@ def case_context_v2_repository():
 async def get_context_panel_v3(case_id: str, view: Literal["bank", "customer"] = "bank", actor_user_id: str | None = None) -> PublicContextPanelV3:
     case = await repository.get(case_id)
     if case is None:
-        raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case not found."})
+        raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "사건을 찾을 수 없습니다."})
     if view == "bank":
         if not actor_user_id:
             raise HTTPException(status_code=401, detail={"code": "ACTOR_REQUIRED", "message": "은행 화면 조회자 정보가 필요합니다."})
         await require_context_v2_member(case_id, actor_user_id, access="READ")
+    else:
+        await require_customer_context_member(case_id, actor_user_id)
     display_store = await context_display_repository(case_id)
     resources, verifications, actions, messages, display_items = await asyncio.gather(
         case_context_v2_repository().list_resources(case_id), repository.list_verifications(case_id),
@@ -1839,6 +1851,19 @@ async def get_context_panel_v3(case_id: str, view: Literal["bank", "customer"] =
         case, resources, view=view, verifications=verifications, actions=actions,
         messages=messages, progress=build_customer_progress(actions), display_items=display_items,
     )
+
+
+@app.get("/api/cases/{case_id}/context-extractions/{message_id}")
+async def get_context_extraction_status(case_id: str, message_id: str, actor_user_id: str) -> dict:
+    """Return extraction state without exposing message content."""
+    await require_context_v2_member(case_id, actor_user_id, access="READ")
+    job = await repository.get_message_extraction(case_id, message_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail={"code": "EXTRACTION_NOT_FOUND", "message": "추출 작업을 찾을 수 없습니다."})
+    return {key: job.get(key) for key in (
+        "extraction_id", "case_id", "message_id", "status", "attempts", "last_error",
+        "model_version", "prompt_version", "created_at", "updated_at", "completed_at",
+    )}
 
 
 async def read_staff_context_records(case_id: str):
@@ -1853,25 +1878,49 @@ async def require_context_v2_member(
     *,
     access: Literal["READ", "WRITE", "REVIEW"] = "WRITE",
 ):
-    """Temporary MVP authorization until authenticated sessions replace actor_user_id."""
+    """Authorize a context operation through the shared ActorContext adapter."""
     await require_case(case_id)
-    if mvp_context_permissions(actor_user_id):
-        return case_context_v2_repository()
-    allowed_roles = {
-        "READ": {"CASE_OWNER", "CHAT_OPERATOR", "REVIEWER", "VIEWER"},
-        "WRITE": {"CASE_OWNER", "CHAT_OPERATOR", "REVIEWER"},
-        "REVIEW": {"CASE_OWNER", "REVIEWER"},
-    }[access]
+    try:
+        actor = normalize_legacy_actor(actor_user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=401, detail={"code": "ACTOR_REQUIRED", "message": "actor_user_id is required"}) from exc
     members = await repository.list_members(case_id)
-    if not any(
-        item.get("user_id") == actor_user_id
-        and item.get("status", "ACTIVE") == "ACTIVE"
-        and item.get("role") in allowed_roles
-        for item in members
-    ):
+    member = next((item for item in members if item.get("user_id") == actor.actor_id and item.get("status", "ACTIVE") == "ACTIVE"), None)
+    if actor.actor_type != "BANK_STAFF" or (member and member.get("role") == "CUSTOMER"):
         raise HTTPException(
             status_code=403,
             detail={"code": "CASE_CONTEXT_FORBIDDEN", "message": "이 사건에 대한 작업 권한이 없습니다."},
+        )
+    if mvp_context_permissions(actor.actor_id):
+        return case_context_v2_repository()
+    scoped_actor = actor.for_case(case_id, str(member.get("role"))) if member else actor
+    if not scoped_actor.can(access):
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "CASE_CONTEXT_FORBIDDEN", "message": "이 사건에 대한 작업 권한이 없습니다."},
+        )
+    return case_context_v2_repository()
+
+
+async def require_customer_context_member(case_id: str, actor_user_id: str | None):
+    if not actor_user_id:
+        raise HTTPException(status_code=401, detail={"code": "ACTOR_REQUIRED", "message": "customer actor_user_id is required"})
+    actor = normalize_legacy_actor(actor_user_id, actor_type="CUSTOMER")
+    members = await repository.list_members(case_id)
+    member = next(
+        (
+            item for item in members
+            if item.get("user_id") == actor.actor_id
+            and item.get("status", "ACTIVE") == "ACTIVE"
+            and item.get("role") == "CUSTOMER"
+        ),
+        None,
+    )
+    scoped_actor = actor.for_case(case_id, "CUSTOMER") if member else actor
+    if actor.actor_type != "CUSTOMER" or not scoped_actor.can("READ"):
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "CUSTOMER_CASE_FORBIDDEN", "message": "customer is not a member of this case"},
         )
     return case_context_v2_repository()
 
@@ -2014,6 +2063,9 @@ async def update_legacy_context_gap(case_id: str, action_id: str, actor_user_id:
 
 @app.patch("/api/cases/{case_id}/context-v2/suggestions/{suggestion_id}/review", response_model=PublicSuggestionReviewResultV2)
 async def review_case_context_v2_suggestion(case_id: str, suggestion_id: str, actor_user_id: str, request: PublicReviewSuggestionV2Request) -> PublicSuggestionReviewResultV2:
+    # Chat operators are the staffed AI-suggestion review queue role; this
+    # operation uses their existing WRITE permission without granting them
+    # Fact review or final Task completion authority.
     store = await require_context_v2_member(case_id, actor_user_id, access="WRITE")
     try:
         suggestion, task = await store.review_suggestion(case_id, suggestion_id, request.model_dump(mode="json"), actor_user_id)
@@ -2074,11 +2126,17 @@ async def read_context_display(case_id: str, actor_user_id: str):
     # 오류나 다른 직원의 수정본을 내보내지 않고 빈 편집본으로 응답한다.
     # 로컬 MVP 모드에서만 은행 업무 권한을 개방하고, 그 외에는 PATCH도 역할을 검증한다.
     store = await context_display_repository(case_id)
-    if mvp_context_permissions(actor_user_id):
-        return [item for item in await store.list_items(case_id, include_deleted=True)
-                if item.semantic_key == 'display' or (item.semantic_key.startswith('display-archive:') and item.deleted_by)]
+    try:
+        actor = normalize_legacy_actor(actor_user_id)
+    except ValueError:
+        return []
     members = await repository.list_members(case_id)
-    if not any(item.get('user_id') == actor_user_id and item.get('role') in {'CASE_OWNER', 'CHAT_OPERATOR', 'REVIEWER'} for item in members):
+    member = next((item for item in members if item.get('user_id') == actor.actor_id and item.get('status', 'ACTIVE') == 'ACTIVE'), None)
+    if actor.actor_type != 'BANK_STAFF' or (member and member.get('role') == 'CUSTOMER'):
+        return []
+    if not mvp_context_permissions(actor.actor_id) and not (
+        member and actor.for_case(case_id, str(member.get('role'))).can('WRITE')
+    ):
         return []
     return [item for item in await store.list_items(case_id, include_deleted=True)
             if item.semantic_key == 'display' or (item.semantic_key.startswith('display-archive:') and item.deleted_by)]
@@ -2148,8 +2206,8 @@ async def request_progress_confirmation(case_id: str, step: ProgressStep):
 
 
 @app.post("/api/cases/{case_id}/actions", response_model=PublicActionResponse, status_code=201)
-async def create_case_action(case_id: str, request: PublicCreateActionRequest) -> PublicActionResponse:
-    await require_case(case_id)
+async def create_case_action(case_id: str, actor_user_id: str, request: PublicCreateActionRequest) -> PublicActionResponse:
+    await require_context_v2_member(case_id, actor_user_id, access="WRITE")
     if request.action_type.startswith(PROGRESS_PREFIX):
         raise HTTPException(status_code=422, detail='고객 처리 상태는 전용 처리 결과 화면에서 기록해 주세요.')
     try:
@@ -2159,8 +2217,8 @@ async def create_case_action(case_id: str, request: PublicCreateActionRequest) -
 
 
 @app.patch("/api/cases/{case_id}/actions/{action_id}", response_model=PublicActionResponse)
-async def update_case_action(case_id: str, action_id: str, request: PublicUpdateActionRequest) -> PublicActionResponse:
-    await require_case(case_id)
+async def update_case_action(case_id: str, action_id: str, actor_user_id: str, request: PublicUpdateActionRequest) -> PublicActionResponse:
+    await require_context_v2_member(case_id, actor_user_id, access="WRITE")
     actions = await repository.list_actions(case_id)
     current = next((item for item in actions if item['action_id'] == action_id), None)
     if current and current['action_type'].startswith(PROGRESS_PREFIX):

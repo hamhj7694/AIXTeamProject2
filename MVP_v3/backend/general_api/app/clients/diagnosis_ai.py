@@ -16,15 +16,28 @@ class DiagnosisAiClient(Protocol):
 
 
 class AiServiceError(RuntimeError):
-    pass
+    code = "AI_SERVICE_UNAVAILABLE"
+    retryable = True
+
+    def __init__(self, message: str, *, code: str | None = None, retryable: bool | None = None) -> None:
+        super().__init__(message)
+        if code is not None:
+            self.code = code
+        if retryable is not None:
+            self.retryable = retryable
 
 
 class AiServiceQuotaError(AiServiceError):
-    pass
+    code = "AI_PROVIDER_RATE_LIMITED"
 
 
 class AiServiceAuthenticationError(AiServiceError):
-    pass
+    code = "AI_PROVIDER_AUTH_ERROR"
+    retryable = False
+
+
+class AiServiceTimeoutError(AiServiceError):
+    code = "AI_PROVIDER_TIMEOUT"
 
 
 class HttpDiagnosisAiClient:
@@ -48,7 +61,7 @@ class HttpDiagnosisAiClient:
                     raise AiServiceError(message)
                 return DiagnosisResult.model_validate(response.json())
         except httpx.TimeoutException as exc:
-            raise AiServiceError(f"AI 분석 제한시간({self.timeout_seconds:.0f}초)을 초과했습니다. 다시 시도해 주세요.") from exc
+            raise AiServiceTimeoutError(f"AI 분석 제한시간({self.timeout_seconds:.0f}초)을 초과했습니다. 다시 시도해 주세요.") from exc
         except httpx.RequestError as exc:
             raise AiServiceError("AI 분석 서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.") from exc
 

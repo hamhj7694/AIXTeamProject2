@@ -11,6 +11,12 @@ from contracts.public_api.case_context_v2 import (
 
 from .semantic_keys import SENSITIVE_KEYS, mask_sensitive_text, section_for_key
 
+ACTION_LABELS = {
+    "PAYMENT_HOLD_REVIEW": "지급정지 검토", "ACCOUNT_REPORT_GUIDANCE": "기관 신고 안내",
+    "EVIDENCE_PRESERVATION": "증거자료 보존", "DEVICE_SECURITY_GUIDANCE": "기기·계정 보호 안내",
+    "CUSTOMER_CALLBACK": "고객 재확인", "OTHER": "기타 대응 업무",
+}
+
 
 def _item(**values: Any) -> PublicContextPanelItemV3:
     return PublicContextPanelItemV3(**values)
@@ -46,8 +52,31 @@ def build_context_panel_v3(
         ))
 
     if view == "bank":
+        # Legacy 조치 기록은 actions journal에 저장되므로 Context V3의 담당자 조치에도 투영한다.
+        for action in actions:
+            if action.get("actor_type") not in {None, "BANK_STAFF"} or str(action.get("action_type", "")).startswith("CUSTOMER_PROGRESS:"):
+                continue
+            status = str(action.get("status", "REQUESTED"))
+            status = {"REQUESTED": "TODO", "IN_PROGRESS": "IN_PROGRESS", "COMPLETED": "COMPLETED", "CANCELLED": "CANCELLED"}.get(status, status)
+            action_type = str(action.get("action_type") or "OTHER")
+            sections["STAFF_ACTIONS"].groups.setdefault("completed" if status in {"COMPLETED", "CANCELLED"} else "active", []).append(_item(
+                item_id=str(action["action_id"]), semantic_key=f"action.{str(action.get('action_type', 'record')).lower()}",
+                label=ACTION_LABELS.get(action_type, "담당자 조치"), display_value=str(action.get("note") or ""),
+                value={}, source_kind="ACTION_RECORD", status=status, visibility="BANK_INTERNAL", version=1,
+            ))
         for fact in resources.facts:
-            if fact.status in {"REJECTED", "SUPERSEDED"}:
+            if fact.status == "REJECTED":
+                target = section_for_key(fact.semantic_key)
+                masked = fact.semantic_key in SENSITIVE_KEYS
+                display = mask_sensitive_text(fact.display_value) if masked else fact.display_value
+                sections[target].groups.setdefault("archived", []).append(_item(
+                    item_id=fact.fact_id, semantic_key=fact.semantic_key, label=fact.display_label,
+                    display_value=display, value=fact.value, source_kind=fact.source_kind, status=fact.status,
+                    confidence=fact.confidence, evidence_refs=fact.evidence_refs, visibility=fact.visibility,
+                    masked=masked, version=fact.version,
+                ))
+                continue
+            if fact.status == "SUPERSEDED":
                 continue
             masked = fact.semantic_key in SENSITIVE_KEYS
             display = mask_sensitive_text(fact.display_value) if masked else fact.display_value

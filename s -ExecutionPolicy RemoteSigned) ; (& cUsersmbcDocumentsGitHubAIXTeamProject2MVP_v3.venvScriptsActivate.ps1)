@@ -1,0 +1,223 @@
+[1mdiff --git a/MVP_v3/frontend/scripts/test-context-v3.cjs b/MVP_v3/frontend/scripts/test-context-v3.cjs[m
+[1mindex 13807114..632ff32b 100644[m
+[1m--- a/MVP_v3/frontend/scripts/test-context-v3.cjs[m
+[1m+++ b/MVP_v3/frontend/scripts/test-context-v3.cjs[m
+[36m@@ -6,6 +6,10 @@[m [mconst source = (relative) => fs.readFileSync(path.resolve(__dirname, '..', relat[m
+ const types = source('src/context-v3/types.ts');[m
+ const panel = source('src/context-v3/ContextPanelV3.tsx');[m
+ const sections = source('src/context-v3/sections.tsx');[m
+[32m+[m[32mconst components = source('src/context-v3/components.tsx');[m
+[32m+[m[32mconst quickNav = source('src/context-v3/ContextQuickNav.tsx');[m
+[32m+[m[32mconst history = source('src/context-v3/HistoryDrawer.tsx');[m
+[32m+[m[32mconst api = source('src/context-v3/api.ts');[m
+ const room = source('src/pages/CaseRoomPage.tsx');[m
+ const question = source('src/customer/CustomerQuestionCard.tsx');[m
+ [m
+[36m@@ -17,12 +21,29 @@[m [massert.match(room, /<ContextPanelV3/);[m
+ assert.doesNotMatch(room, /import \{ CaseContextPanel \}/);[m
+ assert.match(panel, /reviewContextFact/);[m
+ assert.match(panel, /reviewContextSuggestion/);[m
+[32m+[m[32massert.match(panel, /createContextFact/);[m
+ assert.match(panel, /createContextTask/);[m
+ assert.match(panel, /completeContextTask/);[m
+[31m-assert.match(sections, /기관 확인 열기/);[m
+[32m+[m[32massert.match(sections, /현재 사건 요약/);[m
+[32m+[m[32massert.match(sections, /피해·노출/);[m
+[32m+[m[32massert.match(sections, /사칭·접촉 정보/);[m
+[32m+[m[32massert.match(sections, /상대방 주장/);[m
+[32m+[m[32massert.match(sections, /사실·확인 현황/);[m
+[32m+[m[32massert.match(sections, /AI 제안 · 직원 검토 필요/);[m
+[32m+[m[32massert.match(sections, /고객 공유 결과/);[m
+[32m+[m[32massert.match(components, /Evidence/);[m
+[32m+[m[32massert.match(components, /새 값으로 대체 제안/);[m
+[32m+[m[32massert.match(components, /AI 추출 · 확인 필요/);[m
+[32m+[m[32massert.match(quickNav, /사건 맥락 빠른 이동/);[m
+[32m+[m[32massert.match(history, /Fact 전체 변경 이력은 전용 조회 API/);[m
+[32m+[m[32massert.match(api, /\/context-v2\/facts/);[m
+[32m+[m[32massert.match(room, /<HistoryDrawer/);[m
+[32m+[m[32massert.match(room, /<ParticipantManager/);[m
+[32m+[m[32massert.match(room, /해결 및 종료/);[m
+[32m+[m[32massert.doesNotMatch(panel, /onOpenParticipants|onFinalize|onReopen|onTrash/);[m
+ assert.match(question, /aria-pressed=\{active\}/);[m
+ assert.match(question, /question\.allow_multi_select/);[m
+ assert.match(question, /selected_option_ids/);[m
+ assert.match(question, /free_text/);[m
+ [m
+[31m-console.log('Context V3: exact sections, default switch, review/task/verification controls, and structured multi-answer contract passed');[m
+[32m+[m[32mconsole.log('Context V3: semantic sections, Fact/verification/task controls, global header ownership, and structured answer contract passed');[m
+[1mdiff --git a/MVP_v3/frontend/src/context-v3/ContextPanelV3.tsx b/MVP_v3/frontend/src/context-v3/ContextPanelV3.tsx[m
+[1mindex 46ac39ce..2c43c615 100644[m
+[1m--- a/MVP_v3/frontend/src/context-v3/ContextPanelV3.tsx[m
+[1m+++ b/MVP_v3/frontend/src/context-v3/ContextPanelV3.tsx[m
+[36m@@ -1,56 +1,94 @@[m
+[31m-import React, { useCallback, useEffect, useState } from 'react';[m
+[31m-import { CheckCircle2, PanelRightClose, PanelRightOpen, RefreshCw, Trash2, Users } from 'lucide-react';[m
+[31m-import type { CaseAction, CaseBundle, CaseFact, CaseSupportSnapshot, CustomerProgressItem, StoredCase, VerificationTask } from '../api/types';[m
+[31m-import { AdminCaseDialog } from '../components/AdminCaseDialog';[m
+[32m+[m[32mimport React, { useCallback, useEffect, useMemo, useState } from 'react';[m
+[32m+[m[32mimport { AlertCircle, PanelRightClose, RefreshCw, X } from 'lucide-react';[m
+[32m+[m[32mimport type { CaseBundle, CustomerProgressItem, StoredCase, VerificationTask } from '../api/types';[m
+ import { CustomerProgressEditor } from '../components/CustomerProgressEditor';[m
+[31m-import { cancelContextTask, completeContextTask, createContextTask, loadContextPanelV3, loadSummaryDisplayOverride, reviewContextFact, reviewContextSuggestion, saveSummaryDisplayOverride, updateContextTask } from './api';[m
+[31m-import { ContextV3Section } from './sections';[m
+[31m-import type { ContextPanelItemV3, ContextPanelV3 as ContextPanelData } from './types';[m
+ import { generateUuid } from '../uuid';[m
+[32m+[m[32mimport { createContextFact, cancelContextTask, completeContextTask, createContextTask, loadContextPanelV3, loadSummaryDisplayOverride, resetSummaryDisplayOverride, reviewContextFact, reviewContextSuggestion, saveSummaryDisplayOverride, updateContextTask } from './api';[m
+[32m+[m[32mimport { ContextQuickNav } from './ContextQuickNav';[m
+[32m+[m[32mimport { CustomerShareSection, ExposureSection, FactVerificationSection, FraudCircumstanceSection, ImpersonationSection, StaffActionSection, SummarySection, type WorkflowAction } from './sections';[m
+[32m+[m[32mimport type { ContextPanelItemV3, ContextPanelSectionV3, ContextPanelV3 as ContextPanelData } from './types';[m
+ [m
+ interface Props {[m
+[31m-  accessRevision: number; onOpenParticipants: () => void; caseItem: StoredCase; bundle: CaseBundle;[m
+[31m-  facts: CaseFact[]; support: CaseSupportSnapshot | null; open: boolean; onToggle: () => void;[m
+[31m-  onEditVerification: (task: VerificationTask) => void; onCreateJudgment: (note: string) => Promise<boolean>;[m
+[31m-  onUpdateChecklist: (action: CaseAction, values: { status?: 'REQUESTED' | 'COMPLETED' | 'CANCELLED'; note?: string }) => Promise<boolean>;[m
+[31m-  checklistBusy: boolean; onProgressSaved: (items: CustomerProgressItem[]) => void;[m
+[31m-  onFinalize: (password: string, note: string) => Promise<void>; onReopen: (password: string) => Promise<void>; onTrash: (password: string) => Promise<void>;[m
+[32m+[m[32m  accessRevision: number; caseItem: StoredCase; bundle: CaseBundle; open: boolean; onToggle: () => void;[m
+[32m+[m[32m  onEditVerification: (task: VerificationTask) => void; onProgressSaved: (items: CustomerProgressItem[]) => void;[m
+ }[m
+ [m
+[32m+[m[32mtype FactOption = { key: string; label: string; section: 'EXPOSURE' | 'IMPERSONATION_CONTACT' | 'FRAUD_CIRCUMSTANCES'; kind: 'amount' | 'transfer-status' | 'exposure' | 'occurred' | 'name' | 'role' | 'text' };[m
+[32m+[m[32mconst factOptions: FactOption[] = [[m
+[32m+[m[32m  { key: 'transfer.actual.status', label: '실제 이체 여부', section: 'EXPOSURE', kind: 'transfer-status' },[m
+[32m+[m[32m  { key: 'transfer.requested.amount', label: '요구 금액', section: 'EXPOSURE', kind: 'amount' },[m
+[32m+[m[32m  { key: 'transfer.actual.amount', label: '실제 이체 금액', section: 'EXPOSURE', kind: 'amount' },[m
+[32m+[m[32m  { key: 'exposure.personal_information', label: '개인정보 노출', section: 'EXPOSURE', kind: 'exposure' },[m
+[32m+[m[32m  { key: 'exposure.account_information', label: '계좌정보 노출', section: 'EXPOSURE', kind: 'exposure' },[m
+[32m+[m[32m  { key: 'exposure.authentication_information', label: 'OTP·인증정보 노출', section: 'EXPOSURE', kind: 'exposure' },[m
+[32m+[m[32m  { key: 'exposure.identity_or_card', label: '신분증·카드정보 노출', section: 'EXPOSURE', kind: 'exposure' },[m
+[32m+[m[32m  { key: 'device.remote_control_app', label: '원격제어 앱', section: 'EXPOSURE', kind: 'exposure' },[m
+[32m+[m[32m  { key: 'exposure.occurred_at', label: '발생 시점', section: 'EXPOSURE', kind: 'occurred' },[m
+[32m+[m[32m  { key: 'offender.claimed_organization', label: '사칭 기관', section: 'IMPERSONATION_CONTACT', kind: 'name' },[m
+[32m+[m[32m  { key: 'offender.claimed_person_or_role', label: '사칭 인물·직책', section: 'IMPERSONATION_CONTACT', kind: 'role' },[m
+[32m+[m[32m  { key: 'offender.requested_account', label: '제시 계좌', section: 'IMPERSONATION_CONTACT', kind: 'text' },[m
+[32m+[m[32m  { key: 'offender.contact', label: '연락처', section: 'IMPERSONATION_CONTACT', kind: 'text' },[m
+[32m+[m[32m  { key: 'offender.incident_claim', label: '상대방 주장', section: 'FRAUD_CIRCUMSTANCES', kind: 'text' },[m
+[32m+[m[32m  { key: 'circumstance.demand', label: '상대방 요구', section: 'FRAUD_CIRCUMSTANCES', kind: 'text' },[m
+[32m+[m[32m  { key: 'circumstance.tactic', label: '압박·조작 수법', section: 'FRAUD_CIRCUMSTANCES', kind: 'text' },[m
+[32m+[m[32m];[m
+[32m+[m[32mconst section = (data: ContextPanelData, id: ContextPanelSectionV3['section_id']) => data.sections.find((item) => item.section_id === id)!;[m
+[32m+[m
+[32m+[m[32mconst typedValue = (option: FactOption, raw: string): Record<string, unknown> => {[m
+[32m+[m[32m  if (option.kind === 'amount') return { amount_krw: Number(raw.replace(/,/g, '')), currency: 'KRW' };[m
+[32m+[m[32m  if (option.kind === 'transfer-status') return { status: raw };[m
+[32m+[m[32m  if (option.kind === 'exposure') return { status: 'EXPOSED', types: [raw] };[m
+[32m+[m[32m  if (option.kind === 'occurred') return { occurred_at: raw };[m
+[32m+[m[32m  if (option.kind === 'name') return { name: raw };[m
+[32m+[m[32m  if (option.kind === 'role') return { role_or_title: raw };[m
+[32m+[m[32m  if (option.key === 'offender.requested_account') return { account_ref: raw };[m
+[32m+[m[32m  return { text: raw };[m
+[32m+[m[32m};[m
+[32m+[m[32mconst editableValue = (item: ContextPanelItemV3): string => {[m
+[32m+[m[32m  if (typeof item.value.amount_krw === 'number') return String(item.value.amount_krw);[m
+[32m+[m[32m  for (const key of ['status', 'occurred_at', 'name', 'role_or_title', 'account_ref', 'text']) {[m
+[32m+[m[32m    if (typeof item.value[key] === 'string') return item.value[key] as string;[m
+[32m+[m[32m  }[m
+[32m+[m[32m  return item.display_value;[m
+[32m+[m[32m};[m
+[32m+[m
+ export const ContextPanelV3: React.FC<Props> = (props) => {[m
+   const [data, setData] = useState<ContextPanelData | null>(null);[m
+[32m+[m[32m  const [loading, setLoading] = useState(true);[m
+   const [error, setError] = useState('');[m
+   const [busy, setBusy] = useState(false);[m
+[31m-  const [adminAction, setAdminAction] = useState<'finalize' | 'reopen' | 'trash' | null>(null);[m
+   const [summaryEdit, setSummaryEdit] = useState<{ text: string; version: number } | null>(null);[m
+[32m+[m[32m  const [factDraft, setFactDraft] = useState<{ section: FactOption['section']; key: string; value: string } | null>(null);[m
+[32m+[m
+   const load = useCallback(async (signal?: AbortSignal) => {[m
+[32m+[m[32m    setLoading(true);[m
+     try { setError(''); setData(await loadContextPanelV3(props.caseItem.case_id, signal)); }[m
+     catch (reason) { if (!signal?.aborted) setError(reason instanceof Error ? reason.message : '맥락 패널을 불러오지 못했습니다.'); }[m
+[32m+[m[32m    finally { if (!signal?.aborted) setLoading(false); }[m
+   }, [props.caseItem.case_id]);[m
+   useEffect(() => { const controller = new AbortController(); void load(controller.signal); return () => controller.abort(); }, [load, props.accessRevision, props.bundle.cursor, props.bundle.case.context_revision]);[m
+[32m+[m
+[32m+[m[32m  const availableOptions = useMemo(() => factDraft ? factOptions.filter((item) => item.section === factDraft.section) : [], [factDraft]);[m
+   const review = async (item: ContextPanelItemV3, decision: 'CONFIRM' | 'REJECT') => {[m
+     setBusy(true); setError('');[m
+     try {[m
+[31m-      const scalarKeys = new Set(['transfer.actual.status', 'transfer.requested.amount', 'transfer.actual.amount', 'exposure.personal_information', 'exposure.account_information', 'exposure.authentication_information', 'exposure.identity_or_card', 'exposure.occurred_at', 'device.remote_control_app']);[m
+[31m-      const confirmed = scalarKeys.has(item.semantic_key) ? data?.sections.flatMap((section) => [[m
+[31m-        ...section.items, ...Object.values(section.groups).flat(),[m
+[31m-      ]).find((candidate) => candidate.semantic_key === item.semantic_key && candidate.status === 'CONFIRMED') : undefined;[m
+[31m-      await reviewContextFact(props.caseItem.case_id, item.item_id, item.version, decision, decision === 'CONFIRM' ? '담당자 확인' : '담당자 검토 결과 불일치', decision === 'CONFIRM' ? confirmed?.item_id : undefined);[m
+[32m+[m[32m      const confirmed = data?.sections.flatMap((entry) => [...entry.items, ...Object.values(entry.groups).flat()]).find((candidate) => candidate.semantic_key === item.semantic_key && candidate.status === 'CONFIRMED');[m
+[32m+[m[32m      await reviewContextFact(props.caseItem.case_id, item.item_id, item.version, decision, decision === 'CONFIRM' ? '담당자 확인' : '잘못된 정보로 제외', decision === 'CONFIRM' ? confirmed?.item_id : undefined);[m
+       await load();[m
+[31m-    }[m
+[31m-    catch (reason) { setError(reason instanceof Error ? reason.message : '검토 결과를 저장하지 못했습니다. 최신 상태를 다시 불러와 주세요.'); }[m
+[32m+[m[32m    } catch (reason) { setError(reason instanceof Error ? reason.message : '검토 결과를 저장하지 못했습니다. 최신 상태를 다시 불러와 주세요.'); }[m
+     finally { setBusy(false); }[m
+   };[m
+[31m-  const workflow = async (item: ContextPanelItemV3, action: 'ACCEPT' | 'DISMISS' | 'START' | 'COMPLETE' | 'CANCEL') => {[m
+[32m+[m[32m  const workflow = async (item: ContextPanelItemV3, action: WorkflowAction) => {[m
+     let note = '';[m
+     if (action === 'DISMISS') note = window.prompt('제안 제외 사유를 입력하세요.')?.trim() ?? '';[m
+[31m-    if (action === 'COMPLETE') note = window.prompt('확인한 처리 결과를 입력하세요.')?.trim() ?? '';[m
+[32m+[m[32m    if (action === 'COMPLETE') note = window.prompt('완료한 업무 결과를 입력하세요.')?.trim() ?? '';[m
+     if (action === 'CANCEL') note = window.prompt('업무 취소 사유를 입력하세요.')?.trim() ?? '';[m
+     if (['DISMISS', 'COMPLETE', 'CANCEL'].includes(action) && !note) return;[m
+     setBusy(true); setError('');[m
+     try {[m
+       if (action === 'ACCEPT' || action === 'DISMISS') await reviewContextSuggestion(props.caseItem.case_id, item.item_id, item.version, action, note);[m
+       else if (action === 'START') await updateContextTask(props.caseItem.case_id, item.item_id, item.version, 'IN_PROGRESS');[m
+[32m+[m[32m      else if (action === 'BLOCK') await updateContextTask(props.caseItem.case_id, item.item_id, item.version, 'BLOCKED');[m
+       else if (action === 'COMPLETE') await completeContextTask(props.caseItem.case_id, item.item_id, item.version, note);[m
+       else await cancelContextTask(props.caseItem.case_id, item.item_id, item.version, note);[m
+       await load();[m
+[36m@@ -59,43 +97,63 @@[m [mexport const ContextPanelV3: React.FC<Props> = (props) => {[m
+   };[m
+   const openVerification = (id: string) => { const task = props.bundle.verification_tasks.find((item) => item.verification_task_id === id); if (task) props.onEditVerification(task); };[m
+   const addTask = async () => {[m
+[31m-    const title = window.prompt('추가할 담당자 업무 제목을 입력하세요.')?.trim() ?? '';[m
+[31m-    if (!title) return;[m
+[31m-    const description = window.prompt('업무 내용과 확인 기준을 입력하세요.')?.trim() ?? '';[m
+[31m-    if (!description) return;[m
+[32m+[m[32m    const title = window.prompt('추가할 담당자 업무 제목을 입력하세요.')?.trim() ?? ''; if (!title) return;[m
+[32m+[m[32m    const description = window.prompt('업무 내용과 확인 기준을 입력하세요.')?.trim() ?? ''; if (!description) return;[m
+     setBusy(true); setError('');[m
+     try { await createContextTask(props.caseItem.case_id, generateUuid(), title, description); await load(); }[m
+     catch (reason) { setError(reason instanceof Error ? reason.message : '담당자 업무를 추가하지 못했습니다.'); }[m
+     finally { setBusy(false); }[m
+   };[m
+   const startSummaryEdit = async () => {[m
+[31m-    const existing = (await loadSummaryDisplayOverride(props.caseItem.case_id)).find((item) => item.section === 'SUMMARY' && item.semantic_key === 'display');[m
+[31m-    const projected = data?.sections.find((section) => section.section_id === 'SUMMARY')?.items.map((item) => item.display_value).join('\n') ?? '';[m
+[31m-    setSummaryEdit({ text: existing?.staff_text || projected, version: existing?.item_version ?? 0 });[m
+[32m+[m[32m    try {[m
+[32m+[m[32m      const existing = (await loadSummaryDisplayOverride(props.caseItem.case_id)).find((item) => item.section === 'SUMMARY' && item.semantic_key === 'display');[m
+[32m+[m[32m      const projected = data ? section(data, 'SUMMARY').items.map((item) => item.display_value).join('\n') : '';[m
+[32m+[m[32m      setSummaryEdit({ text: existing?.staff_text || projected, version: existing?.item_version ?? 0 });[m
+[32m+[m[32m    } catch (reason) { setError(reason instanceof Error ? reason.message : '표시 요약 편집을 시작하지 못했습니다.'); }[m
+   };[m
+   const saveSummary = async () => {[m
+[31m-    if (!summaryEdit?.text.trim()) return;[m
+[31m-    setBusy(true);[m
+[32m+[m[32m    if (!summaryEdit?.text.trim()) return; setBusy(true);[m
+     try { await saveSummaryDisplayOverride(props.caseItem.case_id, summaryEdit.version, summaryEdit.text.trim()); setSummaryEdit(null); await load(); }[m
+     catch (reason) { setError(reason instanceof Error ? reason.message : '표시용 요약을 저장하지 못했습니다.'); }[m
+     finally { setBusy(false); }[m
+   };[m
+[31m-  const closed = props.caseItem.status === 'CLOSED' || props.caseItem.mode === 'CLOSED';[m
+[32m+[m[32m  const resetSummary = async () => {[m
+[32m+[m[32m    setBusy(true); setError('');[m
+[32m+[m[32m    try {[m
+[32m+[m[32m      const existing = (await loadSummaryDisplayOverride(props.caseItem.case_id)).find((item) => item.section === 'SUMMARY' && item.semantic_key === 'display');[m
+[32m+[m[32m      if (existing) await resetSummaryDisplayOverride(props.caseItem.case_id, existing.item_version);[m
+[32m+[m[32m      setSummaryEdit(null); await load();[m
+[32m+[m[32m    } catch (reason) { setError(reason instanceof Error ? reason.message : '자동 요약으로 복원하지 못했습니다.'); }[m
+[32m+[m[32m    finally { setBusy(false); }[m
+[32m+[m[32m  };[m
+[32m+[m[32m  const openFactForm = (target: FactOption['section'], replacing?: ContextPanelItemV3) => setFactDraft({ section: target, key: replacing?.semantic_key ?? factOptions.find((item) => item.section === target)!.key, value: replacing ? editableValue(replacing) : '' });[m
+[32m+[m[32m  const saveFact = async () => {[m
+[32m+[m[32m    if (!factDraft?.value.trim()) return;[m
+[32m+[m[32m    const option = factOptions.find((item) => item.key === factDraft.key); if (!option) return;[m
+[32m+[m[32m    if (option.kind === 'amount' && (!Number.isFinite(Number(factDraft.value.replace(/,/g, ''))) || Number(factDraft.value.replace(/,/g, '')) < 0)) { setError('금액은 0 이상의 숫자로 입력해 주세요.'); return; }[m
+[32m+[m[32m    setBusy(true); setError('');[m
+[32m+[m[32m    try { await createContextFact(props.caseItem.case_id, { client_request_id: generateUuid(), semantic_key: option.key, display_label: option.label, value: typedValue(option, factDraft.value.trim()), display_value: option.kind === 'amount' ? `${Number(factDraft.value.replace(/,/g, '')).toLocaleString('ko-KR')}원` : factDraft.value.trim() }); setFactDraft(null); await load(); }[m
+[32m+[m[32m    catch (reason) { setError(reason instanceof Error ? reason.message : '정보 제안을 저장하지 못했습니다.'); }[m
+[32m+[m[32m    finally { setBusy(false); }[m
+[32m+[m[32m  };[m
+[32m+[m[32m  const factEditor = factDraft && <form className="context-fact-form" onSubmit={(event) => { event.preventDefault(); void saveFact(); }}><header><strong>직원 정보 제안</strong><button type="button" onClick={() => setFactDraft(null)} aria

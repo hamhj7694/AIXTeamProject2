@@ -51,6 +51,7 @@ class CaseActivityEndpointTest(unittest.TestCase):
         self.repository.list_actions.return_value = []
         self.repository.list_messages.return_value = []
         self.repository.list_customer_questions.return_value = []
+        self.repository.list_members.return_value = [{"case_id": "VP-ACTIVITY", "user_id": "staff", "role": "CASE_OWNER", "status": "ACTIVE"}]
         general_main.repository = self.repository
         self.ai_report_patch = patch.object(
             general_main.service.ai_client,
@@ -144,7 +145,7 @@ class CaseActivityEndpointTest(unittest.TestCase):
             "actor_type": "BANK_STAFF", "note": "담당자 검토 요청", "created_at": "2026-09-02T01:00:00+00:00",
         }
         verification = self.client.post("/api/cases/VP-ACTIVITY/verifications", json={"claim": "기관 사칭", "target": "검찰청"})
-        action = self.client.post("/api/cases/VP-ACTIVITY/actions", json={"action_type": "HUMAN_TAKEOVER", "actor_type": "BANK_STAFF", "note": "담당자 검토 요청"})
+        action = self.client.post("/api/cases/VP-ACTIVITY/actions?actor_user_id=staff", json={"action_type": "HUMAN_TAKEOVER", "actor_type": "BANK_STAFF", "note": "담당자 검토 요청"})
 
         self.assertEqual(verification.status_code, 201)
         self.assertEqual(action.status_code, 201)
@@ -186,10 +187,10 @@ class CaseActivityEndpointTest(unittest.TestCase):
             },
         ]
 
-        completed = self.client.patch("/api/cases/VP-ACTIVITY/actions/act-check", json={
+        completed = self.client.patch("/api/cases/VP-ACTIVITY/actions/act-check?actor_user_id=staff", json={
             "status": "COMPLETED", "updated_by": "은행 담당자",
         })
-        reopened = self.client.patch("/api/cases/VP-ACTIVITY/actions/act-check", json={
+        reopened = self.client.patch("/api/cases/VP-ACTIVITY/actions/act-check?actor_user_id=staff", json={
             "status": "REQUESTED", "updated_by": "은행 담당자",
         })
 

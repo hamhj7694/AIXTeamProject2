@@ -109,10 +109,11 @@ SOURCE database/01_mysql_csr_schema.sql;
 EXIT;
 ```
 
-이 파일은 `001`~`013`을 적용한 기준선을 기록한다. **기본 스키마만으로는
-사건 맥락 v2가 동작하지 않는다.** PowerShell로 돌아와 API를 시작하기 전에
-추가 migration을 적용한다. 이 명령은 `MVP_v3/.env`를 읽고 적용 이력이 없는
-파일을 순서대로 실행하며, 현재 새 DB에는 `014_case_context_v2_foundation.sql`을 적용한다.
+이 파일은 현재 기본 테이블과 Context Panel V3 컬럼을 만들고 적용한 migration 이름을
+`schema_migrations`에 기록한다. **기본 스키마만으로는 Case Context v2와 Case 번호
+sequence가 완성되지 않는다.** PowerShell로 돌아와 API를 시작하기 전에 아래 명령으로
+적용 이력이 없는 `014_case_context_v2_foundation.sql`과
+`015_case_number_sequence.sql` 등 남은 migration을 파일명 순서대로 적용한다.
 
 ```powershell
 ./.venv/Scripts/python.exe backend/scripts/apply_migrations.py
@@ -122,10 +123,14 @@ EXIT;
 General API를 중지한 뒤 migration을 적용한다. `schema_migrations`에
 정상 이력이 있으면 같은 명령은 이미 적용한 파일을 건너뛴다. 이력이 없는
 오래된 DB는 실제 스키마와 선행 migration을 확인한 후에만 `--only`로
-대상 파일을 지정한다. `013`까지 적용된 것이 확인된 DB의 `014` 추가 명령은 다음과 같다.
+대상 파일을 지정한다. `013`까지 적용된 기존 DB를 현재 구조로 올릴 때에는 의존성을 검토한 뒤
+최소한 다음 파일을 순서대로 적용한다.
 
 ```powershell
-./.venv/Scripts/python.exe backend/scripts/apply_migrations.py --only 014_case_context_v2_foundation.sql
+./.venv/Scripts/python.exe backend/scripts/apply_migrations.py `
+  --only 014_case_context_v2_foundation.sql `
+  --only 015_case_number_sequence.sql `
+  --only 015_context_panel_v3.sql
 ```
 
 ### 3. 서버 실행
@@ -235,9 +240,8 @@ npm.cmd run build
 
 - 제품 요구사항: `PRD.md`
 - 고객용 제품 요구사항: `CUSTOMER_PRD.md`
-- **작업 시작 시 반드시 먼저 읽는 단일 기준 문서**: `docs/03_IMPLEMENTATION_STATUS.md`
-- 개발 매핑: `docs/01_WORK_MAPPING.md`
-- 세부 이력·장기 백로그: `docs/02_DETAILED_TODO.md`
+- 문서 목록: `docs/README.md`
+- **작업 시작 시 반드시 먼저 읽는 단일 최신 상태 문서**: `docs/CURRENT_STATUS.md`
 - 사건 맥락 v2 승인 데이터 계약과 단계별 구현 경계: `docs/09_CASE_CONTEXT_DATA_CONTRACT.md`
 - 사건 종결 AI 보고서 형식·저장·공개 계약: `docs/10_FINAL_CASE_REPORT_CONTRACT.md`
 
