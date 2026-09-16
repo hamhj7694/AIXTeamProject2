@@ -27,6 +27,8 @@ from .core.actor_context import normalize_legacy_actor
 
 from contracts.diagnosis import AnalyzeTextRequest
 from contracts.ai_internal.context_fact_extraction import ContextFactExtractionInput, ContextFactExtractionMessage, ExistingContextFact
+from contracts.ai_internal.mvp_workflow import TargetField
+from ai_api.app.domains.case_support.answer_service import CustomerAnswerStructuringService
 from contracts.public_api.customer_progress import CustomerProgressItem, ProgressStep, UpdateCustomerProgress
 from .domains.cases.customer_progress import PREFIX as PROGRESS_PREFIX, ProgressConflict, progress_items as build_customer_progress, progress_ai_context, actions_for_ai
 from request_trace import install_request_trace
@@ -132,7 +134,7 @@ from .domains.cases.case_context_v2_repository import (
     MySqlCaseContextV2Repository,
 )
 from .domains.cases.mysql_repository import MySqlCaseRepository
-from .domains.cases.context_v3.semantic_keys import ALLOWED_SEMANTIC_KEYS, proposal_dedupe_key
+from .domains.cases.context_v3.semantic_keys import ALLOWED_SEMANTIC_KEYS, SEMANTIC_LABELS, proposal_dedupe_key
 from .domains.cases.context_v3.panel import build_context_panel_v3
 from .domains.cases.service import AnalyzeCaseService, InvalidCaseTransitionError, transition_case
 
@@ -1016,13 +1018,75 @@ async def dispatch_next_customer_question_message(case_id: str) -> PublicMessage
     return to_public_message(message)
 
 
+def _structured_answer_fact_payload(question: dict, answer_text: str, answer_message_id: str | None) -> dict | None:
+    """Map only deterministic, unambiguous answers to an unconfirmed Context V2 Fact."""
+    if not answer_message_id:
+        return None
+    try:
+        target_field = TargetField(normalize_target_field(str(question["target_field"])))
+    except (KeyError, ValueError):
+        # Contextual questions and unsupported fields retain the existing raw-answer path.
+        return None
+
+    structured = CustomerAnswerStructuringService().structure_answer(target_field, answer_text)
+    if structured.unresolved or structured.structured_value is None:
+        return None
+
+    mappings = {
+        TargetField.TRANSFER_STATUS: (
+            "transfer.actual.status",
+            {"status": structured.structured_value},
+            {"TRANSFERRED": "송금함", "NOT_TRANSFERRED": "송금하지 않음"},
+        ),
+        TargetField.PERSONAL_INFORMATION_EXPOSURE: (
+            "exposure.personal_information",
+            {"status": structured.structured_value},
+            {"EXPOSED": "노출됨", "PARTIALLY_EXPOSED": "일부 노출됨", "NOT_EXPOSED": "노출되지 않음"},
+        ),
+        TargetField.AUTHENTICATION_INFORMATION_EXPOSURE: (
+            "exposure.authentication_information",
+            {"status": structured.structured_value},
+            {"EXPOSED": "노출됨", "NOT_EXPOSED": "노출되지 않음"},
+        ),
+        TargetField.REMOTE_CONTROL_APP: (
+            "device.remote_control_app",
+            {"status": structured.structured_value},
+            {"INSTALLED": "설치됨", "NOT_INSTALLED": "설치되지 않음"},
+        ),
+    }
+    mapping = mappings.get(target_field)
+    if mapping is None:
+        return None
+    semantic_key, value, display_values = mapping
+    return {
+        "client_request_id": proposal_dedupe_key(answer_message_id, semantic_key, value),
+        "semantic_key": semantic_key,
+        "display_label": SEMANTIC_LABELS[semantic_key],
+        "value": value,
+        "display_value": display_values[structured.structured_value],
+        "confidence": structured.confidence,
+        "evidence_refs": [{"type": "QUESTION_ANSWER", "id": answer_message_id}],
+        "visibility": "BANK_INTERNAL",
+    }
+
+
+async def _persist_structured_answer_fact(question: dict, answered: dict, answer_text: str) -> None:
+    """Keep raw-answer persistence authoritative if this additive proposal cannot be stored."""
+    payload = _structured_answer_fact_payload(question, answer_text, answered.get("answer_message_id"))
+    if payload is None:
+        return
+    await case_context_v2_repository().create_fact(
+        answered["case_id"], payload, "customer-answer-structurer", source_kind="CUSTOMER_STATEMENT",
+    )
+
+
 @app.post("/api/cases/{case_id}/customer-questions/{question_id}/answer", response_model=PublicCustomerQuestionResponse)
 async def answer_customer_question(case_id: str, question_id: str, request: PublicAnswerCustomerQuestionRequest, background_tasks: BackgroundTasks) -> PublicCustomerQuestionResponse:
     await require_case(case_id)
-    question = next((item for item in await repository.list_customer_questions(case_id) if item["question_id"] == question_id), None) if request.raw_answer is None else None
-    if request.raw_answer is None and question is None:
+    question = next((item for item in await repository.list_customer_questions(case_id) if item["question_id"] == question_id), None)
+    if question is None:
         raise HTTPException(status_code=404, detail={"code": "CUSTOMER_QUESTION_NOT_FOUND", "message": "답변할 질문을 찾을 수 없습니다."})
-    current_version = int((question or {}).get("question_version", 1))
+    current_version = int(question.get("question_version", 1))
     if request.raw_answer is None and request.question_version is not None and request.question_version != current_version:
         raise HTTPException(status_code=409, detail={"code": "QUESTION_VERSION_CONFLICT", "message": "질문이 변경되었습니다.", "current_version": current_version})
     answer_payload = None
@@ -1046,6 +1110,11 @@ async def answer_customer_question(case_id: str, question_id: str, request: Publ
         raise HTTPException(status_code=404, detail={"code": "CUSTOMER_QUESTION_NOT_FOUND", "message": "응답 대기 중인 질문을 찾을 수 없습니다."}) from exc
     except ValueError as exc:
         raise HTTPException(status_code=409, detail={"code": "CUSTOMER_ANSWER_CONFLICT", "message": "이미 다른 답변이 저장된 질문입니다. 최신 내용을 확인해 주세요."}) from exc
+    try:
+        await _persist_structured_answer_fact(question, answered, answer_text or "")
+    except Exception:
+        # The committed customer answer and legacy Fact remain usable if this additive proposal fails.
+        logger.exception("Could not persist structured customer answer fact for question %s", question_id)
     try:
         message = next((item for item in await repository.list_messages(case_id) if item.get("message_id") == answered.get("answer_message_id")), None)
         if message:
