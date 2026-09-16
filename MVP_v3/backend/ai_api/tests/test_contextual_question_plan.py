@@ -75,6 +75,20 @@ class ContextualQuestionPlanTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result.questions, [])
 
+    async def test_llm_options_are_normalized_before_delivery(self) -> None:
+        item = question(1)
+        item.update({
+            "options": [" 오전 ", "", "오전", "오후"],
+            "answer_mode": "SINGLE_CHOICE",
+            "allow_free_text": False,
+        })
+
+        result, _ = await self._generate([item])
+
+        self.assertEqual(result.questions[0].options, ["오전", "오후"])
+        self.assertEqual(result.questions[0].answer_mode, "SINGLE_CHOICE")
+        self.assertFalse(result.questions[0].allow_free_text)
+
 
 if __name__ == "__main__":
     unittest.main()
