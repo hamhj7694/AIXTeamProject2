@@ -61,6 +61,7 @@ React Frontend :5176
 - Context V3 본문은 좁은 패널에서 카드 가용 폭을 확보하도록 전용 스크롤 영역의 좌우 padding을 4px로 사용한다.
 - Context 근거 상세는 내부 enum·UUID·revision·일반 confidence 수치를 노출하지 않고 대화 기록·고객 답변·기관 확인 결과 등 직원용 근거 종류와 건수로 표시한다.
 - Context Panel은 `TRANSFERRED`·`PROPOSED` 같은 내부 상태와 미등록 source/status/event/actor 값을 직원 화면에 노출하지 않고 한국어 표시값 또는 안전한 일반 문구를 사용한다.
+- Case Context Projection에 `confirmed_facts`, `proposed_facts`, `unresolved_items`, `verification_records`, `staff_actions`, `money_events`, `projection_revision`을 함께 전달하는 하위 호환 계약을 추가했다. C파트 요약 AI는 이 상태 보존 projection을 입력으로 사용해야 한다.
 
 - 은행 `고객 공유 결과` Section은 `CustomerProgressEditor`를 바로 표시한다. 중복 notice, lane, count, empty state를 제거했다.
 - Summary의 중복 `위험도 · 진행 상태` 문구는 구조화 Case metadata와 정확히 일치하는 deterministic item만 표시에서 제외한다. Case의 risk/status 데이터는 유지한다.
@@ -245,6 +246,26 @@ React Frontend :5176
 - Legacy Action 및 Customer Progress 테스트 fixture에 현재 actor ownership 계약을 반영했다.
 - General API non-MySQL: 168 passed, 43 subtests passed. MySQL integration은 실행하지 않았다.
 - Step 4 permission 경계를 완화하지 않았으며 최종 판정은 `STEP_4_COMPLETE`, `READY_FOR_STEP_5`다.
+
+## 2026-09-16 A파트 LLM Context lexical/pragmatic fidelity
+
+- 현재 브랜치 `v3.1-ham`의 working tree를 기준으로 A파트 Context Pipeline에 privacy-safe `observed_terms`와 `speech_form_codes`를 additive하게 연결했다.
+- 기존 normalized `lexical_cues`와 semantic fields는 유지하고, 실제 source turn에 존재하는 짧은 allowlist 용어만 Atom에 surface form·lemma·normalized lexical code로 저장한다.
+- Context observation은 surface form을 복제하지 않고 `source_atom_ids`, `observed_lexical_codes`, `semantic_features`로 Atom lineage를 참조한다.
+- OTP·계좌번호·인증 secret 값, raw phrase, token dump, source에 없는 lexical cue는 저장하지 않도록 targeted tests를 추가했다.
+- ML feature vector/model artifact와 Frontend는 변경하지 않았고, 기존 JSON persistence 컬럼을 확장하므로 DB migration은 필요하지 않다.
+- `MVP_v3/docs/now_md/A_part`에 A파트 기준 문서를 모아 관리한다. 기존 문서의 historical note는 당시 상태를 기록한 것이다.
+- 현재 Grounded 문장화는 존재하지만 일부 Panel projection이 여러 세부 Fact를 넓은 문장으로 합칠 수 있어 specificity 손실 가능성이 남아 있다.
+- 다음 A 구현은 `Fine-Grained Grounded Statement`, one-Fact-one-Statement 기본 정책, semantic slot/action-state/polarity/unknown 보존, 다중 Fact 분리 projection과 Relation-aware 문장화를 대상으로 한다.
+- Context Signal의 상위 label을 그대로 직원용 문장으로 사용하지 않고 supporting Atom/Fact의 구체 의미를 우선하는 방향으로 보강한다.
+- Fine-Grained Grounded Statement 1차 구현으로 Fact가 참조하는 supporting Atom의 OTP 유형, 안전계좌 목적, 긴급성 lexical cue, 통신 통제, action state를 직원용 문장에 반영한다.
+- 2026-09-16 다중 predicate Atom 분리 validator를 추가해 송금·인증정보·통신 통제처럼 서로 다른 의미가 한 Atom에 혼합되면 저장하지 않도록 하고, 분리된 Atom별 lineage를 유지한다.
+- 2026-09-16 2단계 세분화 피처화를 완료해 슬롯 허용값 검증, action state 확장, 독립 semantic field 보존, source 검증 observed term, 다중 금액·행동 fixture, privacy-safe coverage report를 추가했다. AI API 전체 테스트 152개 통과.
+- 2026-09-16 다음 작업으로 2.5단계 `Semantic Feature Audit Agent`를 추가했다. Atom 누락·혼합·slot 불일치·unsupported lexicalization·lineage 단절을 감사하고, 원본을 자동 확정/삭제하지 않은 채 `PASS / NEEDS_REVIEW / REEXTRACTION_REQUIRED`로 판정하는 범위다.
+- 2026-09-16 2.5단계 1차 구현으로 `SemanticAuditResult` 계약과 결정적 감사기를 추가하고 `DiagnosisResult.semantic_audit`에 연결했다. 감사기는 원문을 결과에 반환하지 않으며 Atom·Relation·Signal coverage, 혼합 Atom, observed term source 불일치, orphan lineage를 검사한다. 관련 테스트 47개 통과.
+- 2026-09-16 2.5단계 2차 구현으로 `SemanticAuditReview` LLM 검토기와 selected-turn targeted re-extraction을 연결하고, 원문·근거 문장을 제거한 개발자용 JSON export 명령 `backend/scripts/export_diagnosis_report.py`를 추가했다. LLM 검토 실패 시 결정적 감사 결과를 유지하며 자동 확정/삭제하지 않는다. AI API 전체 테스트 158개 통과.
+- 2026-09-16 4~6단계 구현 메모 `now_md/A_part/A_4_TO_6_IMPLEMENTATION_HANDOFF.md`를 추가했다. 4단계 Fact 저장·human review·revision 규칙, 5단계 기존 7개 패널 Fact projection, 6단계 one-Fact-one-Statement grounded 문장화와 완료 조건을 분리해 기록했다. 기존 Context V2 계약 테스트 33개가 통과했으며, 다음 구현 대상은 미완료 Fact projection과 semantic slot 보존이다.
+- 현재는 전체 semantic slot과 모든 semantic key를 완전히 보존하는 단계가 아니므로 broad abstraction validator, 부정·조건·UNKNOWN 전 범위 검증, revision/conflict는 후속 작업으로 남아 있다.
 
 ## 2026-09-15 Prework Step 2 Frontend Freeze Contract
 

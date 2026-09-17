@@ -38,6 +38,10 @@ const Workspace: React.FC = () => {
     setContextOpen(!window.matchMedia('(max-width: 1180px)').matches);
   }, [selectedCaseId]);
   const refreshLists = () => { void loadCases(); void loadTrash(); };
+  const renameCase = async (caseId: string, caseName: string, expectedVersion: number) => {
+    const updated = await casesApi.updateCase(caseId, expectedVersion, { case_name: caseName });
+    setCases((current) => current.map((item) => item.case_id === caseId ? updated : item));
+  };
   const restoreCase = async (caseId: string, password: string) => {
     await casesApi.restore(caseId, password);
     await Promise.all([loadCases(), loadTrash()]);
@@ -57,9 +61,9 @@ const Workspace: React.FC = () => {
       </div>
     </header>
     <div className="workspace-body">
-      <CaseListPane cases={cases} selectedCaseId={selectedCaseId} loading={loading} error={error} mobileOpen={mobileListOpen} onCloseMobile={() => setMobileListOpen(false)} onRetry={() => void loadCases()} trashCount={trashedCases.length} onOpenTrash={() => setTrashOpen(true)} onSelectCase={() => setTrashOpen(false)}/>
+      <CaseListPane cases={cases} selectedCaseId={selectedCaseId} loading={loading} error={error} mobileOpen={mobileListOpen} onCloseMobile={() => setMobileListOpen(false)} onRetry={() => void loadCases()} trashCount={trashedCases.length} onOpenTrash={() => setTrashOpen(true)} onSelectCase={() => setTrashOpen(false)} onRenameCase={renameCase}/>
       {mobileListOpen && <button className="mobile-scrim" onClick={() => setMobileListOpen(false)} aria-label="사건 목록 닫기"/>}
-      <div className="workspace-main">{trashOpen ? <TrashWorkspace cases={trashedCases} loading={trashLoading} error={trashError} onRetry={() => void loadTrash()} onClose={() => setTrashOpen(false)} onRestore={restoreCase} onPurge={purgeCase}/> : <Routes><Route path="/" element={<HomePage/>}/><Route path="/cases/:caseId" element={<CaseRoomPage onMutated={refreshLists} contextOpen={contextOpen} onContextOpenChange={setContextOpen}/>}/><Route path="*" element={<Navigate to="/" replace/>}/></Routes>}</div>
+      <div className="workspace-main">{trashOpen ? <TrashWorkspace cases={trashedCases} loading={trashLoading} error={trashError} onRetry={() => void loadTrash()} onClose={() => setTrashOpen(false)} onRestore={restoreCase} onPurge={purgeCase}/> : <Routes><Route path="/" element={<HomePage/>}/><Route path="/cases/:caseId" element={<CaseRoomPage caseName={cases.find((item) => item.case_id === selectedCaseId)?.case_name} onMutated={refreshLists} contextOpen={contextOpen} onContextOpenChange={setContextOpen}/>}/><Route path="*" element={<Navigate to="/" replace/>}/></Routes>}</div>
     </div>
   </div>;
 };

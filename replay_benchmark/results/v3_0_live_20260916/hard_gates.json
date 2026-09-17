@@ -1,0 +1,18 @@
+{
+  "status": "PARTIAL_LIVE_REPLAY",
+  "features": {
+    "case_creation": true,
+    "message_persistence": true,
+    "generic_message_fact_extraction": false,
+    "context_v2": true,
+    "context_v3": false,
+    "case_local_rag": true,
+    "official_rag": false,
+    "final_report_export": true
+  },
+  "live_measurement": {
+    "status": "NOT RUN",
+    "reason": "No DB-backed or live-chat execution was possible; no hard-gate pass is inferred from static tests.",
+    "counts": "NOT RUN"
+  }
+}

@@ -1,0 +1,362 @@
+[
+  {
+    "model": "gpt-4o-mini",
+    "usage": {
+      "input_tokens": 489,
+      "output_tokens": 78,
+      "total_tokens": 567,
+      "cached_input_tokens": 0
+    },
+    "operation": "voice_phishing_events_v2_2"
+  },
+  {
+    "model": "gpt-4o-mini",
+    "usage": {
+      "input_tokens": 483,
+      "output_tokens": 72,
+      "total_tokens": 555,
+      "cached_input_tokens": 0
+    },
+    "operation": "voice_phishing_events_v2_2"
+  },
+  {
+    "model": "gpt-4o-mini",
+    "usage": {
+      "input_tokens": 485,
+      "output_tokens": 76,
+      "total_tokens": 561,
+      "cached_input_tokens": 0
+    },
+    "operation": "voice_phishing_events_v2_2"
+  },
+  {
+    "model": "gpt-4o-mini",
+    "usage": {
+      "input_tokens": 487,
+      "output_tokens": 79,
+      "total_tokens": 566,
+      "cached_input_tokens": 0
+    },
+    "operation": "voice_phishing_events_v2_2"
+  },
+  {
+    "model": "gpt-4o-mini",
+    "usage": {
+      "input_tokens": 489,
+      "output_tokens": 80,
+      "total_tokens": 569,
+      "cached_input_tokens": 0
+    },
+    "operation": "voice_phishing_events_v2_2"
+  },
+  {
+    "model": "gpt-4o-mini",
+    "usage": {
+      "input_tokens": 554,
+      "output_tokens": 141,
+      "total_tokens": 695,
+      "cached_input_tokens": 0
+    },
+    "operation": "diagnosis_signal_context_v1"
+  },
+  {
+    "model": "gpt-4o-mini",
+    "usage": {
+      "input_tokens": 533,
+      "output_tokens": 190,
+      "total_tokens": 723,
+      "cached_input_tokens": 0
+    },
+    "operation": "responses.create"
+  },
+  {
+    "model": "gpt-4o-mini",
+    "usage": {
+      "input_tokens": 736,
+      "output_tokens": 116,
+      "total_tokens": 852,
+      "cached_input_tokens": 0
+    },
+    "operation": "case_work_card_v1"
+  },
+  {
+    "model": "gpt-4o-mini",
+    "usage": {
+      "input_tokens": 737,
+      "output_tokens": 126,
+      "total_tokens": 863,
+      "cached_input_tokens": 0
+    },
+    "operation": "case_work_card_v1"
+  },
+  {
+    "model": "gpt-4o-mini",
+    "usage": {
+      "input_tokens": 736,
+      "output_tokens": 180,
+      "total_tokens": 916,
+      "cached_input_tokens": 0
+    },
+    "operation": "case_work_card_v1"
+  },
+  {
+    "model": "gpt-4o-mini",
+    "usage": {
+      "input_tokens": 1843,
+      "output_tokens": 86,
+      "total_tokens": 1929,
+      "cached_input_tokens": 0
+    },
+    "operation": "responses.create"
+  },
+  {
+    "model": "gpt-4o-mini",
+    "usage": {
+      "input_tokens": 574,
+      "output_tokens": 253,
+      "total_tokens": 827,
+      "cached_input_tokens": 0
+    },
+    "operation": "final_case_report_v2"
+  },
+  {
+    "model": "gpt-4o-mini",
+    "usage": {
+      "input_tokens": 489,
+      "output_tokens": 86,
+      "total_tokens": 575,
+      "cached_input_tokens": 0
+    },
+    "operation": "voice_phishing_events_v2_2"
+  },
+  {
+    "model": "gpt-4o-mini",
+    "usage": {
+      "input_tokens": 483,
+      "output_tokens": 72,
+      "total_tokens": 555,
+      "cached_input_tokens": 0
+    },
+    "operation": "voice_phishing_events_v2_2"
+  },
+  {
+    "model": "gpt-4o-mini",
+    "usage": {
+      "input_tokens": 485,
+      "output_tokens": 76,
+      "total_tokens": 561,
+      "cached_input_tokens": 0
+    },
+    "operation": "voice_phishing_events_v2_2"
+  },
+  {
+    "model": "gpt-4o-mini",
+    "usage": {
+      "input_tokens": 487,
+      "output_tokens": 79,
+      "total_tokens": 566,
+      "cached_input_tokens": 0
+    },
+    "operation": "voice_phishing_events_v2_2"
+  },
+  {
+    "model": "gpt-4o-mini",
+    "usage": {
+      "input_tokens": 489,
+      "output_tokens": 80,
+      "total_tokens": 569,
+      "cached_input_tokens": 0
+    },
+    "operation": "voice_phishing_events_v2_2"
+  },
+  {
+    "model": "gpt-4o-mini",
+    "usage": {
+      "input_tokens": 581,
+      "output_tokens": 125,
+      "total_tokens": 706,
+      "cached_input_tokens": 0
+    },
+    "operation": "diagnosis_signal_context_v1"
+  },
+  {
+    "model": "gpt-4o-mini",
+    "usage": {
+      "input_tokens": 533,
+      "output_tokens": 186,
+      "total_tokens": 719,
+      "cached_input_tokens": 0
+    },
+    "operation": "responses.create"
+  },
+  {
+    "model": "gpt-4o-mini",
+    "usage": {
+      "input_tokens": 736,
+      "output_tokens": 158,
+      "total_tokens": 894,
+      "cached_input_tokens": 0
+    },
+    "operation": "case_work_card_v1"
+  },
+  {
+    "model": "gpt-4o-mini",
+    "usage": {
+      "input_tokens": 737,
+      "output_tokens": 166,
+      "total_tokens": 903,
+      "cached_input_tokens": 0
+    },
+    "operation": "case_work_card_v1"
+  },
+  {
+    "model": "gpt-4o-mini",
+    "usage": {
+      "input_tokens": 736,
+      "output_tokens": 141,
+      "total_tokens": 877,
+      "cached_input_tokens": 0
+    },
+    "operation": "case_work_card_v1"
+  },
+  {
+    "model": "gpt-4o-mini",
+    "usage": {
+      "input_tokens": 1843,
+      "output_tokens": 119,
+      "total_tokens": 1962,
+      "cached_input_tokens": 0
+    },
+    "operation": "responses.create"
+  },
+  {
+    "model": "gpt-4o-mini",
+    "usage": {
+      "input_tokens": 574,
+      "output_tokens": 226,
+      "total_tokens": 800,
+      "cached_input_tokens": 0
+    },
+    "operation": "final_case_report_v2"
+  },
+  {
+    "model": "gpt-4o-mini",
+    "usage": {
+      "input_tokens": 489,
+      "output_tokens": 84,
+      "total_tokens": 573,
+      "cached_input_tokens": 0
+    },
+    "operation": "voice_phishing_events_v2_2"
+  },
+  {
+    "model": "gpt-4o-mini",
+    "usage": {
+      "input_tokens": 483,
+      "output_tokens": 72,
+      "total_tokens": 555,
+      "cached_input_tokens": 0
+    },
+    "operation": "voice_phishing_events_v2_2"
+  },
+  {
+    "model": "gpt-4o-mini",
+    "usage": {
+      "input_tokens": 485,
+      "output_tokens": 76,
+      "total_tokens": 561,
+      "cached_input_tokens": 0
+    },
+    "operation": "voice_phishing_events_v2_2"
+  },
+  {
+    "model": "gpt-4o-mini",
+    "usage": {
+      "input_tokens": 487,
+      "output_tokens": 77,
+      "total_tokens": 564,
+      "cached_input_tokens": 0
+    },
+    "operation": "voice_phishing_events_v2_2"
+  },
+  {
+    "model": "gpt-4o-mini",
+    "usage": {
+      "input_tokens": 489,
+      "output_tokens": 80,
+      "total_tokens": 569,
+      "cached_input_tokens": 0
+    },
+    "operation": "voice_phishing_events_v2_2"
+  },
+  {
+    "model": "gpt-4o-mini",
+    "usage": {
+      "input_tokens": 570,
+      "output_tokens": 142,
+      "total_tokens": 712,
+      "cached_input_tokens": 0
+    },
+    "operation": "diagnosis_signal_context_v1"
+  },
+  {
+    "model": "gpt-4o-mini",
+    "usage": {
+      "input_tokens": 533,
+      "output_tokens": 201,
+      "total_tokens": 734,
+      "cached_input_tokens": 0
+    },
+    "operation": "responses.create"
+  },
+  {
+    "model": "gpt-4o-mini",
+    "usage": {
+      "input_tokens": 736,
+      "output_tokens": 125,
+      "total_tokens": 861,
+      "cached_input_tokens": 0
+    },
+    "operation": "case_work_card_v1"
+  },
+  {
+    "model": "gpt-4o-mini",
+    "usage": {
+      "input_tokens": 737,
+      "output_tokens": 129,
+      "total_tokens": 866,
+      "cached_input_tokens": 0
+    },
+    "operation": "case_work_card_v1"
+  },
+  {
+    "model": "gpt-4o-mini",
+    "usage": {
+      "input_tokens": 736,
+      "output_tokens": 148,
+      "total_tokens": 884,
+      "cached_input_tokens": 0
+    },
+    "operation": "case_work_card_v1"
+  },
+  {
+    "model": "gpt-4o-mini",
+    "usage": {
+      "input_tokens": 1843,
+      "output_tokens": 114,
+      "total_tokens": 1957,
+      "cached_input_tokens": 0
+    },
+    "operation": "responses.create"
+  },
+  {
+    "model": "gpt-4o-mini",
+    "usage": {
+      "input_tokens": 574,
+      "output_tokens": 244,
+      "total_tokens": 818,
+      "cached_input_tokens": 0
+    },
+    "operation": "final_case_report_v2"
+  }
+]

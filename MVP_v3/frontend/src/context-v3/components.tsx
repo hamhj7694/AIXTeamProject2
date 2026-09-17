@@ -21,7 +21,7 @@ const statusLabels: Record<string, string> = {
 const evidenceLabels: Record<string, string> = {
   MESSAGE: '대화 기록', QUESTION_ANSWER: '고객 답변', BANK_TRANSACTION: '거래 기록',
   VERIFICATION_RESULT: '기관 확인 결과', ATTACHMENT: '첨부 자료',
-  STRUCTURED_SIGNAL: '분석 근거', STAFF_RECORD: '담당자 기록',
+  STRUCTURED_SIGNAL: '분석 근거', STRUCTURED_ATOM: '분석 근거', STAFF_RECORD: '담당자 기록',
 };
 
 const internalDisplayLabels: Record<string, string> = {
@@ -35,12 +35,15 @@ export const staffDisplayValue = (item: ContextPanelItemV3): string => {
 };
 
 export const evidenceSummaries = (refs: ContextPanelItemV3['evidence_refs']): string[] => {
+  const detailed = refs.map((ref) => ref.summary?.trim()).filter((summary): summary is string => Boolean(summary));
+  if (detailed.length === refs.length) return detailed;
   const counts = new Map<string, number>();
   refs.forEach((ref) => {
+    if (ref.summary) return;
     const label = evidenceLabels[ref.type] ?? '기타 근거';
     counts.set(label, (counts.get(label) ?? 0) + 1);
   });
-  return [...counts].map(([label, count]) => `${label} ${count}건`);
+  return [...detailed, ...[...counts].map(([label, count]) => `${label} ${count}건`)];
 };
 
 export const SourceBadge: React.FC<{ source: string }> = ({ source }) => <span className="context-source-badge">{sourceLabels[source] ?? '기타 출처'}</span>;
@@ -73,7 +76,7 @@ const Evidence: React.FC<{ item: ContextPanelItemV3; compact?: boolean }> = ({ i
   const [open, setOpen] = useState(false);
   const detailsId = useId();
   const summaries = evidenceSummaries(item.evidence_refs);
-  const summaryList = summaries.length > 0 ? <ul>{summaries.map((summary) => <li key={summary}>{summary}</li>)}</ul> : null;
+  const summaryList = summaries.length > 0 ? <ul>{summaries.map((summary, index) => <li key={summary + '-' + index}>{summary}</li>)}</ul> : null;
   if (compact) return <>{item.evidence_refs.length === 0 ? <span className="context-evidence-empty" aria-disabled="true"><FileSearch size={12}/>근거 없음</span> : <button type="button" className="context-evidence-toggle" aria-expanded={open} aria-controls={detailsId} onClick={() => setOpen((value) => !value)}><FileSearch size={12}/>근거 {item.evidence_refs.length}건</button>}{open && summaryList && <div id={detailsId} className="context-compact-evidence-panel">{item.masked && <p>민감정보가 가려진 화면용 근거입니다.</p>}{summaryList}</div>}</>;
   return <details className="context-item-details"><summary><FileSearch size={12}/>근거와 상세 정보</summary><div><SourceBadge source={item.source_kind}/>{item.masked && <span>민감정보 가림 적용</span>}</div>{summaryList ?? <p>연결된 근거가 없습니다.</p>}</details>;
 };
@@ -114,12 +117,12 @@ export const SectionShell: React.FC<{ id: string; title: string; count?: number;
   </section>;
 };
 
-export const HistoryHint: React.FC<{ items: ContextPanelItemV3[]; busy: boolean; onRestore: (item: ContextPanelItemV3) => void; kind?: 'task' | 'fact' }> = ({ items, busy, onRestore, kind = 'task' }) => {
+export const HistoryHint: React.FC<{ items: ContextPanelItemV3[]; busy: boolean; onRestore: (item: ContextPanelItemV3) => void; onDelete?: (item: ContextPanelItemV3) => void; kind?: 'task' | 'fact' }> = ({ items, busy, onRestore, onDelete, kind = 'task' }) => {
   const [open, setOpen] = useState(false);
   const contentId = useId();
   if (items.length === 0 && kind === 'task') return null;
   return <section className="context-archive-history">
     <button type="button" className="context-history-summary" aria-expanded={open} aria-controls={contentId} onClick={() => setOpen((value) => !value)}><RotateCcw size={13}/><span>{kind === 'fact' ? '제외된 정보' : '완료·취소 업무'} {items.length}건</span><ChevronDown size={14}/></button>
-    {open && <div id={contentId} className="context-archive-list"><p>{items.length === 0 ? '제외된 정보가 없습니다.' : kind === 'fact' ? '검토에서 제외한 정보입니다. 복구하면 다시 확인 필요 상태로 돌아갑니다.' : '완료하거나 취소한 업무입니다. 복구하면 대기 상태의 현재 업무로 돌아갑니다.'}</p>{items.map((item) => <article key={item.item_id}><header><strong>{item.label}</strong><StatusBadge status={item.status}/></header><p>{staffDisplayValue(item)}</p><footer><SourceBadge source={item.source_kind}/><button type="button" disabled={busy} onClick={() => onRestore(item)}><RotateCcw size={12}/>{kind === 'fact' ? '정보 복구' : '업무 복구'}</button></footer></article>)}</div>}
+    {open && <div id={contentId} className="context-archive-list"><p>{items.length === 0 ? '제외된 정보가 없습니다.' : kind === 'fact' ? '검토에서 제외한 정보입니다. 복구하면 다시 확인 필요 상태로 돌아갑니다.' : '완료하거나 취소한 업무입니다. 복구하면 대기 상태의 현재 업무로 돌아갑니다.'}</p>{items.map((item) => <article key={item.item_id}><header><strong>{item.label}</strong><StatusBadge status={item.status}/></header><p>{staffDisplayValue(item)}</p><footer><SourceBadge source={item.source_kind}/><button type="button" disabled={busy} onClick={() => onRestore(item)}><RotateCcw size={12}/>{kind === 'fact' ? '정보 복구' : '업무 복구'}</button>{kind === 'fact' && onDelete && <button type="button" className="context-danger-action" disabled={busy} onClick={() => onDelete(item)}><X size={12}/>완전 삭제</button>}</footer></article>)}</div>}
   </section>;
 };

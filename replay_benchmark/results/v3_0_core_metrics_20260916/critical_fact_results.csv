@@ -1,0 +1,2 @@
+metric,numerator,denominator,score,tier,status,notes
+Critical Signal / Fact Recall,NOT RUN,270,NOT RUN,BLOCKED,BLOCKED,No live provider/DB and no frozen semantic mapping to event output

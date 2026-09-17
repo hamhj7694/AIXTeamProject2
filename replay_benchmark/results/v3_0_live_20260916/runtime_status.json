@@ -1,0 +1,15 @@
+{
+  "status": "PARTIAL_RUNTIME",
+  "live_ai_status": "BLOCKED",
+  "live_ai_blocker": "LIVE_AI_BLOCKED: PROVIDER_CONNECTION_UNAVAILABLE",
+  "docker_status": "BLOCKED",
+  "docker_blocker": "Docker daemon unavailable; no benchmark MySQL container was started.",
+  "existing_user_database_touched": false,
+  "benchmark_database_created": false,
+  "services_started": [],
+  "tests_executed": {
+    "ai_api": {"tests": 126, "passed": 126, "failures": 0, "errors": 0, "skipped": 0, "evidence": "ai_api_pytest.xml"},
+    "general_api_non_mysql": {"tests": 146, "passed": 146, "failures": 0, "errors": 0, "skipped": 0, "evidence": "general_api_non_mysql_pytest.xml"},
+    "general_api_full": {"status": "BLOCKED_MYSQL_RUNTIME", "reason": "MySQL integration path waited for unavailable DB and was stopped before touching any database."}
+  }
+}

@@ -55,6 +55,7 @@ class AnalyzeCaseService:
                         "risk": diagnosis.risk_level.value,
                         "risk_score": diagnosis.risk_score,
                         "mode": "PREVENT", "status": "TRIAGE",
+                        "case_name": diagnosis.context.incident_type or "보이스피싱 의심 사건",
                         "initial_brief": diagnosis.context.summary,
                         "diagnosis": diagnosis.model_dump(mode="json"),
                         "initial_report": initial_report.model_dump(mode="json"),
@@ -103,11 +104,11 @@ class InvalidCaseTransitionError(ValueError):
     pass
 
 
-async def transition_case(repository: CaseRepository, case_id: str, expected_version: int, *, status: str | None, mode: str | None) -> dict[str, Any]:
+async def transition_case(repository: CaseRepository, case_id: str, expected_version: int, *, case_name: str | None, status: str | None, mode: str | None) -> dict[str, Any]:
     current = await repository.get(case_id)
     if current is None:
         raise KeyError(case_id)
-    changes = {key: value for key, value in (("status", status), ("mode", mode)) if value is not None}
+    changes = {key: value for key, value in (("case_name", case_name), ("status", status), ("mode", mode)) if value is not None}
     if not changes:
         return current
     if status == 'CLOSED' or mode == 'CLOSED':

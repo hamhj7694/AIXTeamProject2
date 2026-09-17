@@ -267,6 +267,21 @@ class InMemoryCaseContextV2Repository:
             self._touch(case_id, now)
             return deepcopy(after)
 
+    async def delete_rejected_fact(self, case_id: str, fact_id: str, expected_version: int, actor: str) -> None:
+        """Permanently remove only a rejected fact after recording a tombstone audit event."""
+        async with self.cases._lock:
+            before = self.cases._context_v2_facts.get((case_id, fact_id))
+            if before is None:
+                raise KeyError(fact_id)
+            if before.version != expected_version:
+                raise ContextV2ConflictError(before.version)
+            if before.status != "REJECTED":
+                raise ContextV2TransitionError("완전히 삭제하려면 제외(REJECTED) 상태여야 합니다.")
+            now = _now()
+            self._history(case_id, "FACT", fact_id, before.version + 1, "HARD_DELETE", actor, before, {"fact_id": fact_id, "status": "DELETED"})
+            del self.cases._context_v2_facts[(case_id, fact_id)]
+            self._touch(case_id, now)
+
     async def create_gap(self, case_id: str, data: dict[str, Any], actor: str, *, source: str = "BANK_STAFF") -> PublicCaseGapV2:
         case = await self._case(case_id)
         async with self.cases._lock:
@@ -610,6 +625,28 @@ class MySqlCaseContextV2Repository:
                     await self._history(cursor, case_id, "FACT", fact_id, after.version, decision, actor, before, after)
                 await connection.commit()
                 return after
+            except BaseException:
+                await connection.rollback()
+                raise
+
+    async def delete_rejected_fact(self, case_id: str, fact_id: str, expected_version: int, actor: str) -> None:
+        """Permanently remove only a rejected fact after recording a tombstone audit event."""
+        pool = await self.cases._get_pool()
+        async with pool.acquire() as connection:
+            try:
+                await connection.begin()
+                async with connection.cursor(aiomysql.DictCursor) as cursor:
+                    row = await self._one(cursor, "case_context_facts_v2", "fact_id", case_id, fact_id, lock=True)
+                    if not row:
+                        raise KeyError(fact_id)
+                    before = _fact(row)
+                    if before.version != expected_version:
+                        raise ContextV2ConflictError(before.version)
+                    if before.status != "REJECTED":
+                        raise ContextV2TransitionError("완전히 삭제하려면 제외(REJECTED) 상태여야 합니다.")
+                    await self._history(cursor, case_id, "FACT", fact_id, before.version + 1, "HARD_DELETE", actor, before, {"fact_id": fact_id, "status": "DELETED"})
+                    await cursor.execute("DELETE FROM case_context_facts_v2 WHERE case_id=%s AND fact_id=%s", (case_id, fact_id))
+                await connection.commit()
             except BaseException:
                 await connection.rollback()
                 raise

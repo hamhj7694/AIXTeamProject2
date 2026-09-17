@@ -1,0 +1,57 @@
+{
+  "schema_version": "a-context-quality-metrics.v1",
+  "generated_at": "2026-09-16T13:39:08.136502+00:00",
+  "fixture_id": "VP-18",
+  "annotation_status": "PENDING_HUMAN_ANNOTATION",
+  "score_status": "PENDING_HUMAN_ANNOTATION",
+  "metrics": {
+    "event_decomposition": {
+      "true_positive": 0,
+      "predicted": 5,
+      "expected": 0,
+      "precision": null,
+      "recall": null,
+      "f1": null,
+      "status": "NO_GOLD_LABELS"
+    },
+    "semantic_atom": {
+      "true_positive": 0,
+      "predicted": 9,
+      "expected": 0,
+      "precision": null,
+      "recall": null,
+      "f1": null,
+      "status": "NO_GOLD_LABELS"
+    },
+    "critical_slot": {
+      "true_positive": 0,
+      "predicted": 28,
+      "expected": 0,
+      "precision": null,
+      "recall": null,
+      "f1": null,
+      "status": "NO_GOLD_LABELS"
+    },
+    "observed_lexical_code": {
+      "true_positive": 0,
+      "predicted": 0,
+      "expected": 0,
+      "precision": null,
+      "recall": null,
+      "f1": null,
+      "status": "NO_GOLD_LABELS"
+    }
+  },
+  "structural_metrics": {
+    "event_atom_turn_coverage": 1.0,
+    "relation_lineage_rate": 1.0,
+    "context_signal_lineage_rate": 1.0,
+    "privacy_status": "PASS"
+  },
+  "predicted_counts": {
+    "event_decomposition": 5,
+    "semantic_atom": 9,
+    "critical_slot": 28,
+    "observed_lexical_code": 0
+  }
+}

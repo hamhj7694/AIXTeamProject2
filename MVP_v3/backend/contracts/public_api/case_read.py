@@ -20,6 +20,7 @@ class PublicCaseReadModel(BaseModel):
 class PublicCaseReadResponse(PublicCaseReadModel):
     case_id: str
     version: int = 1
+    case_name: str | None = None
     client_request_id: str | None
     input_text: str
     risk: CaseRisk
@@ -42,6 +43,7 @@ class PublicCaseSummaryResponse(PublicCaseReadModel):
     """Screen-safe Case context shared by customer, bank, and verification views."""
     case_id: str
     version: int = 1
+    case_name: str | None = None
     context_revision: int = 1
     risk: CaseRisk
     mode: CaseMode
@@ -59,6 +61,7 @@ def to_public_case_read_response(record: dict[str, Any]) -> PublicCaseReadRespon
     return PublicCaseReadResponse.model_validate({
         "case_id": record["case_id"],
         "version": record.get("version", 1),
+        "case_name": record.get("case_name"),
         "client_request_id": record.get("client_request_id"),
         "input_text": record["input_text"],
         "risk": record["risk"],
@@ -81,7 +84,7 @@ def to_public_case_read_response(record: dict[str, Any]) -> PublicCaseReadRespon
 def to_public_case_summary_response(record: dict[str, Any]) -> PublicCaseSummaryResponse:
     """Do not include original call text, diagnosis payload, or internal report in chat bundles."""
     return PublicCaseSummaryResponse.model_validate({
-        "case_id": record["case_id"], "version": record.get("version", 1),
+        "case_id": record["case_id"], "version": record.get("version", 1), "case_name": record.get("case_name"),
         "context_revision": record.get("context_revision", 1),
         "risk": record["risk"], "mode": record["mode"], "status": record["status"],
         "initial_brief": record["initial_brief"], "primary_assignee": record.get("primary_assignee"),

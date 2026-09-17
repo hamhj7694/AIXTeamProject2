@@ -1,0 +1,37 @@
+{
+  "schema_version": "a-context-benchmark-summary.v1",
+  "generated_at": "2026-09-16T14:58:10.415801+00:00",
+  "benchmark_version": "benchmark_v1.0",
+  "case_count": 30,
+  "fact_count": 270,
+  "scenario_class_counts": {
+    "HIGH": 10,
+    "MIXED": 10,
+    "LOW": 10
+  },
+  "semantic_key_counts": {
+    "claimed_organization": 30,
+    "claimed_role": 30,
+    "transfer_requested": 30,
+    "transfer_amount": 30,
+    "otp_shared": 30,
+    "password_shared": 30,
+    "remote_app_requested": 30,
+    "isolation_family": 30,
+    "isolation_bank_staff": 30
+  },
+  "panel_section_counts": {
+    "IMPERSONATION_CONTACT": 60,
+    "FRAUD_INDICATORS": 120,
+    "LOSS_EXPOSURE": 90
+  },
+  "visibility_counts": {
+    "BANK_INTERNAL": 270
+  },
+  "criticality_counts": {
+    "HIGH": 180,
+    "CRITICAL": 90
+  },
+  "privacy_status": "PASS",
+  "source_text_exported": false
+}

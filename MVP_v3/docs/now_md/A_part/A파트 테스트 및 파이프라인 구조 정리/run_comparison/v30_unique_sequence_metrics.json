@@ -1,0 +1,39 @@
+{
+  "status": "PARTIAL_NA",
+  "weighting": "UNIQUE_SEQUENCE_MACRO",
+  "sequence_count": 2,
+  "scored_sequence_count": 1,
+  "sequence_macro": {
+    "precision": 1.0,
+    "recall": 0.14,
+    "f1": 0.245614
+  },
+  "sequences": [
+    {
+      "sequence_hash": "eeccdbc060d2cffda5128eeac2bfd11bde42bd1154d20016fb471713133afe49",
+      "member_count": 20,
+      "status": "SCORED",
+      "metrics": {
+        "tp": 14,
+        "predicted": 14,
+        "expected": 100,
+        "precision": 1.0,
+        "recall": 0.14,
+        "f1": 0.245614
+      }
+    },
+    {
+      "sequence_hash": "7a459de4ee0f9153f7db3e2db9eafc21eb96a4b0ab7dfea49c76dd47f98e6803",
+      "member_count": 10,
+      "status": "NOT_APPLICABLE",
+      "metrics": {
+        "tp": 0,
+        "predicted": 0,
+        "expected": 0,
+        "precision": 0.0,
+        "recall": null,
+        "f1": null
+      }
+    }
+  ]
+}

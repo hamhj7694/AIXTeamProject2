@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import re
 import unicodedata
@@ -9,10 +10,20 @@ from typing import Any
 
 from openai import AsyncOpenAI, AuthenticationError, RateLimitError
 
-from contracts.diagnosis import CaseContextFeatures, ContextResult, ExtractedEvent
+from contracts.diagnosis import CaseContextFeatures, ContextResult, ExtractedEvent, SemanticAtom
 
-from .constants import EVENT_OUTPUT_SCHEMA, SYSTEM_INSTRUCTION
+from .constants import (
+    ATOM_CLASSES,
+    CLAIMED_ORGANIZATION_CODES,
+    CLAIMED_ROLE_CODES,
+    ENTITY_CODES,
+    EVENT_OUTPUT_SCHEMA,
+    PREDICATE_CODES,
+    SEMANTIC_ATOM_INSTRUCTION,
+    SYSTEM_INSTRUCTION,
+)
 from .budget import active_diagnosis_budget
+from .lexical_cues import enrich_atom_payload
 
 
 @dataclass
@@ -22,6 +33,7 @@ class EventExtraction:
     successful_turn_ids: list[int]
     extractor_model: str
     warnings: list[str] = field(default_factory=list)
+    semantic_atoms: list[SemanticAtom] = field(default_factory=list)
 
 
 class AiProviderQuotaError(RuntimeError):
@@ -63,6 +75,7 @@ def build_case_context_features(events: list[ExtractedEvent]) -> CaseContextFeat
     tactics: list[str] = []
     exposures: list[str] = []
     amounts: list[float] = []
+    requested_amounts: list[float] = []
     chronology: list[str] = []
     for event in sorted(events, key=lambda item: item.detected_at_turn):
         code = event.subtype or event.event_family
@@ -79,12 +92,15 @@ def build_case_context_features(events: list[ExtractedEvent]) -> CaseContextFeat
             tactics.append(code)
         if event.amount_krw is not None:
             amounts.append(event.amount_krw)
+            if event.is_requested:
+                requested_amounts.append(event.amount_krw)
         chronology.append(f"T{event.detected_at_turn}:{event.event_family}:{code}")
     unique = lambda values: list(dict.fromkeys(values))
     return CaseContextFeatures(
         claimed_actor_types=unique(actor_types), claim_codes=unique(claims),
         requested_action_codes=unique(actions), manipulation_tactic_codes=unique(tactics),
         exposure_risk_codes=unique(exposures), amount_values_krw=unique(amounts),
+        requested_amount_values_krw=unique(requested_amounts),
         chronology=unique(chronology),
         unknown_fields=["transfer_status", "personal_information_exposure", "authentication_information_exposure"],
     )
@@ -142,8 +158,87 @@ def _validate_event(raw: dict[str, Any], turn_id: int, target: str) -> Extracted
     evidence = unicodedata.normalize("NFKC", str(raw["evidence_text"]).strip())
     if not evidence or evidence not in unicodedata.normalize("NFKC", target):
         raise ValueError("evidence_text가 TARGET 원문에 존재하지 않습니다.")
-    payload = {**raw, "evidence_text": evidence, "detected_at_turn": turn_id}
+    payload = {
+        key: value for key, value in raw.items()
+        if key != "semantic_atoms"
+    }
+    payload.update({"evidence_text": evidence, "detected_at_turn": turn_id})
     return ExtractedEvent.model_validate(payload)
+
+
+def _validate_llm_atoms(raw_atoms: Any, turn_id: int, target: str = "") -> list[SemanticAtom]:
+    """Validate LLM atoms and attach deterministic non-text lineage."""
+    if not isinstance(raw_atoms, list):
+        return []
+    result: list[SemanticAtom] = []
+    for index, raw in enumerate(raw_atoms, start=1):
+        if not isinstance(raw, dict):
+            continue
+        payload = dict(raw)
+        predicate = str(payload.get("predicate") or "UNKNOWN")
+        if not _is_single_primary_predicate(payload, predicate):
+            continue
+        if predicate.startswith("CLAIMS_"):
+            payload["action_state"] = None
+        elif payload.get("atom_class") == "ACTION_INSTRUCTION" and payload.get("action_state") in {None, "REQUESTED"}:
+            payload["action_state"] = "INSTRUCTED"
+        fingerprint_payload = {
+            key: payload.get(key)
+            for key in sorted(payload)
+            if key not in {"atom_id", "source_event_id", "source_turn_id", "semantic_fingerprint"}
+        }
+        fingerprint = hashlib.sha256(
+            json.dumps(
+                {"turn_id": turn_id, **fingerprint_payload},
+                ensure_ascii=True,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        payload.update({
+            "atom_id": f"ATM-{turn_id:04d}-LLM-{index:04d}",
+            "source_event_id": f"EVT-{turn_id:04d}-LLM-{index:04d}",
+            "source_turn_id": turn_id,
+            "semantic_fingerprint": f"sha256:{fingerprint}",
+        })
+        try:
+            result.append(SemanticAtom.model_validate(enrich_atom_payload(target, payload)))
+        except Exception:
+            continue
+    return result
+
+
+def _is_single_primary_predicate(payload: dict[str, Any], predicate: str) -> bool:
+    """Reject one Atom that mixes independently reviewable meanings."""
+    if predicate not in PREDICATE_CODES:
+        return False
+    if payload.get("atom_class") not in ATOM_CLASSES:
+        return False
+    for field in ("subject", "actor", "target", "object", "destination"):
+        value = payload.get(field)
+        if value is not None:
+            allowed = {"destination": {"CLAIMED_SAFE_ACCOUNT", "EXTERNAL_ACCOUNT", "CUSTOMER_ACCOUNT", "UNKNOWN"}}.get(field, set(ENTITY_CODES))
+            if value not in allowed:
+                return False
+    if payload.get("claimed_organization") not in {None, *CLAIMED_ORGANIZATION_CODES}:
+        return False
+    if payload.get("claimed_role") not in {None, *CLAIMED_ROLE_CODES}:
+        return False
+    if predicate == "CLAIMS_ORGANIZATION" and payload.get("claimed_role") is not None:
+        return False
+    if predicate == "CLAIMS_ROLE" and payload.get("claimed_organization") is not None:
+        return False
+    if predicate in {"TRANSFER_FUNDS", "WITHDRAW_CASH", "INSTALL_APP", "OPEN_URL", "SHARE_SCREEN"}:
+        if payload.get("communication_control") is not None or payload.get("auth_secret_type") is not None:
+            return False
+    if predicate in {"DISCLOSE_OTP", "DISCLOSE_PASSWORD", "PROVIDE_CARD_INFO"}:
+        if payload.get("destination") is not None or payload.get("amount_value_krw") is not None:
+            return False
+    if payload.get("atom_class") == "COMMUNICATION_CONTROL" and predicate not in {
+        "MAINTAIN_CALL", "END_CALL", "KEEP_SECRET", "AVOID_REPORTING", "AVOID_EXTERNAL_CONTACT",
+    }:
+        return False
+    return True
 
 
 def _local_safety_events(
@@ -236,9 +331,10 @@ async def extract_events(text: str) -> EventExtraction:
     events: list[ExtractedEvent] = []
     successful: list[int] = []
     warnings: list[str] = []
+    semantic_atoms: list[SemanticAtom] = []
     failures: list[Exception] = []
     failed_turn_ids: set[int] = set()
-    max_output_tokens = int(os.getenv("OPENAI_EVENT_MAX_OUTPUT_TOKENS", "350"))
+    max_output_tokens = int(os.getenv("OPENAI_EVENT_MAX_OUTPUT_TOKENS", "1800"))
     for turn_id, target in enumerate(turns, start=1):
         reservation = budget.reserve(
             input_text=f"{SYSTEM_INSTRUCTION}\n[TARGET][TURN {turn_id}] {target}",
@@ -247,7 +343,7 @@ async def extract_events(text: str) -> EventExtraction:
         try:
             response = await client.responses.create(
                 model=model_name,
-                instructions=SYSTEM_INSTRUCTION,
+                instructions=f"{SYSTEM_INSTRUCTION}\n\n{SEMANTIC_ATOM_INSTRUCTION}",
                 input=f"[TARGET][TURN {turn_id}][SPEAKER_UNKNOWN] {target}",
                 max_output_tokens=max_output_tokens,
                 text={"format": {"type": "json_schema", "name": "voice_phishing_events_v2_2", "schema": EVENT_OUTPUT_SCHEMA, "strict": True}},
@@ -255,6 +351,7 @@ async def extract_events(text: str) -> EventExtraction:
             budget.settle(reservation, response)
             payload = json.loads(response.output_text)
             events.extend(_validate_event(raw, turn_id, target) for raw in payload["events"])
+            semantic_atoms.extend(_validate_llm_atoms(payload.get("semantic_atoms"), turn_id, target))
             successful.append(turn_id)
         except Exception as exc:
             failures.append(exc)
@@ -270,6 +367,7 @@ async def extract_events(text: str) -> EventExtraction:
                 list(range(1, len(turns) + 1)),
                 "local-safety-fallback-v1",
                 warnings,
+                [],
             )
         if any(isinstance(error, RateLimitError) for error in failures):
             raise AiProviderQuotaError("OpenAI API 크레딧 또는 호출 한도가 부족합니다. 결제·사용 한도를 확인한 뒤 다시 시도해 주세요.")
@@ -282,7 +380,7 @@ async def extract_events(text: str) -> EventExtraction:
         if fallback_events:
             events.extend(fallback_events)
             warnings.append("일부 문장은 외부 AI 대신 로컬 안전 신호로 보완했습니다.")
-    return EventExtraction(turns, _dedupe_events(events), successful, model_name, warnings)
+    return EventExtraction(turns, _dedupe_events(events), successful, model_name, warnings, semantic_atoms)
 
 
 def build_context_from_events(events: list[ExtractedEvent]) -> ContextResult:

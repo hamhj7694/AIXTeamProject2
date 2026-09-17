@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import json
 import os
 import hashlib
 import logging
@@ -135,7 +136,8 @@ from .domains.cases.case_context_v2_repository import (
 )
 from .domains.cases.mysql_repository import MySqlCaseRepository
 from .domains.cases.context_v3.semantic_keys import ALLOWED_SEMANTIC_KEYS, SEMANTIC_LABELS, proposal_dedupe_key
-from .domains.cases.context_v3.panel import build_context_panel_v3
+from .domains.cases.context_v3.panel import build_context_panel_v3, build_summary_projection
+from .domains.cases.context_v3.atom_fact_projection import project_semantic_atoms_to_fact_candidates
 from .domains.cases.service import AnalyzeCaseService, InvalidCaseTransitionError, transition_case
 
 
@@ -478,6 +480,7 @@ async def patch_case(case_id: str, request: PublicCasePatchRequest) -> PublicCas
             repository,
             case_id,
             request.expected_version,
+            case_name=request.case_name,
             status=request.status,
             mode=request.mode,
         )
@@ -575,24 +578,58 @@ async def seed_initial_context_facts(case_id: str) -> None:
         return
     diagnosis = case.get("diagnosis") or {}
     context = diagnosis.get("context") or {}
-    evidence_id = str((case.get("initial_report") or {}).get("report_id") or case_id)
+    diagnosis_signals = diagnosis.get("context_signals") or []
+    diagnosis_atoms = diagnosis.get("semantic_atoms") or []
+    if diagnosis_signals:
+        base_evidence_ref = {"type": "STRUCTURED_SIGNAL", "id": str(diagnosis_signals[0].get("signal_id"))}
+    elif diagnosis_atoms:
+        base_evidence_ref = {"type": "STRUCTURED_ATOM", "id": str(diagnosis_atoms[0].get("atom_id"))}
+    else:
+        base_evidence_ref = {"type": "STAFF_RECORD", "id": str((case.get("initial_report") or {}).get("report_id") or case_id)}
     candidates: list[tuple[str, str, dict, str]] = []
     transfer = case.get("victim_transfer_status")
     if transfer in {"YES", "NO"}:
         candidates.append(("transfer.actual.status", "실제 이체 여부", {"status": "TRANSFERRED" if transfer == "YES" else "NOT_TRANSFERRED"}, "이체함" if transfer == "YES" else "이체하지 않음"))
     features = diagnosis.get("features") or {}
-    requested_amount = int(float(features.get("requested_amount_max") or 0))
-    if requested_amount > 0:
-        candidates.append(("transfer.requested.amount", "요구 금액", {"amount_krw": requested_amount, "currency": "KRW"}, f"{requested_amount:,}원 요구"))
+    context_features = diagnosis.get("case_context_features") or {}
+    amount_values: list[int] = []
+    raw_amount_values = [
+        *(context_features.get("requested_amount_values_krw") or []),
+        *[
+            atom.get("amount_value_krw")
+            for atom in diagnosis_atoms
+            if atom.get("amount_value_krw") is not None and atom.get("action_state") == "REQUESTED"
+        ],
+    ]
+    for raw_amount in raw_amount_values:
+        try:
+            amount = int(float(raw_amount))
+        except (TypeError, ValueError):
+            continue
+        if amount > 0 and amount not in amount_values:
+            amount_values.append(amount)
+    if not amount_values:
+        fallback_amount = int(float(features.get("requested_amount_max") or 0))
+        if fallback_amount > 0:
+            amount_values.append(fallback_amount)
+    for amount in amount_values:
+        candidates.append(("transfer.requested.amount", "요구 금액", {"amount_krw": amount, "currency": "KRW"}, f"{amount:,}원 요구"))
     actual_amount = int(float(case.get("actual_loss_amount_krw") or 0))
     if transfer == "YES" and actual_amount > 0:
         candidates.append(("transfer.actual.amount", "실제 이체 금액", {"amount_krw": actual_amount, "currency": "KRW"}, f"{actual_amount:,}원 이체"))
-    context_features = diagnosis.get("case_context_features") or {}
     requested_codes = {str(code).upper() for code in context_features.get("requested_action_codes", [])}
-    if any("AUTH" in code or "OTP" in code for code in requested_codes):
-        candidates.append(("exposure.authentication_information", "인증정보 노출", {"status": "REQUESTED"}, "인증정보 제공 요구"))
-    if any("REMOTE" in code for code in requested_codes):
-        candidates.append(("device.remote_control_app", "원격제어 앱", {"status": "REQUESTED"}, "원격제어 앱 설치 요구"))
+    requested_action_facts = {
+        "REQUEST_AUTH_INFO": ("exposure.authentication_information", "인증정보 노출", {"status": "REQUESTED"}, "인증정보 제공 요구"),
+        "REQUEST_PERSONAL_INFO": ("exposure.personal_information", "개인정보 노출", {"status": "REQUESTED"}, "개인정보 제공 요구"),
+        "REQUEST_INSTALL_APP": ("device.remote_control_app", "원격제어 앱", {"status": "REQUESTED"}, "원격제어 앱 설치 요구"),
+        "REQUEST_TRANSFER": ("circumstance.demand", "상대방 요구", {"text": "송금·이체 요구"}, "송금·이체 요구"),
+        "REQUEST_KEEP_CALL": ("circumstance.demand", "상대방 요구", {"text": "통화 유지 요구"}, "통화 유지 요구"),
+        "REQUEST_SECRECY": ("circumstance.demand", "상대방 요구", {"text": "외부 확인 제한 요구"}, "외부 확인 제한 요구"),
+    }
+    for code in sorted(requested_codes):
+        fact = requested_action_facts.get(code)
+        if fact:
+            candidates.append(fact)
     for key, label, values in (
         ("offender.incident_claim", "상대방 주장", context.get("offender_claims", [])),
         ("circumstance.demand", "상대방 요구", context.get("offender_demands", [])),
@@ -602,13 +639,138 @@ async def seed_initial_context_facts(case_id: str) -> None:
             text = str(value).strip()
             if text:
                 candidates.append((key, label, {"text": text}, text))
+
+    # Context features and LLM atoms are complementary. The former is a safe
+    # grouped summary; the latter preserves fine-grained facts that must also
+    # become reviewable Context V3 items.
+    candidate_keys = {(key, json.dumps(value, ensure_ascii=False, sort_keys=True), display) for key, _, value, display in candidates}
+    def add_structured_candidate(key: str, label: str, value: dict[str, Any], display: str) -> None:
+        if key == "circumstance.tactic":
+            family = (
+                {"고립", "연락", "가족", "상의를", "알리"} if value.get("kind") == "ISOLATION"
+                else {"긴급", "재촉", "압박", "시한"} if value.get("kind") in {"URGENCY", "DEADLINE_TODAY", "DEADLINE_IMMEDIATE"}
+                else {"불안", "공포", "처벌", "피해"} if value.get("kind") == "FEAR" else set()
+            )
+            if family and any(any(word in existing.casefold() for word in family) for existing_key, _, _, existing in candidates if existing_key == key):
+                return
+        marker = (key, json.dumps(value, ensure_ascii=False, sort_keys=True), display)
+        if marker not in candidate_keys:
+            candidates.append((key, label, value, display))
+            candidate_keys.add(marker)
+
+    organization_labels = {
+        "PROSECUTION_SERVICE": "수사기관", "POLICE_SERVICE": "경찰", "FINANCIAL_SUPERVISORY_SERVICE": "금융기관",
+        "COURT": "법원", "BANK": "은행", "CARD_COMPANY": "카드사", "LOAN_COMPANY": "대출기관",
+    }
+    def organization_display(atom: dict[str, Any], fallback: str) -> str:
+        """Prefer the privacy-safe observed organization phrase over a broad code label."""
+        for term in atom.get("observed_terms") or []:
+            surface = str(term.get("surface_form") or "").strip() if isinstance(term, dict) else str(term).strip()
+            if surface and len(surface) <= 120:
+                return surface
+        return fallback
+    for atom in diagnosis_atoms:
+        predicate = str(atom.get("predicate") or "").upper()
+        atom_class = str(atom.get("atom_class") or "").upper()
+        cues = {str(cue).upper() for cue in atom.get("lexical_cues", [])}
+        if predicate == "CLAIMS_ORGANIZATION":
+            organization_code = str(atom.get("claimed_organization") or "")
+            organization = organization_display(atom, organization_labels.get(organization_code, "특정 기관"))
+            add_structured_candidate("offender.claimed_organization", "사칭 기관", {
+                "organization": organization, "organization_code": organization_code or None,
+            }, f"상대방이 {organization}을(를) 사칭한 정황")
+        elif predicate == "TRANSFER_FUNDS":
+            add_structured_candidate("circumstance.demand", "상대방 요구", {"kind": "TRANSFER", "text": "송금·이체 요구"}, "송금·이체 요구")
+        elif predicate == "OPEN_URL" or "OPEN_URL" in cues:
+            add_structured_candidate("circumstance.demand", "상대방 요구", {"kind": "LINK_OR_APP", "text": "링크·앱 실행 요구"}, "링크·앱 실행 요구")
+        elif predicate in {"AVOID_EXTERNAL_CONTACT", "KEEP_CALL"} or atom.get("communication_control"):
+            add_structured_candidate("circumstance.tactic", "압박·조작 수법", {"kind": "ISOLATION", "text": "외부 연락 제한"}, "외부 연락 제한")
+        elif atom.get("urgency") not in {None, "NONE", "UNKNOWN", "UNKNOWN_DEADLINE"}:
+            add_structured_candidate("circumstance.tactic", "압박·조작 수법", {"kind": "URGENCY", "text": "긴급 처리 압박"}, "긴급 처리 압박")
+        elif atom.get("fear_pressure") not in {None, "NONE"} or atom.get("threat_type"):
+            add_structured_candidate("circumstance.tactic", "압박·조작 수법", {"kind": "FEAR", "text": "불안·공포 유발"}, "불안·공포 유발")
+
+    observation_candidates = {
+        "PURPOSE_SAFE_ACCOUNT": ("circumstance.demand", "안전계좌로 자금 이동을 유도한 정황", {"kind": "SAFE_ACCOUNT"}),
+        "DEADLINE_TODAY": ("circumstance.tactic", "오늘 안에 처리하도록 재촉한 정황", {"kind": "DEADLINE_TODAY"}),
+        "DEADLINE_IMMEDIATE": ("circumstance.tactic", "즉시 처리하도록 재촉한 정황", {"kind": "DEADLINE_IMMEDIATE"}),
+    }
+    for observation in context_features.get("observations", []):
+        code = str(observation.get("code") or "").upper()
+        if str(observation.get("status") or "").upper() == "DENIED":
+            continue
+        candidate = observation_candidates.get(code)
+        if candidate:
+            key, display, value = candidate
+            add_structured_candidate(key, "상대방 요구" if key.endswith("demand") else "압박·조작 수법", value, display)
+    # Keep grouped legacy candidates, then add one reviewable candidate per
+    # fine-grained Atom so values are not collapsed into one panel row.
+    for atom_candidate in project_semantic_atoms_to_fact_candidates(diagnosis_atoms):
+        candidates.append((
+            atom_candidate["semantic_key"], atom_candidate["display_label"],
+            atom_candidate["value"], atom_candidate["display_value"],
+        ))
     store = case_context_v2_repository()
+    amount_atom_ids = {
+        int(float(atom["amount_value_krw"])): str(atom["atom_id"])
+        for atom in diagnosis_atoms
+        if atom.get("amount_value_krw") is not None
+    }
+    def relevant_atom_id(key: str, display: str) -> str | None:
+        text = display.casefold()
+        for atom in diagnosis_atoms:
+            predicate = str(atom.get("predicate") or "").upper()
+            cues = {str(cue).upper() for cue in atom.get("lexical_cues", [])}
+            if key == "offender.claimed_organization" and predicate == "CLAIMS_ORGANIZATION":
+                return str(atom["atom_id"])
+            if key == "offender.incident_claim" and predicate.startswith("CLAIMS_"):
+                return str(atom["atom_id"])
+            if key == "exposure.authentication_information" and (
+                atom.get("auth_secret_type") or predicate in {"DISCLOSE_OTP", "REQUEST_AUTH_INFO"}
+            ):
+                return str(atom["atom_id"])
+            if key == "exposure.personal_information" and (
+                "PERSONAL" in predicate or "SENSITIVE_INFO" in cues
+            ):
+                return str(atom["atom_id"])
+            if key == "device.remote_control_app" and (
+                "DEVICE" in predicate or "DEVICE_CONTROL" in cues or "REMOTE" in predicate
+            ):
+                return str(atom["atom_id"])
+            if key == "transfer.requested.amount" and atom.get("amount_value_krw") is not None:
+                continue
+            if key == "circumstance.demand":
+                if "송금" in text or "이체" in text:
+                    if predicate in {"TRANSFER_FUNDS", "OTHER"} or "TRANSFER" in cues:
+                        return str(atom["atom_id"])
+                if "링크" in text or "앱" in text:
+                    if predicate in {"OPEN_URL", "OPEN_APP"} or "OPEN_URL" in cues or "DEVICE" in predicate:
+                        return str(atom["atom_id"])
+                if "통화" in text or "외부" in text:
+                    if atom.get("communication_control") or predicate in {"AVOID_EXTERNAL_CONTACT", "KEEP_CALL"}:
+                        return str(atom["atom_id"])
+            if key == "circumstance.tactic":
+                if "고립" in text or "연락" in text:
+                    if atom.get("communication_control") or atom.get("isolation_pressure"):
+                        return str(atom["atom_id"])
+                if "긴급" in text or "압박" in text:
+                    if atom.get("urgency") not in {None, "NONE", "UNKNOWN", "UNKNOWN_DEADLINE"} or atom.get("financial_pressure") not in {None, "NONE"}:
+                        return str(atom["atom_id"])
+                if "불안" in text or "공포" in text:
+                    if atom.get("fear_pressure") not in {None, "NONE"} or atom.get("threat_type"):
+                        return str(atom["atom_id"])
+        return None
     for key, label, value, display in candidates:
-        digest = hashlib.sha256(f"{case_id}|{key}|{display}".encode()).hexdigest()[:36]
+        # Include typed value/Atom lineage in the idempotency key so two
+        # separate mentions of the same amount remain separate events.
+        digest = hashlib.sha256(f"{case_id}|{key}|{json.dumps(value, ensure_ascii=False, sort_keys=True)}|{display}".encode()).hexdigest()[:36]
+        amount_atom_id = amount_atom_ids.get(int(value.get("amount_krw", 0))) if key == "transfer.requested.amount" else None
+        support_atom_id = value.get("atom_id") or amount_atom_id or relevant_atom_id(key, display)
+        evidence_refs = [{"type": "STRUCTURED_ATOM", "id": support_atom_id}] if support_atom_id else [dict(base_evidence_ref)]
         await store.create_fact(case_id, {
             "client_request_id": f"initial-{digest}", "semantic_key": key, "display_label": label,
             "value": value, "display_value": display, "confidence": None,
-            "evidence_refs": [{"type": "STRUCTURED_SIGNAL", "id": evidence_id}], "visibility": "BANK_INTERNAL",
+            "evidence_refs": evidence_refs, "visibility": "BANK_INTERNAL",
         }, "system:initial-diagnosis", source_kind="AI_EXTRACTION")
 
 
@@ -823,7 +985,8 @@ async def _read_case_support_source(case_id: str, *, attempts: int = 3) -> tuple
 def _case_support_ai_input(case_id: str, case: dict, facts: list[dict], questions: list[dict], verifications: list[dict], actions: list[dict]) -> dict:
     actions = actions_for_ai(actions)
     return {
-        "case_id": case_id, "diagnosis": case.get("diagnosis"),
+        "case_id": case_id, "source_revision": max(1, int(case.get("context_revision", 1))),
+        "diagnosis": case.get("diagnosis"),
         "question_context": build_question_recommendation_context(facts, questions, case),
         "questions": [{
             "question_id": item["question_id"],
@@ -1084,9 +1247,9 @@ async def _persist_structured_answer_fact(question: dict, answered: dict, answer
 async def answer_customer_question(case_id: str, question_id: str, request: PublicAnswerCustomerQuestionRequest, background_tasks: BackgroundTasks) -> PublicCustomerQuestionResponse:
     await require_case(case_id)
     question = next((item for item in await repository.list_customer_questions(case_id) if item["question_id"] == question_id), None)
-    if question is None:
+    if request.raw_answer is None and question is None:
         raise HTTPException(status_code=404, detail={"code": "CUSTOMER_QUESTION_NOT_FOUND", "message": "답변할 질문을 찾을 수 없습니다."})
-    current_version = int(question.get("question_version", 1))
+    current_version = int((question or {}).get("question_version", 1))
     if request.raw_answer is None and request.question_version is not None and request.question_version != current_version:
         raise HTTPException(status_code=409, detail={"code": "QUESTION_VERSION_CONFLICT", "message": "질문이 변경되었습니다.", "current_version": current_version})
     answer_payload = None
@@ -2075,6 +2238,16 @@ async def create_case_context_v2_fact(case_id: str, actor_user_id: str, request:
         raise_context_v2_error(exc)
 
 
+@app.delete("/api/cases/{case_id}/context-v2/facts/{fact_id}", status_code=204)
+async def delete_rejected_case_context_v2_fact(case_id: str, fact_id: str, actor_user_id: str, expected_version: int) -> None:
+    """Hard-delete a rejected/archive fact only; the repository writes an audit tombstone."""
+    store = await require_context_v2_member(case_id, actor_user_id, access="REVIEW")
+    try:
+        await store.delete_rejected_fact(case_id, fact_id, expected_version, actor_user_id)
+    except (KeyError, ContextV2TransitionError, ContextV2ConflictError) as exc:
+        raise_context_v2_error(exc)
+
+
 @app.patch("/api/cases/{case_id}/context-v2/facts/{fact_id}/review", response_model=PublicCaseFactV2)
 async def review_case_context_v2_fact(case_id: str, fact_id: str, actor_user_id: str, request: PublicReviewFactV2Request) -> PublicCaseFactV2:
     store = await require_context_v2_member(case_id, actor_user_id, access="REVIEW")
@@ -2296,11 +2469,17 @@ async def update_case_action(case_id: str, action_id: str, actor_user_id: str, r
         if current is None and request.status is None:
             raise KeyError(action_id)
         next_status = request.status or current.get('status', 'REQUESTED')
-        if request.note is None:
-            updated = await repository.update_action(case_id, action_id, next_status, request.updated_by)
-        else:
-            updated = await repository.update_action(case_id, action_id, next_status, request.updated_by, request.note)
+        updated = await repository.update_action(
+            case_id, action_id, next_status, request.updated_by,
+            note=request.note, expected_version=request.expected_version,
+            title=request.title, visibility=request.visibility,
+        )
         return to_public_action(updated)
+    except CaseVersionConflictError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "VERSION_CONFLICT", "message": "Action has changed.", "current_version": exc.current_version},
+        ) from exc
     except KeyError as exc:
         raise HTTPException(status_code=404, detail={"code": "CASE_ACTION_NOT_FOUND", "message": "체크리스트 항목을 찾을 수 없습니다."}) from exc
 
@@ -2352,7 +2531,7 @@ async def get_case_bundle(case_id: str, view: Literal["entry", "customer", "bank
     if view != "customer" and (record.get("status") == "CLOSED" or record.get("mode") == "CLOSED"):
         stored_final_report = await repository.get_final_report(case_id)
         if stored_final_report:
-            final_report = PublicReportResponse.model_validate(stored_final_report)
+            final_report = PublicReportResponse.model_validate(_annotate_report_revision(stored_final_report, record))
     if view == "customer":
         questions = [to_public_customer_question_view(item).model_dump(mode="json") for item in question_records]
         customer_verification_results = [
@@ -2421,6 +2600,29 @@ async def get_live_report(case_id: str) -> dict:
     return record["initial_report"]
 
 
+def _enforce_proposed_fact_caution(report: dict[str, Any], report_facts: list[dict[str, Any]]) -> dict[str, Any]:
+    """Keep upstream PROPOSED facts explicitly unconfirmed in report prose."""
+    proposed = [item for item in report_facts if item.get("status") == "PROPOSED"]
+    if not proposed:
+        return report
+    marker = "PROPOSED (NOT CONFIRMED)"
+    terms = {
+        token.lower()
+        for item in proposed
+        for token in re.findall(r"[A-Za-z0-9가-힣]{2,}", str(item.get("value") or ""))
+    }
+    for key in ("executive_summary", "incident_summary", "customer_impact_summary"):
+        text = str(report.get(key) or "").strip()
+        if text and marker not in text and any(term in text.lower() for term in terms):
+            report[key] = f"{marker}: {text}"
+    facts = []
+    for item in report.get("verified_facts") or []:
+        value = str(item)
+        facts.append(value if marker in value or "확인 전" in value or "미확인" in value or not any(term in value.lower() for term in terms) else f"{marker}: {value}")
+    report["verified_facts"] = facts
+    return report
+
+
 @app.post("/api/cases/{case_id}/reports/finalize", response_model=PublicReportResponse)
 async def finalize_case_report(case_id: str, request: AdminCaseFinalizeRequest) -> PublicReportResponse:
     require_admin_password(request.password)
@@ -2428,21 +2630,49 @@ async def finalize_case_report(case_id: str, request: AdminCaseFinalizeRequest) 
         case = await repository.get(case_id)
         if case is None:
             raise KeyError(case_id)
-        facts, verifications, actions, messages, questions = await asyncio.gather(
+        resources, facts, verifications, actions, messages, questions = await asyncio.gather(
+            case_context_v2_repository().list_resources(case_id),
             repository.list_case_facts(case_id),
             repository.list_verifications(case_id),
             repository.list_actions(case_id),
             repository.list_messages(case_id),
             repository.list_customer_questions(case_id),
         )
+        if isinstance(repository, MySqlCaseRepository):
+            display_store = await context_display_repository(case_id)
+            display_items = await display_store.list_items(case_id, include_deleted=True)
+        else:
+            display_records = getattr(repository, "_display_items", {})
+            display_items = list(display_records.values()) if isinstance(display_records, dict) else []
+        summary = build_summary_projection(case, resources, verifications, actions, display_items)
+        merged_facts, _ = merge_support_records(resources, facts, actions)
+        v2_fact_ids = {fact.fact_id for fact in resources.facts}
+        v2_fact_fields = {
+            SEMANTIC_FIELDS[fact.semantic_key]
+            for fact in resources.facts
+            if fact.semantic_key in SEMANTIC_FIELDS
+        }
+        report_facts = [
+            item for item in merged_facts
+            if item.get("status") not in {"REJECTED", "SUPERSEDED"}
+            and (
+                item.get("fact_id") in v2_fact_ids
+                or normalize_target_field(str(item.get("field", ""))) not in v2_fact_fields
+            )
+        ]
+        report_actions = [
+            item for item in actions
+            if item.get("actor_type") in {None, "BANK_STAFF"}
+            and not str(item.get("action_type", "")).startswith("CUSTOMER_PROGRESS:")
+        ]
         staff = await read_staff_context_records(case_id)
         ai_report = await service.ai_client.generate_final_report({
             "case_id": case_id,
-            "case_summary": case.get("initial_brief", ""),
+            "case_summary": summary["text"],
             "workflow_status": case.get("status", "TRIAGE"),
             "case_mode": case.get("mode", "PREVENT"),
             "staff_context": staff_context(staff),
-            "known_facts": [user_text(f"{item.get('field')}: {item.get('value')} ({item.get('status')})") for item in facts[:40]],
+            "known_facts": [user_text(f"{item.get('field')}: {item.get('value')} ({item.get('status')})") for item in report_facts[:40]],
             "recent_conversation": [
                 f"{item.get('actor_display_name', item.get('actor_type', '작성자'))}: {item.get('content', '')[:500]}"
                 for item in messages[-30:] if item.get("message_kind") != "REPORT_CARD" and item.get("visibility") != "AI_PRIVATE"
@@ -2452,8 +2682,8 @@ async def finalize_case_report(case_id: str, request: AdminCaseFinalizeRequest) 
                 for item in verifications[:30]
             ],
             "action_results": [
-                user_text(f"{item.get('action_type')}: {item.get('note') or '상세 내용 없음'} ({item.get('status')})")
-                for item in actions_for_ai(actions)[:30]
+                user_text(f"{item.get('title') or item.get('action_type')}: {item.get('note') or '상세 내용 없음'} ({item.get('status')})")
+                for item in report_actions[:30]
             ],
             "customer_answers": [
                 f"질문: {item.get('question_text')} / 고객 답변: {item.get('answer_text')}"
@@ -2461,6 +2691,7 @@ async def finalize_case_report(case_id: str, request: AdminCaseFinalizeRequest) 
             ][:30],
             "closure_note": request.note,
         })
+        ai_report = _enforce_proposed_fact_caution(ai_report, report_facts)
         report_card = {
             "title": ai_report["title"],
             "executive_summary": ai_report["executive_summary"],
@@ -2489,6 +2720,9 @@ async def finalize_case_report(case_id: str, request: AdminCaseFinalizeRequest) 
             {"section_key": "resolution", "content": {"text": report_card["resolution"], "closure_note": request.note}},
             {"section_key": "follow_up", "content": {"items": report_card["follow_up"]}},
             {"section_key": "cautions", "content": {"items": report_card["cautions"]}},
+            {"section_key": "report_metadata", "content": {
+                "summary_source_revision": summary["source_revision"],
+            }},
         ]
         report = await repository.finalize_report(case_id, request.expected_version, request.note, sections, report_card)
     except AiServiceQuotaError as exc:
@@ -2503,7 +2737,8 @@ async def finalize_case_report(case_id: str, request: AdminCaseFinalizeRequest) 
         raise HTTPException(status_code=409, detail={"code": str(exc), "message": "현재 사건 상태에서는 요청한 변경을 수행할 수 없습니다."}) from exc
     except KeyError as exc:
         raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case not found."}) from exc
-    return PublicReportResponse.model_validate(report)
+    latest_case = await repository.get(case_id) or case
+    return PublicReportResponse.model_validate(_annotate_report_revision(report, latest_case))
 
 
 @app.post("/api/cases/{case_id}/reopen", response_model=PublicCaseReadResponse, response_model_exclude_none=True)
@@ -2523,10 +2758,28 @@ async def reopen_closed_case(case_id: str, request: AdminCaseReopenRequest) -> P
 @app.get("/api/cases/{case_id}/reports/final", response_model=PublicReportResponse)
 async def get_final_case_report(case_id: str) -> PublicReportResponse:
     await require_case(case_id)
+    case = await repository.get(case_id)
+    if case is None:
+        raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case not found."})
     report = await repository.get_final_report(case_id)
     if report is None:
         raise HTTPException(status_code=404, detail={"code": "FINAL_REPORT_NOT_FOUND", "message": "Final report not found."})
-    return PublicReportResponse.model_validate(report)
+    return PublicReportResponse.model_validate(_annotate_report_revision(report, case))
+
+
+def _annotate_report_revision(report: dict, case: dict) -> dict:
+    metadata = next((item.get("content") or {} for item in report.get("sections", []) if item.get("section_key") == "report_metadata"), {})
+    source = metadata.get("summary_source_revision")
+    current = max(1, int(case.get("context_revision", 1)))
+    # Finalization itself writes one REPORT_CARD message and closes the Case;
+    # both are non-input mutations that advance context_revision by two.
+    generated_revision = int(source) + 2 if source is not None else None
+    return {
+        **report,
+        "summary_source_revision": int(source) if source is not None else None,
+        "current_context_revision": current,
+        "is_stale": source is not None and current not in {int(source), generated_revision},
+    }
 
 
 def _report_export_lines(case_id: str, report: dict) -> list[tuple[str, list[str]]]:
@@ -2539,6 +2792,8 @@ def _report_export_lines(case_id: str, report: dict) -> list[tuple[str, list[str
     }
     blocks: list[tuple[str, list[str]]] = [("보고서 정보", [f"Case ID: {case_id}", f"보고서 버전: {report.get('report_version', 1)}", f"생성 시각: {report.get('created_at', '')}"])]
     for section in report.get("sections", []):
+        if section.get("section_key") == "report_metadata":
+            continue
         content = section.get("content") or {}
         lines: list[str] = []
         if content.get("text"):

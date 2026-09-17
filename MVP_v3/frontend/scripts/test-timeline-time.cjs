@@ -24,8 +24,12 @@ const timeline = evaluate(timelineSource, {
 const entries = timeline.buildTimeline({
   recent_messages: [{ message_id: 'message-1', actor_type: 'BANK_STAFF', actor_user_id: 'bank-user', content: '메시지', created_at: '2026-09-06T06:53:00+00:00' }],
   questions: [{ question_id: 'question-1', question_text: '질문', asked_at: '2026-09-06T06:51:00+00:00', answered_at: '2026-09-06T06:52:00+00:00', answer_text: 'NO' }],
+  recent_actions: [{ action_id: 'action-1', action_type: 'CUSTOMER_CALLBACK', title: '고객 재확인', note: '송금 여부 확인', status: 'IN_PROGRESS', created_at: '2026-09-06T06:50:00+00:00', updated_at: '2026-09-06T06:54:00+00:00' }],
 }, false);
-assert.deepEqual(Array.from(entries, entry => entry.kind), ['QUESTION', 'ANSWER', 'MESSAGE']);
+assert.deepEqual(Array.from(entries, entry => entry.kind), ['QUESTION', 'ANSWER', 'MESSAGE', 'ACTION']);
+const actionEntry = entries.find(entry => entry.kind === 'ACTION');
+assert.equal(actionEntry.id, 'action-action-1');
+assert.equal(actionEntry.occurredAt, '2026-09-06T06:54:00+00:00');
 assert.equal(entries.some(entry => entry.kind === 'BRIEF'), false);
 
 const conversation = source('components/SharedConversation.tsx');

@@ -1,0 +1,155 @@
+{
+  "benchmark_version": "benchmark_v1.0",
+  "cases": [
+    {
+      "case_id": "E2E-01",
+      "required_flow": [
+        "case_create",
+        "customer_chat",
+        "bank_chat",
+        "fact",
+        "question",
+        "answer",
+        "verification",
+        "action_task",
+        "context_panel",
+        "final_report"
+      ]
+    },
+    {
+      "case_id": "E2E-02",
+      "required_flow": [
+        "case_create",
+        "customer_chat",
+        "bank_chat",
+        "fact",
+        "question",
+        "answer",
+        "verification",
+        "action_task",
+        "context_panel",
+        "final_report"
+      ]
+    },
+    {
+      "case_id": "E2E-03",
+      "required_flow": [
+        "case_create",
+        "customer_chat",
+        "bank_chat",
+        "fact",
+        "question",
+        "answer",
+        "verification",
+        "action_task",
+        "context_panel",
+        "final_report"
+      ]
+    },
+    {
+      "case_id": "E2E-04",
+      "required_flow": [
+        "case_create",
+        "customer_chat",
+        "bank_chat",
+        "fact",
+        "question",
+        "answer",
+        "verification",
+        "action_task",
+        "context_panel",
+        "final_report"
+      ]
+    },
+    {
+      "case_id": "E2E-05",
+      "required_flow": [
+        "case_create",
+        "customer_chat",
+        "bank_chat",
+        "fact",
+        "question",
+        "answer",
+        "verification",
+        "action_task",
+        "context_panel",
+        "final_report"
+      ]
+    },
+    {
+      "case_id": "E2E-06",
+      "required_flow": [
+        "case_create",
+        "customer_chat",
+        "bank_chat",
+        "fact",
+        "question",
+        "answer",
+        "verification",
+        "action_task",
+        "context_panel",
+        "final_report"
+      ]
+    },
+    {
+      "case_id": "E2E-07",
+      "required_flow": [
+        "case_create",
+        "customer_chat",
+        "bank_chat",
+        "fact",
+        "question",
+        "answer",
+        "verification",
+        "action_task",
+        "context_panel",
+        "final_report"
+      ]
+    },
+    {
+      "case_id": "E2E-08",
+      "required_flow": [
+        "case_create",
+        "customer_chat",
+        "bank_chat",
+        "fact",
+        "question",
+        "answer",
+        "verification",
+        "action_task",
+        "context_panel",
+        "final_report"
+      ]
+    },
+    {
+      "case_id": "E2E-09",
+      "required_flow": [
+        "case_create",
+        "customer_chat",
+        "bank_chat",
+        "fact",
+        "question",
+        "answer",
+        "verification",
+        "action_task",
+        "context_panel",
+        "final_report"
+      ]
+    },
+    {
+      "case_id": "E2E-10",
+      "required_flow": [
+        "case_create",
+        "customer_chat",
+        "bank_chat",
+        "fact",
+        "question",
+        "answer",
+        "verification",
+        "action_task",
+        "context_panel",
+        "final_report"
+      ]
+    }
+  ]
+}

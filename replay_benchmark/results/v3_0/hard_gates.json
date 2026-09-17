@@ -1,0 +1,17 @@
+{
+  "status": "STATIC_REPLAY_ONLY",
+  "features": {
+    "case_creation": true,
+    "message_persistence": true,
+    "generic_message_fact_extraction": false,
+    "context_v2": true,
+    "context_v3": false,
+    "case_local_rag": true,
+    "official_rag": false,
+    "final_report_export": true
+  },
+  "live_measurement": {
+    "status": "NOT RUN",
+    "reason": "Live AI provider and isolated MySQL/Docker environment are unavailable."
+  }
+}

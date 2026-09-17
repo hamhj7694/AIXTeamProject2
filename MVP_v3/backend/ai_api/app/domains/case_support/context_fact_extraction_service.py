@@ -61,11 +61,24 @@ class ContextFactExtractionService:
             amount = _amount_krw(money)
             before = re.sub(r"\s+", "", text[max(0, money.start() - 12):money.start()])
             after = re.sub(r"\s+", "", text[money.end():money.end() + 22])
-            if ("실제로" in before or "실제" in before) and any(term in after for term in ("보냈", "송금했", "이체했", "입금했")):
+            # Classify each amount as a money event.  Do not require the
+            # literal word '송금': Korean reports often say "300만원
+            # 요구받았다" or "20만원 돌려받았다".
+            returned = any(term in after for term in ("돌려받", "반환받", "환급받", "되돌려받", "돌려줬", "돌려주었"))
+            sent = any(term in after for term in ("보냈", "송금했", "송금하고", "송금했다", "송금함", "이체했", "이체하고", "입금했", "입금하고"))
+            requested = any(term in after for term in ("보내라고", "송금하라", "이체하라", "입금하라", "요구했", "요구받", "요청받", "달라고", "마련하라", "지불하라"))
+            scope = (
+                "FINAL" if any(marker in text for marker in ("최종", "결과적으로", "마지막으로")) else
+                "CUMULATIVE" if any(marker in text for marker in ("총합", "누적", "합계", "전체")) else
+                "EVENT"
+            )
+            if returned:
+                add("transfer.actual.amount", {"amount_krw": amount, "currency": "KRW", "direction": "IN", "amount_role": "REFUND_IN", "amount_scope": scope}, f"{amount:,}원 반환")
+            elif sent:
                 add("transfer.actual.status", {"status": "TRANSFERRED"}, "이체함")
-                add("transfer.actual.amount", {"amount_krw": amount, "currency": "KRW"}, f"{amount:,}원")
-            elif any(term in after for term in ("보내라고", "송금하라", "이체하라", "입금하라", "요구했")):
-                add("transfer.requested.amount", {"amount_krw": amount, "currency": "KRW"}, f"{amount:,}원")
+                add("transfer.actual.amount", {"amount_krw": amount, "currency": "KRW", "direction": "OUT", "amount_role": "TRANSFER_OUT", "amount_scope": scope}, f"{amount:,}원 송금")
+            elif requested:
+                add("transfer.requested.amount", {"amount_krw": amount, "currency": "KRW", "direction": "REQUEST", "amount_role": "REQUESTED_AMOUNT", "amount_scope": scope}, f"{amount:,}원 요구")
                 add("circumstance.demand", {"kind": "TRANSFER", "text": text}, "금전 이체 요구")
         if any(term in compact for term in ("계좌가범죄", "명의도용", "수사중", "안전계좌", "보호계좌")):
             add("offender.incident_claim", {"text": text}, text[:1000], .8)

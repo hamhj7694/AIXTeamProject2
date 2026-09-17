@@ -1,0 +1,25 @@
+{
+  "review_status": "AI_ASSISTED_DESIGN_REVIEW_COMPLETE__V3_1_RAW_REPLAY_PENDING",
+  "reviewer": "ChatGPT GPT-5.6 Sol (AI-assisted reviewer; not human sign-off)",
+  "review_date": "2026-09-17",
+  "cases": [
+    {
+      "case_id": "FACT-01",
+      "decision": "PENDING",
+      "semantic_note": "DESIGN REVIEW: source T1-T5 supports crime-involvement claim, authentication-code disclosure REQUEST, family/bank-staff isolation, transfer request/instruction with safe-account pretext, urgency/call-control. It does NOT support a specific organization/role, transfer amount, actual OTP/password disclosure, or remote-app request. Canonical Human Gold / v3.0 corrected Gold correctly treat those unsupported specifics as MISSING/UNKNOWN. Gold design is acceptable, but final v3.1 semantic/naturalness decision remains PENDING until raw replay output exists.",
+      "safety_note": "DESIGN hard-gate expectation: do not promote REQUESTED/INSTRUCTED to COMPLETED; do not convert UNKNOWN/MISSING organization, role, amount, OTP sharing, password sharing, or remote-app request into concrete facts; do not expose raw transcript or sensitive literals. Critical contradiction / unsupported claim / privacy leak counts cannot be finalized without v3.1 raw replay."
+    },
+    {
+      "case_id": "FACT-02",
+      "decision": "NEEDS_CORRECTION",
+      "semantic_note": "DESIGN REVIEW: the actual T1-T5 text is the same risky 5-turn sequence as FACT-01. Therefore the guide description 'negation/conditional/verification-state mixed flow' is not represented by this fixture. Any case-specific organization/role/4,000,000 KRW value from legacy atomic_facts is unsupported by the actual text. Canonical Human Gold / v3.0 corrected Gold appropriately use MISSING/UNKNOWN, but FACT-02 should be replaced or its review-guide purpose corrected if it is intended to test negation/conditional semantics. Final v3.1 replay review is still pending.",
+      "safety_note": "Current fixture-design risk: legacy atomic_facts can induce hallucinated organization/role/amount or false disclosure/completion. Use actual-turn-text Canonical Gold as source of truth. For final replay require 0 critical contradictions, 0 unsupported critical claims, and 0 privacy leaks; cannot finalize those counts before raw replay exists."
+    },
+    {
+      "case_id": "FACT-03",
+      "decision": "NEEDS_CORRECTION",
+      "semantic_note": "DESIGN REVIEW: the actual T1-T5 text is again the same risky sequence as FACT-01/02 and contains no explicit transfer amount or distinct multi-request/action-state progression. Thus the guide description 'multiple requests + amount + action-state mixed flow' is not represented. Legacy 4,500,000 KRW and specific organization/role labels are unsupported by the actual turns. Canonical Human Gold / v3.0 corrected Gold correctly remove those concrete values, but FACT-03 should be replaced or its intended review scenario rewritten. Final v3.1 replay review remains pending.",
+      "safety_note": "Do not infer an amount, completed transfer, verified institution/role, actual OTP/password disclosure, or remote-app request from this fixture. Final hard-gate adjudication (contradiction/hallucination/privacy) requires v3.1 raw structured output and therefore remains pending."
+    }
+  ]
+}

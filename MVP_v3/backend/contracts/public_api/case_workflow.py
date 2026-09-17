@@ -50,6 +50,15 @@ class PublicCaseContextProjection(PublicWorkflowModel):
     manipulation_tactics: list[str] = Field(default_factory=list)
     customer_exposure: list[str] = Field(default_factory=list)
     next_actions: list[str] = Field(default_factory=list)
+    # AI가 계산한 금액 이벤트를 Context Panel에 전달한다.
+    # 원문이 아닌 개인정보 비식별 구조화 값만 공개 투영에 포함한다.
+    money_events: list[dict[str, Any]] = Field(default_factory=list, max_length=100)
+    confirmed_facts: list[dict[str, Any]] = Field(default_factory=list, max_length=100)
+    proposed_facts: list[dict[str, Any]] = Field(default_factory=list, max_length=100)
+    unresolved_items: list[str] = Field(default_factory=list, max_length=100)
+    verification_records: list[dict[str, Any]] = Field(default_factory=list, max_length=100)
+    staff_actions: list[dict[str, Any]] = Field(default_factory=list, max_length=100)
+    projection_revision: int | None = Field(default=None, ge=1)
 
 
 class PublicUnresolvedItemResponse(PublicWorkflowModel):
@@ -235,18 +244,33 @@ class PublicCustomerVerificationResult(PublicWorkflowModel):
 class PublicCreateActionRequest(PublicWorkflowModel):
     action_type: str = Field(min_length=1, max_length=64)
     actor_type: Literal["BANK_STAFF", "SYSTEM"]
+    title: str | None = Field(default=None, min_length=1, max_length=300)
     note: str = Field(min_length=1, max_length=10_000)
+    visibility: Literal["BANK_INTERNAL", "CUSTOMER_SHARED"] = "BANK_INTERNAL"
+
+    @model_validator(mode="after")
+    def normalize_title(self):
+        if self.title is not None and not self.title.strip():
+            raise ValueError("Action title must not be blank.")
+        return self
 
 
 class PublicUpdateActionRequest(PublicWorkflowModel):
-    status: Literal["REQUESTED", "COMPLETED", "CANCELLED"] | None = None
+    # None is a temporary compatibility path for the frozen legacy frontend.
+    # New clients must echo the Action response version to receive conflict protection.
+    expected_version: int | None = Field(default=None, ge=1)
+    status: Literal["REQUESTED", "IN_PROGRESS", "COMPLETED", "CANCELLED"] | None = None
+    title: str | None = Field(default=None, min_length=1, max_length=300)
     note: str | None = Field(default=None, min_length=1, max_length=10_000)
+    visibility: Literal["BANK_INTERNAL", "CUSTOMER_SHARED"] | None = None
     updated_by: str = Field(min_length=1, max_length=128)
 
     @model_validator(mode="after")
     def require_change(self):
-        if self.status is None and self.note is None:
-            raise ValueError("상태 또는 내용을 하나 이상 변경해야 합니다.")
+        if self.status is None and self.title is None and self.note is None and self.visibility is None:
+            raise ValueError("Action 변경값을 하나 이상 제공해야 합니다.")
+        if self.title is not None and not self.title.strip():
+            raise ValueError("Action title must not be blank.")
         if self.note is not None and not self.note.strip():
             raise ValueError("체크리스트 내용은 비워둘 수 없습니다.")
         return self
@@ -303,6 +327,9 @@ class PublicReportResponse(PublicWorkflowModel):
     sections: list[dict[str, Any]]
     created_at: str
     note: str | None = None
+    summary_source_revision: int | None = None
+    current_context_revision: int | None = None
+    is_stale: bool | None = None
 
 
 class PublicActionResponse(PublicWorkflowModel):
@@ -311,7 +338,10 @@ class PublicActionResponse(PublicWorkflowModel):
     action_type: str
     status: str
     actor_type: str
+    title: str | None = None
     note: str
+    visibility: Literal["BANK_INTERNAL", "CUSTOMER_SHARED"] = "BANK_INTERNAL"
+    version: int = 1
     created_at: str
     updated_at: str | None = None
     updated_by: str | None = None

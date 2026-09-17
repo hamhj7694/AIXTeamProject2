@@ -1,0 +1,3 @@
+metric,numerator,denominator,score,tier,status,notes
+Context Logic Survival,NOT RUN,NOT RUN,NOT RUN,BLOCKED,Blocked,No live provider/DB path completed
+Persistence Survival,NOT RUN,NOT RUN,NOT RUN,BLOCKED,Blocked,MySQL unavailable

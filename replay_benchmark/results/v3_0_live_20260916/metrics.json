@@ -1,0 +1,32 @@
+{
+  "status": "PARTIAL_LIVE_REPLAY",
+  "features": {
+    "case_creation": true,
+    "message_persistence": true,
+    "generic_message_fact_extraction": false,
+    "context_v2": true,
+    "context_v3": false,
+    "case_local_rag": true,
+    "official_rag": false,
+    "final_report_export": true
+  },
+  "live_measurement": {
+    "status": "BLOCKED",
+    "reason": "Provider connection unavailable after credential-presence check; Docker/MySQL unavailable.",
+    "fact_precision": "NOT RUN",
+    "fact_recall": "NOT RUN",
+    "fact_f1": "NOT RUN",
+    "critical_fact_precision": "NOT RUN",
+    "critical_fact_recall": "NOT RUN",
+    "critical_fact_f1": "NOT RUN",
+    "message_persistence_rate": "NOT RUN",
+    "context_projection_recall": "NOT RUN",
+    "panel_projection_recall": "NOT IMPLEMENTED",
+    "e2e_context_survival_rate": "NOT RUN"
+  },
+  "deterministic_regression": {
+    "ai_api": "126 / 126 = 100.0%",
+    "general_api_non_mysql": "146 / 146 = 100.0%",
+    "note": "Unit/contract regression is preserved as test evidence, not AI quality score."
+  }
+}

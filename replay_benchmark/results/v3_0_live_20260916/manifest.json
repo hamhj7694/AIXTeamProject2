@@ -1,0 +1,40 @@
+{
+  "label": "v3_0_live_20260916",
+  "result_status": "FINAL",
+  "git_sha": "071fb512ce42a570b0bcf585041eac6f31c2fb1c",
+  "git_short_sha": "071fb51",
+  "commit_subject": "fix(v3): stabilize production frontend and case workflows",
+  "commit_date": "2026-09-06 13:35:51 +0900",
+  "executed_at": "2026-09-16T02:03:14.139907+00:00",
+  "python": "3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]",
+  "platform": "Windows-10-10.0.26200-SP0",
+  "ai_provider_configured": false,
+  "docker_available": false,
+  "benchmark_manifest": {
+    "benchmark_version": "benchmark_v1.0",
+    "frozen_before_version_runs": true,
+    "dataset_files": {
+      "fact_context_cases.json": "ef6ffeadb23d688074d6b5a2edbbb2a5aca8976bd7968c813eb9659ab9b05166",
+      "chat_prompts.json": "2f35e3de88fe669a0953d365b8214e784af9b3743510074a3819bd6c08339ba1",
+      "question_states.json": "9e41ec3c016d3ccf9fe2abee44793340e7052eb0baff7fce6e6bea6334d8aa3e",
+      "rag_queries.json": "f1d0c7b8f5392b3b33671a2c37b96b78b0ec3cc4aa9bb6fd3d48ac829cf372f4",
+      "e2e_cases.json": "b916a2e44795144e04c31d9aff120d6b3fc670973c02157c0b83ee09c287913d"
+    },
+    "evaluator_sha256": "ffff15e820aa6dd3668552bd8799d2deecc996101c9e5806adfc80186d744afc",
+    "case_count": 30,
+    "gold_fact_count": 270,
+    "prompt_count": 20,
+    "rag_query_count": 0,
+    "e2e_case_count": 10
+  },
+  "features": {
+    "case_creation": true,
+    "message_persistence": true,
+    "generic_message_fact_extraction": false,
+    "context_v2": true,
+    "context_v3": false,
+    "case_local_rag": true,
+    "official_rag": false,
+    "final_report_export": true
+  }
+}

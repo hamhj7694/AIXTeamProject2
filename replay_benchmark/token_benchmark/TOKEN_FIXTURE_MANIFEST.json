@@ -1,0 +1,11 @@
+{
+  "fixture_version": "token_fixtures_v1",
+  "source_benchmark": "benchmark_v1.0",
+  "source_commit": "071fb512ce42a570b0bcf585041eac6f31c2fb1c",
+  "fixture_file": "token_fixtures_v1.json",
+  "fixture_sha256": "22ac5c69d89fee080de37f8ee8f94b236623f8182f6d37f4c55b67c2a5f2260f",
+  "fixture_count": 7,
+  "frozen_before_version_runs": true,
+  "production_source_modified": false,
+  "benchmark_v1_modified": false
+}

@@ -29,6 +29,7 @@ class ContextFeatureSafetyTest(unittest.TestCase):
         ) for turn, amount in [(8, 30000), (2, 10000)]]
         features = build_case_context_features(events)
         self.assertEqual(features.amount_values_krw, [10000, 30000])
+        self.assertEqual(features.requested_amount_values_krw, [10000, 30000])
         self.assertEqual(features.chronology, ["T2:MONEY_MOVEMENT:TRANSFER", "T8:MONEY_MOVEMENT:TRANSFER"])
         self.assertNotIn("원문으로만", features.model_dump_json())
 

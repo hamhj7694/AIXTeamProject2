@@ -16,6 +16,7 @@ from contracts.diagnosis import DiagnosisResult
 
 from .workflow import MvpWorkflowService
 from .answer_service import CustomerAnswerStructuringService
+from .grounding import validate_case_support_grounding
 
 
 class CaseSnapshotAiAdapter:
@@ -42,6 +43,7 @@ class CaseSnapshotAiAdapter:
 
         return CaseSnapshotAiInput(
             case_id=case_id,
+            source_revision=self._positive_int(snapshot.get("source_revision")),
             diagnosis=diagnosis,
             question_context=self._question_context_from(snapshot.get("question_context")),
             questions=snapshot.get("questions") or [],
@@ -60,7 +62,7 @@ class CaseSnapshotAiAdapter:
         brief = self._apply_live_case_state(brief, ai_input)
         context = self._build_case_context(brief, ai_input)
         questions = self._workflow.recommend_questions(brief, ai_input.question_context)
-        return CaseSnapshotPresentation(
+        presentation = CaseSnapshotPresentation(
             case_id=ai_input.case_id,
             case_brief=brief,
             case_context=context,
@@ -68,6 +70,8 @@ class CaseSnapshotAiAdapter:
             unresolved_items=brief.unresolved_items,
             warnings=ai_input.warnings,
         )
+        validate_case_support_grounding(presentation, ai_input)
+        return presentation
 
     @staticmethod
     def _apply_live_case_state(brief, ai_input: CaseSnapshotAiInput):
@@ -298,12 +302,47 @@ class CaseSnapshotAiAdapter:
         remote_app = field_values.get("remote_control_app")
         if remote_app and CaseSnapshotAiAdapter._answer_polarity(remote_app[0]) is True:
             offender_demands.append("원격제어 앱 설치 요구")
+        requested_amounts = [
+            CaseSnapshotAiAdapter._short(fact.value, 80)
+            for fact in ai_input.facts
+            if fact.field == "requested_amount_krw" and fact.status in {"PROPOSED", "CONFIRMED"} and fact.value.strip()
+        ]
+        if requested_amounts:
+            offender_demands.append(f"요구 금액 기록(개별): {', '.join(requested_amounts[:30])}")
 
         for verification in ai_input.verifications:
             if verification.status == "COMPLETED" and verification.result_summary:
                 key_signals.append(
                     f"{verification.target} 공식 확인: {CaseSnapshotAiAdapter._short(verification.result_summary)}"
                 )
+
+        money_events = []
+        if diagnosis is not None:
+            for atom in diagnosis.semantic_atoms:
+                if atom.amount_value_krw is None:
+                    continue
+                money_events.append({
+                    "event_id": atom.amount_event_id or atom.source_event_id or atom.atom_id,
+                    "atom_id": atom.atom_id,
+                    "turn": atom.source_turn_id,
+                    "amount_krw": int(atom.amount_value_krw),
+                    "role": atom.amount_role or ("REQUESTED_AMOUNT" if atom.action_state in {"REQUESTED", "INSTRUCTED"} else "TRANSFER_OUT"),
+                    "direction": atom.amount_direction or ("REQUEST" if atom.action_state in {"REQUESTED", "INSTRUCTED"} else "OUT"),
+                    "scope": atom.amount_scope or "EVENT",
+                })
+
+        confirmed_facts = [
+            {"fact_id": fact.fact_id, "field": fact.field, "value": fact.value, "status": fact.status}
+            for fact in ai_input.facts if fact.status == "CONFIRMED"
+        ]
+        proposed_facts = [
+            {"fact_id": fact.fact_id, "field": fact.field, "value": fact.value, "status": fact.status}
+            for fact in ai_input.facts if fact.status == "PROPOSED"
+        ]
+        unresolved_items = [
+            str(getattr(item, "description", "추가 확인 필요"))
+            for item in brief.unresolved_items
+        ]
 
         return CaseContextProjection(
             situation_summary=brief.summary,
@@ -313,6 +352,13 @@ class CaseSnapshotAiAdapter:
             manipulation_tactics=CaseSnapshotAiAdapter._unique(manipulation_tactics)[:6],
             customer_exposure=CaseSnapshotAiAdapter._unique(customer_exposure)[:6],
             next_actions=CaseSnapshotAiAdapter._unique(brief.next_checks)[:8],
+            money_events=money_events[:100],
+            confirmed_facts=confirmed_facts[:100],
+            proposed_facts=proposed_facts[:100],
+            unresolved_items=unresolved_items[:100],
+            verification_records=[item.model_dump(mode="python") for item in ai_input.verifications][:100],
+            staff_actions=[item.model_dump(mode="python") for item in ai_input.actions][:100],
+            projection_revision=ai_input.source_revision,
         )
 
     @staticmethod
@@ -473,6 +519,14 @@ class CaseSnapshotAiAdapter:
     @staticmethod
     def _non_empty_string(value: Any) -> str | None:
         return value.strip() if isinstance(value, str) and value.strip() else None
+
+    @staticmethod
+    def _positive_int(value: Any) -> int | None:
+        try:
+            number = int(value)
+        except (TypeError, ValueError):
+            return None
+        return number if number >= 1 else None
 
     @staticmethod
     def _warnings_from(value: Any) -> list[str]:

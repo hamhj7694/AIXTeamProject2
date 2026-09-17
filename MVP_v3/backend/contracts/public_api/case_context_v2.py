@@ -34,10 +34,11 @@ class CaseContextV2Model(BaseModel):
 class PublicEvidenceRef(CaseContextV2Model):
     type: Literal[
         "MESSAGE", "QUESTION_ANSWER", "BANK_TRANSACTION", "VERIFICATION_RESULT",
-        "ATTACHMENT", "STRUCTURED_SIGNAL", "STAFF_RECORD",
+        "ATTACHMENT", "STRUCTURED_SIGNAL", "STRUCTURED_ATOM", "STAFF_RECORD",
     ]
     id: str = Field(min_length=1, max_length=100)
     revision: int | None = Field(default=None, ge=1)
+    summary: str | None = Field(default=None, max_length=300)
 
 
 class PublicCaseFactV2(CaseContextV2Model):
@@ -270,6 +271,43 @@ class PublicContextPanelSectionV3(CaseContextV2Model):
     groups: dict[str, list[PublicContextPanelItemV3]] = Field(default_factory=dict)
 
 
+class PublicStructuredAtomV3(CaseContextV2Model):
+    """Privacy-safe Atom projection for bank staff; source text is excluded."""
+
+    atom_id: str
+    atom_class: str
+    predicate: str
+    action_state: str | None = None
+    modality: str | None = None
+    claim_status: str
+    source_turn_id: int = Field(ge=1)
+
+
+class PublicStructuredRelationV3(CaseContextV2Model):
+    relation_id: str
+    relation_type: str
+    source_atom_id: str
+    target_atom_id: str
+    confidence: float = Field(ge=0, le=1)
+
+
+class PublicStructuredSignalV3(CaseContextV2Model):
+    signal_id: str
+    signal_code: str
+    severity: str
+    confidence: float = Field(ge=0, le=1)
+    claim_status: str
+    atom_ids: list[str] = Field(default_factory=list)
+
+
+class PublicStructuredContextV3(CaseContextV2Model):
+    source_revision: int = Field(ge=1)
+    atoms: list[PublicStructuredAtomV3] = Field(default_factory=list)
+    relations: list[PublicStructuredRelationV3] = Field(default_factory=list)
+    signals: list[PublicStructuredSignalV3] = Field(default_factory=list)
+    feature_codes: dict[str, list[str]] = Field(default_factory=dict)
+
+
 class PublicContextPanelV3(CaseContextV2Model):
     schema_version: Literal["context-panel.v3"] = "context-panel.v3"
     case_id: str
@@ -277,6 +315,8 @@ class PublicContextPanelV3(CaseContextV2Model):
     source_revision: int = Field(ge=1)
     projection_status: Literal["CURRENT", "UPDATING", "STALE", "FAILED", "UNCACHED"] = "CURRENT"
     generated_by: Literal["DETERMINISTIC_FALLBACK", "LAST_SUCCESS", "LLM"] = "DETERMINISTIC_FALLBACK"
+    updated_at: datetime | None = None
+    structured_context: PublicStructuredContextV3 | None = None
     sections: list[PublicContextPanelSectionV3] = Field(min_length=7, max_length=7)
 
 

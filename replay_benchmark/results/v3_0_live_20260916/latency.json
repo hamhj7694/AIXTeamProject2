@@ -1,0 +1,9 @@
+{
+  "status": "NOT RUN",
+  "p50_ms": "NOT RUN",
+  "p95_ms": "NOT RUN",
+  "mean_ms": "NOT RUN",
+  "tokens": "NOT RUN",
+  "cost": "COST_NOT_AVAILABLE",
+  "reason": "No live AI provider or application API runtime."
+}
