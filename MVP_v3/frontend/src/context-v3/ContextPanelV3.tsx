@@ -4,7 +4,7 @@ import type { CaseBundle, CustomerProgressItem, StoredCase, VerificationTask } f
 import { casesApi } from '../api/cases';
 import { CustomerProgressEditor } from '../components/CustomerProgressEditor';
 import { generateUuid } from '../uuid';
-import { createContextFact, cancelContextTask, completeContextTask, createContextTask, editContextTask, loadContextPanelV3, loadSummaryDisplayOverride, resetSummaryDisplayOverride, reviewContextFact, reviewContextSuggestion, saveSummaryDisplayOverride, updateContextTask } from './api';
+import { createContextFact, cancelContextTask, completeContextTask, createContextTask, deleteRejectedContextFact, editContextTask, loadContextPanelV3, loadSummaryDisplayOverride, resetSummaryDisplayOverride, reviewContextFact, reviewContextSuggestion, saveSummaryDisplayOverride, updateContextTask } from './api';
 import { ContextQuickNav } from './ContextQuickNav';
 import { ContextActionModal, ContextTextArea } from './ContextActionModal';
 import { CustomerShareSection, ExposureSection, FactVerificationSection, FraudCircumstanceSection, ImpersonationSection, StaffActionSection, SummarySection, visibleSummaryItems, type WorkflowAction } from './sections';
@@ -45,6 +45,7 @@ const expectedSections: { id: ContextPanelSectionV3['section_id']; title: string
   { id: 'FACT_VERIFICATION', title: '사실·확인 현황' }, { id: 'STAFF_ACTIONS', title: '담당자 조치 및 결과' },
   { id: 'CUSTOMER_SHARE', title: '고객 공유 결과' },
 ];
+
 const normalizeSections = (data: ContextPanelData): ContextPanelSectionV3[] => expectedSections.map(({ id, title }) => data.sections.find((item) => item.section_id === id) ?? { section_id: id, title, items: [], groups: {} });
 
 const typedValue = (option: FactOption, raw: string): Record<string, unknown> => {
@@ -57,6 +58,16 @@ const typedValue = (option: FactOption, raw: string): Record<string, unknown> =>
   if (option.key === 'offender.requested_account') return { account_ref: raw };
   return { text: raw };
 };
+
+const formatContextUpdatedAt = (value: string | null | undefined, fallback: string) => {
+  const parsed = new Date(value || fallback);
+  if (Number.isNaN(parsed.getTime())) return '최종 반영 시각 확인 필요';
+  return `${new Intl.DateTimeFormat('ko-KR', {
+    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+    hour12: false, timeZone: 'Asia/Seoul',
+  }).format(parsed)} 최종 반영`;
+};
+
 export const ContextPanelV3: React.FC<Props> = (props) => {
   const [data, setData] = useState<ContextPanelData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -151,6 +162,22 @@ export const ContextPanelV3: React.FC<Props> = (props) => {
     const resumesVerification = ['PENDING', 'ON_HOLD', 'FAILED'].includes(task.status);
     props.onEditVerification(resumesVerification ? { ...task, status: 'IN_PROGRESS' } : task);
   };
+  const deleteExcludedFact = (item: ContextPanelItemV3) => {
+    setContextDialog({
+      kind: 'confirm',
+      title: '정보 완전 삭제',
+      description: '이 제외 정보를 영구 삭제할까요? 삭제 후에는 복구할 수 없습니다.',
+      primaryLabel: '완전 삭제',
+      onConfirm: () => {
+        setContextDialog(null);
+        setBusy(true); setError('');
+        void deleteRejectedContextFact(props.caseItem.case_id, item.item_id, item.version)
+          .then(() => load())
+          .catch((reason) => setError(reason instanceof Error ? reason.message : '제외 정보 삭제에 실패했습니다. 최신 상태를 다시 확인해 주세요.'))
+          .finally(() => setBusy(false));
+      },
+    });
+  };
   const correctFactValue = async (item: ContextPanelItemV3, option: FactOption, rawValue: string) => {
     const nextValue = rawValue.trim();
     if (!nextValue || nextValue === item.display_value) return;
@@ -235,7 +262,7 @@ export const ContextPanelV3: React.FC<Props> = (props) => {
   const taskEditForm = taskEdit && <form className="context-fact-form context-inline-create-form context-task-form" onSubmit={(event) => { event.preventDefault(); void saveTaskEdit(); }}><header><strong>업무 수정</strong><button type="button" onClick={() => { setTaskEdit(null); setTaskFormError(''); }} aria-label="업무 수정 닫기"><X size={14}/></button></header><label>업무 제목<input value={taskEdit.title} maxLength={300} onChange={(event) => { setTaskEdit({ ...taskEdit, title: event.target.value }); setTaskFormError(''); }}/></label><label>업무 내용<textarea value={taskEdit.description} maxLength={3000} rows={3} onChange={(event) => { setTaskEdit({ ...taskEdit, description: event.target.value }); setTaskFormError(''); }}/></label>{taskFormError && <p className="context-inline-form-error" role="alert">{taskFormError}</p>}<footer><button type="button" onClick={() => { setTaskEdit(null); setTaskFormError(''); }}>취소</button><button type="submit" disabled={busy || !taskEdit.title.trim() || !taskEdit.description.trim()}>수정 저장</button></footer></form>;
   const projectionLabel = visibleData?.projection_status === 'CURRENT' ? '최신' : visibleData?.projection_status === 'UPDATING' ? '갱신 중' : visibleData?.projection_status === 'STALE' ? '오래된 정보' : '확인 필요';
   return <aside className={`context-panel context-panel-v3 ${props.open ? 'is-open' : ''}`} aria-label="사건 맥락 V3">
-    <div className="context-header context-v3-sticky-header"><div><p className="eyebrow">사건 정보</p><h2>사건 맥락</h2>{visibleData && <small>사건 정보 {visibleData.source_revision}차 · {projectionLabel}</small>}</div><div><button type="button" className="context-open context-header-toggle" onClick={props.onToggle} aria-label="사건 맥락 닫기"><PanelRightClose size={17}/></button></div></div>
+    <div className="context-header context-v3-sticky-header"><div><p className="eyebrow">사건 정보</p><h2>사건 맥락</h2>{visibleData && <small>{formatContextUpdatedAt(visibleData.updated_at, props.caseItem.updated_at)} · {projectionLabel}</small>}</div><div><button type="button" className="context-open context-header-toggle" onClick={props.onToggle} aria-label="사건 맥락 닫기"><PanelRightClose size={17}/></button></div></div>
     {visibleData && <ContextQuickNav
       sections={normalizedSections} activeSection={activeSection} onNavigate={navigateToSection}
     />}
@@ -245,10 +272,10 @@ export const ContextPanelV3: React.FC<Props> = (props) => {
       {missingSections.length > 0 && <div className="context-edit-error context-panel-error"><AlertCircle size={14}/><p>서버 응답에서 누락된 영역을 빈 상태로 표시합니다: {missingSections.join(', ')}</p></div>}
       {visibleData && <Fragment key={props.caseItem.case_id}>
         <SummarySection section={getSection('SUMMARY')} caseRisk={props.caseItem.risk} caseStatus={props.caseItem.status} projectionStatus={visibleData.projection_status} editing={Boolean(summaryEdit)} onEdit={() => void startSummaryEdit()} onReset={() => void resetSummary()} editor={<div className="context-v3-summary-edit"><textarea value={summaryEdit?.text ?? ''} onChange={(event) => summaryEdit && setSummaryEdit({ ...summaryEdit, text: event.target.value })}/><div><button disabled={busy} onClick={() => setSummaryEdit(null)}>취소</button><button disabled={busy || !summaryEdit?.text.trim()} onClick={() => void saveSummary()}>표시 요약 저장</button></div></div>}/>
-        <ExposureSection section={getSection('EXPOSURE')} busy={busy} onReview={review} onCorrect={correctFact} open={openSections.has('EXPOSURE')} onOpenChange={(next) => setSectionOpen('EXPOSURE', next)} onAdd={() => toggleFactForm('EXPOSURE')} addOpen={factDraft?.section === 'EXPOSURE'} createForm={factDraft?.section === 'EXPOSURE' ? factEditor : null}/>
-        <ImpersonationSection section={getSection('IMPERSONATION_CONTACT')} busy={busy} onReview={review} onCorrect={correctFact} open={openSections.has('IMPERSONATION_CONTACT')} onOpenChange={(next) => setSectionOpen('IMPERSONATION_CONTACT', next)} onAdd={() => toggleFactForm('IMPERSONATION_CONTACT')} addOpen={factDraft?.section === 'IMPERSONATION_CONTACT'} createForm={factDraft?.section === 'IMPERSONATION_CONTACT' ? factEditor : null}/>
-        <FraudCircumstanceSection section={getSection('FRAUD_CIRCUMSTANCES')} busy={busy} onReview={review} onCorrect={correctFact} open={openSections.has('FRAUD_CIRCUMSTANCES')} onOpenChange={(next) => setSectionOpen('FRAUD_CIRCUMSTANCES', next)} onAdd={() => toggleFactForm('FRAUD_CIRCUMSTANCES')} addOpen={factDraft?.section === 'FRAUD_CIRCUMSTANCES'} createForm={factDraft?.section === 'FRAUD_CIRCUMSTANCES' ? factEditor : null}/>
-        <FactVerificationSection section={getSection('FACT_VERIFICATION')} busy={busy} onReview={review} onCorrect={correctFact} open={openSections.has('FACT_VERIFICATION')} onOpenChange={(next) => setSectionOpen('FACT_VERIFICATION', next)} onOpenVerification={openVerification} onCreateVerification={props.onCreateVerification}/>
+        <ExposureSection section={getSection('EXPOSURE')} busy={busy} onReview={review} onCorrect={correctFact} onDeleteExcluded={deleteExcludedFact} open={openSections.has('EXPOSURE')} onOpenChange={(next) => setSectionOpen('EXPOSURE', next)} onAdd={() => toggleFactForm('EXPOSURE')} addOpen={factDraft?.section === 'EXPOSURE'} createForm={factDraft?.section === 'EXPOSURE' ? factEditor : null}/>
+        <ImpersonationSection section={getSection('IMPERSONATION_CONTACT')} busy={busy} onReview={review} onCorrect={correctFact} onDeleteExcluded={deleteExcludedFact} open={openSections.has('IMPERSONATION_CONTACT')} onOpenChange={(next) => setSectionOpen('IMPERSONATION_CONTACT', next)} onAdd={() => toggleFactForm('IMPERSONATION_CONTACT')} addOpen={factDraft?.section === 'IMPERSONATION_CONTACT'} createForm={factDraft?.section === 'IMPERSONATION_CONTACT' ? factEditor : null}/>
+        <FraudCircumstanceSection section={getSection('FRAUD_CIRCUMSTANCES')} busy={busy} onReview={review} onCorrect={correctFact} onDeleteExcluded={deleteExcludedFact} open={openSections.has('FRAUD_CIRCUMSTANCES')} onOpenChange={(next) => setSectionOpen('FRAUD_CIRCUMSTANCES', next)} onAdd={() => toggleFactForm('FRAUD_CIRCUMSTANCES')} addOpen={factDraft?.section === 'FRAUD_CIRCUMSTANCES'} createForm={factDraft?.section === 'FRAUD_CIRCUMSTANCES' ? factEditor : null}/>
+        <FactVerificationSection section={getSection('FACT_VERIFICATION')} busy={busy} onReview={review} onCorrect={correctFact} open={openSections.has('FACT_VERIFICATION')} onOpenChange={(next) => setSectionOpen('FACT_VERIFICATION', next)} onOpenVerification={openVerification} onCreateVerification={props.onCreateVerification} onDeleteExcluded={deleteExcludedFact}/>
         <StaffActionSection section={getSection('STAFF_ACTIONS')} busy={busy} onWorkflow={workflow} onEditTask={openTaskEdit} open={openSections.has('STAFF_ACTIONS')} onOpenChange={(next) => setSectionOpen('STAFF_ACTIONS', next)} onAddTask={toggleTaskForm} addOpen={Boolean(taskDraft)} createForm={taskEditor} editForm={taskEditForm}/>
         <CustomerShareSection section={getSection('CUSTOMER_SHARE')} open={openSections.has('CUSTOMER_SHARE')} onOpenChange={(next) => setSectionOpen('CUSTOMER_SHARE', next)} progressEditor={<CustomerProgressEditor caseId={props.caseItem.case_id} items={props.bundle.customer_progress ?? []} onSaved={props.onProgressSaved}/>}/>
       </Fragment>}

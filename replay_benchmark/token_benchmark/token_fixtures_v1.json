@@ -1,0 +1,84 @@
+{
+  "fixture_version": "token_fixtures_v1",
+  "source_benchmark": "benchmark_v1.0",
+  "source_commit": "071fb512ce42a570b0bcf585041eac6f31c2fb1c",
+  "fixtures": [
+    {
+      "fixture_id": "CASE_CREATE_01",
+      "source_case_id": "FACT-01",
+      "feature": "case_creation_diagnosis",
+      "actor": "CUSTOMER",
+      "user_input": "고객의심 통화 내용을 접수하고 보이스피싱 의심 사건을 생성한다.",
+      "case_context_state": "new_case_no_prior_context",
+      "expected_feature": "diagnosis_and_case_context",
+      "production_route": "AI diagnosis extractor -> context extraction -> case brief",
+      "notes": "모든 실제 LLM call을 합산; deterministic brief 생성은 0 call로 별도 기록"
+    },
+    {
+      "fixture_id": "BANK_CHAT_01",
+      "source_case_id": "FACT-01",
+      "feature": "bank_staff_chat_ai",
+      "actor": "BANK_AGENT",
+      "user_input": "현재 사건에서 은행 담당자가 우선 확인하고 조치할 사항을 알려줘.",
+      "case_context_state": "fixture_case_context_v1",
+      "expected_feature": "bank_internal_copilot_reply",
+      "production_route": "CaseCopilotService.generate",
+      "notes": "BANK_INTERNAL / CONVERSATIONAL"
+    },
+    {
+      "fixture_id": "CUSTOMER_QUESTION_01",
+      "source_case_id": "FACT-01",
+      "feature": "customer_confirmation_question_ai",
+      "actor": "BANK_AGENT",
+      "user_input": "고객에게 다음으로 확인할 질문을 추천해줘.",
+      "case_context_state": "fixture_case_context_v1_with_unresolved_facts",
+      "expected_feature": "customer_confirmation_question",
+      "production_route": "CaseWorkCardService.generate(card_type=QUESTION_PLAN)",
+      "notes": "deterministic planner path는 0 tokens; LLM work-card path는 실제 usage 측정"
+    },
+    {
+      "fixture_id": "VERIFICATION_AI_01",
+      "source_case_id": "FACT-01",
+      "feature": "verification_ai",
+      "actor": "BANK_AGENT",
+      "user_input": "주장된 기관과 계좌 정보를 어떤 공식 채널로 확인할지 제안해줘.",
+      "case_context_state": "fixture_case_context_v1_pending_verification",
+      "expected_feature": "verification_request_or_work_card",
+      "production_route": "CaseWorkCardService.generate(card_type=VERIFICATION_REQUEST)",
+      "notes": "CRUD 자체는 LLM call로 간주하지 않음"
+    },
+    {
+      "fixture_id": "ACTION_AI_01",
+      "source_case_id": "FACT-01",
+      "feature": "action_work_ai",
+      "actor": "BANK_AGENT",
+      "user_input": "지급정지 검토와 고객 안내를 위한 다음 조치를 제안해줘.",
+      "case_context_state": "fixture_case_context_v1_action_pending",
+      "expected_feature": "bank_action_work_card",
+      "production_route": "CaseWorkCardService.generate(card_type=BANK_ACTION)",
+      "notes": "실제 action mutation은 실행하지 않음"
+    },
+    {
+      "fixture_id": "CUSTOMER_CHAT_01",
+      "source_case_id": "FACT-01",
+      "feature": "customer_chat_ai",
+      "actor": "CUSTOMER",
+      "user_input": "제가 지금 무엇을 확인하고 어떻게 행동해야 하나요?",
+      "case_context_state": "fixture_case_context_v1_customer_safe_projection",
+      "expected_feature": "customer_support_copilot_reply",
+      "production_route": "CaseCopilotService.generate(assistant_mode=CUSTOMER_SUPPORT)",
+      "notes": "고객 공개 가능 context만 전달"
+    },
+    {
+      "fixture_id": "FINAL_REPORT_01",
+      "source_case_id": "FACT-01",
+      "feature": "final_report_ai",
+      "actor": "BANK_AGENT",
+      "user_input": "확인된 사실과 조치 결과를 바탕으로 최종 사건 보고서를 작성해줘.",
+      "case_context_state": "fixture_case_context_v1_closed_review",
+      "expected_feature": "final_case_report",
+      "production_route": "FinalCaseReportService.generate",
+      "notes": "PDF/DOCX rendering tokens are excluded"
+    }
+  ]
+}

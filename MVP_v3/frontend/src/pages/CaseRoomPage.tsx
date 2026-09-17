@@ -44,12 +44,13 @@ const caseContextRevision = (caseItem: StoredCase, bundle: CaseBundle, facts: Ca
 });
 
 type CaseRoomPageProps = {
+  caseName?: string | null;
   onMutated: () => void;
   contextOpen: boolean;
   onContextOpenChange: (open: boolean) => void;
 };
 
-export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ onMutated, contextOpen, onContextOpenChange }) => {
+export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated, contextOpen, onContextOpenChange }) => {
   const { caseId = '' } = useParams();
   const navigate = useNavigate();
   const [caseItem, setCaseItem] = useState<StoredCase | null>(null);
@@ -80,6 +81,11 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ onMutated, contextOp
   const loadRequestRef = useRef(0);
   const pendingMessagesRef = useRef(new Map<string, CaseMessage>());
   const outboxRef = useRef(new Map<string, BankOutboxItem>());
+
+  useEffect(() => {
+    if (caseName === undefined) return;
+    setCaseItem((current) => current && current.case_id === caseId ? { ...current, case_name: caseName } : current);
+  }, [caseId, caseName]);
 
   const load = useCallback(async (quiet = false, refreshSupport = !quiet) => {
     if (!caseId) return;

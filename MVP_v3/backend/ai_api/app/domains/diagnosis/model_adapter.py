@@ -43,12 +43,27 @@ def load_model_bundle() -> dict[str, Any]:
     return bundle
 
 
+def effective_threshold(bundle: dict[str, Any] | None = None) -> float:
+    """Return runtime threshold without modifying the signed ML artifact."""
+    source = bundle if bundle is not None else load_model_bundle()
+    configured = os.getenv("WINDOW_RISK_THRESHOLD")
+    if configured is None or not configured.strip():
+        return float(source["threshold"])
+    try:
+        value = float(configured)
+    except ValueError as exc:
+        raise ValueError("WINDOW_RISK_THRESHOLD must be a number between 0 and 1") from exc
+    if not 0 < value <= 1:
+        raise ValueError("WINDOW_RISK_THRESHOLD must be a number between 0 and 1")
+    return value
+
+
 def predict(features: dict[str, float]) -> dict[str, Any]:
     bundle = load_model_bundle()
     model_features = list(bundle["model_features"])
     frame = pd.DataFrame([{name: features.get(name, 0) for name in model_features}], columns=model_features)
     raw_probability = float(bundle["model"].predict_proba(frame)[:, 1][0])
-    threshold = float(bundle["threshold"])
+    threshold = effective_threshold(bundle)
     signal_count = sum(float(features.get(name, 0) or 0) != 0 for name in bundle["guardrail_signal_features"])
     final_probability = raw_probability
     guardrail_applied = signal_count == 0
@@ -75,7 +90,7 @@ def metadata(extractor_model: str) -> dict[str, Any]:
         "model_status": bundle["model_status"],
         "feature_version": bundle.get("feature_version"),
         "source_run": bundle["source_run"],
-        "threshold": float(bundle["threshold"]),
+        "threshold": effective_threshold(bundle),
         "extractor_model": extractor_model,
         "artifact_sha256": EXPECTED_SHA256,
     }

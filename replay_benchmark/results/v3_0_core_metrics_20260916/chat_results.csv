@@ -1,0 +1,3 @@
+metric,numerator,denominator,score,tier,status,notes
+Chat Task Success,NOT RUN,60,NOT RUN,BLOCKED,Blocked,Provider connection unavailable
+Role Isolation,NOT RUN,NOT RUN,NOT RUN,BLOCKED,Blocked,Provider connection unavailable

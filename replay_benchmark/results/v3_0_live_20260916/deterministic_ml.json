@@ -1,0 +1,21 @@
+{
+  "status": "ARTIFACT_VERIFIED_ONLY",
+  "model_name": "Logistic",
+  "model_version": "12_07_recall_first_v1.0",
+  "feature_version": "v2.2",
+  "threshold": 0.95,
+  "model_status": "EXPERIMENTAL_SAMPLE",
+  "artifact_sha256": "662db2a9351dc4ca2c453776ae6f45750e465234cc9abcecc65b58a6b047c5fc",
+  "gold_pattern_scoring": "NOT RUN",
+  "gold_pattern_scoring_reason": "Provider calls returned APIConnectionError and the fallback output is not a live provider replay; benchmark taxonomy mapping to model event families is not defined.",
+  "threshold_modified": false
+  ,"local_fallback_replay": {
+    "status": "EXECUTED",
+    "cases": 30,
+    "events_total": 160,
+    "labels": {"PHISHING": 30, "NORMAL": 0},
+    "risk_score_min": 96.17637151236745,
+    "risk_score_max": 99.99755177234573,
+    "interpretation": "Deterministic local safety fallback plus unchanged v3.0 model artifact; not live provider quality and not used as Gold Pattern score."
+  }
+}

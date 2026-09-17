@@ -3,7 +3,7 @@ import warnings
 from unittest.mock import patch
 
 from sklearn.exceptions import InconsistentVersionWarning
-from ai_api.app.domains.diagnosis.model_adapter import load_model_bundle, predict
+from ai_api.app.domains.diagnosis.model_adapter import effective_threshold, load_model_bundle, predict
 from contracts.ai_internal.case_snapshot import CaseSnapshotAiInput
 from contracts.ai_internal.mvp_workflow import TargetField
 
@@ -27,6 +27,17 @@ class MlRuntimeTest(unittest.TestCase):
             warnings.simplefilter("error", InconsistentVersionWarning)
             result = predict({})
         self.assertEqual(result["label"], "NORMAL")
+
+    def test_runtime_threshold_override_does_not_change_artifact(self):
+        bundle = {"threshold": 0.95}
+        with patch.dict("os.environ", {"WINDOW_RISK_THRESHOLD": "0.60"}, clear=False):
+            self.assertEqual(effective_threshold(bundle), 0.60)
+        self.assertEqual(bundle["threshold"], 0.95)
+
+    def test_runtime_threshold_override_rejects_invalid_value(self):
+        with patch.dict("os.environ", {"WINDOW_RISK_THRESHOLD": "1.2"}, clear=False):
+            with self.assertRaisesRegex(ValueError, "between 0 and 1"):
+                effective_threshold({"threshold": 0.95})
 
 
 class AutomaticQuestionContractTest(unittest.TestCase):

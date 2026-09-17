@@ -34,4 +34,5 @@ class WindowAiAdapter:
         return WindowAnalysisResult(
             turns=extraction.turns, events=extraction.events, windows=windows,
             extractor_model=extraction.extractor_model, warnings=extraction.warnings,
+            semantic_atoms=extraction.semantic_atoms,
         )

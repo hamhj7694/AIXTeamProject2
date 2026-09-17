@@ -30,6 +30,15 @@ class CaseTransitionEndpointTest(unittest.TestCase):
         self.assertEqual(response.json()["version"], 2)
         self.repository.update_case.assert_awaited_once_with("VP-TRANSITION", 1, {"status": "VERIFYING"})
 
+    def test_patch_case_updates_case_name(self) -> None:
+        self.repository.update_case.return_value = {**self.repository.get.return_value, "version": 2, "case_name": "송금 의심 사건"}
+
+        response = self.client.patch("/api/cases/VP-TRANSITION", json={"expected_version": 1, "case_name": "  송금 의심 사건  "})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["case_name"], "송금 의심 사건")
+        self.repository.update_case.assert_awaited_once_with("VP-TRANSITION", 1, {"case_name": "송금 의심 사건"})
+
     def test_invalid_transition_returns_conflict(self) -> None:
         response = self.client.patch("/api/cases/VP-TRANSITION", json={"expected_version": 1, "status": "NEW"})
         self.assertEqual(response.status_code, 409)

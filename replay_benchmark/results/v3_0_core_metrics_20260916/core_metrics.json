@@ -1,0 +1,20 @@
+{
+  "commit": "071fb512ce42a570b0bcf585041eac6f31c2fb1c",
+  "benchmark": "benchmark_v1.0",
+  "status": "PARTIAL_CORE_METRICS",
+  "metrics": {
+    "critical_signal_fact_recall": {"value": "NOT RUN", "tier": "BLOCKED", "reason": "Live provider/Fact persistence unavailable; no benchmark-to-event semantic mapping is defined."},
+    "ai_extraction_f1": {"value": "N/A", "tier": "N/A", "reason": "Generic Message→Fact extraction is not implemented in v3.0."},
+    "risk_detection_high_recall": {"numerator": 10, "denominator": 10, "score": "100.0%", "tier": "LOGIC", "notes": "HIGH subset only; local deterministic fallback predicted PHISHING for all 30 cases, including all 10 HIGH and all 10 LOW. This is not provider quality."},
+    "risk_detection_high_low_precision": {"numerator": 10, "denominator": 20, "score": "50.0%", "tier": "LOGIC", "notes": "HIGH/LOW subset; MIXED excluded. TP=10, FP=10, FN=0, TN=0."},
+    "risk_detection_f1_high_low": {"score": "66.7%", "tier": "LOGIC", "notes": "HIGH/LOW subset only; derived from TP=10, FP=10, FN=0."},
+    "chat_task_success": {"value": "NOT RUN", "tier": "BLOCKED", "reason": "Provider connection unavailable."},
+    "role_isolation": {"value": "NOT RUN", "tier": "BLOCKED", "reason": "Live chat/provider unavailable."},
+    "question_duplicate_rate": {"numerator": 0, "denominator": 30, "score": "0.0%", "tier": "LOGIC", "notes": "Production QuestionIntelligenceService called for all 15 frozen states; two critical candidates per state."},
+    "critical_question_coverage": {"numerator": 30, "denominator": 30, "score": "100.0%", "tier": "LOGIC", "notes": "Coverage of the 30 supplied UNKNOWN_CRITICAL candidate slots."},
+    "context_survival": {"value": "NOT RUN", "tier": "BLOCKED", "reason": "No provider/DB replay; v3.0 Context V3 panel is not implemented."},
+    "correction_accuracy": {"value": "N/A", "tier": "N/A", "reason": "The frozen v3.0 code has no benchmark-compatible 350만원→300만원 canonical correction path."},
+    "negation_accuracy": {"numerator": 3, "denominator": 3, "score": "100.0%", "tier": "LOGIC", "notes": "Production CustomerAnswerStructuringService: transfer, authentication, and personal-information negative answers."}
+  },
+  "regression_evidence": {"ai_api": "126/126", "general_api_non_mysql": "146/146"}
+}

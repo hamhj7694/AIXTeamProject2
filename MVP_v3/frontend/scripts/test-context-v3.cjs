@@ -282,13 +282,13 @@ const summary = {section_id:'SUMMARY', title:'현재 사건 요약', groups:{}, 
   {...item('CURRENT'), item_id:'summary-2', source_kind:'DETERMINISTIC_PROJECTION', display_value:'위험도 HIGH · 진행 상태 TRIAGE'},
   {...item('CURRENT'), item_id:'summary-3', source_kind:'DETERMINISTIC_PROJECTION', display_value:'확정 사실 3건 · 검토 대기 0건'},
 ]};
-assert.deepEqual(Array.from(visibleSummaryItems(summary, 'HIGH', 'TRIAGE'), (entry) => entry.item_id), ['summary-1', 'summary-3']);
+assert.deepEqual(Array.from(visibleSummaryItems(summary, 'HIGH', 'TRIAGE'), (entry) => entry.item_id), ['summary-1']);
 const renderedSummary = renderToStaticMarkup(React.createElement(SummarySection, {section:summary, caseRisk:'HIGH', caseStatus:'TRIAGE', projectionStatus:'CURRENT', editing:false, onEdit:noop, onReset:noop, editor:null}));
 assert.match(renderedSummary, /가족 사칭 송금 요구 사건입니다/);
-assert.match(renderedSummary, /확정 사실 3건 · 검토 대기 0건/);
+assert.doesNotMatch(renderedSummary.match(/<div class="context-summary-copy">.*?<\/div>/)?.[0] ?? '', /확정 사실 3건 · 검토 대기 0건/);
 assert.doesNotMatch(renderedSummary, /위험도 HIGH · 진행 상태 TRIAGE/);
 assert.match(renderedSummary, /표시 요약 편집|자동 요약으로 복원/);
-assert.match(renderedSummary, /사건 정보 기준 자동 요약/);
+assert.match(renderedSummary, /<footer><span class="context-summary-count">확정 사실 3건 · 검토 대기 0건<\/span><span>사건 정보 기준 자동 요약<\/span><\/footer>/);
 assert.doesNotMatch(renderedSummary, /Canonical Fact|Revision 연동|API 필요/);
 
 console.log('Context V3: compact Fact rows, inline create UX, state guards, accordion ownership, enum UX, and seven-section fallback passed');

@@ -1,0 +1,4 @@
+test_id,expected,observed,status,reason
+P-04,300만원,NOT RUN,BLOCKED,LIVE AI/DB unavailable
+NEGATION_PASSWORD,FALSE,NOT RUN,BLOCKED,LIVE AI/DB unavailable
+WORKFLOW_CUSTOMER_CLAIM_NOT_COMPLETED,NOT COMPLETED,NOT RUN,BLOCKED,Live workflow DB unavailable

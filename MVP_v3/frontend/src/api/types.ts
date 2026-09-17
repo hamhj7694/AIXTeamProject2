@@ -32,6 +32,41 @@ export interface DiagnosisWindow {
   label: 'NORMAL' | 'PHISHING';
 }
 
+export interface SemanticAtom {
+  atom_id: string;
+  atom_class: string;
+  predicate: string;
+  action_state?: string | null;
+  modality?: string | null;
+  claim_status: string;
+  source_turn_id: number;
+}
+
+export interface SemanticRelation {
+  relation_id: string;
+  relation_type: string;
+  source_atom_id: string;
+  target_atom_id: string;
+  confidence: number;
+}
+
+export interface ContextSignal {
+  signal_id: string;
+  signal_code: string;
+  severity: string;
+  confidence: number;
+  claim_status: string;
+  atom_ids: string[];
+}
+
+export interface StructuredContextProjection {
+  source_revision: number;
+  atoms: SemanticAtom[];
+  relations: SemanticRelation[];
+  signals: ContextSignal[];
+  feature_codes: Record<string, string[]>;
+}
+
 export interface InitialReportSection {
   section_key: string;
   content: Record<string, unknown>;
@@ -63,6 +98,7 @@ export interface AnalyzeCaseResponse {
 export interface StoredCase {
   case_id: string;
   version: number;
+  case_name?: string | null;
   risk: RiskLevel;
   risk_score: number;
   mode: 'PREVENT' | 'RECOVERY' | 'CLOSED';
@@ -84,10 +120,17 @@ export interface StoredCase {
     evidence?: DiagnosisEvidence[];
     windows?: DiagnosisWindow[];
     features?: Record<string, number>;
+    semantic_atoms?: SemanticAtom[];
+    semantic_relations?: SemanticRelation[];
+    context_signals?: ContextSignal[];
+    conversation_episodes?: Array<{ episode_id: string; start_turn: number; end_turn: number; atom_ids: string[]; episode_type: string }>;
+    action_groups?: Array<{ group_id: string; action_predicate: string; atom_ids: string[]; action_states: string[]; target_codes: string[] }>;
+    entity_registry?: Array<{ entity_id: string; entity_code: string; mention_roles: string[]; atom_ids: string[]; source_turn_ids: number[] }>;
     case_context_features?: {
       claimed_actor_types: string[]; claim_codes: string[]; requested_action_codes: string[];
       manipulation_tactic_codes: string[]; exposure_risk_codes: string[];
-      amount_values_krw: number[]; chronology: string[]; unknown_fields: string[];
+      amount_values_krw: number[]; requested_amount_values_krw?: number[]; chronology: string[]; unknown_fields: string[];
+      observations?: Array<{ code: string; turn: number; status: string }>;
     };
     warnings?: string[];
   };

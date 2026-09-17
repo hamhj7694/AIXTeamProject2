@@ -1,0 +1,6 @@
+{
+  "benchmark_version": "benchmark_v1.0",
+  "status": "NOT_IMPLEMENTED",
+  "queries": [],
+  "reason": "Official-source corpus is absent; reserve RAG gold for benchmark_v1.1."
+}

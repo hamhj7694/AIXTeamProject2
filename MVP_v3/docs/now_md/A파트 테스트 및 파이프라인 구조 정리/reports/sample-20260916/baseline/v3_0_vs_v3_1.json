@@ -1,0 +1,33 @@
+{
+  "schema_version": "a-context-baseline-comparison.v1",
+  "generated_at": "2026-09-16T14:52:41.961002+00:00",
+  "comparison_policy": "v3.0 comparable metrics are shown beside v3.1; unavailable v3.1 scores are not inferred",
+  "v3_0": {
+    "benchmark": "benchmark_v1.0",
+    "commit": "071fb512ce42a570b0bcf585041eac6f31c2fb1c",
+    "metrics": {
+      "context_feature_recall": "NOT RUN",
+      "risk_detection_f1": "66.7%",
+      "negation_accuracy": "100.0%",
+      "contradiction": "7 cases (historical baseline)",
+      "hallucination": "76 cases (historical baseline)"
+    }
+  },
+  "v3_1": {
+    "status": "STRUCTURAL_ONLY_PENDING_GOLD_AND_LIVE_RUN",
+    "pipeline_counts": {
+      "events": 5,
+      "semantic_atoms": 9,
+      "semantic_relations": 2,
+      "context_signals": 0
+    },
+    "metrics": {
+      "context_feature_recall": "PENDING_HUMAN_ANNOTATION",
+      "risk_detection_f1": "PENDING_HUMAN_ANNOTATION",
+      "negation_accuracy": "PENDING_HUMAN_ANNOTATION",
+      "contradiction": "PENDING_HUMAN_ANNOTATION",
+      "hallucination": "PENDING_HUMAN_ANNOTATION"
+    },
+    "structural_metrics": {}
+  }
+}

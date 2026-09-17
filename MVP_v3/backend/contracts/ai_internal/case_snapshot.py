@@ -1,7 +1,7 @@
 """General Case snapshot을 AI workflow에 연결하기 위한 내부 의미 Contract."""
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field
 
@@ -68,6 +68,8 @@ class CaseContextProjection(StrictModel):
     manipulation_tactics: list[str] = Field(default_factory=list)
     customer_exposure: list[str] = Field(default_factory=list)
     next_actions: list[str] = Field(default_factory=list)
+    # Privacy-safe canonical money events shared by Copilot and Context Panel.
+    money_events: list[dict[str, Any]] = Field(default_factory=list, max_length=100)
 
 
 class CaseSnapshotPresentation(StrictModel):

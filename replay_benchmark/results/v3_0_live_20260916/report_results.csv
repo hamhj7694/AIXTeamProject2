@@ -1,0 +1,2 @@
+case_id,report_generation,pdf_success,docx_success,supported_claim_rate,required_fact_recall,unsupported_claim_rate,status,reason
+E2E-01..E2E-10,NOT RUN,NOT RUN,NOT RUN,NOT RUN,NOT RUN,NOT RUN,BLOCKED,No isolated DB/live AI execution

@@ -37,9 +37,92 @@ IMP_SUBTYPE_SLUG = {
     "DELIVERY": "delivery_subtype", "OTHER": "other_subtype",
 }
 
+ATOM_CLASSES = [
+    "IDENTITY_CLAIM", "ORGANIZATION_CLAIM", "ROLE_CLAIM", "STATE_CLAIM",
+    "EVENT_CLAIM", "ACTION_REQUEST", "ACTION_INSTRUCTION", "PROHIBITION",
+    "QUESTION", "WARNING", "THREAT", "PROMISE", "JUSTIFICATION", "CONDITION",
+    "OBSERVED_ACTION", "REPORTED_ACTION", "CUSTOMER_RESPONSE", "DISCLOSURE_REQUEST",
+    "SECRECY_REQUEST", "COMMUNICATION_CONTROL", "FINANCIAL_ACTION",
+]
+ENTITY_CODES = [
+    "CALLER", "CUSTOMER", "CUSTOMER_ACCOUNT", "EXTERNAL_ACCOUNT",
+    "CLAIMED_SAFE_ACCOUNT", "PROSECUTION_SERVICE", "POLICE_SERVICE",
+    "FINANCIAL_INSTITUTION", "FAMILY", "THIRD_PARTY", "UNKNOWN",
+]
+CLAIMED_ORGANIZATION_CODES = [
+    "PROSECUTION_SERVICE", "POLICE_SERVICE", "FINANCIAL_SUPERVISORY_SERVICE",
+    "COURT", "BANK", "CARD_COMPANY", "LOAN_COMPANY", "TELECOM_COMPANY",
+    "DELIVERY_COMPANY", "GOVERNMENT_AGENCY", "OTHER", "UNKNOWN",
+]
+CLAIMED_ROLE_CODES = [
+    "INVESTIGATOR", "PROSECUTOR", "POLICE_OFFICER", "BANK_EMPLOYEE",
+    "FSS_EMPLOYEE", "COURT_EMPLOYEE", "LOAN_COUNSELOR", "DELIVERY_AGENT",
+    "FAMILY_MEMBER", "ACQUAINTANCE", "OTHER", "UNKNOWN",
+]
+LEXICAL_CUE_CODES = [
+    "PROSECUTION", "POLICE", "FINANCIAL_AUTHORITY", "COURT", "BANK",
+    "INVESTIGATOR_ROLE", "PROSECUTOR_ROLE", "POLICE_ROLE", "BANK_ROLE",
+    "ACCOUNT_CRIME_LINK", "CRIME_INVOLVEMENT", "ARREST", "ASSET_FREEZE",
+    "SAFE_ACCOUNT", "TRANSFER", "WITHDRAWAL", "ALL_FUNDS", "EXACT_AMOUNT",
+    "OTP", "PASSWORD", "PIN", "CARD_CVC", "APP_INSTALL", "URL_OPEN",
+    "SCREEN_SHARE", "IMMEDIATE", "DEADLINE", "NO_END_CALL", "NO_FAMILY",
+    "NO_BANK_CONTACT", "NO_REPORTING", "NO_SEARCH", "KEEP_SECRET",
+]
+PREDICATE_CODES = [
+    "CLAIMS_IDENTITY", "CLAIMS_ORGANIZATION", "CLAIMS_ROLE",
+    "CLAIMS_ACCOUNT_INVOLVEMENT", "CLAIMS_CRIME_INVOLVEMENT",
+    "TRANSFER_FUNDS", "WITHDRAW_CASH", "DISCLOSE_OTP", "DISCLOSE_PASSWORD",
+    "PROVIDE_CARD_INFO", "INSTALL_APP", "OPEN_URL", "SHARE_SCREEN",
+    "MAINTAIN_CALL", "END_CALL", "KEEP_SECRET", "AVOID_REPORTING",
+    "AVOID_EXTERNAL_CONTACT", "THREATEN_ARREST", "THREATEN_ASSET_FREEZE",
+    "JUSTIFY_ASSET_PROTECTION", "PROMISE_RETURN", "OTHER",
+]
+
+
+def _nullable_enum(values: list[str]) -> dict[str, object]:
+    return {"type": ["string", "null"], "enum": [*values, None]}
+
+
+SEMANTIC_ATOM_OUTPUT_PROPERTIES = {
+    "atom_class": {"type": "string", "enum": ATOM_CLASSES},
+    "speaker": {"type": "string", "enum": ["CALLER", "CUSTOMER", "BANK_STAFF", "SYSTEM", "UNKNOWN"]},
+    "subject": _nullable_enum(ENTITY_CODES),
+    "predicate": {"type": "string", "enum": PREDICATE_CODES},
+    "actor": _nullable_enum(ENTITY_CODES), "target": _nullable_enum(ENTITY_CODES),
+    "object": _nullable_enum(ENTITY_CODES),
+    "destination": _nullable_enum(["CLAIMED_SAFE_ACCOUNT", "EXTERNAL_ACCOUNT", "CUSTOMER_ACCOUNT", "UNKNOWN"]),
+    "action_state": _nullable_enum(["MENTIONED", "REQUESTED", "INSTRUCTED", "PLANNED", "ATTEMPTED", "REPORTED_ACTION", "VERIFIED", "COMPLETED", "FAILED", "CANCELLED", "DENIED", "UNKNOWN"]),
+    "modality": _nullable_enum(["ASSERTION", "REQUEST", "DIRECTIVE", "QUESTION", "WARNING", "CONDITIONAL", "PROMISE", "UNKNOWN"]),
+    "polarity": {"type": "string", "enum": ["POSITIVE", "NEGATIVE", "UNKNOWN"]},
+    "claim_status": {"type": "string", "enum": ["CALLER_CLAIM", "CUSTOMER_REPORTED", "STAFF_REPORTED", "UNVERIFIED", "VERIFIED", "UNKNOWN"]},
+    "lexical_cues": {
+        "type": "array", "items": {"type": "string", "enum": LEXICAL_CUE_CODES},
+        "description": "Privacy-safe normalized cue codes only; never source words or quotations.",
+    },
+    "speech_act": _nullable_enum(["ASSERTION", "REQUEST", "INSTRUCTION", "PROHIBITION", "QUESTION", "WARNING", "THREAT", "PROMISE", "JUSTIFICATION", "CONDITION", "UNKNOWN"]),
+    "directive_strength": _nullable_enum(["WEAK", "MEDIUM", "STRONG", "UNKNOWN"]),
+    "obligation": _nullable_enum(["OPTIONAL", "SUGGESTED", "REQUIRED", "UNKNOWN"]),
+    "urgency": _nullable_enum(["NONE", "IMMEDIATE", "TODAY", "WITHIN_30_MINUTES", "BEFORE_CALL_END", "BEFORE_BANK_CLOSE", "UNKNOWN_DEADLINE"]),
+    "authority_pressure": _nullable_enum(["NONE", "LOW", "MEDIUM", "HIGH", "UNKNOWN"]),
+    "fear_pressure": _nullable_enum(["NONE", "LOW", "MEDIUM", "HIGH", "UNKNOWN"]),
+    "secrecy_pressure": _nullable_enum(["NONE", "LOW", "MEDIUM", "HIGH", "UNKNOWN"]),
+    "isolation_pressure": _nullable_enum(["NONE", "LOW", "MEDIUM", "HIGH", "UNKNOWN"]),
+    "financial_pressure": _nullable_enum(["NONE", "LOW", "MEDIUM", "HIGH", "UNKNOWN"]),
+    "repetition_pressure": _nullable_enum(["NONE", "LOW", "MEDIUM", "HIGH", "UNKNOWN"]),
+    "threat_type": _nullable_enum(["ARREST_THREAT", "ASSET_FREEZE_THREAT", "LEGAL_ACTION_THREAT", "FINANCIAL_LOSS_THREAT", "ACCOUNT_SUSPENSION_THREAT", "FAMILY_HARM_THREAT", "INVESTIGATION_ESCALATION_THREAT", "UNKNOWN"]),
+    "communication_control": _nullable_enum(["NO_END_CALL", "NO_EXTERNAL_CONTACT", "NO_REPORTING", "NO_FAMILY_DISCLOSURE", "NO_BANK_CONTACT", "NO_SEARCH", "KEEP_SECRET", "UNKNOWN"]),
+    "auth_secret_type": _nullable_enum(["OTP", "SECURITY_CODE", "PASSWORD", "PIN", "CARD_CVC", "CERTIFICATE_SECRET", "UNKNOWN"]),
+    "amount_scope": _nullable_enum(["ALL_FUNDS", "PARTIAL_FUNDS", "HALF", "REMAINING_BALANCE", "MAXIMUM_AVAILABLE", "EXPLICIT_AMOUNT", "UNKNOWN"]),
+    "amount_value_krw": {"type": ["number", "null"], "minimum": 0},
+    "claimed_organization": _nullable_enum(CLAIMED_ORGANIZATION_CODES),
+    "claimed_role": _nullable_enum(CLAIMED_ROLE_CODES),
+    "claimed_purpose": _nullable_enum(["ASSET_PROTECTION", "INVESTIGATION", "VERIFICATION", "FEE_PAYMENT", "REPAYMENT", "UNKNOWN"]),
+}
+
 EVENT_OUTPUT_SCHEMA = {
     "type": "object", "additionalProperties": False,
-    "properties": {"events": {"type": "array", "items": {
+    "properties": {
+        "events": {"type": "array", "items": {
         "type": "object", "additionalProperties": False,
         "properties": {
             "event_family": {"type": "string", "enum": EVENT_FAMILIES},
@@ -50,8 +133,14 @@ EVENT_OUTPUT_SCHEMA = {
             "is_requested": {"type": ["boolean", "null"]},
         },
         "required": ["event_family", "subtype", "impersonation_group", "evidence_turn_id", "evidence_text", "amount_krw", "amount_context", "is_requested"],
-    }}},
-    "required": ["events"],
+        }},
+        "semantic_atoms": {"type": "array", "items": {
+            "type": "object", "additionalProperties": False,
+            "properties": SEMANTIC_ATOM_OUTPUT_PROPERTIES,
+            "required": list(SEMANTIC_ATOM_OUTPUT_PROPERTIES),
+        }},
+    },
+    "required": ["events", "semantic_atoms"],
 }
 
 SYSTEM_INSTRUCTION = """
@@ -63,4 +152,42 @@ IMPERSONATION: PROSECUTION, POLICE, FSS, COURT, POST_OFFICE, GOVERNMENT_OTHER, B
 PSY_STRATEGY: AUTHORITY, FEAR, URGENCY, LEGITIMACY, INFO_EXTRACTION, ISOLATION, MONEY_REQUEST, BENEFIT, RESISTANCE_HANDLING, BEHAVIOR_CONTROL
 ACTION_REQUEST: SENSITIVE_INFO, AUTH_INFO, DEVICE_CONTROL, CONTACT_RESTRICTION, CARD_HANDOVER, ACCOUNT_RENTAL, OTHER_HIGH_RISK
 MONEY_MOVEMENT: TRANSFER, WITHDRAWAL, CASH_HANDOFF, FEE_PAYMENT, REPAYMENT, OTHER_MONEY_MOVEMENT
+""".strip()
+
+SEMANTIC_ATOM_INSTRUCTION = """
+Populate the top-level semantic_atoms array with every independently
+verifiable meaning unit in the target turn. Split organization claims, role
+claims, incident claims, requested actions, authentication-secret requests,
+threats, urgency, secrecy and communication control into separate atoms.
+Never copy the source sentence, quotation, phone number, account number, OTP,
+or other sensitive literal into an atom. Keep claim_status and action_state
+explicit; distinguish REQUESTED, INSTRUCTED and COMPLETED. Use UNKNOWN or null
+when the target does not support a concrete value. Use only the uppercase codes
+allowed by the JSON schema. Never emit the string "null"; emit JSON null.
+Represent urgency, communication restrictions, amount scope and claimed
+purpose in their dedicated fields rather than hiding them in lexical_cues.
+Use the most specific authentication type supported by the target: OTP,
+SECURITY_CODE, PASSWORD, PIN, CARD_CVC or CERTIFICATE_SECRET; do not collapse
+these into a generic authentication request. Preserve pressure dimensions
+independently: urgency is a deadline, obligation is requiredness,
+authority_pressure is claimed institutional power, and fear_pressure is a
+threat or feared consequence. Euphemisms such as "safe account", "protective
+transfer" or "verification fee" must be normalized into dedicated purpose and
+destination codes, while the original wording must not be copied.
+One atom must contain exactly one primary predicate. A claimed organization and
+a claimed role are always separate atoms. Every communication restriction is
+a separate COMMUNICATION_CONTROL atom: "do not end the call" and "do not tell
+family" must never be merged. Never attach communication_control to a transfer
+atom. Put ALL_FUNDS, REMAINING_BALANCE or an explicit KRW amount on the relevant
+financial atom. Claim atoms must have action_state null. Requested, instructed,
+attempted and completed actions are different states and must not be inferred
+from one another. "ask/request" means ACTION_REQUEST + REQUESTED; "tell/order/
+instruct/require" means ACTION_INSTRUCTION + INSTRUCTED; only an action reported
+as already performed means COMPLETED. Preserve denial with NEGATIVE + DENIED,
+and preserve hypothetical or conditional actions with CONDITIONAL rather than
+turning them into facts. Repeated pressure may raise repetition_pressure but
+must not change an unperformed action to COMPLETED. A phrase such as "prosecution investigator ... do not end the
+call or tell family ... immediately transfer all funds to a safe account"
+therefore needs at least five atoms: organization claim, role claim, no-end-call
+control, no-family-disclosure control, and transfer instruction.
 """.strip()

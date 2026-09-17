@@ -110,7 +110,7 @@ class MySqlCaseRepository:
                     for row in await cursor.fetchall()
                 ]
         return {
-            "case_id": case_row["case_id"], "version": case_row.get("version", 1), "context_revision": int(case_row.get("context_revision", 1)), "client_request_id": case_row["client_request_id"],
+            "case_id": case_row["case_id"], "version": case_row.get("version", 1), "case_name": case_row.get("case_name"), "context_revision": int(case_row.get("context_revision", 1)), "client_request_id": case_row["client_request_id"],
             "input_text": case_row["input_text"], "risk": case_row["risk_level"],
             "risk_score": float(case_row["risk_score"]), "mode": case_row["mode"], "status": case_row["status"],
             "initial_brief": case_row["initial_brief"], "diagnosis": self._json(case_row["diagnosis_json"]),
@@ -138,9 +138,9 @@ class MySqlCaseRepository:
                 async with connection.cursor() as cursor:
                     await cursor.execute(
                         """INSERT INTO cases
-                           (case_id, client_request_id, risk_level, risk_score, mode, status, version, initial_brief, diagnosis_json, created_at, updated_at)
-                           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-                        (record["case_id"], record.get("client_request_id"), record["risk"], record["risk_score"],
+                           (case_id, case_name, client_request_id, risk_level, risk_score, mode, status, version, initial_brief, diagnosis_json, created_at, updated_at)
+                           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                        (record["case_id"], record.get("case_name"), record.get("client_request_id"), record["risk"], record["risk_score"],
                          record["mode"], record["status"], record.get("version", 1), record["initial_brief"], json.dumps(diagnosis, ensure_ascii=False),
                          created_at, updated_at),
                     )
@@ -161,6 +161,31 @@ class MySqlCaseRepository:
                         await cursor.execute(
                             "INSERT INTO context_features (case_id, segment_id, feature_key, feature_value, source, created_at) VALUES (%s,NULL,%s,%s,'DIAGNOSIS_FUSION',%s)",
                             (record["case_id"], key, float(value), created_at),
+                        )
+                    source_revision = int(record.get("context_revision", 1))
+                    for atom in diagnosis.get("semantic_atoms", []):
+                        await cursor.execute(
+                            """INSERT INTO case_semantic_atoms
+                               (case_id, atom_id, atom_class, predicate, source_turn_id, semantic_fingerprint, payload_json, source_revision, created_at)
+                               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                            (record["case_id"], atom["atom_id"], atom["atom_class"], atom["predicate"], atom["source_turn_id"],
+                             atom["semantic_fingerprint"], json.dumps(atom, ensure_ascii=False), source_revision, created_at),
+                        )
+                    for relation in diagnosis.get("semantic_relations", []):
+                        await cursor.execute(
+                            """INSERT INTO case_semantic_relations
+                               (case_id, relation_id, relation_type, source_atom_id, target_atom_id, confidence, payload_json, source_revision, created_at)
+                               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                            (record["case_id"], relation["relation_id"], relation["relation_type"], relation["source_atom_id"],
+                             relation["target_atom_id"], relation["confidence"], json.dumps(relation, ensure_ascii=False), source_revision, created_at),
+                        )
+                    for signal in diagnosis.get("context_signals", []):
+                        await cursor.execute(
+                            """INSERT INTO case_context_signals
+                               (case_id, signal_id, signal_code, severity, confidence, claim_status, visibility, payload_json, source_revision, created_at)
+                               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                            (record["case_id"], signal["signal_id"], signal["signal_code"], signal["severity"], signal["confidence"],
+                             signal["claim_status"], signal["visibility"], json.dumps(signal, ensure_ascii=False), source_revision, created_at),
                         )
                     await cursor.execute(
                         "INSERT INTO case_reports (report_id, case_id, report_type, report_version, created_at, updated_at) VALUES (%s,%s,'LIVE',%s,%s,%s)",
@@ -186,7 +211,7 @@ class MySqlCaseRepository:
 
     async def update_case(self, case_id: str, expected_version: int, changes: dict[str, Any]) -> dict[str, Any]:
         pool = await self._get_pool()
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         async with pool.acquire() as connection:
             try:
                 async with connection.cursor(aiomysql.DictCursor) as cursor:
@@ -222,7 +247,7 @@ class MySqlCaseRepository:
         return [record for case_id in ids if (record := await self.get(case_id)) is not None]
 
     async def delete_case(self, case_id: str) -> None:
-        pool = await self._get_pool(); now = datetime.now()
+        pool = await self._get_pool(); now = datetime.now(timezone.utc)
         async with pool.acquire() as connection, connection.cursor() as cursor:
             await cursor.execute("UPDATE cases SET deleted_at=%s, updated_at=%s WHERE case_id=%s AND deleted_at IS NULL", (now, now, case_id))
             if cursor.rowcount == 0: raise KeyError(case_id)
@@ -237,7 +262,7 @@ class MySqlCaseRepository:
         return [record for case_id in ids if (record := await self.get(case_id, include_deleted=True)) is not None]
 
     async def restore_case(self, case_id: str) -> None:
-        pool = await self._get_pool(); now = datetime.now()
+        pool = await self._get_pool(); now = datetime.now(timezone.utc)
         async with pool.acquire() as connection, connection.cursor() as cursor:
             await cursor.execute("UPDATE cases SET deleted_at=NULL, updated_at=%s WHERE case_id=%s AND deleted_at IS NOT NULL", (now, case_id))
             if cursor.rowcount == 0: raise KeyError(case_id)
@@ -259,6 +284,7 @@ class MySqlCaseRepository:
                     for table in (
                         "transcript_segments", "voice_sessions", "case_context_projections", "case_context_items",
                         "message_context_extractions",
+                        "case_context_signals", "case_semantic_relations", "case_semantic_atoms",
                         "personal_notes", "case_facts", "customer_questions", "case_attachments", "actions",
                         "verification_tasks", "case_presence", "case_members", "messages", "case_events",
                         "context_features", "analysis_segments", "case_inputs", "case_reports",
@@ -274,7 +300,7 @@ class MySqlCaseRepository:
 
     async def purge_expired_trash(self, retention_days: int = 30) -> list[str]:
         pool = await self._get_pool()
-        cutoff = datetime.now() - timedelta(days=retention_days)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
         async with pool.acquire() as connection, connection.cursor() as cursor:
             await cursor.execute("SELECT case_id FROM cases WHERE deleted_at IS NOT NULL AND deleted_at<=%s", (cutoff,))
             expired = [row[0] for row in await cursor.fetchall()]
@@ -290,7 +316,7 @@ class MySqlCaseRepository:
                 return existing
         pool = await self._get_pool()
         message_id = f"msg-{__import__('uuid').uuid4().hex}"
-        created_at = datetime.now()
+        created_at = datetime.now(timezone.utc)
         attachment_ids = list(dict.fromkeys(record.get("attachment_ids", [])))
         async with pool.acquire() as connection:
             try:
@@ -402,7 +428,7 @@ class MySqlCaseRepository:
             return messages
 
     async def enqueue_message_extraction(self, case_id: str, message_id: str) -> dict[str, Any]:
-        pool = await self._get_pool(); now = datetime.now(); extraction_id = f"extract-{uuid.uuid4().hex}"
+        pool = await self._get_pool(); now = datetime.now(timezone.utc); extraction_id = f"extract-{uuid.uuid4().hex}"
         async with pool.acquire() as connection:
             async with connection.cursor(aiomysql.DictCursor) as cursor:
                 await cursor.execute(
@@ -415,7 +441,7 @@ class MySqlCaseRepository:
         return dict(row)
 
     async def claim_message_extraction(self, message_id: str) -> dict[str, Any] | None:
-        pool = await self._get_pool(); now = datetime.now()
+        pool = await self._get_pool(); now = datetime.now(timezone.utc)
         async with pool.acquire() as connection:
             try:
                 async with connection.cursor(aiomysql.DictCursor) as cursor:
@@ -430,13 +456,13 @@ class MySqlCaseRepository:
                 await connection.rollback(); raise
 
     async def complete_message_extraction(self, message_id: str, model_version: str, prompt_version: str) -> None:
-        pool = await self._get_pool(); now = datetime.now()
+        pool = await self._get_pool(); now = datetime.now(timezone.utc)
         async with pool.acquire() as connection, connection.cursor() as cursor:
             await cursor.execute("UPDATE message_context_extractions SET status='COMPLETED',model_version=%s,prompt_version=%s,last_error=NULL,completed_at=%s,updated_at=%s WHERE message_id=%s", (model_version, prompt_version, now, now, message_id))
             await connection.commit()
 
     async def fail_message_extraction(self, message_id: str, error: str) -> None:
-        pool = await self._get_pool(); now = datetime.now()
+        pool = await self._get_pool(); now = datetime.now(timezone.utc)
         async with pool.acquire() as connection, connection.cursor() as cursor:
             await cursor.execute("UPDATE message_context_extractions SET status='FAILED',last_error=%s,updated_at=%s WHERE message_id=%s", (error[:1000], now, message_id))
             await connection.commit()
@@ -505,7 +531,7 @@ class MySqlCaseRepository:
 
     async def upsert_member(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]:
         pool = await self._get_pool()
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         stored_member: dict[str, Any] | None = None
         async with pool.acquire() as connection:
             try:
@@ -543,7 +569,7 @@ class MySqlCaseRepository:
     async def set_primary_assignee(self, case_id: str, display_name: str | None) -> str | None:
         pool = await self._get_pool()
         normalized = (display_name or "").strip()
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         async with pool.acquire() as connection:
             try:
                 async with connection.cursor() as cursor:
@@ -584,7 +610,7 @@ class MySqlCaseRepository:
 
     async def heartbeat_presence(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]:
         pool = await self._get_pool()
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         expires_at = now + timedelta(seconds=45)
         async with pool.acquire() as connection:
             try:
@@ -623,7 +649,7 @@ class MySqlCaseRepository:
     async def create_verification(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]:
         pool = await self._get_pool()
         verification_task_id = f"ver-{__import__('uuid').uuid4().hex}"
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         async with pool.acquire() as connection:
             try:
                 async with connection.cursor() as cursor:
@@ -653,7 +679,7 @@ class MySqlCaseRepository:
 
     async def update_verification(self, case_id: str, verification_task_id: str, expected_version: int, status: str, details: dict[str, Any] | None = None) -> dict[str, Any]:
         pool = await self._get_pool()
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         async with pool.acquire() as connection:
             try:
                 async with connection.cursor(aiomysql.DictCursor) as cursor:
@@ -682,7 +708,7 @@ class MySqlCaseRepository:
     async def create_action(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]:
         pool = await self._get_pool()
         action_id = f"act-{__import__('uuid').uuid4().hex}"
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         async with pool.acquire() as connection:
             try:
                 async with connection.cursor() as cursor:
@@ -721,7 +747,7 @@ class MySqlCaseRepository:
 
     async def update_action(self, case_id: str, action_id: str, status: str, updated_by: str, note: str | None = None) -> dict[str, Any]:
         pool = await self._get_pool()
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         async with pool.acquire() as connection:
             try:
                 async with connection.cursor(aiomysql.DictCursor) as cursor:
@@ -754,7 +780,7 @@ class MySqlCaseRepository:
         pool = await self._get_pool()
         from uuid import uuid4
         session_id = f"voice-{uuid4().hex}"
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         async with pool.acquire() as connection:
             try:
                 async with connection.cursor() as cursor:
@@ -769,7 +795,7 @@ class MySqlCaseRepository:
 
     async def update_voice_session(self, case_id: str, session_id: str, status: str) -> dict[str, Any]:
         pool = await self._get_pool()
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         async with pool.acquire() as connection:
             try:
                 async with connection.cursor(aiomysql.DictCursor) as cursor:
@@ -799,7 +825,7 @@ class MySqlCaseRepository:
     async def append_transcript(self, case_id: str, session_id: str, record: dict[str, Any]) -> dict[str, Any]:
         pool = await self._get_pool()
         from uuid import uuid4
-        segment_id = f"seg-{uuid4().hex}"; now = datetime.now()
+        segment_id = f"seg-{uuid4().hex}"; now = datetime.now(timezone.utc)
         async with pool.acquire() as connection:
             try:
                 async with connection.cursor() as cursor:
@@ -821,7 +847,7 @@ class MySqlCaseRepository:
 
     async def finalize_report(self, case_id: str, expected_version: int, note: str, sections: list[dict[str, Any]], report_card: dict[str, Any]) -> dict[str, Any]:
         pool = await self._get_pool()
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         report_id = f"final-{case_id}"
         async with pool.acquire() as connection:
             try:
@@ -857,7 +883,7 @@ class MySqlCaseRepository:
         return await self.get_final_report(case_id) or {"report_id": report_id, "case_id": case_id, "report_version": report_version, "status": "FINAL", "sections": [], "created_at": _utc_iso(now)}
 
     async def reopen_case(self, case_id: str, expected_version: int) -> dict[str, Any]:
-        pool = await self._get_pool(); now = datetime.now()
+        pool = await self._get_pool(); now = datetime.now(timezone.utc)
         async with pool.acquire() as connection:
             try:
                 async with connection.cursor(aiomysql.DictCursor) as cursor:
@@ -902,7 +928,7 @@ class MySqlCaseRepository:
         return [self._question_row(row) for row in rows]
 
     async def queue_customer_questions(self, case_id: str, questions: list[dict[str, Any]], requested_by: str) -> list[dict[str, Any]]:
-        pool = await self._get_pool(); now = datetime.now(); created_ids: list[str] = []
+        pool = await self._get_pool(); now = datetime.now(timezone.utc); created_ids: list[str] = []
         async with pool.acquire() as connection:
             try:
                 async with connection.cursor() as cursor:
@@ -934,7 +960,7 @@ class MySqlCaseRepository:
         return [item for item in all_items if item["question_id"] in created_ids]
 
     async def dispatch_next_customer_question(self, case_id: str) -> dict[str, Any] | None:
-        pool = await self._get_pool(); now = datetime.now()
+        pool = await self._get_pool(); now = datetime.now(timezone.utc)
         async with pool.acquire() as connection:
             try:
                 async with connection.cursor(aiomysql.DictCursor) as cursor:
@@ -968,7 +994,7 @@ class MySqlCaseRepository:
                 await connection.rollback(); raise
 
     async def answer_customer_question(self, case_id: str, question_id: str, message_id: str, answer_text: str) -> dict[str, Any]:
-        pool = await self._get_pool(); now = datetime.now()
+        pool = await self._get_pool(); now = datetime.now(timezone.utc)
         async with pool.acquire() as connection:
             try:
                 async with connection.cursor(aiomysql.DictCursor) as cursor:
@@ -983,7 +1009,7 @@ class MySqlCaseRepository:
 
     async def submit_customer_answer(self, case_id: str, question_id: str, answer_text: str, actor_user_id: str, actor_display_name: str, answer_payload: dict[str, Any] | None = None, answer_question_version: int | None = None) -> dict[str, Any]:
         pool = await self._get_pool()
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         async with pool.acquire() as connection:
             try:
                 async with connection.cursor(aiomysql.DictCursor) as cursor:
@@ -1044,7 +1070,7 @@ class MySqlCaseRepository:
         return [self._fact_row(row) for row in rows]
 
     async def propose_case_fact(self, case_id: str, question_id: str, value: str, evidence_message_id: str | None) -> dict[str, Any]:
-        pool = await self._get_pool(); now = datetime.now()
+        pool = await self._get_pool(); now = datetime.now(timezone.utc)
         async with pool.acquire() as connection:
             try:
                 async with connection.cursor(aiomysql.DictCursor) as cursor:
@@ -1066,7 +1092,7 @@ class MySqlCaseRepository:
         return self._fact_row(fact)
 
     async def confirm_case_fact(self, case_id: str, fact_id: str, confirmed_by: str) -> dict[str, Any]:
-        pool = await self._get_pool(); now = datetime.now()
+        pool = await self._get_pool(); now = datetime.now(timezone.utc)
         async with pool.acquire() as connection:
             try:
                 async with connection.cursor(aiomysql.DictCursor) as cursor:
@@ -1086,7 +1112,7 @@ class MySqlCaseRepository:
         return [{**row, "created_at": row["created_at"].isoformat(), "updated_at": row["updated_at"].isoformat()} for row in rows]
 
     async def create_personal_note(self, case_id: str, author_id: str, content: str) -> dict[str, Any]:
-        pool = await self._get_pool(); note_id = f"note-{uuid.uuid4().hex}"; now = datetime.now()
+        pool = await self._get_pool(); note_id = f"note-{uuid.uuid4().hex}"; now = datetime.now(timezone.utc)
         async with pool.acquire() as connection:
             try:
                 async with connection.cursor() as cursor: await cursor.execute("INSERT INTO personal_notes (note_id,case_id,author_id,content,created_at,updated_at) VALUES (%s,%s,%s,%s,%s,%s)", (note_id, case_id, author_id, content, now, now))
@@ -1095,7 +1121,7 @@ class MySqlCaseRepository:
         return {"note_id": note_id, "case_id": case_id, "author_id": author_id, "content": content, "visibility": "PRIVATE_TO_AUTHOR", "created_at": now.isoformat(), "updated_at": now.isoformat()}
 
     async def update_personal_note(self, case_id: str, note_id: str, author_id: str, content: str) -> dict[str, Any]:
-        pool = await self._get_pool(); now = datetime.now()
+        pool = await self._get_pool(); now = datetime.now(timezone.utc)
         async with pool.acquire() as connection, connection.cursor() as cursor:
             await cursor.execute("UPDATE personal_notes SET content=%s,updated_at=%s WHERE case_id=%s AND note_id=%s AND author_id=%s", (content, now, case_id, note_id, author_id));
             if cursor.rowcount == 0: raise KeyError(note_id)
