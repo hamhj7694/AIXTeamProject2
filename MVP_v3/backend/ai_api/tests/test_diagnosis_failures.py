@@ -9,8 +9,10 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
+from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
+from ai_api.app.main import app
 from ai_api.app.domains.diagnosis import DiagnosisService
 from ai_api.app.domains.diagnosis.extractor import (
     EventExtraction,
@@ -213,6 +215,19 @@ class DiagnosisFailureTest(unittest.IsolatedAsyncioTestCase):
         ):
             with self.assertRaisesRegex(RuntimeError, "predict failed"):
                 predict({"feature_a": 1.0})
+
+    def test_failure_response_and_request_log_never_echo_source_text(self) -> None:
+        source = "PRIVATE_CALL_CONTENT_OTP_123456_ACCOUNT_9999"
+        with TestClient(app) as client, patch(
+            "ai_api.app.main.service.analyze",
+            new=AsyncMock(side_effect=RuntimeError(source)),
+        ), self.assertLogs("uvicorn.error", level="INFO") as captured:
+            response = client.post("/ai/analyze/text", json={"text": source})
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json()["detail"]["code"], "AI_SERVICE_UNAVAILABLE")
+        self.assertNotIn(source, response.text)
+        self.assertNotIn(source, "\n".join(captured.output))
 
 
 if __name__ == "__main__":

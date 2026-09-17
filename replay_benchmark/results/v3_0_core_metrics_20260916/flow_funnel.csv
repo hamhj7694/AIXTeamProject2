@@ -1,0 +1,6 @@
+stage,numerator,denominator,score,tier,status,notes
+Gold Fact,NOT RUN,270,NOT RUN,BLOCKED,No live replay
+AI extracted,NOT RUN,270,NOT RUN,BLOCKED,Provider connection unavailable
+API accepted,NOT RUN,270,NOT RUN,BLOCKED,No live DB/API flow
+Context represented,NOT RUN,270,NOT RUN,BLOCKED,No live DB/API flow
+Next AI context,NOT RUN,270,NOT RUN,BLOCKED,Provider connection unavailable

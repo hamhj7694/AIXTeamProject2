@@ -22,6 +22,9 @@ export const CURRENT_CUSTOMER_USER = {
 export const casesApi = {
   list: () => request<StoredCase[]>('/api/cases'),
   listTrash: () => request<StoredCase[]>('/api/cases/trash'),
+  updateCase: (caseId: string, expectedVersion: number, values: { case_name?: string }) => request<StoredCase>(`/api/cases/${encodeURIComponent(caseId)}`, {
+    method: 'PATCH', body: JSON.stringify({ expected_version: expectedVersion, ...values }),
+  }),
   trash: (caseId: string, password: string) => request<void>(`/api/cases/${encodeURIComponent(caseId)}/trash`, {
     method: 'POST', body: JSON.stringify({ password }),
   }),

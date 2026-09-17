@@ -1,0 +1,2095 @@
+{
+  "status": "LIVE_AI_READY",
+  "executed_at": "2026-09-16T03:59:19.671769+00:00",
+  "v30_commit": "071fb512ce42a570b0bcf585041eac6f31c2fb1c",
+  "case_count": 30,
+  "api_key_logged": false,
+  "cases": [
+    {
+      "case_id": "FACT-01",
+      "status": "LIVE",
+      "extractor_model": "gpt-4o-mini",
+      "event_count": 5,
+      "successful_turn_ids": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "warning_count": 0,
+      "events": [
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "GOVERNMENT_OTHER",
+          "impersonation_group": "OTHER",
+          "evidence_turn_id": 1,
+          "evidence_text": "고객님 명의 계좌가 자금세탁에 연루돼서 확인 절차가 필요합니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 1
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "SENSITIVE_INFO",
+          "impersonation_group": null,
+          "evidence_turn_id": 2,
+          "evidence_text": "본인 확인을 위해 문자로 온 인증번호 6자리를 불러주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 2
+        },
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "PROSECUTION",
+          "impersonation_group": "FAMILY",
+          "evidence_turn_id": 3,
+          "evidence_text": "수사 보안을 위해 가족이나 은행 직원에게는 절대 말하시면 안 됩니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 3
+        },
+        {
+          "event_family": "MONEY_MOVEMENT",
+          "subtype": null,
+          "impersonation_group": null,
+          "evidence_turn_id": 4,
+          "evidence_text": "지정한 안전계좌로 돈을 옮겨야 피해금 동결을 막을 수 있습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 4
+        },
+        {
+          "event_family": "PSY_STRATEGY",
+          "subtype": "URGENCY",
+          "impersonation_group": null,
+          "evidence_turn_id": 5,
+          "evidence_text": "통화를 끊으면 사건 처리가 취소될 수 있으니 지금 바로 송금 화면을 열어주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 5
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-02",
+      "status": "LIVE",
+      "extractor_model": "gpt-4o-mini",
+      "event_count": 5,
+      "successful_turn_ids": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "warning_count": 0,
+      "events": [
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "GOVERNMENT_OTHER",
+          "impersonation_group": "OTHER",
+          "evidence_turn_id": 1,
+          "evidence_text": "지금 고객님 명의 계좌가 자금세탁에 연루돼서 확인 절차가 필요합니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 1
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "SENSITIVE_INFO",
+          "impersonation_group": null,
+          "evidence_turn_id": 2,
+          "evidence_text": "문자로 온 인증번호 6자리를 불러주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 2
+        },
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "FAMILY",
+          "impersonation_group": "FAMILY",
+          "evidence_turn_id": 3,
+          "evidence_text": "가족이나 은행 직원에게는 절대 말하시면 안 됩니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 3
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "OTHER_HIGH_RISK",
+          "impersonation_group": null,
+          "evidence_turn_id": 4,
+          "evidence_text": "지정한 안전계좌로 돈을 옮겨야 피해금 동결을 막을 수 있습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 4
+        },
+        {
+          "event_family": "PSY_STRATEGY",
+          "subtype": "URGENCY",
+          "impersonation_group": null,
+          "evidence_turn_id": 5,
+          "evidence_text": "통화를 끊으면 사건 처리가 취소될 수 있으니 지금 바로 송금 화면을 열어주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 5
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-03",
+      "status": "LIVE",
+      "extractor_model": "gpt-4o-mini",
+      "event_count": 5,
+      "successful_turn_ids": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "warning_count": 0,
+      "events": [
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "GOVERNMENT_OTHER",
+          "impersonation_group": "OTHER",
+          "evidence_turn_id": 1,
+          "evidence_text": "고객님 명의 계좌가 자금세탁에 연루돼서 확인 절차가 필요합니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 1
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "SENSITIVE_INFO",
+          "impersonation_group": null,
+          "evidence_turn_id": 2,
+          "evidence_text": "본인 확인을 위해 문자로 온 인증번호 6자리를 불러주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 2
+        },
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "FAMILY",
+          "impersonation_group": "FAMILY",
+          "evidence_turn_id": 3,
+          "evidence_text": "수사 보안을 위해 가족이나 은행 직원에게는 절대 말하시면 안 됩니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 3
+        },
+        {
+          "event_family": "MONEY_MOVEMENT",
+          "subtype": null,
+          "impersonation_group": null,
+          "evidence_turn_id": 4,
+          "evidence_text": "지정한 안전계좌로 돈을 옮겨야 피해금 동결을 막을 수 있습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 4
+        },
+        {
+          "event_family": "PSY_STRATEGY",
+          "subtype": "URGENCY",
+          "impersonation_group": null,
+          "evidence_turn_id": 5,
+          "evidence_text": "통화를 끊으면 사건 처리가 취소될 수 있으니 지금 바로 송금 화면을 열어주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 5
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-04",
+      "status": "LIVE",
+      "extractor_model": "gpt-4o-mini",
+      "event_count": 6,
+      "successful_turn_ids": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "warning_count": 0,
+      "events": [
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "GOVERNMENT_OTHER",
+          "impersonation_group": "OTHER",
+          "evidence_turn_id": 1,
+          "evidence_text": "고객님 명의 계좌가 자금세탁에 연루돼서 확인 절차가 필요합니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 1
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "SENSITIVE_INFO",
+          "impersonation_group": null,
+          "evidence_turn_id": 2,
+          "evidence_text": "본인 확인을 위해 문자로 온 인증번호 6자리를 불러주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 2
+        },
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "FAMILY",
+          "impersonation_group": "FAMILY",
+          "evidence_turn_id": 3,
+          "evidence_text": "수사 보안을 위해 가족이나 은행 직원에게는 절대 말하시면 안 됩니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 3
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "OTHER_HIGH_RISK",
+          "impersonation_group": null,
+          "evidence_turn_id": 4,
+          "evidence_text": "지정한 안전계좌로 돈을 옮겨야 피해금 동결을 막을 수 있습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 4
+        },
+        {
+          "event_family": "PSY_STRATEGY",
+          "subtype": "URGENCY",
+          "impersonation_group": null,
+          "evidence_turn_id": 5,
+          "evidence_text": "통화를 끊으면 사건 처리가 취소될 수 있으니 지금 바로 송금 화면을 열어주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 5
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "OTHER_HIGH_RISK",
+          "impersonation_group": null,
+          "evidence_turn_id": 5,
+          "evidence_text": "통화를 끊으면 사건 처리가 취소될 수 있으니 지금 바로 송금 화면을 열어주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 5
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-05",
+      "status": "LIVE",
+      "extractor_model": "gpt-4o-mini",
+      "event_count": 6,
+      "successful_turn_ids": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "warning_count": 0,
+      "events": [
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "GOVERNMENT_OTHER",
+          "impersonation_group": "OTHER",
+          "evidence_turn_id": 1,
+          "evidence_text": "고객님 명의 계좌가 자금세탁에 연루돼서 확인 절차가 필요합니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 1
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "SENSITIVE_INFO",
+          "impersonation_group": null,
+          "evidence_turn_id": 2,
+          "evidence_text": "본인 확인을 위해 문자로 온 인증번호 6자리를 불러주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 2
+        },
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "PROSECUTION",
+          "impersonation_group": "OTHER",
+          "evidence_turn_id": 3,
+          "evidence_text": "수사 보안을 위해 가족이나 은행 직원에게는 절대 말하시면 안 됩니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 3
+        },
+        {
+          "event_family": "PSY_STRATEGY",
+          "subtype": "URGENCY",
+          "impersonation_group": null,
+          "evidence_turn_id": 4,
+          "evidence_text": "지정한 안전계좌로 돈을 옮겨야 피해금 동결을 막을 수 있습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 4
+        },
+        {
+          "event_family": "PSY_STRATEGY",
+          "subtype": "URGENCY",
+          "impersonation_group": null,
+          "evidence_turn_id": 5,
+          "evidence_text": "통화를 끊으면 사건 처리가 취소될 수 있으니 지금 바로 송금 화면을 열어주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 5
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "SENSITIVE_INFO",
+          "impersonation_group": null,
+          "evidence_turn_id": 5,
+          "evidence_text": "통화를 끊으면 사건 처리가 취소될 수 있으니 지금 바로 송금 화면을 열어주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 5
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-06",
+      "status": "LIVE",
+      "extractor_model": "gpt-4o-mini",
+      "event_count": 6,
+      "successful_turn_ids": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "warning_count": 0,
+      "events": [
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "GOVERNMENT_OTHER",
+          "impersonation_group": "FINANCIAL_INSTITUTION",
+          "evidence_turn_id": 1,
+          "evidence_text": "지금 고객님 명의 계좌가 자금세탁에 연루돼서 확인 절차가 필요합니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 1
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "SENSITIVE_INFO",
+          "impersonation_group": null,
+          "evidence_turn_id": 2,
+          "evidence_text": "본인 확인을 위해 문자로 온 인증번호 6자리를 불러주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 2
+        },
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "FAMILY",
+          "impersonation_group": "FAMILY",
+          "evidence_turn_id": 3,
+          "evidence_text": "가족이나 은행 직원에게는 절대 말하시면 안 됩니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 3
+        },
+        {
+          "event_family": "PSY_STRATEGY",
+          "subtype": "AUTHORITY",
+          "impersonation_group": null,
+          "evidence_turn_id": 3,
+          "evidence_text": "수사 보안을 위해 가족이나 은행 직원에게는 절대 말하시면 안 됩니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 3
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "OTHER_HIGH_RISK",
+          "impersonation_group": null,
+          "evidence_turn_id": 4,
+          "evidence_text": "지정한 안전계좌로 돈을 옮겨야 피해금 동결을 막을 수 있습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 4
+        },
+        {
+          "event_family": "PSY_STRATEGY",
+          "subtype": "URGENCY",
+          "impersonation_group": null,
+          "evidence_turn_id": 5,
+          "evidence_text": "통화를 끊으면 사건 처리가 취소될 수 있으니 지금 바로 송금 화면을 열어주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 5
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-07",
+      "status": "LIVE",
+      "extractor_model": "gpt-4o-mini",
+      "event_count": 5,
+      "successful_turn_ids": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "warning_count": 0,
+      "events": [
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "OTHER",
+          "impersonation_group": "FINANCIAL_INSTITUTION",
+          "evidence_turn_id": 1,
+          "evidence_text": "고객님 명의 계좌가 자금세탁에 연루돼서 확인 절차가 필요합니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 1
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "SENSITIVE_INFO",
+          "impersonation_group": null,
+          "evidence_turn_id": 2,
+          "evidence_text": "본인 확인을 위해 문자로 온 인증번호 6자리를 불러주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 2
+        },
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "FAMILY",
+          "impersonation_group": "FAMILY",
+          "evidence_turn_id": 3,
+          "evidence_text": "수사 보안을 위해 가족이나 은행 직원에게는 절대 말하시면 안 됩니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 3
+        },
+        {
+          "event_family": "MONEY_MOVEMENT",
+          "subtype": null,
+          "impersonation_group": null,
+          "evidence_turn_id": 4,
+          "evidence_text": "지정한 안전계좌로 돈을 옮겨야 피해금 동결을 막을 수 있습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 4
+        },
+        {
+          "event_family": "PSY_STRATEGY",
+          "subtype": "FEAR",
+          "impersonation_group": null,
+          "evidence_turn_id": 5,
+          "evidence_text": "통화를 끊으면 사건 처리가 취소될 수 있으니 지금 바로 송금 화면을 열어주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 5
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-08",
+      "status": "LIVE",
+      "extractor_model": "gpt-4o-mini",
+      "event_count": 5,
+      "successful_turn_ids": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "warning_count": 0,
+      "events": [
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "FINANCIAL_OTHER",
+          "impersonation_group": "OTHER",
+          "evidence_turn_id": 1,
+          "evidence_text": "고객님 명의 계좌가 자금세탁에 연루돼서 확인 절차가 필요합니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 1
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "SENSITIVE_INFO",
+          "impersonation_group": null,
+          "evidence_turn_id": 2,
+          "evidence_text": "본인 확인을 위해 문자로 온 인증번호 6자리를 불러주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 2
+        },
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "PROSECUTION",
+          "impersonation_group": "FAMILY",
+          "evidence_turn_id": 3,
+          "evidence_text": "가족이나 은행 직원에게는 절대 말하시면 안 됩니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 3
+        },
+        {
+          "event_family": "PSY_STRATEGY",
+          "subtype": "FEAR",
+          "impersonation_group": null,
+          "evidence_turn_id": 4,
+          "evidence_text": "지정한 안전계좌로 돈을 옮겨야 피해금 동결을 막을 수 있습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 4
+        },
+        {
+          "event_family": "PSY_STRATEGY",
+          "subtype": "URGENCY",
+          "impersonation_group": null,
+          "evidence_turn_id": 5,
+          "evidence_text": "통화를 끊으면 사건 처리가 취소될 수 있으니 지금 바로 송금 화면을 열어주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 5
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-09",
+      "status": "LIVE",
+      "extractor_model": "gpt-4o-mini",
+      "event_count": 6,
+      "successful_turn_ids": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "warning_count": 0,
+      "events": [
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "OTHER",
+          "impersonation_group": "FINANCIAL_INSTITUTION",
+          "evidence_turn_id": 1,
+          "evidence_text": "지금 고객님 명의 계좌가 자금세탁에 연루돼서 확인 절차가 필요합니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 1
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "SENSITIVE_INFO",
+          "impersonation_group": "OTHER",
+          "evidence_turn_id": 2,
+          "evidence_text": "본인 확인을 위해 문자로 온 인증번호 6자리를 불러주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 2
+        },
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "FAMILY",
+          "impersonation_group": "OTHER",
+          "evidence_turn_id": 3,
+          "evidence_text": "수사 보안을 위해 가족이나 은행 직원에게는 절대 말하시면 안 됩니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 3
+        },
+        {
+          "event_family": "PSY_STRATEGY",
+          "subtype": "FEAR",
+          "impersonation_group": null,
+          "evidence_turn_id": 3,
+          "evidence_text": "수사 보안을 위해 가족이나 은행 직원에게는 절대 말하시면 안 됩니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 3
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "OTHER_HIGH_RISK",
+          "impersonation_group": null,
+          "evidence_turn_id": 4,
+          "evidence_text": "지정한 안전계좌로 돈을 옮겨야 피해금 동결을 막을 수 있습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 4
+        },
+        {
+          "event_family": "PSY_STRATEGY",
+          "subtype": "URGENCY",
+          "impersonation_group": null,
+          "evidence_turn_id": 5,
+          "evidence_text": "통화를 끊으면 사건 처리가 취소될 수 있으니 지금 바로 송금 화면을 열어주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 5
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-10",
+      "status": "LIVE",
+      "extractor_model": "gpt-4o-mini",
+      "event_count": 6,
+      "successful_turn_ids": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "warning_count": 0,
+      "events": [
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "GOVERNMENT_OTHER",
+          "impersonation_group": "OTHER",
+          "evidence_turn_id": 1,
+          "evidence_text": "지금 고객님 명의 계좌가 자금세탁에 연루돼서 확인 절차가 필요합니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 1
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "SENSITIVE_INFO",
+          "impersonation_group": null,
+          "evidence_turn_id": 2,
+          "evidence_text": "본인 확인을 위해 문자로 온 인증번호 6자리를 불러주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 2
+        },
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "FAMILY",
+          "impersonation_group": "FAMILY",
+          "evidence_turn_id": 3,
+          "evidence_text": "수사 보안을 위해 가족이나 은행 직원에게는 절대 말하시면 안 됩니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 3
+        },
+        {
+          "event_family": "MONEY_MOVEMENT",
+          "subtype": null,
+          "impersonation_group": null,
+          "evidence_turn_id": 4,
+          "evidence_text": "지정한 안전계좌로 돈을 옮겨야 피해금 동결을 막을 수 있습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 4
+        },
+        {
+          "event_family": "PSY_STRATEGY",
+          "subtype": "URGENCY",
+          "impersonation_group": null,
+          "evidence_turn_id": 5,
+          "evidence_text": "사건 처리가 취소될 수 있으니 지금 바로 송금 화면을 열어주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 5
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "SENSITIVE_INFO",
+          "impersonation_group": null,
+          "evidence_turn_id": 5,
+          "evidence_text": "송금 화면을 열어주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 5
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-11",
+      "status": "LIVE",
+      "extractor_model": "gpt-4o-mini",
+      "event_count": 6,
+      "successful_turn_ids": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "warning_count": 0,
+      "events": [
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "GOVERNMENT_OTHER",
+          "impersonation_group": "PUBLIC_AGENCY",
+          "evidence_turn_id": 1,
+          "evidence_text": "지금 고객님 명의 계좌가 자금세탁에 연루돼서 확인 절차가 필요합니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 1
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "SENSITIVE_INFO",
+          "impersonation_group": null,
+          "evidence_turn_id": 2,
+          "evidence_text": "본인 확인을 위해 문자로 온 인증번호 6자리를 불러주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 2
+        },
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "PROSECUTION",
+          "impersonation_group": "FAMILY",
+          "evidence_turn_id": 3,
+          "evidence_text": "수사 보안을 위해 가족이나 은행 직원에게는 절대 말하시면 안 됩니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 3
+        },
+        {
+          "event_family": "MONEY_MOVEMENT",
+          "subtype": null,
+          "impersonation_group": null,
+          "evidence_turn_id": 4,
+          "evidence_text": "지정한 안전계좌로 돈을 옮겨야 피해금 동결을 막을 수 있습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 4
+        },
+        {
+          "event_family": "PSY_STRATEGY",
+          "subtype": "FEAR",
+          "impersonation_group": null,
+          "evidence_turn_id": 5,
+          "evidence_text": "통화를 끊으면 사건 처리가 취소될 수 있으니 지금 바로 송금 화면을 열어주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 5
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "OTHER_HIGH_RISK",
+          "impersonation_group": null,
+          "evidence_turn_id": 5,
+          "evidence_text": "지금 바로 송금 화면을 열어주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 5
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-12",
+      "status": "LIVE",
+      "extractor_model": "gpt-4o-mini",
+      "event_count": 6,
+      "successful_turn_ids": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "warning_count": 0,
+      "events": [
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "BANK",
+          "impersonation_group": "FINANCIAL_INSTITUTION",
+          "evidence_turn_id": 1,
+          "evidence_text": "고객님 명의 계좌가 자금세탁에 연루돼서 확인 절차가 필요합니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 1
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "SENSITIVE_INFO",
+          "impersonation_group": null,
+          "evidence_turn_id": 2,
+          "evidence_text": "본인 확인을 위해 문자로 온 인증번호 6자리를 불러주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 2
+        },
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "PROSECUTION",
+          "impersonation_group": "FAMILY",
+          "evidence_turn_id": 3,
+          "evidence_text": "수사 보안을 위해 가족이나 은행 직원에게는 절대 말하시면 안 됩니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 3
+        },
+        {
+          "event_family": "PSY_STRATEGY",
+          "subtype": "FEAR",
+          "impersonation_group": null,
+          "evidence_turn_id": 4,
+          "evidence_text": "지정한 안전계좌로 돈을 옮겨야 피해금 동결을 막을 수 있습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 4
+        },
+        {
+          "event_family": "PSY_STRATEGY",
+          "subtype": "FEAR",
+          "impersonation_group": null,
+          "evidence_turn_id": 5,
+          "evidence_text": "통화를 끊으면 사건 처리가 취소될 수 있으니 지금 바로 송금 화면을 열어주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 5
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "OTHER_HIGH_RISK",
+          "impersonation_group": null,
+          "evidence_turn_id": 5,
+          "evidence_text": "지금 바로 송금 화면을 열어주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 5
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-13",
+      "status": "LIVE",
+      "extractor_model": "gpt-4o-mini",
+      "event_count": 6,
+      "successful_turn_ids": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "warning_count": 0,
+      "events": [
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "GOVERNMENT_OTHER",
+          "impersonation_group": "OTHER",
+          "evidence_turn_id": 1,
+          "evidence_text": "지금 고객님 명의 계좌가 자금세탁에 연루돼서 확인 절차가 필요합니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 1
+        },
+        {
+          "event_family": "PSY_STRATEGY",
+          "subtype": "FEAR",
+          "impersonation_group": null,
+          "evidence_turn_id": 1,
+          "evidence_text": "지금 고객님 명의 계좌가 자금세탁에 연루돼서 확인 절차가 필요합니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 1
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "SENSITIVE_INFO",
+          "impersonation_group": null,
+          "evidence_turn_id": 2,
+          "evidence_text": "본인 확인을 위해 문자로 온 인증번호 6자리를 불러주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 2
+        },
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "PROSECUTION",
+          "impersonation_group": "FAMILY",
+          "evidence_turn_id": 3,
+          "evidence_text": "수사 보안을 위해 가족이나 은행 직원에게는 절대 말하시면 안 됩니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 3
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "OTHER_HIGH_RISK",
+          "impersonation_group": null,
+          "evidence_turn_id": 4,
+          "evidence_text": "지정한 안전계좌로 돈을 옮겨야 피해금 동결을 막을 수 있습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 4
+        },
+        {
+          "event_family": "PSY_STRATEGY",
+          "subtype": "URGENCY",
+          "impersonation_group": null,
+          "evidence_turn_id": 5,
+          "evidence_text": "통화를 끊으면 사건 처리가 취소될 수 있으니 지금 바로 송금 화면을 열어주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 5
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-14",
+      "status": "LIVE",
+      "extractor_model": "gpt-4o-mini",
+      "event_count": 5,
+      "successful_turn_ids": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "warning_count": 0,
+      "events": [
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "GOVERNMENT_OTHER",
+          "impersonation_group": "OTHER",
+          "evidence_turn_id": 1,
+          "evidence_text": "고객님 명의 계좌가 자금세탁에 연루돼서 확인 절차가 필요합니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 1
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "SENSITIVE_INFO",
+          "impersonation_group": null,
+          "evidence_turn_id": 2,
+          "evidence_text": "본인 확인을 위해 문자로 온 인증번호 6자리를 불러주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 2
+        },
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "FAMILY",
+          "impersonation_group": "FAMILY",
+          "evidence_turn_id": 3,
+          "evidence_text": "수사 보안을 위해 가족이나 은행 직원에게는 절대 말하시면 안 됩니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 3
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "OTHER_HIGH_RISK",
+          "impersonation_group": null,
+          "evidence_turn_id": 4,
+          "evidence_text": "지정한 안전계좌로 돈을 옮겨야 피해금 동결을 막을 수 있습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 4
+        },
+        {
+          "event_family": "PSY_STRATEGY",
+          "subtype": "URGENCY",
+          "impersonation_group": null,
+          "evidence_turn_id": 5,
+          "evidence_text": "통화를 끊으면 사건 처리가 취소될 수 있으니 지금 바로 송금 화면을 열어주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 5
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-15",
+      "status": "LIVE",
+      "extractor_model": "gpt-4o-mini",
+      "event_count": 5,
+      "successful_turn_ids": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "warning_count": 0,
+      "events": [
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "GOVERNMENT_OTHER",
+          "impersonation_group": "OTHER",
+          "evidence_turn_id": 1,
+          "evidence_text": "지금 고객님 명의 계좌가 자금세탁에 연루돼서 확인 절차가 필요합니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 1
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "SENSITIVE_INFO",
+          "impersonation_group": "OTHER",
+          "evidence_turn_id": 2,
+          "evidence_text": "본인 확인을 위해 문자로 온 인증번호 6자리를 불러주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 2
+        },
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "PROSECUTION",
+          "impersonation_group": "FAMILY",
+          "evidence_turn_id": 3,
+          "evidence_text": "수사 보안을 위해 가족이나 은행 직원에게는 절대 말하시면 안 됩니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 3
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "OTHER_HIGH_RISK",
+          "impersonation_group": null,
+          "evidence_turn_id": 4,
+          "evidence_text": "지정한 안전계좌로 돈을 옮겨야 피해금 동결을 막을 수 있습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 4
+        },
+        {
+          "event_family": "PSY_STRATEGY",
+          "subtype": "URGENCY",
+          "impersonation_group": null,
+          "evidence_turn_id": 5,
+          "evidence_text": "통화를 끊으면 사건 처리가 취소될 수 있으니 지금 바로 송금 화면을 열어주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 5
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-16",
+      "status": "LIVE",
+      "extractor_model": "gpt-4o-mini",
+      "event_count": 5,
+      "successful_turn_ids": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "warning_count": 0,
+      "events": [
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "FINANCIAL_OTHER",
+          "impersonation_group": "FINANCIAL_INSTITUTION",
+          "evidence_turn_id": 1,
+          "evidence_text": "고객님 명의 계좌가 자금세탁에 연루돼서 확인 절차가 필요합니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 1
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "SENSITIVE_INFO",
+          "impersonation_group": "OTHER",
+          "evidence_turn_id": 2,
+          "evidence_text": "본인 확인을 위해 문자로 온 인증번호 6자리를 불러주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 2
+        },
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "PROSECUTION",
+          "impersonation_group": "FAMILY",
+          "evidence_turn_id": 3,
+          "evidence_text": "수사 보안을 위해 가족이나 은행 직원에게는 절대 말하시면 안 됩니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 3
+        },
+        {
+          "event_family": "PSY_STRATEGY",
+          "subtype": "FEAR",
+          "impersonation_group": null,
+          "evidence_turn_id": 4,
+          "evidence_text": "지정한 안전계좌로 돈을 옮겨야 피해금 동결을 막을 수 있습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 4
+        },
+        {
+          "event_family": "PSY_STRATEGY",
+          "subtype": "URGENCY",
+          "impersonation_group": null,
+          "evidence_turn_id": 5,
+          "evidence_text": "통화를 끊으면 사건 처리가 취소될 수 있으니 지금 바로 송금 화면을 열어주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 5
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-17",
+      "status": "LIVE",
+      "extractor_model": "gpt-4o-mini",
+      "event_count": 6,
+      "successful_turn_ids": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "warning_count": 0,
+      "events": [
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "GOVERNMENT_OTHER",
+          "impersonation_group": "OTHER",
+          "evidence_turn_id": 1,
+          "evidence_text": "고객님 명의 계좌가 자금세탁에 연루돼서 확인 절차가 필요합니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 1
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "SENSITIVE_INFO",
+          "impersonation_group": null,
+          "evidence_turn_id": 2,
+          "evidence_text": "본인 확인을 위해 문자로 온 인증번호 6자리를 불러주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 2
+        },
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "PROSECUTION",
+          "impersonation_group": "FAMILY",
+          "evidence_turn_id": 3,
+          "evidence_text": "수사 보안을 위해 가족이나 은행 직원에게는 절대 말하시면 안 됩니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 3
+        },
+        {
+          "event_family": "PSY_STRATEGY",
+          "subtype": "FEAR",
+          "impersonation_group": null,
+          "evidence_turn_id": 3,
+          "evidence_text": "수사 보안을 위해 가족이나 은행 직원에게는 절대 말하시면 안 됩니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 3
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "OTHER_HIGH_RISK",
+          "impersonation_group": null,
+          "evidence_turn_id": 4,
+          "evidence_text": "지정한 안전계좌로 돈을 옮겨야 피해금 동결을 막을 수 있습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 4
+        },
+        {
+          "event_family": "PSY_STRATEGY",
+          "subtype": "FEAR",
+          "impersonation_group": null,
+          "evidence_turn_id": 5,
+          "evidence_text": "통화를 끊으면 사건 처리가 취소될 수 있으니 지금 바로 송금 화면을 열어주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 5
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-18",
+      "status": "LIVE",
+      "extractor_model": "gpt-4o-mini",
+      "event_count": 6,
+      "successful_turn_ids": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "warning_count": 0,
+      "events": [
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "OTHER",
+          "impersonation_group": "FINANCIAL_INSTITUTION",
+          "evidence_turn_id": 1,
+          "evidence_text": "고객님 명의 계좌가 자금세탁에 연루돼서 확인 절차가 필요합니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 1
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "SENSITIVE_INFO",
+          "impersonation_group": "OTHER",
+          "evidence_turn_id": 2,
+          "evidence_text": "본인 확인을 위해 문자로 온 인증번호 6자리를 불러주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 2
+        },
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "PROSECUTION",
+          "impersonation_group": "FAMILY",
+          "evidence_turn_id": 3,
+          "evidence_text": "수사 보안을 위해 가족이나 은행 직원에게는 절대 말하시면 안 됩니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 3
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "OTHER_HIGH_RISK",
+          "impersonation_group": null,
+          "evidence_turn_id": 4,
+          "evidence_text": "지정한 안전계좌로 돈을 옮겨야 피해금 동결을 막을 수 있습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 4
+        },
+        {
+          "event_family": "PSY_STRATEGY",
+          "subtype": "FEAR",
+          "impersonation_group": null,
+          "evidence_turn_id": 5,
+          "evidence_text": "통화를 끊으면 사건 처리가 취소될 수 있으니 지금 바로 송금 화면을 열어주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 5
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "OTHER_HIGH_RISK",
+          "impersonation_group": null,
+          "evidence_turn_id": 5,
+          "evidence_text": "송금 화면을 열어주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 5
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-19",
+      "status": "LIVE",
+      "extractor_model": "gpt-4o-mini",
+      "event_count": 5,
+      "successful_turn_ids": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "warning_count": 0,
+      "events": [
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "OTHER",
+          "impersonation_group": "FINANCIAL_INSTITUTION",
+          "evidence_turn_id": 1,
+          "evidence_text": "지금 고객님 명의 계좌가 자금세탁에 연루돼서 확인 절차가 필요합니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 1
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "SENSITIVE_INFO",
+          "impersonation_group": "OTHER",
+          "evidence_turn_id": 2,
+          "evidence_text": "본인 확인을 위해 문자로 온 인증번호 6자리를 불러주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 2
+        },
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "PROSECUTION",
+          "impersonation_group": "FAMILY",
+          "evidence_turn_id": 3,
+          "evidence_text": "수사 보안을 위해 가족이나 은행 직원에게는 절대 말하시면 안 됩니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 3
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "OTHER_HIGH_RISK",
+          "impersonation_group": null,
+          "evidence_turn_id": 4,
+          "evidence_text": "지정한 안전계좌로 돈을 옮겨야 피해금 동결을 막을 수 있습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 4
+        },
+        {
+          "event_family": "PSY_STRATEGY",
+          "subtype": "URGENCY",
+          "impersonation_group": null,
+          "evidence_turn_id": 5,
+          "evidence_text": "통화를 끊으면 사건 처리가 취소될 수 있으니 지금 바로 송금 화면을 열어주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 5
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-20",
+      "status": "LIVE",
+      "extractor_model": "gpt-4o-mini",
+      "event_count": 5,
+      "successful_turn_ids": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "warning_count": 0,
+      "events": [
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "GOVERNMENT_OTHER",
+          "impersonation_group": "OTHER",
+          "evidence_turn_id": 1,
+          "evidence_text": "고객님 명의 계좌가 자금세탁에 연루돼서 확인 절차가 필요합니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 1
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "SENSITIVE_INFO",
+          "impersonation_group": null,
+          "evidence_turn_id": 2,
+          "evidence_text": "본인 확인을 위해 문자로 온 인증번호 6자리를 불러주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 2
+        },
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "FAMILY",
+          "impersonation_group": "FAMILY",
+          "evidence_turn_id": 3,
+          "evidence_text": "가족이나 은행 직원에게는 절대 말하시면 안 됩니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 3
+        },
+        {
+          "event_family": "PSY_STRATEGY",
+          "subtype": "FEAR",
+          "impersonation_group": null,
+          "evidence_turn_id": 4,
+          "evidence_text": "지정한 안전계좌로 돈을 옮겨야 피해금 동결을 막을 수 있습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 4
+        },
+        {
+          "event_family": "PSY_STRATEGY",
+          "subtype": "URGENCY",
+          "impersonation_group": null,
+          "evidence_turn_id": 5,
+          "evidence_text": "통화를 끊으면 사건 처리가 취소될 수 있으니 지금 바로 송금 화면을 열어주세요.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 5
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-21",
+      "status": "LIVE",
+      "extractor_model": "gpt-4o-mini",
+      "event_count": 3,
+      "successful_turn_ids": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "warning_count": 0,
+      "events": [
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "OTHER_HIGH_RISK",
+          "impersonation_group": "FINANCIAL_INSTITUTION",
+          "evidence_turn_id": 1,
+          "evidence_text": "은행 상담 예약을 확인하고 싶습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 1
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "SENSITIVE_INFO",
+          "impersonation_group": null,
+          "evidence_turn_id": 2,
+          "evidence_text": "비밀번호나 인증번호는 알려주지 않았습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 2
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "OTHER_HIGH_RISK",
+          "impersonation_group": null,
+          "evidence_turn_id": 4,
+          "evidence_text": "송금 요청은 없었습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 4
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-22",
+      "status": "LIVE",
+      "extractor_model": "gpt-4o-mini",
+      "event_count": 4,
+      "successful_turn_ids": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "warning_count": 0,
+      "events": [
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "BANK",
+          "impersonation_group": "FINANCIAL_INSTITUTION",
+          "evidence_turn_id": 1,
+          "evidence_text": "은행 상담 예약을 확인하고 싶습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 1
+        },
+        {
+          "event_family": "PSY_STRATEGY",
+          "subtype": "LEGITIMACY",
+          "impersonation_group": "OTHER",
+          "evidence_turn_id": 2,
+          "evidence_text": "비밀번호나 인증번호는 알려주지 않았습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 2
+        },
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "FAMILY",
+          "impersonation_group": "FAMILY",
+          "evidence_turn_id": 3,
+          "evidence_text": "가족과 상담했습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 3
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "MONEY_REQUEST",
+          "impersonation_group": null,
+          "evidence_turn_id": 4,
+          "evidence_text": "송금 요청은 없었습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": false,
+          "detected_at_turn": 4
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-23",
+      "status": "LIVE",
+      "extractor_model": "gpt-4o-mini",
+      "event_count": 4,
+      "successful_turn_ids": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "warning_count": 0,
+      "events": [
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "BANK",
+          "impersonation_group": "FINANCIAL_INSTITUTION",
+          "evidence_turn_id": 1,
+          "evidence_text": "은행 상담 예약을 확인하고 싶습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 1
+        },
+        {
+          "event_family": "PSY_STRATEGY",
+          "subtype": "AUTHORITY",
+          "impersonation_group": null,
+          "evidence_turn_id": 2,
+          "evidence_text": "비밀번호나 인증번호는 알려주지 않았습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 2
+        },
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "FAMILY",
+          "impersonation_group": "FAMILY",
+          "evidence_turn_id": 3,
+          "evidence_text": "가족과 상담했습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 3
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "OTHER_HIGH_RISK",
+          "impersonation_group": null,
+          "evidence_turn_id": 4,
+          "evidence_text": "송금 요청은 없었습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 4
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-24",
+      "status": "LIVE",
+      "extractor_model": "gpt-4o-mini",
+      "event_count": 2,
+      "successful_turn_ids": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "warning_count": 0,
+      "events": [
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "OTHER_HIGH_RISK",
+          "impersonation_group": "FINANCIAL_INSTITUTION",
+          "evidence_turn_id": 1,
+          "evidence_text": "은행 상담 예약을 확인하고 싶습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 1
+        },
+        {
+          "event_family": "PSY_STRATEGY",
+          "subtype": "LEGITIMACY",
+          "impersonation_group": null,
+          "evidence_turn_id": 2,
+          "evidence_text": "비밀번호나 인증번호는 알려주지 않았습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 2
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-25",
+      "status": "LIVE",
+      "extractor_model": "gpt-4o-mini",
+      "event_count": 4,
+      "successful_turn_ids": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "warning_count": 0,
+      "events": [
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "BANK",
+          "impersonation_group": "FINANCIAL_INSTITUTION",
+          "evidence_turn_id": 1,
+          "evidence_text": "은행 상담 예약을 확인하고 싶습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 1
+        },
+        {
+          "event_family": "PSY_STRATEGY",
+          "subtype": "RESISTANCE_HANDLING",
+          "impersonation_group": null,
+          "evidence_turn_id": 2,
+          "evidence_text": "비밀번호나 인증번호는 알려주지 않았습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 2
+        },
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "FAMILY",
+          "impersonation_group": "FAMILY",
+          "evidence_turn_id": 3,
+          "evidence_text": "가족과 상담했습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 3
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": null,
+          "impersonation_group": null,
+          "evidence_turn_id": 4,
+          "evidence_text": "송금 요청은 없었습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": false,
+          "detected_at_turn": 4
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-26",
+      "status": "LIVE",
+      "extractor_model": "gpt-4o-mini",
+      "event_count": 4,
+      "successful_turn_ids": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "warning_count": 0,
+      "events": [
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "BANK",
+          "impersonation_group": "FINANCIAL_INSTITUTION",
+          "evidence_turn_id": 1,
+          "evidence_text": "은행 상담 예약을 확인하고 싶습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 1
+        },
+        {
+          "event_family": "PSY_STRATEGY",
+          "subtype": "LEGITIMACY",
+          "impersonation_group": null,
+          "evidence_turn_id": 2,
+          "evidence_text": "비밀번호나 인증번호는 알려주지 않았습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 2
+        },
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "FAMILY",
+          "impersonation_group": "FAMILY",
+          "evidence_turn_id": 3,
+          "evidence_text": "가족과 상담했습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 3
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "OTHER_HIGH_RISK",
+          "impersonation_group": null,
+          "evidence_turn_id": 4,
+          "evidence_text": "송금 요청은 없었습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 4
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-27",
+      "status": "LIVE",
+      "extractor_model": "gpt-4o-mini",
+      "event_count": 4,
+      "successful_turn_ids": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "warning_count": 0,
+      "events": [
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "BANK",
+          "impersonation_group": "FINANCIAL_INSTITUTION",
+          "evidence_turn_id": 1,
+          "evidence_text": "은행 상담 예약을 확인하고 싶습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 1
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "SENSITIVE_INFO",
+          "impersonation_group": null,
+          "evidence_turn_id": 2,
+          "evidence_text": "비밀번호나 인증번호는 알려주지 않았습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 2
+        },
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "FAMILY",
+          "impersonation_group": "FAMILY",
+          "evidence_turn_id": 3,
+          "evidence_text": "가족과 상담했습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 3
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "OTHER_HIGH_RISK",
+          "impersonation_group": null,
+          "evidence_turn_id": 4,
+          "evidence_text": "송금 요청은 없었습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 4
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-28",
+      "status": "LIVE",
+      "extractor_model": "gpt-4o-mini",
+      "event_count": 4,
+      "successful_turn_ids": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "warning_count": 0,
+      "events": [
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "BANK",
+          "impersonation_group": "FINANCIAL_INSTITUTION",
+          "evidence_turn_id": 1,
+          "evidence_text": "은행 상담 예약을 확인하고 싶습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 1
+        },
+        {
+          "event_family": "PSY_STRATEGY",
+          "subtype": "RESISTANCE_HANDLING",
+          "impersonation_group": null,
+          "evidence_turn_id": 2,
+          "evidence_text": "비밀번호나 인증번호는 알려주지 않았습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 2
+        },
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "FAMILY",
+          "impersonation_group": "FAMILY",
+          "evidence_turn_id": 3,
+          "evidence_text": "가족과 상담했습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 3
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "OTHER_HIGH_RISK",
+          "impersonation_group": null,
+          "evidence_turn_id": 4,
+          "evidence_text": "송금 요청은 없었습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 4
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-29",
+      "status": "LIVE",
+      "extractor_model": "gpt-4o-mini",
+      "event_count": 3,
+      "successful_turn_ids": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "warning_count": 0,
+      "events": [
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "OTHER_HIGH_RISK",
+          "impersonation_group": "FINANCIAL_INSTITUTION",
+          "evidence_turn_id": 1,
+          "evidence_text": "은행 상담 예약을 확인하고 싶습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 1
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "SENSITIVE_INFO",
+          "impersonation_group": null,
+          "evidence_turn_id": 2,
+          "evidence_text": "비밀번호나 인증번호는 알려주지 않았습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 2
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "OTHER_HIGH_RISK",
+          "impersonation_group": null,
+          "evidence_turn_id": 4,
+          "evidence_text": "송금 요청은 없었습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 4
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-30",
+      "status": "LIVE",
+      "extractor_model": "gpt-4o-mini",
+      "event_count": 4,
+      "successful_turn_ids": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "warning_count": 0,
+      "events": [
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "BANK",
+          "impersonation_group": "FINANCIAL_INSTITUTION",
+          "evidence_turn_id": 1,
+          "evidence_text": "은행 상담 예약을 확인하고 싶습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 1
+        },
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": null,
+          "impersonation_group": "OTHER",
+          "evidence_turn_id": 2,
+          "evidence_text": "비밀번호나 인증번호는 알려주지 않았습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 2
+        },
+        {
+          "event_family": "IMPERSONATION",
+          "subtype": "FAMILY",
+          "impersonation_group": "FAMILY",
+          "evidence_turn_id": 3,
+          "evidence_text": "가족과 상담했습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": null,
+          "detected_at_turn": 3
+        },
+        {
+          "event_family": "ACTION_REQUEST",
+          "subtype": "OTHER_HIGH_RISK",
+          "impersonation_group": null,
+          "evidence_turn_id": 4,
+          "evidence_text": "송금 요청은 없었습니다.",
+          "amount_krw": null,
+          "amount_context": null,
+          "is_requested": false,
+          "detected_at_turn": 4
+        }
+      ]
+    }
+  ]
+}

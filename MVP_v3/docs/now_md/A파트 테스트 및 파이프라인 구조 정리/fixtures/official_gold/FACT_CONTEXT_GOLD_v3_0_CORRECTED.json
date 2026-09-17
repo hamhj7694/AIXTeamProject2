@@ -1,0 +1,2828 @@
+{
+  "schema_version": "csr-gold-v3.0-corrected.v1",
+  "source_file_sha256": "ef6ffeadb23d688074d6b5a2edbbb2a5aca8976bd7968c813eb9659ab9b05166",
+  "projection_from": "csr-canonical-human-gold.v1",
+  "purpose": "Legacy v3.0-compatible evaluation projection. Keeps legacy semantic keys but replaces unsupported concrete values with MISSING/UNKNOWN.",
+  "cases": [
+    {
+      "case_id": "FACT-01",
+      "source_scenario_class": "HIGH",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "legacy_atomic_facts_corrected": [
+        {
+          "semantic_key": "claimed_organization",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "claimed_role",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "transfer_requested",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "transfer_amount",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "otp_shared",
+          "gold_value": null,
+          "knowledge_status": "UNKNOWN",
+          "source_turn": 2,
+          "mapping_note": "Turn 2 requests an authentication code; it does not establish actual disclosure."
+        },
+        {
+          "semantic_key": "password_shared",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "remote_app_requested",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "isolation_family",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 3
+        },
+        {
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 3
+        }
+      ],
+      "do_not_use_source_atomic_facts_as_gold": true
+    },
+    {
+      "case_id": "FACT-02",
+      "source_scenario_class": "HIGH",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "legacy_atomic_facts_corrected": [
+        {
+          "semantic_key": "claimed_organization",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "claimed_role",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "transfer_requested",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "transfer_amount",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "otp_shared",
+          "gold_value": null,
+          "knowledge_status": "UNKNOWN",
+          "source_turn": 2,
+          "mapping_note": "Turn 2 requests an authentication code; it does not establish actual disclosure."
+        },
+        {
+          "semantic_key": "password_shared",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "remote_app_requested",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "isolation_family",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 3
+        },
+        {
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 3
+        }
+      ],
+      "do_not_use_source_atomic_facts_as_gold": true
+    },
+    {
+      "case_id": "FACT-03",
+      "source_scenario_class": "HIGH",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "legacy_atomic_facts_corrected": [
+        {
+          "semantic_key": "claimed_organization",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "claimed_role",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "transfer_requested",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "transfer_amount",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "otp_shared",
+          "gold_value": null,
+          "knowledge_status": "UNKNOWN",
+          "source_turn": 2,
+          "mapping_note": "Turn 2 requests an authentication code; it does not establish actual disclosure."
+        },
+        {
+          "semantic_key": "password_shared",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "remote_app_requested",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "isolation_family",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 3
+        },
+        {
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 3
+        }
+      ],
+      "do_not_use_source_atomic_facts_as_gold": true
+    },
+    {
+      "case_id": "FACT-04",
+      "source_scenario_class": "HIGH",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "legacy_atomic_facts_corrected": [
+        {
+          "semantic_key": "claimed_organization",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "claimed_role",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "transfer_requested",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "transfer_amount",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "otp_shared",
+          "gold_value": null,
+          "knowledge_status": "UNKNOWN",
+          "source_turn": 2,
+          "mapping_note": "Turn 2 requests an authentication code; it does not establish actual disclosure."
+        },
+        {
+          "semantic_key": "password_shared",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "remote_app_requested",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "isolation_family",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 3
+        },
+        {
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 3
+        }
+      ],
+      "do_not_use_source_atomic_facts_as_gold": true
+    },
+    {
+      "case_id": "FACT-05",
+      "source_scenario_class": "HIGH",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "legacy_atomic_facts_corrected": [
+        {
+          "semantic_key": "claimed_organization",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "claimed_role",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "transfer_requested",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "transfer_amount",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "otp_shared",
+          "gold_value": null,
+          "knowledge_status": "UNKNOWN",
+          "source_turn": 2,
+          "mapping_note": "Turn 2 requests an authentication code; it does not establish actual disclosure."
+        },
+        {
+          "semantic_key": "password_shared",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "remote_app_requested",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "isolation_family",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 3
+        },
+        {
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 3
+        }
+      ],
+      "do_not_use_source_atomic_facts_as_gold": true
+    },
+    {
+      "case_id": "FACT-06",
+      "source_scenario_class": "HIGH",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "legacy_atomic_facts_corrected": [
+        {
+          "semantic_key": "claimed_organization",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "claimed_role",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "transfer_requested",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "transfer_amount",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "otp_shared",
+          "gold_value": null,
+          "knowledge_status": "UNKNOWN",
+          "source_turn": 2,
+          "mapping_note": "Turn 2 requests an authentication code; it does not establish actual disclosure."
+        },
+        {
+          "semantic_key": "password_shared",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "remote_app_requested",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "isolation_family",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 3
+        },
+        {
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 3
+        }
+      ],
+      "do_not_use_source_atomic_facts_as_gold": true
+    },
+    {
+      "case_id": "FACT-07",
+      "source_scenario_class": "HIGH",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "legacy_atomic_facts_corrected": [
+        {
+          "semantic_key": "claimed_organization",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "claimed_role",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "transfer_requested",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "transfer_amount",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "otp_shared",
+          "gold_value": null,
+          "knowledge_status": "UNKNOWN",
+          "source_turn": 2,
+          "mapping_note": "Turn 2 requests an authentication code; it does not establish actual disclosure."
+        },
+        {
+          "semantic_key": "password_shared",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "remote_app_requested",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "isolation_family",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 3
+        },
+        {
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 3
+        }
+      ],
+      "do_not_use_source_atomic_facts_as_gold": true
+    },
+    {
+      "case_id": "FACT-08",
+      "source_scenario_class": "HIGH",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "legacy_atomic_facts_corrected": [
+        {
+          "semantic_key": "claimed_organization",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "claimed_role",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "transfer_requested",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "transfer_amount",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "otp_shared",
+          "gold_value": null,
+          "knowledge_status": "UNKNOWN",
+          "source_turn": 2,
+          "mapping_note": "Turn 2 requests an authentication code; it does not establish actual disclosure."
+        },
+        {
+          "semantic_key": "password_shared",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "remote_app_requested",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "isolation_family",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 3
+        },
+        {
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 3
+        }
+      ],
+      "do_not_use_source_atomic_facts_as_gold": true
+    },
+    {
+      "case_id": "FACT-09",
+      "source_scenario_class": "HIGH",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "legacy_atomic_facts_corrected": [
+        {
+          "semantic_key": "claimed_organization",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "claimed_role",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "transfer_requested",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "transfer_amount",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "otp_shared",
+          "gold_value": null,
+          "knowledge_status": "UNKNOWN",
+          "source_turn": 2,
+          "mapping_note": "Turn 2 requests an authentication code; it does not establish actual disclosure."
+        },
+        {
+          "semantic_key": "password_shared",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "remote_app_requested",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "isolation_family",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 3
+        },
+        {
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 3
+        }
+      ],
+      "do_not_use_source_atomic_facts_as_gold": true
+    },
+    {
+      "case_id": "FACT-10",
+      "source_scenario_class": "HIGH",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "legacy_atomic_facts_corrected": [
+        {
+          "semantic_key": "claimed_organization",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "claimed_role",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "transfer_requested",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "transfer_amount",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "otp_shared",
+          "gold_value": null,
+          "knowledge_status": "UNKNOWN",
+          "source_turn": 2,
+          "mapping_note": "Turn 2 requests an authentication code; it does not establish actual disclosure."
+        },
+        {
+          "semantic_key": "password_shared",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "remote_app_requested",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "isolation_family",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 3
+        },
+        {
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 3
+        }
+      ],
+      "do_not_use_source_atomic_facts_as_gold": true
+    },
+    {
+      "case_id": "FACT-11",
+      "source_scenario_class": "MIXED",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "legacy_atomic_facts_corrected": [
+        {
+          "semantic_key": "claimed_organization",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "claimed_role",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "transfer_requested",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "transfer_amount",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "otp_shared",
+          "gold_value": null,
+          "knowledge_status": "UNKNOWN",
+          "source_turn": 2,
+          "mapping_note": "Turn 2 requests an authentication code; it does not establish actual disclosure."
+        },
+        {
+          "semantic_key": "password_shared",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "remote_app_requested",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "isolation_family",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 3
+        },
+        {
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 3
+        }
+      ],
+      "do_not_use_source_atomic_facts_as_gold": true
+    },
+    {
+      "case_id": "FACT-12",
+      "source_scenario_class": "MIXED",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "legacy_atomic_facts_corrected": [
+        {
+          "semantic_key": "claimed_organization",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "claimed_role",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "transfer_requested",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "transfer_amount",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "otp_shared",
+          "gold_value": null,
+          "knowledge_status": "UNKNOWN",
+          "source_turn": 2,
+          "mapping_note": "Turn 2 requests an authentication code; it does not establish actual disclosure."
+        },
+        {
+          "semantic_key": "password_shared",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "remote_app_requested",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "isolation_family",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 3
+        },
+        {
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 3
+        }
+      ],
+      "do_not_use_source_atomic_facts_as_gold": true
+    },
+    {
+      "case_id": "FACT-13",
+      "source_scenario_class": "MIXED",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "legacy_atomic_facts_corrected": [
+        {
+          "semantic_key": "claimed_organization",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "claimed_role",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "transfer_requested",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "transfer_amount",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "otp_shared",
+          "gold_value": null,
+          "knowledge_status": "UNKNOWN",
+          "source_turn": 2,
+          "mapping_note": "Turn 2 requests an authentication code; it does not establish actual disclosure."
+        },
+        {
+          "semantic_key": "password_shared",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "remote_app_requested",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "isolation_family",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 3
+        },
+        {
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 3
+        }
+      ],
+      "do_not_use_source_atomic_facts_as_gold": true
+    },
+    {
+      "case_id": "FACT-14",
+      "source_scenario_class": "MIXED",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "legacy_atomic_facts_corrected": [
+        {
+          "semantic_key": "claimed_organization",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "claimed_role",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "transfer_requested",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "transfer_amount",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "otp_shared",
+          "gold_value": null,
+          "knowledge_status": "UNKNOWN",
+          "source_turn": 2,
+          "mapping_note": "Turn 2 requests an authentication code; it does not establish actual disclosure."
+        },
+        {
+          "semantic_key": "password_shared",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "remote_app_requested",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "isolation_family",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 3
+        },
+        {
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 3
+        }
+      ],
+      "do_not_use_source_atomic_facts_as_gold": true
+    },
+    {
+      "case_id": "FACT-15",
+      "source_scenario_class": "MIXED",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "legacy_atomic_facts_corrected": [
+        {
+          "semantic_key": "claimed_organization",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "claimed_role",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "transfer_requested",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "transfer_amount",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "otp_shared",
+          "gold_value": null,
+          "knowledge_status": "UNKNOWN",
+          "source_turn": 2,
+          "mapping_note": "Turn 2 requests an authentication code; it does not establish actual disclosure."
+        },
+        {
+          "semantic_key": "password_shared",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "remote_app_requested",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "isolation_family",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 3
+        },
+        {
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 3
+        }
+      ],
+      "do_not_use_source_atomic_facts_as_gold": true
+    },
+    {
+      "case_id": "FACT-16",
+      "source_scenario_class": "MIXED",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "legacy_atomic_facts_corrected": [
+        {
+          "semantic_key": "claimed_organization",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "claimed_role",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "transfer_requested",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "transfer_amount",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "otp_shared",
+          "gold_value": null,
+          "knowledge_status": "UNKNOWN",
+          "source_turn": 2,
+          "mapping_note": "Turn 2 requests an authentication code; it does not establish actual disclosure."
+        },
+        {
+          "semantic_key": "password_shared",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "remote_app_requested",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "isolation_family",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 3
+        },
+        {
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 3
+        }
+      ],
+      "do_not_use_source_atomic_facts_as_gold": true
+    },
+    {
+      "case_id": "FACT-17",
+      "source_scenario_class": "MIXED",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "legacy_atomic_facts_corrected": [
+        {
+          "semantic_key": "claimed_organization",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "claimed_role",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "transfer_requested",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "transfer_amount",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "otp_shared",
+          "gold_value": null,
+          "knowledge_status": "UNKNOWN",
+          "source_turn": 2,
+          "mapping_note": "Turn 2 requests an authentication code; it does not establish actual disclosure."
+        },
+        {
+          "semantic_key": "password_shared",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "remote_app_requested",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "isolation_family",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 3
+        },
+        {
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 3
+        }
+      ],
+      "do_not_use_source_atomic_facts_as_gold": true
+    },
+    {
+      "case_id": "FACT-18",
+      "source_scenario_class": "MIXED",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "legacy_atomic_facts_corrected": [
+        {
+          "semantic_key": "claimed_organization",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "claimed_role",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "transfer_requested",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "transfer_amount",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "otp_shared",
+          "gold_value": null,
+          "knowledge_status": "UNKNOWN",
+          "source_turn": 2,
+          "mapping_note": "Turn 2 requests an authentication code; it does not establish actual disclosure."
+        },
+        {
+          "semantic_key": "password_shared",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "remote_app_requested",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "isolation_family",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 3
+        },
+        {
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 3
+        }
+      ],
+      "do_not_use_source_atomic_facts_as_gold": true
+    },
+    {
+      "case_id": "FACT-19",
+      "source_scenario_class": "MIXED",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "legacy_atomic_facts_corrected": [
+        {
+          "semantic_key": "claimed_organization",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "claimed_role",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "transfer_requested",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "transfer_amount",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "otp_shared",
+          "gold_value": null,
+          "knowledge_status": "UNKNOWN",
+          "source_turn": 2,
+          "mapping_note": "Turn 2 requests an authentication code; it does not establish actual disclosure."
+        },
+        {
+          "semantic_key": "password_shared",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "remote_app_requested",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "isolation_family",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 3
+        },
+        {
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 3
+        }
+      ],
+      "do_not_use_source_atomic_facts_as_gold": true
+    },
+    {
+      "case_id": "FACT-20",
+      "source_scenario_class": "MIXED",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "legacy_atomic_facts_corrected": [
+        {
+          "semantic_key": "claimed_organization",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "claimed_role",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "transfer_requested",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "transfer_amount",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "otp_shared",
+          "gold_value": null,
+          "knowledge_status": "UNKNOWN",
+          "source_turn": 2,
+          "mapping_note": "Turn 2 requests an authentication code; it does not establish actual disclosure."
+        },
+        {
+          "semantic_key": "password_shared",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "remote_app_requested",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "isolation_family",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 3
+        },
+        {
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": true,
+          "knowledge_status": "OBSERVED",
+          "source_turn": 3
+        }
+      ],
+      "do_not_use_source_atomic_facts_as_gold": true
+    },
+    {
+      "case_id": "FACT-21",
+      "source_scenario_class": "LOW",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": []
+        },
+        {
+          "turn": 2,
+          "patterns": []
+        },
+        {
+          "turn": 3,
+          "patterns": []
+        },
+        {
+          "turn": 4,
+          "patterns": []
+        },
+        {
+          "turn": 5,
+          "patterns": []
+        }
+      ],
+      "legacy_atomic_facts_corrected": [
+        {
+          "semantic_key": "claimed_organization",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "claimed_role",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "transfer_requested",
+          "gold_value": false,
+          "knowledge_status": "REPORTED",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "transfer_amount",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "otp_shared",
+          "gold_value": false,
+          "knowledge_status": "REPORTED",
+          "source_turn": 2,
+          "mapping_note": "Legacy compatibility mapping from explicit '인증번호' non-disclosure."
+        },
+        {
+          "semantic_key": "password_shared",
+          "gold_value": false,
+          "knowledge_status": "REPORTED",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "remote_app_requested",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "isolation_family",
+          "gold_value": false,
+          "knowledge_status": "REPORTED_COUNTEREVIDENCE",
+          "source_turn": 3
+        },
+        {
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 3
+        }
+      ],
+      "do_not_use_source_atomic_facts_as_gold": true
+    },
+    {
+      "case_id": "FACT-22",
+      "source_scenario_class": "LOW",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": []
+        },
+        {
+          "turn": 2,
+          "patterns": []
+        },
+        {
+          "turn": 3,
+          "patterns": []
+        },
+        {
+          "turn": 4,
+          "patterns": []
+        },
+        {
+          "turn": 5,
+          "patterns": []
+        }
+      ],
+      "legacy_atomic_facts_corrected": [
+        {
+          "semantic_key": "claimed_organization",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "claimed_role",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "transfer_requested",
+          "gold_value": false,
+          "knowledge_status": "REPORTED",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "transfer_amount",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "otp_shared",
+          "gold_value": false,
+          "knowledge_status": "REPORTED",
+          "source_turn": 2,
+          "mapping_note": "Legacy compatibility mapping from explicit '인증번호' non-disclosure."
+        },
+        {
+          "semantic_key": "password_shared",
+          "gold_value": false,
+          "knowledge_status": "REPORTED",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "remote_app_requested",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "isolation_family",
+          "gold_value": false,
+          "knowledge_status": "REPORTED_COUNTEREVIDENCE",
+          "source_turn": 3
+        },
+        {
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 3
+        }
+      ],
+      "do_not_use_source_atomic_facts_as_gold": true
+    },
+    {
+      "case_id": "FACT-23",
+      "source_scenario_class": "LOW",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": []
+        },
+        {
+          "turn": 2,
+          "patterns": []
+        },
+        {
+          "turn": 3,
+          "patterns": []
+        },
+        {
+          "turn": 4,
+          "patterns": []
+        },
+        {
+          "turn": 5,
+          "patterns": []
+        }
+      ],
+      "legacy_atomic_facts_corrected": [
+        {
+          "semantic_key": "claimed_organization",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "claimed_role",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "transfer_requested",
+          "gold_value": false,
+          "knowledge_status": "REPORTED",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "transfer_amount",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "otp_shared",
+          "gold_value": false,
+          "knowledge_status": "REPORTED",
+          "source_turn": 2,
+          "mapping_note": "Legacy compatibility mapping from explicit '인증번호' non-disclosure."
+        },
+        {
+          "semantic_key": "password_shared",
+          "gold_value": false,
+          "knowledge_status": "REPORTED",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "remote_app_requested",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "isolation_family",
+          "gold_value": false,
+          "knowledge_status": "REPORTED_COUNTEREVIDENCE",
+          "source_turn": 3
+        },
+        {
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 3
+        }
+      ],
+      "do_not_use_source_atomic_facts_as_gold": true
+    },
+    {
+      "case_id": "FACT-24",
+      "source_scenario_class": "LOW",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": []
+        },
+        {
+          "turn": 2,
+          "patterns": []
+        },
+        {
+          "turn": 3,
+          "patterns": []
+        },
+        {
+          "turn": 4,
+          "patterns": []
+        },
+        {
+          "turn": 5,
+          "patterns": []
+        }
+      ],
+      "legacy_atomic_facts_corrected": [
+        {
+          "semantic_key": "claimed_organization",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "claimed_role",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "transfer_requested",
+          "gold_value": false,
+          "knowledge_status": "REPORTED",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "transfer_amount",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "otp_shared",
+          "gold_value": false,
+          "knowledge_status": "REPORTED",
+          "source_turn": 2,
+          "mapping_note": "Legacy compatibility mapping from explicit '인증번호' non-disclosure."
+        },
+        {
+          "semantic_key": "password_shared",
+          "gold_value": false,
+          "knowledge_status": "REPORTED",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "remote_app_requested",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "isolation_family",
+          "gold_value": false,
+          "knowledge_status": "REPORTED_COUNTEREVIDENCE",
+          "source_turn": 3
+        },
+        {
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 3
+        }
+      ],
+      "do_not_use_source_atomic_facts_as_gold": true
+    },
+    {
+      "case_id": "FACT-25",
+      "source_scenario_class": "LOW",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": []
+        },
+        {
+          "turn": 2,
+          "patterns": []
+        },
+        {
+          "turn": 3,
+          "patterns": []
+        },
+        {
+          "turn": 4,
+          "patterns": []
+        },
+        {
+          "turn": 5,
+          "patterns": []
+        }
+      ],
+      "legacy_atomic_facts_corrected": [
+        {
+          "semantic_key": "claimed_organization",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "claimed_role",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "transfer_requested",
+          "gold_value": false,
+          "knowledge_status": "REPORTED",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "transfer_amount",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "otp_shared",
+          "gold_value": false,
+          "knowledge_status": "REPORTED",
+          "source_turn": 2,
+          "mapping_note": "Legacy compatibility mapping from explicit '인증번호' non-disclosure."
+        },
+        {
+          "semantic_key": "password_shared",
+          "gold_value": false,
+          "knowledge_status": "REPORTED",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "remote_app_requested",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "isolation_family",
+          "gold_value": false,
+          "knowledge_status": "REPORTED_COUNTEREVIDENCE",
+          "source_turn": 3
+        },
+        {
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 3
+        }
+      ],
+      "do_not_use_source_atomic_facts_as_gold": true
+    },
+    {
+      "case_id": "FACT-26",
+      "source_scenario_class": "LOW",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": []
+        },
+        {
+          "turn": 2,
+          "patterns": []
+        },
+        {
+          "turn": 3,
+          "patterns": []
+        },
+        {
+          "turn": 4,
+          "patterns": []
+        },
+        {
+          "turn": 5,
+          "patterns": []
+        }
+      ],
+      "legacy_atomic_facts_corrected": [
+        {
+          "semantic_key": "claimed_organization",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "claimed_role",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "transfer_requested",
+          "gold_value": false,
+          "knowledge_status": "REPORTED",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "transfer_amount",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "otp_shared",
+          "gold_value": false,
+          "knowledge_status": "REPORTED",
+          "source_turn": 2,
+          "mapping_note": "Legacy compatibility mapping from explicit '인증번호' non-disclosure."
+        },
+        {
+          "semantic_key": "password_shared",
+          "gold_value": false,
+          "knowledge_status": "REPORTED",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "remote_app_requested",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "isolation_family",
+          "gold_value": false,
+          "knowledge_status": "REPORTED_COUNTEREVIDENCE",
+          "source_turn": 3
+        },
+        {
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 3
+        }
+      ],
+      "do_not_use_source_atomic_facts_as_gold": true
+    },
+    {
+      "case_id": "FACT-27",
+      "source_scenario_class": "LOW",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": []
+        },
+        {
+          "turn": 2,
+          "patterns": []
+        },
+        {
+          "turn": 3,
+          "patterns": []
+        },
+        {
+          "turn": 4,
+          "patterns": []
+        },
+        {
+          "turn": 5,
+          "patterns": []
+        }
+      ],
+      "legacy_atomic_facts_corrected": [
+        {
+          "semantic_key": "claimed_organization",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "claimed_role",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "transfer_requested",
+          "gold_value": false,
+          "knowledge_status": "REPORTED",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "transfer_amount",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "otp_shared",
+          "gold_value": false,
+          "knowledge_status": "REPORTED",
+          "source_turn": 2,
+          "mapping_note": "Legacy compatibility mapping from explicit '인증번호' non-disclosure."
+        },
+        {
+          "semantic_key": "password_shared",
+          "gold_value": false,
+          "knowledge_status": "REPORTED",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "remote_app_requested",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "isolation_family",
+          "gold_value": false,
+          "knowledge_status": "REPORTED_COUNTEREVIDENCE",
+          "source_turn": 3
+        },
+        {
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 3
+        }
+      ],
+      "do_not_use_source_atomic_facts_as_gold": true
+    },
+    {
+      "case_id": "FACT-28",
+      "source_scenario_class": "LOW",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": []
+        },
+        {
+          "turn": 2,
+          "patterns": []
+        },
+        {
+          "turn": 3,
+          "patterns": []
+        },
+        {
+          "turn": 4,
+          "patterns": []
+        },
+        {
+          "turn": 5,
+          "patterns": []
+        }
+      ],
+      "legacy_atomic_facts_corrected": [
+        {
+          "semantic_key": "claimed_organization",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "claimed_role",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "transfer_requested",
+          "gold_value": false,
+          "knowledge_status": "REPORTED",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "transfer_amount",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "otp_shared",
+          "gold_value": false,
+          "knowledge_status": "REPORTED",
+          "source_turn": 2,
+          "mapping_note": "Legacy compatibility mapping from explicit '인증번호' non-disclosure."
+        },
+        {
+          "semantic_key": "password_shared",
+          "gold_value": false,
+          "knowledge_status": "REPORTED",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "remote_app_requested",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "isolation_family",
+          "gold_value": false,
+          "knowledge_status": "REPORTED_COUNTEREVIDENCE",
+          "source_turn": 3
+        },
+        {
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 3
+        }
+      ],
+      "do_not_use_source_atomic_facts_as_gold": true
+    },
+    {
+      "case_id": "FACT-29",
+      "source_scenario_class": "LOW",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": []
+        },
+        {
+          "turn": 2,
+          "patterns": []
+        },
+        {
+          "turn": 3,
+          "patterns": []
+        },
+        {
+          "turn": 4,
+          "patterns": []
+        },
+        {
+          "turn": 5,
+          "patterns": []
+        }
+      ],
+      "legacy_atomic_facts_corrected": [
+        {
+          "semantic_key": "claimed_organization",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "claimed_role",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "transfer_requested",
+          "gold_value": false,
+          "knowledge_status": "REPORTED",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "transfer_amount",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "otp_shared",
+          "gold_value": false,
+          "knowledge_status": "REPORTED",
+          "source_turn": 2,
+          "mapping_note": "Legacy compatibility mapping from explicit '인증번호' non-disclosure."
+        },
+        {
+          "semantic_key": "password_shared",
+          "gold_value": false,
+          "knowledge_status": "REPORTED",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "remote_app_requested",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "isolation_family",
+          "gold_value": false,
+          "knowledge_status": "REPORTED_COUNTEREVIDENCE",
+          "source_turn": 3
+        },
+        {
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 3
+        }
+      ],
+      "do_not_use_source_atomic_facts_as_gold": true
+    },
+    {
+      "case_id": "FACT-30",
+      "source_scenario_class": "LOW",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": []
+        },
+        {
+          "turn": 2,
+          "patterns": []
+        },
+        {
+          "turn": 3,
+          "patterns": []
+        },
+        {
+          "turn": 4,
+          "patterns": []
+        },
+        {
+          "turn": 5,
+          "patterns": []
+        }
+      ],
+      "legacy_atomic_facts_corrected": [
+        {
+          "semantic_key": "claimed_organization",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "claimed_role",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 1
+        },
+        {
+          "semantic_key": "transfer_requested",
+          "gold_value": false,
+          "knowledge_status": "REPORTED",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "transfer_amount",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 4
+        },
+        {
+          "semantic_key": "otp_shared",
+          "gold_value": false,
+          "knowledge_status": "REPORTED",
+          "source_turn": 2,
+          "mapping_note": "Legacy compatibility mapping from explicit '인증번호' non-disclosure."
+        },
+        {
+          "semantic_key": "password_shared",
+          "gold_value": false,
+          "knowledge_status": "REPORTED",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "remote_app_requested",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 2
+        },
+        {
+          "semantic_key": "isolation_family",
+          "gold_value": false,
+          "knowledge_status": "REPORTED_COUNTEREVIDENCE",
+          "source_turn": 3
+        },
+        {
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": null,
+          "knowledge_status": "MISSING",
+          "source_turn": 3
+        }
+      ],
+      "do_not_use_source_atomic_facts_as_gold": true
+    }
+  ]
+}

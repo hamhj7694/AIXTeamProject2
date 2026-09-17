@@ -1,0 +1,10 @@
+{
+  "live_ai": "BLOCKED: PROVIDER_CONNECTION_UNAVAILABLE",
+  "credential_presence": true,
+  "provider_smoke": {"status": "APIConnectionError", "secret_logged": false},
+  "docker": "BLOCKED: daemon unavailable",
+  "mysql": "BLOCKED",
+  "existing_user_database_touched": false,
+  "production_modified": false,
+  "benchmark_modified": false
+}

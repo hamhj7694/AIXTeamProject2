@@ -1,0 +1,9 @@
+flowchart LR
+  I[입력 처리 중] --> E[Event 추출]
+  E --> A[Semantic Atom / Observed Term / Expression Feature]
+  A --> R[Relation / Context Signal]
+  R --> D[DiagnosisResult 저장]
+  D --> F[Fact projection]
+  F --> S[Grounded Statement]
+  S --> P[기존 Context Panel]
+  P --> C[Case Room]

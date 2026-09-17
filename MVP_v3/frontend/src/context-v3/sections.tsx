@@ -11,32 +11,70 @@ const total = (section: ContextPanelSectionV3) => section.items.length + Object.
 const proposed = (section: ContextPanelSectionV3) => [...section.items, ...Object.values(section.groups).flat()].filter((item) => item.status === 'PROPOSED').length;
 const FactList: React.FC<SharedProps> = ({ section, busy, onReview, onCorrect }) => section.items.length === 0 ? <p className="context-empty">등록된 정보가 없습니다.</p> : <div className="context-fact-list">{section.items.map((item) => <FactRow key={item.item_id} item={item} busy={busy} onConfirm={() => onReview(item, 'CONFIRM')} onReject={() => onReview(item, 'REJECT')} onCorrect={() => onCorrect(item)} onUnconfirm={() => onReview(item, 'UNCONFIRM')} onInvalidate={() => onReview(item, 'INVALIDATE')}/>)}</div>;
 const AddButton: React.FC<{ label: string; onClick: () => void; expanded: boolean; controls: string }> = ({ label, onClick, expanded, controls }) => <button type="button" className="context-section-add" onClick={onClick} aria-expanded={expanded} aria-controls={controls}><Plus size={13}/>{label}</button>;
+const amountTotal = (items: ContextPanelItemV3[], semanticKey: string, status: 'CONFIRMED' | 'PROPOSED' = 'CONFIRMED') => {
+  const candidates = items.filter((item) => item.semantic_key === semanticKey && item.status === status)
+    .filter((item) => !['NEGATIVE', 'DENIED', 'UNKNOWN'].includes(String(item.value?.polarity ?? '').toUpperCase()))
+    .filter((item) => !['UNCERTAIN', 'UNKNOWN', 'UNVERIFIED'].includes(String(item.value?.verification_status ?? '').toUpperCase()));
+  const finalItems = candidates.filter((item) => item.value?.amount_scope === 'FINAL');
+  const selected = finalItems.length > 0 ? finalItems : candidates;
+  const values = selected
+    .map((item) => Number(item.value?.amount_krw))
+    .filter((value) => Number.isFinite(value) && value > 0);
+  return { count: values.length, total: values.reduce((sum, value) => sum + value, 0) };
+};
+const amountTotalByDirection = (items: ContextPanelItemV3[], direction: 'OUT' | 'IN', status: 'CONFIRMED' | 'PROPOSED' = 'CONFIRMED') => {
+  const values = items
+    .filter((item) => item.semantic_key === 'transfer.actual.amount' && item.status === status)
+    .filter((item) => (item.value?.direction ?? item.value?.amount_direction ?? 'OUT') === direction)
+    .filter((item) => !['NEGATIVE', 'DENIED', 'UNKNOWN'].includes(String(item.value?.polarity ?? '').toUpperCase()))
+    .filter((item) => !['UNCERTAIN', 'UNKNOWN', 'UNVERIFIED'].includes(String(item.value?.verification_status ?? '').toUpperCase()))
+    .map((item) => Number(item.value?.amount_krw))
+    .filter((value) => Number.isFinite(value) && value > 0);
+  return { count: values.length, total: values.reduce((sum, value) => sum + value, 0) };
+};
+const AmountSummary: React.FC<{ section: ContextPanelSectionV3 }> = ({ section }) => {
+  const requested = amountTotal(section.items, 'transfer.requested.amount');
+  const sent = amountTotalByDirection(section.items, 'OUT');
+  const returned = amountTotalByDirection(section.items, 'IN');
+  // AI 추천(PROPOSED)은 개별 Fact에서만 보여주고, 직원 확정 전에는 공식 합계에 포함하지 않는다.
+  if (requested.count === 0 && sent.count === 0 && returned.count === 0) return null;
+  return <div className="context-amount-summary" aria-label="금액 합계">
+    {(requested.count > 0 || sent.count > 0 || returned.count > 0) && <span><b>직원 확정 금액</b><em>{requested.count + sent.count + returned.count}건</em></span>}
+    {requested.count > 0 && <span><b>요구 금액 {requested.count}건</b><em>합계 {requested.total.toLocaleString('ko-KR')}원</em></span>}
+    {sent.count > 0 && <span><b>실제 송금 {sent.count}건</b><em>합계 {sent.total.toLocaleString('ko-KR')}원</em></span>}
+    {returned.count > 0 && <span><b>반환 {returned.count}건</b><em>합계 {returned.total.toLocaleString('ko-KR')}원</em></span>}
+    {sent.count > 0 && returned.count > 0 && <span><b>순손실</b><em>{(sent.total - returned.total).toLocaleString('ko-KR')}원</em></span>}
+  </div>;
+};
+const summaryCountPattern = /^확정 사실 \d+건 · 검토 대기 \d+건$/;
 
 export const visibleSummaryItems = (section: ContextPanelSectionV3, risk: string, status: string) => {
   const caseMetadata = `위험도 ${risk} · 진행 상태 ${status}`;
-  return section.items.filter((item) => item.source_kind !== 'DETERMINISTIC_PROJECTION' || item.display_value !== caseMetadata);
+  return section.items.filter((item) => item.source_kind !== 'DETERMINISTIC_PROJECTION' || item.display_value !== caseMetadata).filter((item) => !summaryCountPattern.test(item.display_value));
 };
+
+const summaryCount = (section: ContextPanelSectionV3) => section.items.find((item) => summaryCountPattern.test(item.display_value))?.display_value ?? '확정 사실 0건 · 검토 대기 0건';
 
 export const SummarySection: React.FC<{ section: ContextPanelSectionV3; caseRisk: string; caseStatus: string; projectionStatus: string; editing: boolean; onEdit: () => void; onReset: () => void; editor: React.ReactNode }> = ({ section, caseRisk, caseStatus, projectionStatus, editing, onEdit, onReset, editor }) => <section id="context-section-summary" className="context-summary-area">
   <header><div><span>현재 사건 요약</span><StatusBadge status={projectionStatus}/></div>{!editing && <div className="context-summary-actions"><button type="button" onClick={onEdit} aria-label="표시 요약 편집" title="표시 요약 편집"><Pencil size={13}/><span>표시 요약 편집</span></button><MoreMenu label="요약 추가 작업"><button onClick={onReset}><RotateCcw size={13}/>자동 요약으로 복원</button></MoreMenu></div>}</header>
-  {editing ? editor : <div className="context-summary-copy">{visibleSummaryItems(section, caseRisk, caseStatus).filter((item, index, items) => !/^확정 사실 \d+건 · 검토 대기 \d+건$/.test(item.display_value) || items.findIndex((candidate) => candidate.display_value === item.display_value) === index).map((item) => <p key={item.item_id}>{item.display_value}</p>)}</div>}
-  <footer><span>사건 정보 기준 자동 요약</span></footer>
+  {editing ? editor : <div className="context-summary-copy">{visibleSummaryItems(section, caseRisk, caseStatus).map((item) => <p key={item.item_id}>{item.display_value}</p>)}</div>}
+  <footer><span className="context-summary-count">{summaryCount(section)}</span><span>사건 정보 기준 자동 요약</span></footer>
 </section>;
 
-type FactSectionProps = SharedProps & OpenStateProps & { onAdd: () => void; addOpen: boolean; createForm: React.ReactNode };
-export const ExposureSection: React.FC<FactSectionProps> = (props) => <SectionShell id="EXPOSURE" title="피해·노출" count={total(props.section)} attention={proposed(props.section)} open={props.open} onOpenChange={props.onOpenChange} action={<AddButton label="정보 추가" onClick={props.onAdd} expanded={props.addOpen} controls="context-create-exposure"/>}>{props.createForm}<FactList {...props}/><HistoryHint kind="fact" items={props.section.groups.archived ?? []} busy={props.busy} onRestore={(item) => props.onReview(item, 'RESTORE')}/></SectionShell>;
-export const ImpersonationSection: React.FC<FactSectionProps> = (props) => <SectionShell id="IMPERSONATION_CONTACT" title="사칭·접촉 정보" count={total(props.section)} attention={proposed(props.section)} open={props.open} onOpenChange={props.onOpenChange} action={<AddButton label="정보 추가" onClick={props.onAdd} expanded={props.addOpen} controls="context-create-impersonation_contact"/>}>{props.createForm}<FactList {...props}/><p className="context-section-note">계좌·연락처는 은행 내부 정보이며 화면에서 기본 마스킹됩니다.</p><HistoryHint kind="fact" items={props.section.groups.archived ?? []} busy={props.busy} onRestore={(item) => props.onReview(item, 'RESTORE')}/></SectionShell>;
+type FactSectionProps = SharedProps & OpenStateProps & { onAdd: () => void; addOpen: boolean; createForm: React.ReactNode; onDeleteExcluded: (item: ContextPanelItemV3) => void };
+export const ExposureSection: React.FC<FactSectionProps> = (props) => <SectionShell id="EXPOSURE" title="피해·노출" count={total(props.section)} attention={proposed(props.section)} open={props.open} onOpenChange={props.onOpenChange} action={<AddButton label="정보 추가" onClick={props.onAdd} expanded={props.addOpen} controls="context-create-exposure"/>}>{props.createForm}<AmountSummary section={props.section}/><FactList {...props}/><HistoryHint kind="fact" items={props.section.groups.archived ?? []} busy={props.busy} onRestore={(item) => props.onReview(item, 'RESTORE')} onDelete={props.onDeleteExcluded}/></SectionShell>;
+export const ImpersonationSection: React.FC<FactSectionProps> = (props) => <SectionShell id="IMPERSONATION_CONTACT" title="사칭·접촉 정보" count={total(props.section)} attention={proposed(props.section)} open={props.open} onOpenChange={props.onOpenChange} action={<AddButton label="정보 추가" onClick={props.onAdd} expanded={props.addOpen} controls="context-create-impersonation_contact"/>}>{props.createForm}<FactList {...props}/><p className="context-section-note">계좌·연락처는 은행 내부 정보이며 화면에서 기본 마스킹됩니다.</p><HistoryHint kind="fact" items={props.section.groups.archived ?? []} busy={props.busy} onRestore={(item) => props.onReview(item, 'RESTORE')} onDelete={props.onDeleteExcluded}/></SectionShell>;
 
 export const FraudCircumstanceSection: React.FC<FactSectionProps> = (props) => {
   const labels: Record<string, string> = { claims: '상대방 주장', demands: '상대방 요구', tactics: '압박·조작 수법' };
   return <SectionShell id="FRAUD_CIRCUMSTANCES" title="사기 정황" count={total(props.section)} attention={proposed(props.section)} open={props.open} onOpenChange={props.onOpenChange} action={<AddButton label="정황 추가" onClick={props.onAdd} expanded={props.addOpen} controls="context-create-fraud_circumstances"/>}>
     {props.createForm}
     {['claims', 'demands', 'tactics'].map((group) => <section className="context-circumstance-group" key={group}><h4>{labels[group]}</h4>{(props.section.groups[group] ?? []).length === 0 ? <p className="context-empty">등록된 내용이 없습니다.</p> : <div className="context-fact-list">{(props.section.groups[group] ?? []).map((item) => <FactRow key={item.item_id} item={item} busy={props.busy} onConfirm={() => props.onReview(item, 'CONFIRM')} onReject={() => props.onReview(item, 'REJECT')} onCorrect={() => props.onCorrect(item)} onUnconfirm={() => props.onReview(item, 'UNCONFIRM')} onInvalidate={() => props.onReview(item, 'INVALIDATE')}/>)}</div>}</section>)}
-    <HistoryHint kind="fact" items={props.section.groups.archived ?? []} busy={props.busy} onRestore={(item) => props.onReview(item, 'RESTORE')}/>
+    <HistoryHint kind="fact" items={props.section.groups.archived ?? []} busy={props.busy} onRestore={(item) => props.onReview(item, 'RESTORE')} onDelete={props.onDeleteExcluded}/>
   </SectionShell>;
 };
 
-export const FactVerificationSection: React.FC<SharedProps & OpenStateProps & { onOpenVerification: (id: string) => void; onCreateVerification: () => void }> = ({ section, busy, onReview, onCorrect, open, onOpenChange, onOpenVerification, onCreateVerification }) => {
+export const FactVerificationSection: React.FC<SharedProps & OpenStateProps & { onOpenVerification: (id: string) => void; onCreateVerification: () => void; onDeleteExcluded: (item: ContextPanelItemV3) => void }> = ({ section, busy, onReview, onCorrect, open, onOpenChange, onOpenVerification, onCreateVerification, onDeleteExcluded }) => {
   const needs = section.groups.needs_attention ?? [];
   const verificationItems = [...(section.groups.in_progress ?? []), ...(section.groups.confirmed ?? []), ...(section.groups.failed ?? [])].filter((item, index, items) => items.findIndex((candidate) => candidate.item_id === item.item_id) === index);
   const pending = verificationItems.filter((item) => item.status === 'PENDING');
@@ -49,7 +87,7 @@ export const FactVerificationSection: React.FC<SharedProps & OpenStateProps & { 
     <section className="context-verification-lane"><h4><RotateCcw size={13}/>확인 중 <b>{progress.length}</b></h4>{progress.map(openCard)}{progress.length === 0 && <p className="context-empty">진행 중인 기관 확인이 없습니다.</p>}</section>
     <section className="context-verification-lane"><h4><CheckCircle2 size={13}/>확인 완료 <b>{done.length}</b></h4>{done.map(openCard)}{done.length === 0 && <p className="context-empty">완료된 기관 확인이 없습니다.</p>}</section>
     {stopped.length > 0 && <section className="context-verification-lane"><h4><AlertCircle size={13}/>확인 실패·중단 <b>{stopped.length}</b></h4>{stopped.map(openCard)}</section>}
-    <HistoryHint kind="fact" items={section.groups.archived ?? []} busy={busy} onRestore={(item) => onReview(item, 'RESTORE')}/>
+    <HistoryHint kind="fact" items={section.groups.archived ?? []} busy={busy} onRestore={(item) => onReview(item, 'RESTORE')} onDelete={onDeleteExcluded}/>
   </SectionShell>;
 };
 

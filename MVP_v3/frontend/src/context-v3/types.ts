@@ -1,3 +1,5 @@
+import type { StructuredContextProjection } from '../api/types';
+
 export type ContextPanelItemV3 = {
   item_id: string;
   semantic_key: string;
@@ -7,7 +9,7 @@ export type ContextPanelItemV3 = {
   source_kind: string;
   status: string;
   confidence?: number | null;
-  evidence_refs: { type: string; id: string; revision?: number | null }[];
+  evidence_refs: { type: string; id: string; revision?: number | null; summary?: string | null }[];
   visibility: 'BANK_INTERNAL' | 'CUSTOMER_SHARED';
   masked: boolean;
   version: number;
@@ -27,6 +29,8 @@ export type ContextPanelV3 = {
   source_revision: number;
   projection_status: 'CURRENT' | 'UPDATING' | 'STALE' | 'FAILED' | 'UNCACHED';
   generated_by: 'DETERMINISTIC_FALLBACK' | 'LAST_SUCCESS' | 'LLM';
+  updated_at: string | null;
+  structured_context?: StructuredContextProjection | null;
   sections: ContextPanelSectionV3[];
 };
 

@@ -1,0 +1,290 @@
+{
+  "benchmark_version": "benchmark_v1.0",
+  "cases": [
+    {
+      "case_id": "QUESTION-01",
+      "known_facts": [
+        "claimed_organization"
+      ],
+      "unknown_critical_facts": [
+        "otp_shared",
+        "transfer_amount"
+      ],
+      "already_asked": [
+        "claimed_organization"
+      ],
+      "already_answered": [
+        "claimed_organization"
+      ],
+      "low_priority_facts": [
+        "contact_time"
+      ]
+    },
+    {
+      "case_id": "QUESTION-02",
+      "known_facts": [
+        "claimed_organization"
+      ],
+      "unknown_critical_facts": [
+        "otp_shared",
+        "transfer_amount"
+      ],
+      "already_asked": [
+        "claimed_organization"
+      ],
+      "already_answered": [
+        "claimed_organization"
+      ],
+      "low_priority_facts": [
+        "contact_time"
+      ]
+    },
+    {
+      "case_id": "QUESTION-03",
+      "known_facts": [
+        "claimed_organization"
+      ],
+      "unknown_critical_facts": [
+        "otp_shared",
+        "transfer_amount"
+      ],
+      "already_asked": [
+        "claimed_organization"
+      ],
+      "already_answered": [
+        "claimed_organization"
+      ],
+      "low_priority_facts": [
+        "contact_time"
+      ]
+    },
+    {
+      "case_id": "QUESTION-04",
+      "known_facts": [
+        "claimed_organization"
+      ],
+      "unknown_critical_facts": [
+        "otp_shared",
+        "transfer_amount"
+      ],
+      "already_asked": [
+        "claimed_organization"
+      ],
+      "already_answered": [
+        "claimed_organization"
+      ],
+      "low_priority_facts": [
+        "contact_time"
+      ]
+    },
+    {
+      "case_id": "QUESTION-05",
+      "known_facts": [
+        "claimed_organization"
+      ],
+      "unknown_critical_facts": [
+        "otp_shared",
+        "transfer_amount"
+      ],
+      "already_asked": [
+        "claimed_organization"
+      ],
+      "already_answered": [
+        "claimed_organization"
+      ],
+      "low_priority_facts": [
+        "contact_time"
+      ]
+    },
+    {
+      "case_id": "QUESTION-06",
+      "known_facts": [
+        "claimed_organization"
+      ],
+      "unknown_critical_facts": [
+        "otp_shared",
+        "transfer_amount"
+      ],
+      "already_asked": [
+        "claimed_organization"
+      ],
+      "already_answered": [
+        "claimed_organization"
+      ],
+      "low_priority_facts": [
+        "contact_time"
+      ]
+    },
+    {
+      "case_id": "QUESTION-07",
+      "known_facts": [
+        "claimed_organization"
+      ],
+      "unknown_critical_facts": [
+        "otp_shared",
+        "transfer_amount"
+      ],
+      "already_asked": [
+        "claimed_organization"
+      ],
+      "already_answered": [
+        "claimed_organization"
+      ],
+      "low_priority_facts": [
+        "contact_time"
+      ]
+    },
+    {
+      "case_id": "QUESTION-08",
+      "known_facts": [
+        "claimed_organization"
+      ],
+      "unknown_critical_facts": [
+        "otp_shared",
+        "transfer_amount"
+      ],
+      "already_asked": [
+        "claimed_organization"
+      ],
+      "already_answered": [
+        "claimed_organization"
+      ],
+      "low_priority_facts": [
+        "contact_time"
+      ]
+    },
+    {
+      "case_id": "QUESTION-09",
+      "known_facts": [
+        "claimed_organization"
+      ],
+      "unknown_critical_facts": [
+        "otp_shared",
+        "transfer_amount"
+      ],
+      "already_asked": [
+        "claimed_organization"
+      ],
+      "already_answered": [
+        "claimed_organization"
+      ],
+      "low_priority_facts": [
+        "contact_time"
+      ]
+    },
+    {
+      "case_id": "QUESTION-10",
+      "known_facts": [
+        "claimed_organization"
+      ],
+      "unknown_critical_facts": [
+        "otp_shared",
+        "transfer_amount"
+      ],
+      "already_asked": [
+        "claimed_organization"
+      ],
+      "already_answered": [
+        "claimed_organization"
+      ],
+      "low_priority_facts": [
+        "contact_time"
+      ]
+    },
+    {
+      "case_id": "QUESTION-11",
+      "known_facts": [
+        "claimed_organization"
+      ],
+      "unknown_critical_facts": [
+        "otp_shared",
+        "transfer_amount"
+      ],
+      "already_asked": [
+        "claimed_organization"
+      ],
+      "already_answered": [
+        "claimed_organization"
+      ],
+      "low_priority_facts": [
+        "contact_time"
+      ]
+    },
+    {
+      "case_id": "QUESTION-12",
+      "known_facts": [
+        "claimed_organization"
+      ],
+      "unknown_critical_facts": [
+        "otp_shared",
+        "transfer_amount"
+      ],
+      "already_asked": [
+        "claimed_organization"
+      ],
+      "already_answered": [
+        "claimed_organization"
+      ],
+      "low_priority_facts": [
+        "contact_time"
+      ]
+    },
+    {
+      "case_id": "QUESTION-13",
+      "known_facts": [
+        "claimed_organization"
+      ],
+      "unknown_critical_facts": [
+        "otp_shared",
+        "transfer_amount"
+      ],
+      "already_asked": [
+        "claimed_organization"
+      ],
+      "already_answered": [
+        "claimed_organization"
+      ],
+      "low_priority_facts": [
+        "contact_time"
+      ]
+    },
+    {
+      "case_id": "QUESTION-14",
+      "known_facts": [
+        "claimed_organization"
+      ],
+      "unknown_critical_facts": [
+        "otp_shared",
+        "transfer_amount"
+      ],
+      "already_asked": [
+        "claimed_organization"
+      ],
+      "already_answered": [
+        "claimed_organization"
+      ],
+      "low_priority_facts": [
+        "contact_time"
+      ]
+    },
+    {
+      "case_id": "QUESTION-15",
+      "known_facts": [
+        "claimed_organization"
+      ],
+      "unknown_critical_facts": [
+        "otp_shared",
+        "transfer_amount"
+      ],
+      "already_asked": [
+        "claimed_organization"
+      ],
+      "already_answered": [
+        "claimed_organization"
+      ],
+      "low_priority_facts": [
+        "contact_time"
+      ]
+    }
+  ]
+}

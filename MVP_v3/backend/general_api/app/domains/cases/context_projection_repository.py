@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
 from uuid import uuid4
 
@@ -53,7 +53,7 @@ class ContextProjectionRepository:
         if requested_revision < 1 or not 5 <= lease_seconds <= 300:
             raise ValueError('유효하지 않은 revision 또는 lease 시간입니다.')
         pool = await self.cases._get_pool()
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         token = uuid4().hex
         async with pool.acquire() as connection:
             try:
@@ -101,7 +101,7 @@ class ContextProjectionRepository:
                        schema_version: str = CASE_SUPPORT_SCHEMA_VERSION, model_version: str | None = None,
                        prompt_version: str | None = None) -> bool:
         encoded = json.dumps(payload, ensure_ascii=False)
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         pool = await self.cases._get_pool()
         async with pool.acquire() as connection:
             try:
@@ -133,7 +133,7 @@ class ContextProjectionRepository:
         """Keep last success. safe_error must not contain prompts, messages or secrets."""
         message = ' '.join(safe_error.split())[:500] or 'AI_CONTEXT_GENERATION_FAILED'
         pool = await self.cases._get_pool()
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         async with pool.acquire() as connection:
             try:
                 async with connection.cursor() as cursor:

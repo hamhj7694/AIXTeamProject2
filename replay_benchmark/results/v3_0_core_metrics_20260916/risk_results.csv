@@ -1,0 +1,4 @@
+metric,numerator,denominator,score,tier,status,notes
+HIGH subset recall,10,10,100.0%,LOGIC,MEASURED,All 10 HIGH cases predicted PHISHING by local fallback
+HIGH/LOW precision,10,20,50.0%,LOGIC,MEASURED,MIXED excluded; TP=10 FP=10 FN=0 TN=0
+HIGH/LOW F1,10,30,66.7%,LOGIC,MEASURED,Derived from TP=10 FP=10 FN=0

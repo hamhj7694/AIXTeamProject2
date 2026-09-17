@@ -1,0 +1,3995 @@
+{
+  "benchmark_version": "benchmark_v1.0",
+  "cases": [
+    {
+      "case_id": "FACT-01",
+      "scenario_class": "HIGH",
+      "turns": [
+        {
+          "turn": 1,
+          "text": "지금 고객님 명의 계좌가 자금세탁에 연루돼서 확인 절차가 필요합니다.",
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "text": "본인 확인을 위해 문자로 온 인증번호 6자리를 불러주세요.",
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "text": "수사 보안을 위해 가족이나 은행 직원에게는 절대 말하시면 안 됩니다.",
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "text": "지정한 안전계좌로 돈을 옮겨야 피해금 동결을 막을 수 있습니다.",
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "text": "통화를 끊으면 사건 처리가 취소될 수 있으니 지금 바로 송금 화면을 열어주세요.",
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "atomic_facts": [
+        {
+          "fact_id": "FACT-01-claimed_organization",
+          "semantic_key": "claimed_organization",
+          "gold_value": "서울중앙지검",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-01-claimed_role",
+          "semantic_key": "claimed_role",
+          "gold_value": "검사",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-01-transfer_requested",
+          "semantic_key": "transfer_requested",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-01-transfer_amount",
+          "semantic_key": "transfer_amount",
+          "gold_value": 3500000,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-01-otp_shared",
+          "semantic_key": "otp_shared",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-01-password_shared",
+          "semantic_key": "password_shared",
+          "gold_value": false,
+          "polarity": "NEGATIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-01-remote_app_requested",
+          "semantic_key": "remote_app_requested",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-01-isolation_family",
+          "semantic_key": "isolation_family",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-01-isolation_bank_staff",
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-02",
+      "scenario_class": "HIGH",
+      "turns": [
+        {
+          "turn": 1,
+          "text": "지금 고객님 명의 계좌가 자금세탁에 연루돼서 확인 절차가 필요합니다.",
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "text": "본인 확인을 위해 문자로 온 인증번호 6자리를 불러주세요.",
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "text": "수사 보안을 위해 가족이나 은행 직원에게는 절대 말하시면 안 됩니다.",
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "text": "지정한 안전계좌로 돈을 옮겨야 피해금 동결을 막을 수 있습니다.",
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "text": "통화를 끊으면 사건 처리가 취소될 수 있으니 지금 바로 송금 화면을 열어주세요.",
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "atomic_facts": [
+        {
+          "fact_id": "FACT-02-claimed_organization",
+          "semantic_key": "claimed_organization",
+          "gold_value": "서울중앙지검",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-02-claimed_role",
+          "semantic_key": "claimed_role",
+          "gold_value": "금융감독원 직원",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-02-transfer_requested",
+          "semantic_key": "transfer_requested",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-02-transfer_amount",
+          "semantic_key": "transfer_amount",
+          "gold_value": 4000000,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-02-otp_shared",
+          "semantic_key": "otp_shared",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-02-password_shared",
+          "semantic_key": "password_shared",
+          "gold_value": false,
+          "polarity": "NEGATIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-02-remote_app_requested",
+          "semantic_key": "remote_app_requested",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-02-isolation_family",
+          "semantic_key": "isolation_family",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-02-isolation_bank_staff",
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-03",
+      "scenario_class": "HIGH",
+      "turns": [
+        {
+          "turn": 1,
+          "text": "지금 고객님 명의 계좌가 자금세탁에 연루돼서 확인 절차가 필요합니다.",
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "text": "본인 확인을 위해 문자로 온 인증번호 6자리를 불러주세요.",
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "text": "수사 보안을 위해 가족이나 은행 직원에게는 절대 말하시면 안 됩니다.",
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "text": "지정한 안전계좌로 돈을 옮겨야 피해금 동결을 막을 수 있습니다.",
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "text": "통화를 끊으면 사건 처리가 취소될 수 있으니 지금 바로 송금 화면을 열어주세요.",
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "atomic_facts": [
+        {
+          "fact_id": "FACT-03-claimed_organization",
+          "semantic_key": "claimed_organization",
+          "gold_value": "금융감독원",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-03-claimed_role",
+          "semantic_key": "claimed_role",
+          "gold_value": "검사",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-03-transfer_requested",
+          "semantic_key": "transfer_requested",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-03-transfer_amount",
+          "semantic_key": "transfer_amount",
+          "gold_value": 4500000,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-03-otp_shared",
+          "semantic_key": "otp_shared",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-03-password_shared",
+          "semantic_key": "password_shared",
+          "gold_value": false,
+          "polarity": "NEGATIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-03-remote_app_requested",
+          "semantic_key": "remote_app_requested",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-03-isolation_family",
+          "semantic_key": "isolation_family",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-03-isolation_bank_staff",
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-04",
+      "scenario_class": "HIGH",
+      "turns": [
+        {
+          "turn": 1,
+          "text": "지금 고객님 명의 계좌가 자금세탁에 연루돼서 확인 절차가 필요합니다.",
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "text": "본인 확인을 위해 문자로 온 인증번호 6자리를 불러주세요.",
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "text": "수사 보안을 위해 가족이나 은행 직원에게는 절대 말하시면 안 됩니다.",
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "text": "지정한 안전계좌로 돈을 옮겨야 피해금 동결을 막을 수 있습니다.",
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "text": "통화를 끊으면 사건 처리가 취소될 수 있으니 지금 바로 송금 화면을 열어주세요.",
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "atomic_facts": [
+        {
+          "fact_id": "FACT-04-claimed_organization",
+          "semantic_key": "claimed_organization",
+          "gold_value": "서울중앙지검",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-04-claimed_role",
+          "semantic_key": "claimed_role",
+          "gold_value": "금융감독원 직원",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-04-transfer_requested",
+          "semantic_key": "transfer_requested",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-04-transfer_amount",
+          "semantic_key": "transfer_amount",
+          "gold_value": 3000000,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-04-otp_shared",
+          "semantic_key": "otp_shared",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-04-password_shared",
+          "semantic_key": "password_shared",
+          "gold_value": false,
+          "polarity": "NEGATIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-04-remote_app_requested",
+          "semantic_key": "remote_app_requested",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-04-isolation_family",
+          "semantic_key": "isolation_family",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-04-isolation_bank_staff",
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-05",
+      "scenario_class": "HIGH",
+      "turns": [
+        {
+          "turn": 1,
+          "text": "지금 고객님 명의 계좌가 자금세탁에 연루돼서 확인 절차가 필요합니다.",
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "text": "본인 확인을 위해 문자로 온 인증번호 6자리를 불러주세요.",
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "text": "수사 보안을 위해 가족이나 은행 직원에게는 절대 말하시면 안 됩니다.",
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "text": "지정한 안전계좌로 돈을 옮겨야 피해금 동결을 막을 수 있습니다.",
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "text": "통화를 끊으면 사건 처리가 취소될 수 있으니 지금 바로 송금 화면을 열어주세요.",
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "atomic_facts": [
+        {
+          "fact_id": "FACT-05-claimed_organization",
+          "semantic_key": "claimed_organization",
+          "gold_value": "서울중앙지검",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-05-claimed_role",
+          "semantic_key": "claimed_role",
+          "gold_value": "검사",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-05-transfer_requested",
+          "semantic_key": "transfer_requested",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-05-transfer_amount",
+          "semantic_key": "transfer_amount",
+          "gold_value": 3500000,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-05-otp_shared",
+          "semantic_key": "otp_shared",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-05-password_shared",
+          "semantic_key": "password_shared",
+          "gold_value": false,
+          "polarity": "NEGATIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-05-remote_app_requested",
+          "semantic_key": "remote_app_requested",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-05-isolation_family",
+          "semantic_key": "isolation_family",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-05-isolation_bank_staff",
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-06",
+      "scenario_class": "HIGH",
+      "turns": [
+        {
+          "turn": 1,
+          "text": "지금 고객님 명의 계좌가 자금세탁에 연루돼서 확인 절차가 필요합니다.",
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "text": "본인 확인을 위해 문자로 온 인증번호 6자리를 불러주세요.",
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "text": "수사 보안을 위해 가족이나 은행 직원에게는 절대 말하시면 안 됩니다.",
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "text": "지정한 안전계좌로 돈을 옮겨야 피해금 동결을 막을 수 있습니다.",
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "text": "통화를 끊으면 사건 처리가 취소될 수 있으니 지금 바로 송금 화면을 열어주세요.",
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "atomic_facts": [
+        {
+          "fact_id": "FACT-06-claimed_organization",
+          "semantic_key": "claimed_organization",
+          "gold_value": "금융감독원",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-06-claimed_role",
+          "semantic_key": "claimed_role",
+          "gold_value": "금융감독원 직원",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-06-transfer_requested",
+          "semantic_key": "transfer_requested",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-06-transfer_amount",
+          "semantic_key": "transfer_amount",
+          "gold_value": 4000000,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-06-otp_shared",
+          "semantic_key": "otp_shared",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-06-password_shared",
+          "semantic_key": "password_shared",
+          "gold_value": false,
+          "polarity": "NEGATIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-06-remote_app_requested",
+          "semantic_key": "remote_app_requested",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-06-isolation_family",
+          "semantic_key": "isolation_family",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-06-isolation_bank_staff",
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-07",
+      "scenario_class": "HIGH",
+      "turns": [
+        {
+          "turn": 1,
+          "text": "지금 고객님 명의 계좌가 자금세탁에 연루돼서 확인 절차가 필요합니다.",
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "text": "본인 확인을 위해 문자로 온 인증번호 6자리를 불러주세요.",
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "text": "수사 보안을 위해 가족이나 은행 직원에게는 절대 말하시면 안 됩니다.",
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "text": "지정한 안전계좌로 돈을 옮겨야 피해금 동결을 막을 수 있습니다.",
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "text": "통화를 끊으면 사건 처리가 취소될 수 있으니 지금 바로 송금 화면을 열어주세요.",
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "atomic_facts": [
+        {
+          "fact_id": "FACT-07-claimed_organization",
+          "semantic_key": "claimed_organization",
+          "gold_value": "서울중앙지검",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-07-claimed_role",
+          "semantic_key": "claimed_role",
+          "gold_value": "검사",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-07-transfer_requested",
+          "semantic_key": "transfer_requested",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-07-transfer_amount",
+          "semantic_key": "transfer_amount",
+          "gold_value": 4500000,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-07-otp_shared",
+          "semantic_key": "otp_shared",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-07-password_shared",
+          "semantic_key": "password_shared",
+          "gold_value": false,
+          "polarity": "NEGATIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-07-remote_app_requested",
+          "semantic_key": "remote_app_requested",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-07-isolation_family",
+          "semantic_key": "isolation_family",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-07-isolation_bank_staff",
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-08",
+      "scenario_class": "HIGH",
+      "turns": [
+        {
+          "turn": 1,
+          "text": "지금 고객님 명의 계좌가 자금세탁에 연루돼서 확인 절차가 필요합니다.",
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "text": "본인 확인을 위해 문자로 온 인증번호 6자리를 불러주세요.",
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "text": "수사 보안을 위해 가족이나 은행 직원에게는 절대 말하시면 안 됩니다.",
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "text": "지정한 안전계좌로 돈을 옮겨야 피해금 동결을 막을 수 있습니다.",
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "text": "통화를 끊으면 사건 처리가 취소될 수 있으니 지금 바로 송금 화면을 열어주세요.",
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "atomic_facts": [
+        {
+          "fact_id": "FACT-08-claimed_organization",
+          "semantic_key": "claimed_organization",
+          "gold_value": "서울중앙지검",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-08-claimed_role",
+          "semantic_key": "claimed_role",
+          "gold_value": "금융감독원 직원",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-08-transfer_requested",
+          "semantic_key": "transfer_requested",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-08-transfer_amount",
+          "semantic_key": "transfer_amount",
+          "gold_value": 3000000,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-08-otp_shared",
+          "semantic_key": "otp_shared",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-08-password_shared",
+          "semantic_key": "password_shared",
+          "gold_value": false,
+          "polarity": "NEGATIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-08-remote_app_requested",
+          "semantic_key": "remote_app_requested",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-08-isolation_family",
+          "semantic_key": "isolation_family",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-08-isolation_bank_staff",
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-09",
+      "scenario_class": "HIGH",
+      "turns": [
+        {
+          "turn": 1,
+          "text": "지금 고객님 명의 계좌가 자금세탁에 연루돼서 확인 절차가 필요합니다.",
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "text": "본인 확인을 위해 문자로 온 인증번호 6자리를 불러주세요.",
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "text": "수사 보안을 위해 가족이나 은행 직원에게는 절대 말하시면 안 됩니다.",
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "text": "지정한 안전계좌로 돈을 옮겨야 피해금 동결을 막을 수 있습니다.",
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "text": "통화를 끊으면 사건 처리가 취소될 수 있으니 지금 바로 송금 화면을 열어주세요.",
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "atomic_facts": [
+        {
+          "fact_id": "FACT-09-claimed_organization",
+          "semantic_key": "claimed_organization",
+          "gold_value": "금융감독원",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-09-claimed_role",
+          "semantic_key": "claimed_role",
+          "gold_value": "검사",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-09-transfer_requested",
+          "semantic_key": "transfer_requested",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-09-transfer_amount",
+          "semantic_key": "transfer_amount",
+          "gold_value": 3500000,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-09-otp_shared",
+          "semantic_key": "otp_shared",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-09-password_shared",
+          "semantic_key": "password_shared",
+          "gold_value": false,
+          "polarity": "NEGATIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-09-remote_app_requested",
+          "semantic_key": "remote_app_requested",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-09-isolation_family",
+          "semantic_key": "isolation_family",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-09-isolation_bank_staff",
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-10",
+      "scenario_class": "HIGH",
+      "turns": [
+        {
+          "turn": 1,
+          "text": "지금 고객님 명의 계좌가 자금세탁에 연루돼서 확인 절차가 필요합니다.",
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "text": "본인 확인을 위해 문자로 온 인증번호 6자리를 불러주세요.",
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "text": "수사 보안을 위해 가족이나 은행 직원에게는 절대 말하시면 안 됩니다.",
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "text": "지정한 안전계좌로 돈을 옮겨야 피해금 동결을 막을 수 있습니다.",
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "text": "통화를 끊으면 사건 처리가 취소될 수 있으니 지금 바로 송금 화면을 열어주세요.",
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "atomic_facts": [
+        {
+          "fact_id": "FACT-10-claimed_organization",
+          "semantic_key": "claimed_organization",
+          "gold_value": "서울중앙지검",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-10-claimed_role",
+          "semantic_key": "claimed_role",
+          "gold_value": "금융감독원 직원",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-10-transfer_requested",
+          "semantic_key": "transfer_requested",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-10-transfer_amount",
+          "semantic_key": "transfer_amount",
+          "gold_value": 4000000,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-10-otp_shared",
+          "semantic_key": "otp_shared",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-10-password_shared",
+          "semantic_key": "password_shared",
+          "gold_value": false,
+          "polarity": "NEGATIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-10-remote_app_requested",
+          "semantic_key": "remote_app_requested",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-10-isolation_family",
+          "semantic_key": "isolation_family",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-10-isolation_bank_staff",
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-11",
+      "scenario_class": "MIXED",
+      "turns": [
+        {
+          "turn": 1,
+          "text": "지금 고객님 명의 계좌가 자금세탁에 연루돼서 확인 절차가 필요합니다.",
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "text": "본인 확인을 위해 문자로 온 인증번호 6자리를 불러주세요.",
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "text": "수사 보안을 위해 가족이나 은행 직원에게는 절대 말하시면 안 됩니다.",
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "text": "지정한 안전계좌로 돈을 옮겨야 피해금 동결을 막을 수 있습니다.",
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "text": "통화를 끊으면 사건 처리가 취소될 수 있으니 지금 바로 송금 화면을 열어주세요.",
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "atomic_facts": [
+        {
+          "fact_id": "FACT-11-claimed_organization",
+          "semantic_key": "claimed_organization",
+          "gold_value": "서울중앙지검",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-11-claimed_role",
+          "semantic_key": "claimed_role",
+          "gold_value": "검사",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-11-transfer_requested",
+          "semantic_key": "transfer_requested",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-11-transfer_amount",
+          "semantic_key": "transfer_amount",
+          "gold_value": 4500000,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-11-otp_shared",
+          "semantic_key": "otp_shared",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-11-password_shared",
+          "semantic_key": "password_shared",
+          "gold_value": false,
+          "polarity": "NEGATIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-11-remote_app_requested",
+          "semantic_key": "remote_app_requested",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-11-isolation_family",
+          "semantic_key": "isolation_family",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-11-isolation_bank_staff",
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-12",
+      "scenario_class": "MIXED",
+      "turns": [
+        {
+          "turn": 1,
+          "text": "지금 고객님 명의 계좌가 자금세탁에 연루돼서 확인 절차가 필요합니다.",
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "text": "본인 확인을 위해 문자로 온 인증번호 6자리를 불러주세요.",
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "text": "수사 보안을 위해 가족이나 은행 직원에게는 절대 말하시면 안 됩니다.",
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "text": "지정한 안전계좌로 돈을 옮겨야 피해금 동결을 막을 수 있습니다.",
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "text": "통화를 끊으면 사건 처리가 취소될 수 있으니 지금 바로 송금 화면을 열어주세요.",
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "atomic_facts": [
+        {
+          "fact_id": "FACT-12-claimed_organization",
+          "semantic_key": "claimed_organization",
+          "gold_value": "금융감독원",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-12-claimed_role",
+          "semantic_key": "claimed_role",
+          "gold_value": "금융감독원 직원",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-12-transfer_requested",
+          "semantic_key": "transfer_requested",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-12-transfer_amount",
+          "semantic_key": "transfer_amount",
+          "gold_value": 3000000,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-12-otp_shared",
+          "semantic_key": "otp_shared",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-12-password_shared",
+          "semantic_key": "password_shared",
+          "gold_value": false,
+          "polarity": "NEGATIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-12-remote_app_requested",
+          "semantic_key": "remote_app_requested",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-12-isolation_family",
+          "semantic_key": "isolation_family",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-12-isolation_bank_staff",
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-13",
+      "scenario_class": "MIXED",
+      "turns": [
+        {
+          "turn": 1,
+          "text": "지금 고객님 명의 계좌가 자금세탁에 연루돼서 확인 절차가 필요합니다.",
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "text": "본인 확인을 위해 문자로 온 인증번호 6자리를 불러주세요.",
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "text": "수사 보안을 위해 가족이나 은행 직원에게는 절대 말하시면 안 됩니다.",
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "text": "지정한 안전계좌로 돈을 옮겨야 피해금 동결을 막을 수 있습니다.",
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "text": "통화를 끊으면 사건 처리가 취소될 수 있으니 지금 바로 송금 화면을 열어주세요.",
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "atomic_facts": [
+        {
+          "fact_id": "FACT-13-claimed_organization",
+          "semantic_key": "claimed_organization",
+          "gold_value": "서울중앙지검",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-13-claimed_role",
+          "semantic_key": "claimed_role",
+          "gold_value": "검사",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-13-transfer_requested",
+          "semantic_key": "transfer_requested",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-13-transfer_amount",
+          "semantic_key": "transfer_amount",
+          "gold_value": 3500000,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-13-otp_shared",
+          "semantic_key": "otp_shared",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-13-password_shared",
+          "semantic_key": "password_shared",
+          "gold_value": false,
+          "polarity": "NEGATIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-13-remote_app_requested",
+          "semantic_key": "remote_app_requested",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-13-isolation_family",
+          "semantic_key": "isolation_family",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-13-isolation_bank_staff",
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-14",
+      "scenario_class": "MIXED",
+      "turns": [
+        {
+          "turn": 1,
+          "text": "지금 고객님 명의 계좌가 자금세탁에 연루돼서 확인 절차가 필요합니다.",
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "text": "본인 확인을 위해 문자로 온 인증번호 6자리를 불러주세요.",
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "text": "수사 보안을 위해 가족이나 은행 직원에게는 절대 말하시면 안 됩니다.",
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "text": "지정한 안전계좌로 돈을 옮겨야 피해금 동결을 막을 수 있습니다.",
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "text": "통화를 끊으면 사건 처리가 취소될 수 있으니 지금 바로 송금 화면을 열어주세요.",
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "atomic_facts": [
+        {
+          "fact_id": "FACT-14-claimed_organization",
+          "semantic_key": "claimed_organization",
+          "gold_value": "서울중앙지검",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-14-claimed_role",
+          "semantic_key": "claimed_role",
+          "gold_value": "금융감독원 직원",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-14-transfer_requested",
+          "semantic_key": "transfer_requested",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-14-transfer_amount",
+          "semantic_key": "transfer_amount",
+          "gold_value": 4000000,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-14-otp_shared",
+          "semantic_key": "otp_shared",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-14-password_shared",
+          "semantic_key": "password_shared",
+          "gold_value": false,
+          "polarity": "NEGATIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-14-remote_app_requested",
+          "semantic_key": "remote_app_requested",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-14-isolation_family",
+          "semantic_key": "isolation_family",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-14-isolation_bank_staff",
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-15",
+      "scenario_class": "MIXED",
+      "turns": [
+        {
+          "turn": 1,
+          "text": "지금 고객님 명의 계좌가 자금세탁에 연루돼서 확인 절차가 필요합니다.",
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "text": "본인 확인을 위해 문자로 온 인증번호 6자리를 불러주세요.",
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "text": "수사 보안을 위해 가족이나 은행 직원에게는 절대 말하시면 안 됩니다.",
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "text": "지정한 안전계좌로 돈을 옮겨야 피해금 동결을 막을 수 있습니다.",
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "text": "통화를 끊으면 사건 처리가 취소될 수 있으니 지금 바로 송금 화면을 열어주세요.",
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "atomic_facts": [
+        {
+          "fact_id": "FACT-15-claimed_organization",
+          "semantic_key": "claimed_organization",
+          "gold_value": "금융감독원",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-15-claimed_role",
+          "semantic_key": "claimed_role",
+          "gold_value": "검사",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-15-transfer_requested",
+          "semantic_key": "transfer_requested",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-15-transfer_amount",
+          "semantic_key": "transfer_amount",
+          "gold_value": 4500000,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-15-otp_shared",
+          "semantic_key": "otp_shared",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-15-password_shared",
+          "semantic_key": "password_shared",
+          "gold_value": false,
+          "polarity": "NEGATIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-15-remote_app_requested",
+          "semantic_key": "remote_app_requested",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-15-isolation_family",
+          "semantic_key": "isolation_family",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-15-isolation_bank_staff",
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-16",
+      "scenario_class": "MIXED",
+      "turns": [
+        {
+          "turn": 1,
+          "text": "지금 고객님 명의 계좌가 자금세탁에 연루돼서 확인 절차가 필요합니다.",
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "text": "본인 확인을 위해 문자로 온 인증번호 6자리를 불러주세요.",
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "text": "수사 보안을 위해 가족이나 은행 직원에게는 절대 말하시면 안 됩니다.",
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "text": "지정한 안전계좌로 돈을 옮겨야 피해금 동결을 막을 수 있습니다.",
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "text": "통화를 끊으면 사건 처리가 취소될 수 있으니 지금 바로 송금 화면을 열어주세요.",
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "atomic_facts": [
+        {
+          "fact_id": "FACT-16-claimed_organization",
+          "semantic_key": "claimed_organization",
+          "gold_value": "서울중앙지검",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-16-claimed_role",
+          "semantic_key": "claimed_role",
+          "gold_value": "금융감독원 직원",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-16-transfer_requested",
+          "semantic_key": "transfer_requested",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-16-transfer_amount",
+          "semantic_key": "transfer_amount",
+          "gold_value": 3000000,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-16-otp_shared",
+          "semantic_key": "otp_shared",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-16-password_shared",
+          "semantic_key": "password_shared",
+          "gold_value": false,
+          "polarity": "NEGATIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-16-remote_app_requested",
+          "semantic_key": "remote_app_requested",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-16-isolation_family",
+          "semantic_key": "isolation_family",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-16-isolation_bank_staff",
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-17",
+      "scenario_class": "MIXED",
+      "turns": [
+        {
+          "turn": 1,
+          "text": "지금 고객님 명의 계좌가 자금세탁에 연루돼서 확인 절차가 필요합니다.",
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "text": "본인 확인을 위해 문자로 온 인증번호 6자리를 불러주세요.",
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "text": "수사 보안을 위해 가족이나 은행 직원에게는 절대 말하시면 안 됩니다.",
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "text": "지정한 안전계좌로 돈을 옮겨야 피해금 동결을 막을 수 있습니다.",
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "text": "통화를 끊으면 사건 처리가 취소될 수 있으니 지금 바로 송금 화면을 열어주세요.",
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "atomic_facts": [
+        {
+          "fact_id": "FACT-17-claimed_organization",
+          "semantic_key": "claimed_organization",
+          "gold_value": "서울중앙지검",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-17-claimed_role",
+          "semantic_key": "claimed_role",
+          "gold_value": "검사",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-17-transfer_requested",
+          "semantic_key": "transfer_requested",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-17-transfer_amount",
+          "semantic_key": "transfer_amount",
+          "gold_value": 3500000,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-17-otp_shared",
+          "semantic_key": "otp_shared",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-17-password_shared",
+          "semantic_key": "password_shared",
+          "gold_value": false,
+          "polarity": "NEGATIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-17-remote_app_requested",
+          "semantic_key": "remote_app_requested",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-17-isolation_family",
+          "semantic_key": "isolation_family",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-17-isolation_bank_staff",
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-18",
+      "scenario_class": "MIXED",
+      "turns": [
+        {
+          "turn": 1,
+          "text": "지금 고객님 명의 계좌가 자금세탁에 연루돼서 확인 절차가 필요합니다.",
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "text": "본인 확인을 위해 문자로 온 인증번호 6자리를 불러주세요.",
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "text": "수사 보안을 위해 가족이나 은행 직원에게는 절대 말하시면 안 됩니다.",
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "text": "지정한 안전계좌로 돈을 옮겨야 피해금 동결을 막을 수 있습니다.",
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "text": "통화를 끊으면 사건 처리가 취소될 수 있으니 지금 바로 송금 화면을 열어주세요.",
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "atomic_facts": [
+        {
+          "fact_id": "FACT-18-claimed_organization",
+          "semantic_key": "claimed_organization",
+          "gold_value": "금융감독원",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-18-claimed_role",
+          "semantic_key": "claimed_role",
+          "gold_value": "금융감독원 직원",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-18-transfer_requested",
+          "semantic_key": "transfer_requested",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-18-transfer_amount",
+          "semantic_key": "transfer_amount",
+          "gold_value": 4000000,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-18-otp_shared",
+          "semantic_key": "otp_shared",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-18-password_shared",
+          "semantic_key": "password_shared",
+          "gold_value": false,
+          "polarity": "NEGATIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-18-remote_app_requested",
+          "semantic_key": "remote_app_requested",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-18-isolation_family",
+          "semantic_key": "isolation_family",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-18-isolation_bank_staff",
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-19",
+      "scenario_class": "MIXED",
+      "turns": [
+        {
+          "turn": 1,
+          "text": "지금 고객님 명의 계좌가 자금세탁에 연루돼서 확인 절차가 필요합니다.",
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "text": "본인 확인을 위해 문자로 온 인증번호 6자리를 불러주세요.",
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "text": "수사 보안을 위해 가족이나 은행 직원에게는 절대 말하시면 안 됩니다.",
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "text": "지정한 안전계좌로 돈을 옮겨야 피해금 동결을 막을 수 있습니다.",
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "text": "통화를 끊으면 사건 처리가 취소될 수 있으니 지금 바로 송금 화면을 열어주세요.",
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "atomic_facts": [
+        {
+          "fact_id": "FACT-19-claimed_organization",
+          "semantic_key": "claimed_organization",
+          "gold_value": "서울중앙지검",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-19-claimed_role",
+          "semantic_key": "claimed_role",
+          "gold_value": "검사",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-19-transfer_requested",
+          "semantic_key": "transfer_requested",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-19-transfer_amount",
+          "semantic_key": "transfer_amount",
+          "gold_value": 4500000,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-19-otp_shared",
+          "semantic_key": "otp_shared",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-19-password_shared",
+          "semantic_key": "password_shared",
+          "gold_value": false,
+          "polarity": "NEGATIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-19-remote_app_requested",
+          "semantic_key": "remote_app_requested",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-19-isolation_family",
+          "semantic_key": "isolation_family",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-19-isolation_bank_staff",
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-20",
+      "scenario_class": "MIXED",
+      "turns": [
+        {
+          "turn": 1,
+          "text": "지금 고객님 명의 계좌가 자금세탁에 연루돼서 확인 절차가 필요합니다.",
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "text": "본인 확인을 위해 문자로 온 인증번호 6자리를 불러주세요.",
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "text": "수사 보안을 위해 가족이나 은행 직원에게는 절대 말하시면 안 됩니다.",
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "text": "지정한 안전계좌로 돈을 옮겨야 피해금 동결을 막을 수 있습니다.",
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "text": "통화를 끊으면 사건 처리가 취소될 수 있으니 지금 바로 송금 화면을 열어주세요.",
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "atomic_facts": [
+        {
+          "fact_id": "FACT-20-claimed_organization",
+          "semantic_key": "claimed_organization",
+          "gold_value": "서울중앙지검",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-20-claimed_role",
+          "semantic_key": "claimed_role",
+          "gold_value": "금융감독원 직원",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-20-transfer_requested",
+          "semantic_key": "transfer_requested",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-20-transfer_amount",
+          "semantic_key": "transfer_amount",
+          "gold_value": 3000000,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-20-otp_shared",
+          "semantic_key": "otp_shared",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-20-password_shared",
+          "semantic_key": "password_shared",
+          "gold_value": false,
+          "polarity": "NEGATIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-20-remote_app_requested",
+          "semantic_key": "remote_app_requested",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-20-isolation_family",
+          "semantic_key": "isolation_family",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-20-isolation_bank_staff",
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-21",
+      "scenario_class": "LOW",
+      "turns": [
+        {
+          "turn": 1,
+          "text": "은행 상담 예약을 확인하고 싶습니다.",
+          "patterns": []
+        },
+        {
+          "turn": 2,
+          "text": "비밀번호나 인증번호는 알려주지 않았습니다.",
+          "patterns": []
+        },
+        {
+          "turn": 3,
+          "text": "가족과 상담했습니다.",
+          "patterns": []
+        },
+        {
+          "turn": 4,
+          "text": "송금 요청은 없었습니다.",
+          "patterns": []
+        },
+        {
+          "turn": 5,
+          "text": "통화를 종료했습니다.",
+          "patterns": []
+        }
+      ],
+      "atomic_facts": [
+        {
+          "fact_id": "FACT-21-claimed_organization",
+          "semantic_key": "claimed_organization",
+          "gold_value": "금융감독원",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-21-claimed_role",
+          "semantic_key": "claimed_role",
+          "gold_value": "검사",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-21-transfer_requested",
+          "semantic_key": "transfer_requested",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-21-transfer_amount",
+          "semantic_key": "transfer_amount",
+          "gold_value": 0,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-21-otp_shared",
+          "semantic_key": "otp_shared",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-21-password_shared",
+          "semantic_key": "password_shared",
+          "gold_value": false,
+          "polarity": "NEGATIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-21-remote_app_requested",
+          "semantic_key": "remote_app_requested",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-21-isolation_family",
+          "semantic_key": "isolation_family",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-21-isolation_bank_staff",
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-22",
+      "scenario_class": "LOW",
+      "turns": [
+        {
+          "turn": 1,
+          "text": "은행 상담 예약을 확인하고 싶습니다.",
+          "patterns": []
+        },
+        {
+          "turn": 2,
+          "text": "비밀번호나 인증번호는 알려주지 않았습니다.",
+          "patterns": []
+        },
+        {
+          "turn": 3,
+          "text": "가족과 상담했습니다.",
+          "patterns": []
+        },
+        {
+          "turn": 4,
+          "text": "송금 요청은 없었습니다.",
+          "patterns": []
+        },
+        {
+          "turn": 5,
+          "text": "통화를 종료했습니다.",
+          "patterns": []
+        }
+      ],
+      "atomic_facts": [
+        {
+          "fact_id": "FACT-22-claimed_organization",
+          "semantic_key": "claimed_organization",
+          "gold_value": "서울중앙지검",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-22-claimed_role",
+          "semantic_key": "claimed_role",
+          "gold_value": "금융감독원 직원",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-22-transfer_requested",
+          "semantic_key": "transfer_requested",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-22-transfer_amount",
+          "semantic_key": "transfer_amount",
+          "gold_value": 0,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-22-otp_shared",
+          "semantic_key": "otp_shared",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-22-password_shared",
+          "semantic_key": "password_shared",
+          "gold_value": false,
+          "polarity": "NEGATIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-22-remote_app_requested",
+          "semantic_key": "remote_app_requested",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-22-isolation_family",
+          "semantic_key": "isolation_family",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-22-isolation_bank_staff",
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-23",
+      "scenario_class": "LOW",
+      "turns": [
+        {
+          "turn": 1,
+          "text": "은행 상담 예약을 확인하고 싶습니다.",
+          "patterns": []
+        },
+        {
+          "turn": 2,
+          "text": "비밀번호나 인증번호는 알려주지 않았습니다.",
+          "patterns": []
+        },
+        {
+          "turn": 3,
+          "text": "가족과 상담했습니다.",
+          "patterns": []
+        },
+        {
+          "turn": 4,
+          "text": "송금 요청은 없었습니다.",
+          "patterns": []
+        },
+        {
+          "turn": 5,
+          "text": "통화를 종료했습니다.",
+          "patterns": []
+        }
+      ],
+      "atomic_facts": [
+        {
+          "fact_id": "FACT-23-claimed_organization",
+          "semantic_key": "claimed_organization",
+          "gold_value": "서울중앙지검",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-23-claimed_role",
+          "semantic_key": "claimed_role",
+          "gold_value": "검사",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-23-transfer_requested",
+          "semantic_key": "transfer_requested",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-23-transfer_amount",
+          "semantic_key": "transfer_amount",
+          "gold_value": 0,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-23-otp_shared",
+          "semantic_key": "otp_shared",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-23-password_shared",
+          "semantic_key": "password_shared",
+          "gold_value": false,
+          "polarity": "NEGATIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-23-remote_app_requested",
+          "semantic_key": "remote_app_requested",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-23-isolation_family",
+          "semantic_key": "isolation_family",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-23-isolation_bank_staff",
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-24",
+      "scenario_class": "LOW",
+      "turns": [
+        {
+          "turn": 1,
+          "text": "은행 상담 예약을 확인하고 싶습니다.",
+          "patterns": []
+        },
+        {
+          "turn": 2,
+          "text": "비밀번호나 인증번호는 알려주지 않았습니다.",
+          "patterns": []
+        },
+        {
+          "turn": 3,
+          "text": "가족과 상담했습니다.",
+          "patterns": []
+        },
+        {
+          "turn": 4,
+          "text": "송금 요청은 없었습니다.",
+          "patterns": []
+        },
+        {
+          "turn": 5,
+          "text": "통화를 종료했습니다.",
+          "patterns": []
+        }
+      ],
+      "atomic_facts": [
+        {
+          "fact_id": "FACT-24-claimed_organization",
+          "semantic_key": "claimed_organization",
+          "gold_value": "금융감독원",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-24-claimed_role",
+          "semantic_key": "claimed_role",
+          "gold_value": "금융감독원 직원",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-24-transfer_requested",
+          "semantic_key": "transfer_requested",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-24-transfer_amount",
+          "semantic_key": "transfer_amount",
+          "gold_value": 0,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-24-otp_shared",
+          "semantic_key": "otp_shared",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-24-password_shared",
+          "semantic_key": "password_shared",
+          "gold_value": false,
+          "polarity": "NEGATIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-24-remote_app_requested",
+          "semantic_key": "remote_app_requested",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-24-isolation_family",
+          "semantic_key": "isolation_family",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-24-isolation_bank_staff",
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-25",
+      "scenario_class": "LOW",
+      "turns": [
+        {
+          "turn": 1,
+          "text": "은행 상담 예약을 확인하고 싶습니다.",
+          "patterns": []
+        },
+        {
+          "turn": 2,
+          "text": "비밀번호나 인증번호는 알려주지 않았습니다.",
+          "patterns": []
+        },
+        {
+          "turn": 3,
+          "text": "가족과 상담했습니다.",
+          "patterns": []
+        },
+        {
+          "turn": 4,
+          "text": "송금 요청은 없었습니다.",
+          "patterns": []
+        },
+        {
+          "turn": 5,
+          "text": "통화를 종료했습니다.",
+          "patterns": []
+        }
+      ],
+      "atomic_facts": [
+        {
+          "fact_id": "FACT-25-claimed_organization",
+          "semantic_key": "claimed_organization",
+          "gold_value": "서울중앙지검",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-25-claimed_role",
+          "semantic_key": "claimed_role",
+          "gold_value": "검사",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-25-transfer_requested",
+          "semantic_key": "transfer_requested",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-25-transfer_amount",
+          "semantic_key": "transfer_amount",
+          "gold_value": 0,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-25-otp_shared",
+          "semantic_key": "otp_shared",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-25-password_shared",
+          "semantic_key": "password_shared",
+          "gold_value": false,
+          "polarity": "NEGATIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-25-remote_app_requested",
+          "semantic_key": "remote_app_requested",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-25-isolation_family",
+          "semantic_key": "isolation_family",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-25-isolation_bank_staff",
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-26",
+      "scenario_class": "LOW",
+      "turns": [
+        {
+          "turn": 1,
+          "text": "은행 상담 예약을 확인하고 싶습니다.",
+          "patterns": []
+        },
+        {
+          "turn": 2,
+          "text": "비밀번호나 인증번호는 알려주지 않았습니다.",
+          "patterns": []
+        },
+        {
+          "turn": 3,
+          "text": "가족과 상담했습니다.",
+          "patterns": []
+        },
+        {
+          "turn": 4,
+          "text": "송금 요청은 없었습니다.",
+          "patterns": []
+        },
+        {
+          "turn": 5,
+          "text": "통화를 종료했습니다.",
+          "patterns": []
+        }
+      ],
+      "atomic_facts": [
+        {
+          "fact_id": "FACT-26-claimed_organization",
+          "semantic_key": "claimed_organization",
+          "gold_value": "서울중앙지검",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-26-claimed_role",
+          "semantic_key": "claimed_role",
+          "gold_value": "금융감독원 직원",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-26-transfer_requested",
+          "semantic_key": "transfer_requested",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-26-transfer_amount",
+          "semantic_key": "transfer_amount",
+          "gold_value": 0,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-26-otp_shared",
+          "semantic_key": "otp_shared",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-26-password_shared",
+          "semantic_key": "password_shared",
+          "gold_value": false,
+          "polarity": "NEGATIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-26-remote_app_requested",
+          "semantic_key": "remote_app_requested",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-26-isolation_family",
+          "semantic_key": "isolation_family",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-26-isolation_bank_staff",
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-27",
+      "scenario_class": "LOW",
+      "turns": [
+        {
+          "turn": 1,
+          "text": "은행 상담 예약을 확인하고 싶습니다.",
+          "patterns": []
+        },
+        {
+          "turn": 2,
+          "text": "비밀번호나 인증번호는 알려주지 않았습니다.",
+          "patterns": []
+        },
+        {
+          "turn": 3,
+          "text": "가족과 상담했습니다.",
+          "patterns": []
+        },
+        {
+          "turn": 4,
+          "text": "송금 요청은 없었습니다.",
+          "patterns": []
+        },
+        {
+          "turn": 5,
+          "text": "통화를 종료했습니다.",
+          "patterns": []
+        }
+      ],
+      "atomic_facts": [
+        {
+          "fact_id": "FACT-27-claimed_organization",
+          "semantic_key": "claimed_organization",
+          "gold_value": "금융감독원",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-27-claimed_role",
+          "semantic_key": "claimed_role",
+          "gold_value": "검사",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-27-transfer_requested",
+          "semantic_key": "transfer_requested",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-27-transfer_amount",
+          "semantic_key": "transfer_amount",
+          "gold_value": 0,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-27-otp_shared",
+          "semantic_key": "otp_shared",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-27-password_shared",
+          "semantic_key": "password_shared",
+          "gold_value": false,
+          "polarity": "NEGATIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-27-remote_app_requested",
+          "semantic_key": "remote_app_requested",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-27-isolation_family",
+          "semantic_key": "isolation_family",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-27-isolation_bank_staff",
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-28",
+      "scenario_class": "LOW",
+      "turns": [
+        {
+          "turn": 1,
+          "text": "은행 상담 예약을 확인하고 싶습니다.",
+          "patterns": []
+        },
+        {
+          "turn": 2,
+          "text": "비밀번호나 인증번호는 알려주지 않았습니다.",
+          "patterns": []
+        },
+        {
+          "turn": 3,
+          "text": "가족과 상담했습니다.",
+          "patterns": []
+        },
+        {
+          "turn": 4,
+          "text": "송금 요청은 없었습니다.",
+          "patterns": []
+        },
+        {
+          "turn": 5,
+          "text": "통화를 종료했습니다.",
+          "patterns": []
+        }
+      ],
+      "atomic_facts": [
+        {
+          "fact_id": "FACT-28-claimed_organization",
+          "semantic_key": "claimed_organization",
+          "gold_value": "서울중앙지검",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-28-claimed_role",
+          "semantic_key": "claimed_role",
+          "gold_value": "금융감독원 직원",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-28-transfer_requested",
+          "semantic_key": "transfer_requested",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-28-transfer_amount",
+          "semantic_key": "transfer_amount",
+          "gold_value": 0,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-28-otp_shared",
+          "semantic_key": "otp_shared",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-28-password_shared",
+          "semantic_key": "password_shared",
+          "gold_value": false,
+          "polarity": "NEGATIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-28-remote_app_requested",
+          "semantic_key": "remote_app_requested",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-28-isolation_family",
+          "semantic_key": "isolation_family",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-28-isolation_bank_staff",
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-29",
+      "scenario_class": "LOW",
+      "turns": [
+        {
+          "turn": 1,
+          "text": "은행 상담 예약을 확인하고 싶습니다.",
+          "patterns": []
+        },
+        {
+          "turn": 2,
+          "text": "비밀번호나 인증번호는 알려주지 않았습니다.",
+          "patterns": []
+        },
+        {
+          "turn": 3,
+          "text": "가족과 상담했습니다.",
+          "patterns": []
+        },
+        {
+          "turn": 4,
+          "text": "송금 요청은 없었습니다.",
+          "patterns": []
+        },
+        {
+          "turn": 5,
+          "text": "통화를 종료했습니다.",
+          "patterns": []
+        }
+      ],
+      "atomic_facts": [
+        {
+          "fact_id": "FACT-29-claimed_organization",
+          "semantic_key": "claimed_organization",
+          "gold_value": "서울중앙지검",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-29-claimed_role",
+          "semantic_key": "claimed_role",
+          "gold_value": "검사",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-29-transfer_requested",
+          "semantic_key": "transfer_requested",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-29-transfer_amount",
+          "semantic_key": "transfer_amount",
+          "gold_value": 0,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-29-otp_shared",
+          "semantic_key": "otp_shared",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-29-password_shared",
+          "semantic_key": "password_shared",
+          "gold_value": false,
+          "polarity": "NEGATIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-29-remote_app_requested",
+          "semantic_key": "remote_app_requested",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-29-isolation_family",
+          "semantic_key": "isolation_family",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-29-isolation_bank_staff",
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        }
+      ]
+    },
+    {
+      "case_id": "FACT-30",
+      "scenario_class": "LOW",
+      "turns": [
+        {
+          "turn": 1,
+          "text": "은행 상담 예약을 확인하고 싶습니다.",
+          "patterns": []
+        },
+        {
+          "turn": 2,
+          "text": "비밀번호나 인증번호는 알려주지 않았습니다.",
+          "patterns": []
+        },
+        {
+          "turn": 3,
+          "text": "가족과 상담했습니다.",
+          "patterns": []
+        },
+        {
+          "turn": 4,
+          "text": "송금 요청은 없었습니다.",
+          "patterns": []
+        },
+        {
+          "turn": 5,
+          "text": "통화를 종료했습니다.",
+          "patterns": []
+        }
+      ],
+      "atomic_facts": [
+        {
+          "fact_id": "FACT-30-claimed_organization",
+          "semantic_key": "claimed_organization",
+          "gold_value": "금융감독원",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-30-claimed_role",
+          "semantic_key": "claimed_role",
+          "gold_value": "금융감독원 직원",
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 1,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "IMPERSONATION_CONTACT"
+        },
+        {
+          "fact_id": "FACT-30-transfer_requested",
+          "semantic_key": "transfer_requested",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-30-transfer_amount",
+          "semantic_key": "transfer_amount",
+          "gold_value": 0,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 4,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-30-otp_shared",
+          "semantic_key": "otp_shared",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-30-password_shared",
+          "semantic_key": "password_shared",
+          "gold_value": false,
+          "polarity": "NEGATIVE",
+          "criticality": "CRITICAL",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "LOSS_EXPOSURE"
+        },
+        {
+          "fact_id": "FACT-30-remote_app_requested",
+          "semantic_key": "remote_app_requested",
+          "gold_value": true,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 2,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-30-isolation_family",
+          "semantic_key": "isolation_family",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        },
+        {
+          "fact_id": "FACT-30-isolation_bank_staff",
+          "semantic_key": "isolation_bank_staff",
+          "gold_value": false,
+          "polarity": "POSITIVE",
+          "criticality": "HIGH",
+          "source_turn": 3,
+          "expected_visibility": "BANK_INTERNAL",
+          "expected_panel_section": "FRAUD_INDICATORS"
+        }
+      ]
+    }
+  ]
+}

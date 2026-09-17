@@ -1,0 +1,9 @@
+stage,numerator,denominator,score,status,reason
+Gold Fact,NOT RUN,270,NOT RUN,BLOCKED,LIVE AI and DB unavailable
+Message Saved,NOT RUN,270,NOT RUN,BLOCKED,No isolated benchmark DB
+Fact Correct,NOT RUN,270,NOT RUN,BLOCKED,No live Fact extraction
+Evidence Linked,NOT RUN,270,NOT RUN,BLOCKED,No live Fact extraction
+Context Present,NOT RUN,270,NOT RUN,BLOCKED,No isolated benchmark DB
+Panel Present,NOT IMPLEMENTED,270,NOT IMPLEMENTED,v3.0,Context V3 absent at official v3.0 commit
+AI Context,NOT RUN,270,NOT RUN,BLOCKED,Live AI unavailable
+AI Correct Usage,NOT RUN,270,NOT RUN,BLOCKED,Live AI unavailable

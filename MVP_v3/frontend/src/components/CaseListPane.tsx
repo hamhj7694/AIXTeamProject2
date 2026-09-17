@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { AlertCircle, ArrowDown, ArrowUp, Search, Trash2, X } from 'lucide-react';
+import { AlertCircle, ArrowDown, ArrowUp, Pencil, Search, Trash2, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { StoredCase } from '../api/types';
 import { compareCases, type CaseSortField, type SortDirection } from '../caseSort';
@@ -16,15 +16,20 @@ interface Props {
   trashCount: number;
   onOpenTrash: () => void;
   onSelectCase: () => void;
+  onRenameCase: (caseId: string, caseName: string, expectedVersion: number) => Promise<void>;
 }
 
-export const CaseListPane: React.FC<Props> = ({ cases, selectedCaseId, loading, error, mobileOpen, onCloseMobile, onRetry, trashCount, onOpenTrash, onSelectCase }) => {
+export const CaseListPane: React.FC<Props> = ({ cases, selectedCaseId, loading, error, mobileOpen, onCloseMobile, onRetry, trashCount, onOpenTrash, onSelectCase, onRenameCase }) => {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [stateFilter, setStateFilter] = useState<'ALL' | 'LOSS' | 'SUSPECTED' | 'RESOLVED'>('ALL');
   const [status, setStatus] = useState<'ALL' | 'ACTIVE' | 'RECOVERY' | 'CLOSED'>('ALL');
   const [sortField, setSortField] = useState<CaseSortField>('UPDATED_AT');
   const [sortDirection, setSortDirection] = useState<SortDirection>('DESC');
+  const [editingCaseId, setEditingCaseId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [renameBusy, setRenameBusy] = useState(false);
+  const [renameError, setRenameError] = useState('');
   const rows = useMemo(() => [...cases]
     .filter((item) => stateFilter === 'ALL' || caseState(item) === stateFilter)
     .filter((item) => status === 'ALL'
@@ -34,6 +39,35 @@ export const CaseListPane: React.FC<Props> = ({ cases, selectedCaseId, loading, 
     .filter((item) => `${item.case_id} ${incidentTitle(item)} ${item.initial_brief}`.toLowerCase().includes(query.trim().toLowerCase()))
     .sort((a, b) => compareCases(a, b, sortField, sortDirection)), [cases, query, stateFilter, status, sortField, sortDirection]);
   const openCase = (caseId: string) => { onSelectCase(); navigate(`/cases/${caseId}`); onCloseMobile(); };
+  const startRename = (item: StoredCase) => { setEditingCaseId(item.case_id); setRenameValue(incidentTitle(item)); setRenameError(''); };
+  const cancelRename = () => { if (renameBusy) return; setEditingCaseId(null); setRenameValue(''); setRenameError(''); };
+  const saveRename = async (item: StoredCase) => {
+    const nextName = renameValue.trim();
+    if (!nextName) { setRenameError('사건 이름을 입력해 주세요.'); return; }
+    setRenameBusy(true); setRenameError('');
+    try { await onRenameCase(item.case_id, nextName, item.version); setEditingCaseId(null); setRenameValue(''); }
+    catch (reason) { setRenameError(reason instanceof Error ? reason.message : '사건 이름을 변경하지 못했습니다.'); }
+    finally { setRenameBusy(false); }
+  };
+  const renderCaseItem = (item: StoredCase) => {
+    const editing = editingCaseId === item.case_id;
+    const caseContent = <>
+      <strong>{incidentTitle(item)}</strong>
+      <span className="case-item-bottom"><span>{statusLabel(item.status, item.mode)}</span><time title={new Date(sortField === 'CREATED_AT' ? item.created_at : item.updated_at).toLocaleString('ko-KR')}>{sortField === 'CREATED_AT' ? '생성 ' : sortField === 'UPDATED_AT' ? '수정 ' : ''}{relativeTime(sortField === 'CREATED_AT' ? item.created_at : item.updated_at)}</time></span>
+    </>;
+    return <div key={item.case_id} className={`case-list-item ${selectedCaseId === item.case_id ? 'selected' : ''}`}>
+      {editing ? <form className="case-item-rename" onSubmit={(event) => { event.preventDefault(); void saveRename(item); }}>
+        <span className="case-item-top"><b>{item.case_id}</b><span className={`risk-pill ${caseStateTone(caseState(item))}`}>{caseStateLabel(caseState(item))}</span></span>
+        <label className="sr-only" htmlFor={`case-name-${item.case_id}`}>사건 이름</label><input id={`case-name-${item.case_id}`} value={renameValue} maxLength={200} autoFocus onChange={(event) => { setRenameValue(event.target.value); setRenameError(''); }}/>
+        <span className="case-item-bottom"><span>{statusLabel(item.status, item.mode)}</span><time>{relativeTime(sortField === 'CREATED_AT' ? item.created_at : item.updated_at)}</time></span>
+        {renameError && <span className="case-item-rename-error" role="alert">{renameError}</span>}
+        <span className="case-item-rename-actions"><button type="button" onClick={cancelRename} disabled={renameBusy}>취소</button><button type="submit" disabled={renameBusy || !renameValue.trim()}>저장</button></span>
+      </form> : <>
+        <span className="case-item-top"><button type="button" className="case-item-id-open" onClick={() => openCase(item.case_id)}><b>{item.case_id}</b></button><span className="case-item-top-actions"><span className={`risk-pill ${caseStateTone(caseState(item))}`}>{caseStateLabel(caseState(item))}</span><button type="button" className="case-item-edit" onClick={() => startRename(item)} aria-label={`${incidentTitle(item)} 사건 이름 수정`} title="사건 이름 수정"><Pencil size={14}/></button></span></span>
+        <button type="button" className="case-list-item-open" onClick={() => openCase(item.case_id)}>{caseContent}</button>
+      </>}
+    </div>;
+  };
 
   return <aside className={`case-list-pane ${mobileOpen ? 'is-open' : ''}`} aria-label="현재 대응 사건 목록">
     <div className="pane-heading">
@@ -52,11 +86,7 @@ export const CaseListPane: React.FC<Props> = ({ cases, selectedCaseId, loading, 
       {loading && Array.from({ length: 5 }).map((_, index) => <div className="case-skeleton" key={index}/>) }
       {!loading && error && <div className="pane-state error"><AlertCircle size={20}/><strong>사건을 불러오지 못했습니다.</strong><span>{error}</span><button onClick={onRetry}>다시 시도</button></div>}
       {!loading && !error && rows.length === 0 && <div className="pane-state"><strong>현재 대응 중인 사건이 없습니다.</strong><span>위험 이벤트가 Case로 생성되면 여기에 표시됩니다.</span></div>}
-      {!loading && !error && rows.map((item) => <button key={item.case_id} className={`case-list-item ${selectedCaseId === item.case_id ? 'selected' : ''}`} onClick={() => openCase(item.case_id)}>
-        <span className="case-item-top"><b>{item.case_id}</b><span className={`risk-pill ${caseStateTone(caseState(item))}`}>{caseStateLabel(caseState(item))}</span></span>
-        <strong>{incidentTitle(item)}</strong>
-        <span className="case-item-bottom"><span>{statusLabel(item.status, item.mode)}</span><time title={new Date(sortField === 'CREATED_AT' ? item.created_at : item.updated_at).toLocaleString('ko-KR')}>{sortField === 'CREATED_AT' ? '생성 ' : sortField === 'UPDATED_AT' ? '수정 ' : ''}{relativeTime(sortField === 'CREATED_AT' ? item.created_at : item.updated_at)}</time></span>
-      </button>)}
+      {!loading && !error && rows.map(renderCaseItem)}
     </div>
     <button type="button" className="trash-open-button" onClick={() => { onOpenTrash(); onCloseMobile(); }}><Trash2 size={15}/><span>휴지통</span><b>{trashCount}</b></button>
   </aside>;

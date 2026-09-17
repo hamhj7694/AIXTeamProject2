@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import json
 import os
 import hashlib
 import logging
@@ -134,6 +135,7 @@ from .domains.cases.case_context_v2_repository import (
 from .domains.cases.mysql_repository import MySqlCaseRepository
 from .domains.cases.context_v3.semantic_keys import ALLOWED_SEMANTIC_KEYS, proposal_dedupe_key
 from .domains.cases.context_v3.panel import build_context_panel_v3
+from .domains.cases.context_v3.atom_fact_projection import project_semantic_atoms_to_fact_candidates
 from .domains.cases.service import AnalyzeCaseService, InvalidCaseTransitionError, transition_case
 
 
@@ -476,6 +478,7 @@ async def patch_case(case_id: str, request: PublicCasePatchRequest) -> PublicCas
             repository,
             case_id,
             request.expected_version,
+            case_name=request.case_name,
             status=request.status,
             mode=request.mode,
         )
@@ -573,24 +576,58 @@ async def seed_initial_context_facts(case_id: str) -> None:
         return
     diagnosis = case.get("diagnosis") or {}
     context = diagnosis.get("context") or {}
-    evidence_id = str((case.get("initial_report") or {}).get("report_id") or case_id)
+    diagnosis_signals = diagnosis.get("context_signals") or []
+    diagnosis_atoms = diagnosis.get("semantic_atoms") or []
+    if diagnosis_signals:
+        base_evidence_ref = {"type": "STRUCTURED_SIGNAL", "id": str(diagnosis_signals[0].get("signal_id"))}
+    elif diagnosis_atoms:
+        base_evidence_ref = {"type": "STRUCTURED_ATOM", "id": str(diagnosis_atoms[0].get("atom_id"))}
+    else:
+        base_evidence_ref = {"type": "STAFF_RECORD", "id": str((case.get("initial_report") or {}).get("report_id") or case_id)}
     candidates: list[tuple[str, str, dict, str]] = []
     transfer = case.get("victim_transfer_status")
     if transfer in {"YES", "NO"}:
         candidates.append(("transfer.actual.status", "실제 이체 여부", {"status": "TRANSFERRED" if transfer == "YES" else "NOT_TRANSFERRED"}, "이체함" if transfer == "YES" else "이체하지 않음"))
     features = diagnosis.get("features") or {}
-    requested_amount = int(float(features.get("requested_amount_max") or 0))
-    if requested_amount > 0:
-        candidates.append(("transfer.requested.amount", "요구 금액", {"amount_krw": requested_amount, "currency": "KRW"}, f"{requested_amount:,}원 요구"))
+    context_features = diagnosis.get("case_context_features") or {}
+    amount_values: list[int] = []
+    raw_amount_values = [
+        *(context_features.get("requested_amount_values_krw") or []),
+        *[
+            atom.get("amount_value_krw")
+            for atom in diagnosis_atoms
+            if atom.get("amount_value_krw") is not None and atom.get("action_state") == "REQUESTED"
+        ],
+    ]
+    for raw_amount in raw_amount_values:
+        try:
+            amount = int(float(raw_amount))
+        except (TypeError, ValueError):
+            continue
+        if amount > 0 and amount not in amount_values:
+            amount_values.append(amount)
+    if not amount_values:
+        fallback_amount = int(float(features.get("requested_amount_max") or 0))
+        if fallback_amount > 0:
+            amount_values.append(fallback_amount)
+    for amount in amount_values:
+        candidates.append(("transfer.requested.amount", "요구 금액", {"amount_krw": amount, "currency": "KRW"}, f"{amount:,}원 요구"))
     actual_amount = int(float(case.get("actual_loss_amount_krw") or 0))
     if transfer == "YES" and actual_amount > 0:
         candidates.append(("transfer.actual.amount", "실제 이체 금액", {"amount_krw": actual_amount, "currency": "KRW"}, f"{actual_amount:,}원 이체"))
-    context_features = diagnosis.get("case_context_features") or {}
     requested_codes = {str(code).upper() for code in context_features.get("requested_action_codes", [])}
-    if any("AUTH" in code or "OTP" in code for code in requested_codes):
-        candidates.append(("exposure.authentication_information", "인증정보 노출", {"status": "REQUESTED"}, "인증정보 제공 요구"))
-    if any("REMOTE" in code for code in requested_codes):
-        candidates.append(("device.remote_control_app", "원격제어 앱", {"status": "REQUESTED"}, "원격제어 앱 설치 요구"))
+    requested_action_facts = {
+        "REQUEST_AUTH_INFO": ("exposure.authentication_information", "인증정보 노출", {"status": "REQUESTED"}, "인증정보 제공 요구"),
+        "REQUEST_PERSONAL_INFO": ("exposure.personal_information", "개인정보 노출", {"status": "REQUESTED"}, "개인정보 제공 요구"),
+        "REQUEST_INSTALL_APP": ("device.remote_control_app", "원격제어 앱", {"status": "REQUESTED"}, "원격제어 앱 설치 요구"),
+        "REQUEST_TRANSFER": ("circumstance.demand", "상대방 요구", {"text": "송금·이체 요구"}, "송금·이체 요구"),
+        "REQUEST_KEEP_CALL": ("circumstance.demand", "상대방 요구", {"text": "통화 유지 요구"}, "통화 유지 요구"),
+        "REQUEST_SECRECY": ("circumstance.demand", "상대방 요구", {"text": "외부 확인 제한 요구"}, "외부 확인 제한 요구"),
+    }
+    for code in sorted(requested_codes):
+        fact = requested_action_facts.get(code)
+        if fact:
+            candidates.append(fact)
     for key, label, values in (
         ("offender.incident_claim", "상대방 주장", context.get("offender_claims", [])),
         ("circumstance.demand", "상대방 요구", context.get("offender_demands", [])),
@@ -600,13 +637,138 @@ async def seed_initial_context_facts(case_id: str) -> None:
             text = str(value).strip()
             if text:
                 candidates.append((key, label, {"text": text}, text))
+
+    # Context features and LLM atoms are complementary. The former is a safe
+    # grouped summary; the latter preserves fine-grained facts that must also
+    # become reviewable Context V3 items.
+    candidate_keys = {(key, json.dumps(value, ensure_ascii=False, sort_keys=True), display) for key, _, value, display in candidates}
+    def add_structured_candidate(key: str, label: str, value: dict[str, Any], display: str) -> None:
+        if key == "circumstance.tactic":
+            family = (
+                {"고립", "연락", "가족", "상의를", "알리"} if value.get("kind") == "ISOLATION"
+                else {"긴급", "재촉", "압박", "시한"} if value.get("kind") in {"URGENCY", "DEADLINE_TODAY", "DEADLINE_IMMEDIATE"}
+                else {"불안", "공포", "처벌", "피해"} if value.get("kind") == "FEAR" else set()
+            )
+            if family and any(any(word in existing.casefold() for word in family) for existing_key, _, _, existing in candidates if existing_key == key):
+                return
+        marker = (key, json.dumps(value, ensure_ascii=False, sort_keys=True), display)
+        if marker not in candidate_keys:
+            candidates.append((key, label, value, display))
+            candidate_keys.add(marker)
+
+    organization_labels = {
+        "PROSECUTION_SERVICE": "수사기관", "POLICE_SERVICE": "경찰", "FINANCIAL_SUPERVISORY_SERVICE": "금융기관",
+        "COURT": "법원", "BANK": "은행", "CARD_COMPANY": "카드사", "LOAN_COMPANY": "대출기관",
+    }
+    def organization_display(atom: dict[str, Any], fallback: str) -> str:
+        """Prefer the privacy-safe observed organization phrase over a broad code label."""
+        for term in atom.get("observed_terms") or []:
+            surface = str(term.get("surface_form") or "").strip() if isinstance(term, dict) else str(term).strip()
+            if surface and len(surface) <= 120:
+                return surface
+        return fallback
+    for atom in diagnosis_atoms:
+        predicate = str(atom.get("predicate") or "").upper()
+        atom_class = str(atom.get("atom_class") or "").upper()
+        cues = {str(cue).upper() for cue in atom.get("lexical_cues", [])}
+        if predicate == "CLAIMS_ORGANIZATION":
+            organization_code = str(atom.get("claimed_organization") or "")
+            organization = organization_display(atom, organization_labels.get(organization_code, "특정 기관"))
+            add_structured_candidate("offender.claimed_organization", "사칭 기관", {
+                "organization": organization, "organization_code": organization_code or None,
+            }, f"상대방이 {organization}을(를) 사칭한 정황")
+        elif predicate == "TRANSFER_FUNDS":
+            add_structured_candidate("circumstance.demand", "상대방 요구", {"kind": "TRANSFER", "text": "송금·이체 요구"}, "송금·이체 요구")
+        elif predicate == "OPEN_URL" or "OPEN_URL" in cues:
+            add_structured_candidate("circumstance.demand", "상대방 요구", {"kind": "LINK_OR_APP", "text": "링크·앱 실행 요구"}, "링크·앱 실행 요구")
+        elif predicate in {"AVOID_EXTERNAL_CONTACT", "KEEP_CALL"} or atom.get("communication_control"):
+            add_structured_candidate("circumstance.tactic", "압박·조작 수법", {"kind": "ISOLATION", "text": "외부 연락 제한"}, "외부 연락 제한")
+        elif atom.get("urgency") not in {None, "NONE", "UNKNOWN", "UNKNOWN_DEADLINE"}:
+            add_structured_candidate("circumstance.tactic", "압박·조작 수법", {"kind": "URGENCY", "text": "긴급 처리 압박"}, "긴급 처리 압박")
+        elif atom.get("fear_pressure") not in {None, "NONE"} or atom.get("threat_type"):
+            add_structured_candidate("circumstance.tactic", "압박·조작 수법", {"kind": "FEAR", "text": "불안·공포 유발"}, "불안·공포 유발")
+
+    observation_candidates = {
+        "PURPOSE_SAFE_ACCOUNT": ("circumstance.demand", "안전계좌로 자금 이동을 유도한 정황", {"kind": "SAFE_ACCOUNT"}),
+        "DEADLINE_TODAY": ("circumstance.tactic", "오늘 안에 처리하도록 재촉한 정황", {"kind": "DEADLINE_TODAY"}),
+        "DEADLINE_IMMEDIATE": ("circumstance.tactic", "즉시 처리하도록 재촉한 정황", {"kind": "DEADLINE_IMMEDIATE"}),
+    }
+    for observation in context_features.get("observations", []):
+        code = str(observation.get("code") or "").upper()
+        if str(observation.get("status") or "").upper() == "DENIED":
+            continue
+        candidate = observation_candidates.get(code)
+        if candidate:
+            key, display, value = candidate
+            add_structured_candidate(key, "상대방 요구" if key.endswith("demand") else "압박·조작 수법", value, display)
+    # Keep grouped legacy candidates, then add one reviewable candidate per
+    # fine-grained Atom so values are not collapsed into one panel row.
+    for atom_candidate in project_semantic_atoms_to_fact_candidates(diagnosis_atoms):
+        candidates.append((
+            atom_candidate["semantic_key"], atom_candidate["display_label"],
+            atom_candidate["value"], atom_candidate["display_value"],
+        ))
     store = case_context_v2_repository()
+    amount_atom_ids = {
+        int(float(atom["amount_value_krw"])): str(atom["atom_id"])
+        for atom in diagnosis_atoms
+        if atom.get("amount_value_krw") is not None
+    }
+    def relevant_atom_id(key: str, display: str) -> str | None:
+        text = display.casefold()
+        for atom in diagnosis_atoms:
+            predicate = str(atom.get("predicate") or "").upper()
+            cues = {str(cue).upper() for cue in atom.get("lexical_cues", [])}
+            if key == "offender.claimed_organization" and predicate == "CLAIMS_ORGANIZATION":
+                return str(atom["atom_id"])
+            if key == "offender.incident_claim" and predicate.startswith("CLAIMS_"):
+                return str(atom["atom_id"])
+            if key == "exposure.authentication_information" and (
+                atom.get("auth_secret_type") or predicate in {"DISCLOSE_OTP", "REQUEST_AUTH_INFO"}
+            ):
+                return str(atom["atom_id"])
+            if key == "exposure.personal_information" and (
+                "PERSONAL" in predicate or "SENSITIVE_INFO" in cues
+            ):
+                return str(atom["atom_id"])
+            if key == "device.remote_control_app" and (
+                "DEVICE" in predicate or "DEVICE_CONTROL" in cues or "REMOTE" in predicate
+            ):
+                return str(atom["atom_id"])
+            if key == "transfer.requested.amount" and atom.get("amount_value_krw") is not None:
+                continue
+            if key == "circumstance.demand":
+                if "송금" in text or "이체" in text:
+                    if predicate in {"TRANSFER_FUNDS", "OTHER"} or "TRANSFER" in cues:
+                        return str(atom["atom_id"])
+                if "링크" in text or "앱" in text:
+                    if predicate in {"OPEN_URL", "OPEN_APP"} or "OPEN_URL" in cues or "DEVICE" in predicate:
+                        return str(atom["atom_id"])
+                if "통화" in text or "외부" in text:
+                    if atom.get("communication_control") or predicate in {"AVOID_EXTERNAL_CONTACT", "KEEP_CALL"}:
+                        return str(atom["atom_id"])
+            if key == "circumstance.tactic":
+                if "고립" in text or "연락" in text:
+                    if atom.get("communication_control") or atom.get("isolation_pressure"):
+                        return str(atom["atom_id"])
+                if "긴급" in text or "압박" in text:
+                    if atom.get("urgency") not in {None, "NONE", "UNKNOWN", "UNKNOWN_DEADLINE"} or atom.get("financial_pressure") not in {None, "NONE"}:
+                        return str(atom["atom_id"])
+                if "불안" in text or "공포" in text:
+                    if atom.get("fear_pressure") not in {None, "NONE"} or atom.get("threat_type"):
+                        return str(atom["atom_id"])
+        return None
     for key, label, value, display in candidates:
-        digest = hashlib.sha256(f"{case_id}|{key}|{display}".encode()).hexdigest()[:36]
+        # Include typed value/Atom lineage in the idempotency key so two
+        # separate mentions of the same amount remain separate events.
+        digest = hashlib.sha256(f"{case_id}|{key}|{json.dumps(value, ensure_ascii=False, sort_keys=True)}|{display}".encode()).hexdigest()[:36]
+        amount_atom_id = amount_atom_ids.get(int(value.get("amount_krw", 0))) if key == "transfer.requested.amount" else None
+        support_atom_id = value.get("atom_id") or amount_atom_id or relevant_atom_id(key, display)
+        evidence_refs = [{"type": "STRUCTURED_ATOM", "id": support_atom_id}] if support_atom_id else [dict(base_evidence_ref)]
         await store.create_fact(case_id, {
             "client_request_id": f"initial-{digest}", "semantic_key": key, "display_label": label,
             "value": value, "display_value": display, "confidence": None,
-            "evidence_refs": [{"type": "STRUCTURED_SIGNAL", "id": evidence_id}], "visibility": "BANK_INTERNAL",
+            "evidence_refs": evidence_refs, "visibility": "BANK_INTERNAL",
         }, "system:initial-diagnosis", source_kind="AI_EXTRACTION")
 
 
@@ -2002,6 +2164,16 @@ async def create_case_context_v2_fact(case_id: str, actor_user_id: str, request:
     try:
         # A staff entry is still a proposal until an owner/reviewer confirms it.
         return await store.create_fact(case_id, request.model_dump(mode="json"), actor_user_id)
+    except (KeyError, ContextV2TransitionError, ContextV2ConflictError) as exc:
+        raise_context_v2_error(exc)
+
+
+@app.delete("/api/cases/{case_id}/context-v2/facts/{fact_id}", status_code=204)
+async def delete_rejected_case_context_v2_fact(case_id: str, fact_id: str, actor_user_id: str, expected_version: int) -> None:
+    """Hard-delete a rejected/archive fact only; the repository writes an audit tombstone."""
+    store = await require_context_v2_member(case_id, actor_user_id, access="REVIEW")
+    try:
+        await store.delete_rejected_fact(case_id, fact_id, expected_version, actor_user_id)
     except (KeyError, ContextV2TransitionError, ContextV2ConflictError) as exc:
         raise_context_v2_error(exc)
 

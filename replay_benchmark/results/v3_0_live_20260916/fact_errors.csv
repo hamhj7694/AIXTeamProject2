@@ -1,0 +1,2 @@
+case_id,fact_id,error_type,status,reason
+, ,NOT_RUN,BLOCKED,LIVE_AI_BLOCKED: OPENAI_API_KEY_REQUIRED; benchmark DB unavailable

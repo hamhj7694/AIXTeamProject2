@@ -1,0 +1,2761 @@
+{
+  "schema_version": "csr-canonical-human-gold.v1",
+  "source_benchmark": "benchmark_v1.0",
+  "source_file_sha256": "ef6ffeadb23d688074d6b5a2edbbb2a5aca8976bd7968c813eb9659ab9b05166",
+  "annotation_basis": "ACTUAL_TURN_TEXT_ONLY",
+  "policy": {
+    "source_atomic_facts": "AUDIT_ONLY_NOT_GOLD",
+    "unknown_rule": "Absence of evidence is not false; use UNKNOWN/MISSING unless explicitly negated or reported.",
+    "claim_rule": "Caller/customer statements remain CLAIMED/REPORTED unless externally verified.",
+    "privacy_rule": "No raw transcript copied into this gold file; only structured annotations and short observed lexical cues."
+  },
+  "dataset_findings": {
+    "case_count": 30,
+    "unique_turn_sequences": 2,
+    "FACT_01_to_20": "Same risky 5-turn sequence",
+    "FACT_21_to_30": "Same low-risk/negation 5-turn sequence",
+    "source_atomic_facts_issue": "Values vary across cases despite identical turn text; therefore source atomic_facts are not accepted as human gold."
+  },
+  "cases": [
+    {
+      "case_id": "FACT-01",
+      "source_scenario_class": "HIGH",
+      "human_semantic_template": "RISKY_TEMPLATE_A",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "canonical_summary": {
+        "claimed_organization": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "claimed_role": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "crime_involvement_claim": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "auth_code_disclosure_requested": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "auth_code_shared": {
+          "value": null,
+          "knowledge_status": "UNKNOWN"
+        },
+        "password_shared": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "remote_app_requested": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "isolation_family": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "isolation_bank_staff": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "transfer_requested_or_instructed": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "transfer_amount_krw": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "safe_account_destination_claimed": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "call_control": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "urgency": {
+          "value": "IMMEDIATE",
+          "knowledge_status": "OBSERVED"
+        }
+      },
+      "annotation_warnings": []
+    },
+    {
+      "case_id": "FACT-02",
+      "source_scenario_class": "HIGH",
+      "human_semantic_template": "RISKY_TEMPLATE_A",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "canonical_summary": {
+        "claimed_organization": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "claimed_role": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "crime_involvement_claim": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "auth_code_disclosure_requested": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "auth_code_shared": {
+          "value": null,
+          "knowledge_status": "UNKNOWN"
+        },
+        "password_shared": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "remote_app_requested": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "isolation_family": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "isolation_bank_staff": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "transfer_requested_or_instructed": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "transfer_amount_krw": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "safe_account_destination_claimed": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "call_control": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "urgency": {
+          "value": "IMMEDIATE",
+          "knowledge_status": "OBSERVED"
+        }
+      },
+      "annotation_warnings": []
+    },
+    {
+      "case_id": "FACT-03",
+      "source_scenario_class": "HIGH",
+      "human_semantic_template": "RISKY_TEMPLATE_A",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "canonical_summary": {
+        "claimed_organization": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "claimed_role": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "crime_involvement_claim": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "auth_code_disclosure_requested": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "auth_code_shared": {
+          "value": null,
+          "knowledge_status": "UNKNOWN"
+        },
+        "password_shared": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "remote_app_requested": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "isolation_family": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "isolation_bank_staff": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "transfer_requested_or_instructed": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "transfer_amount_krw": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "safe_account_destination_claimed": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "call_control": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "urgency": {
+          "value": "IMMEDIATE",
+          "knowledge_status": "OBSERVED"
+        }
+      },
+      "annotation_warnings": []
+    },
+    {
+      "case_id": "FACT-04",
+      "source_scenario_class": "HIGH",
+      "human_semantic_template": "RISKY_TEMPLATE_A",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "canonical_summary": {
+        "claimed_organization": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "claimed_role": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "crime_involvement_claim": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "auth_code_disclosure_requested": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "auth_code_shared": {
+          "value": null,
+          "knowledge_status": "UNKNOWN"
+        },
+        "password_shared": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "remote_app_requested": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "isolation_family": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "isolation_bank_staff": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "transfer_requested_or_instructed": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "transfer_amount_krw": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "safe_account_destination_claimed": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "call_control": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "urgency": {
+          "value": "IMMEDIATE",
+          "knowledge_status": "OBSERVED"
+        }
+      },
+      "annotation_warnings": []
+    },
+    {
+      "case_id": "FACT-05",
+      "source_scenario_class": "HIGH",
+      "human_semantic_template": "RISKY_TEMPLATE_A",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "canonical_summary": {
+        "claimed_organization": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "claimed_role": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "crime_involvement_claim": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "auth_code_disclosure_requested": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "auth_code_shared": {
+          "value": null,
+          "knowledge_status": "UNKNOWN"
+        },
+        "password_shared": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "remote_app_requested": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "isolation_family": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "isolation_bank_staff": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "transfer_requested_or_instructed": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "transfer_amount_krw": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "safe_account_destination_claimed": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "call_control": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "urgency": {
+          "value": "IMMEDIATE",
+          "knowledge_status": "OBSERVED"
+        }
+      },
+      "annotation_warnings": []
+    },
+    {
+      "case_id": "FACT-06",
+      "source_scenario_class": "HIGH",
+      "human_semantic_template": "RISKY_TEMPLATE_A",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "canonical_summary": {
+        "claimed_organization": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "claimed_role": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "crime_involvement_claim": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "auth_code_disclosure_requested": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "auth_code_shared": {
+          "value": null,
+          "knowledge_status": "UNKNOWN"
+        },
+        "password_shared": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "remote_app_requested": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "isolation_family": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "isolation_bank_staff": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "transfer_requested_or_instructed": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "transfer_amount_krw": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "safe_account_destination_claimed": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "call_control": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "urgency": {
+          "value": "IMMEDIATE",
+          "knowledge_status": "OBSERVED"
+        }
+      },
+      "annotation_warnings": []
+    },
+    {
+      "case_id": "FACT-07",
+      "source_scenario_class": "HIGH",
+      "human_semantic_template": "RISKY_TEMPLATE_A",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "canonical_summary": {
+        "claimed_organization": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "claimed_role": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "crime_involvement_claim": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "auth_code_disclosure_requested": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "auth_code_shared": {
+          "value": null,
+          "knowledge_status": "UNKNOWN"
+        },
+        "password_shared": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "remote_app_requested": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "isolation_family": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "isolation_bank_staff": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "transfer_requested_or_instructed": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "transfer_amount_krw": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "safe_account_destination_claimed": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "call_control": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "urgency": {
+          "value": "IMMEDIATE",
+          "knowledge_status": "OBSERVED"
+        }
+      },
+      "annotation_warnings": []
+    },
+    {
+      "case_id": "FACT-08",
+      "source_scenario_class": "HIGH",
+      "human_semantic_template": "RISKY_TEMPLATE_A",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "canonical_summary": {
+        "claimed_organization": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "claimed_role": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "crime_involvement_claim": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "auth_code_disclosure_requested": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "auth_code_shared": {
+          "value": null,
+          "knowledge_status": "UNKNOWN"
+        },
+        "password_shared": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "remote_app_requested": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "isolation_family": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "isolation_bank_staff": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "transfer_requested_or_instructed": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "transfer_amount_krw": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "safe_account_destination_claimed": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "call_control": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "urgency": {
+          "value": "IMMEDIATE",
+          "knowledge_status": "OBSERVED"
+        }
+      },
+      "annotation_warnings": []
+    },
+    {
+      "case_id": "FACT-09",
+      "source_scenario_class": "HIGH",
+      "human_semantic_template": "RISKY_TEMPLATE_A",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "canonical_summary": {
+        "claimed_organization": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "claimed_role": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "crime_involvement_claim": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "auth_code_disclosure_requested": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "auth_code_shared": {
+          "value": null,
+          "knowledge_status": "UNKNOWN"
+        },
+        "password_shared": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "remote_app_requested": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "isolation_family": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "isolation_bank_staff": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "transfer_requested_or_instructed": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "transfer_amount_krw": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "safe_account_destination_claimed": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "call_control": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "urgency": {
+          "value": "IMMEDIATE",
+          "knowledge_status": "OBSERVED"
+        }
+      },
+      "annotation_warnings": []
+    },
+    {
+      "case_id": "FACT-10",
+      "source_scenario_class": "HIGH",
+      "human_semantic_template": "RISKY_TEMPLATE_A",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "canonical_summary": {
+        "claimed_organization": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "claimed_role": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "crime_involvement_claim": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "auth_code_disclosure_requested": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "auth_code_shared": {
+          "value": null,
+          "knowledge_status": "UNKNOWN"
+        },
+        "password_shared": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "remote_app_requested": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "isolation_family": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "isolation_bank_staff": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "transfer_requested_or_instructed": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "transfer_amount_krw": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "safe_account_destination_claimed": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "call_control": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "urgency": {
+          "value": "IMMEDIATE",
+          "knowledge_status": "OBSERVED"
+        }
+      },
+      "annotation_warnings": []
+    },
+    {
+      "case_id": "FACT-11",
+      "source_scenario_class": "MIXED",
+      "human_semantic_template": "RISKY_TEMPLATE_A",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "canonical_summary": {
+        "claimed_organization": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "claimed_role": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "crime_involvement_claim": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "auth_code_disclosure_requested": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "auth_code_shared": {
+          "value": null,
+          "knowledge_status": "UNKNOWN"
+        },
+        "password_shared": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "remote_app_requested": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "isolation_family": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "isolation_bank_staff": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "transfer_requested_or_instructed": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "transfer_amount_krw": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "safe_account_destination_claimed": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "call_control": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "urgency": {
+          "value": "IMMEDIATE",
+          "knowledge_status": "OBSERVED"
+        }
+      },
+      "annotation_warnings": [
+        "SOURCE_SCENARIO_CLASS_CONFLICT: turns are identical to FACT-01~10 HIGH cases; semantic gold is not weakened by source class."
+      ]
+    },
+    {
+      "case_id": "FACT-12",
+      "source_scenario_class": "MIXED",
+      "human_semantic_template": "RISKY_TEMPLATE_A",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "canonical_summary": {
+        "claimed_organization": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "claimed_role": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "crime_involvement_claim": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "auth_code_disclosure_requested": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "auth_code_shared": {
+          "value": null,
+          "knowledge_status": "UNKNOWN"
+        },
+        "password_shared": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "remote_app_requested": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "isolation_family": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "isolation_bank_staff": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "transfer_requested_or_instructed": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "transfer_amount_krw": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "safe_account_destination_claimed": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "call_control": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "urgency": {
+          "value": "IMMEDIATE",
+          "knowledge_status": "OBSERVED"
+        }
+      },
+      "annotation_warnings": [
+        "SOURCE_SCENARIO_CLASS_CONFLICT: turns are identical to FACT-01~10 HIGH cases; semantic gold is not weakened by source class."
+      ]
+    },
+    {
+      "case_id": "FACT-13",
+      "source_scenario_class": "MIXED",
+      "human_semantic_template": "RISKY_TEMPLATE_A",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "canonical_summary": {
+        "claimed_organization": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "claimed_role": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "crime_involvement_claim": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "auth_code_disclosure_requested": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "auth_code_shared": {
+          "value": null,
+          "knowledge_status": "UNKNOWN"
+        },
+        "password_shared": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "remote_app_requested": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "isolation_family": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "isolation_bank_staff": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "transfer_requested_or_instructed": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "transfer_amount_krw": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "safe_account_destination_claimed": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "call_control": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "urgency": {
+          "value": "IMMEDIATE",
+          "knowledge_status": "OBSERVED"
+        }
+      },
+      "annotation_warnings": [
+        "SOURCE_SCENARIO_CLASS_CONFLICT: turns are identical to FACT-01~10 HIGH cases; semantic gold is not weakened by source class."
+      ]
+    },
+    {
+      "case_id": "FACT-14",
+      "source_scenario_class": "MIXED",
+      "human_semantic_template": "RISKY_TEMPLATE_A",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "canonical_summary": {
+        "claimed_organization": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "claimed_role": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "crime_involvement_claim": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "auth_code_disclosure_requested": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "auth_code_shared": {
+          "value": null,
+          "knowledge_status": "UNKNOWN"
+        },
+        "password_shared": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "remote_app_requested": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "isolation_family": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "isolation_bank_staff": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "transfer_requested_or_instructed": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "transfer_amount_krw": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "safe_account_destination_claimed": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "call_control": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "urgency": {
+          "value": "IMMEDIATE",
+          "knowledge_status": "OBSERVED"
+        }
+      },
+      "annotation_warnings": [
+        "SOURCE_SCENARIO_CLASS_CONFLICT: turns are identical to FACT-01~10 HIGH cases; semantic gold is not weakened by source class."
+      ]
+    },
+    {
+      "case_id": "FACT-15",
+      "source_scenario_class": "MIXED",
+      "human_semantic_template": "RISKY_TEMPLATE_A",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "canonical_summary": {
+        "claimed_organization": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "claimed_role": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "crime_involvement_claim": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "auth_code_disclosure_requested": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "auth_code_shared": {
+          "value": null,
+          "knowledge_status": "UNKNOWN"
+        },
+        "password_shared": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "remote_app_requested": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "isolation_family": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "isolation_bank_staff": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "transfer_requested_or_instructed": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "transfer_amount_krw": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "safe_account_destination_claimed": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "call_control": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "urgency": {
+          "value": "IMMEDIATE",
+          "knowledge_status": "OBSERVED"
+        }
+      },
+      "annotation_warnings": [
+        "SOURCE_SCENARIO_CLASS_CONFLICT: turns are identical to FACT-01~10 HIGH cases; semantic gold is not weakened by source class."
+      ]
+    },
+    {
+      "case_id": "FACT-16",
+      "source_scenario_class": "MIXED",
+      "human_semantic_template": "RISKY_TEMPLATE_A",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "canonical_summary": {
+        "claimed_organization": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "claimed_role": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "crime_involvement_claim": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "auth_code_disclosure_requested": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "auth_code_shared": {
+          "value": null,
+          "knowledge_status": "UNKNOWN"
+        },
+        "password_shared": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "remote_app_requested": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "isolation_family": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "isolation_bank_staff": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "transfer_requested_or_instructed": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "transfer_amount_krw": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "safe_account_destination_claimed": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "call_control": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "urgency": {
+          "value": "IMMEDIATE",
+          "knowledge_status": "OBSERVED"
+        }
+      },
+      "annotation_warnings": [
+        "SOURCE_SCENARIO_CLASS_CONFLICT: turns are identical to FACT-01~10 HIGH cases; semantic gold is not weakened by source class."
+      ]
+    },
+    {
+      "case_id": "FACT-17",
+      "source_scenario_class": "MIXED",
+      "human_semantic_template": "RISKY_TEMPLATE_A",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "canonical_summary": {
+        "claimed_organization": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "claimed_role": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "crime_involvement_claim": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "auth_code_disclosure_requested": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "auth_code_shared": {
+          "value": null,
+          "knowledge_status": "UNKNOWN"
+        },
+        "password_shared": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "remote_app_requested": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "isolation_family": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "isolation_bank_staff": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "transfer_requested_or_instructed": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "transfer_amount_krw": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "safe_account_destination_claimed": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "call_control": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "urgency": {
+          "value": "IMMEDIATE",
+          "knowledge_status": "OBSERVED"
+        }
+      },
+      "annotation_warnings": [
+        "SOURCE_SCENARIO_CLASS_CONFLICT: turns are identical to FACT-01~10 HIGH cases; semantic gold is not weakened by source class."
+      ]
+    },
+    {
+      "case_id": "FACT-18",
+      "source_scenario_class": "MIXED",
+      "human_semantic_template": "RISKY_TEMPLATE_A",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "canonical_summary": {
+        "claimed_organization": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "claimed_role": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "crime_involvement_claim": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "auth_code_disclosure_requested": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "auth_code_shared": {
+          "value": null,
+          "knowledge_status": "UNKNOWN"
+        },
+        "password_shared": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "remote_app_requested": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "isolation_family": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "isolation_bank_staff": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "transfer_requested_or_instructed": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "transfer_amount_krw": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "safe_account_destination_claimed": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "call_control": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "urgency": {
+          "value": "IMMEDIATE",
+          "knowledge_status": "OBSERVED"
+        }
+      },
+      "annotation_warnings": [
+        "SOURCE_SCENARIO_CLASS_CONFLICT: turns are identical to FACT-01~10 HIGH cases; semantic gold is not weakened by source class."
+      ]
+    },
+    {
+      "case_id": "FACT-19",
+      "source_scenario_class": "MIXED",
+      "human_semantic_template": "RISKY_TEMPLATE_A",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "canonical_summary": {
+        "claimed_organization": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "claimed_role": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "crime_involvement_claim": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "auth_code_disclosure_requested": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "auth_code_shared": {
+          "value": null,
+          "knowledge_status": "UNKNOWN"
+        },
+        "password_shared": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "remote_app_requested": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "isolation_family": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "isolation_bank_staff": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "transfer_requested_or_instructed": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "transfer_amount_krw": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "safe_account_destination_claimed": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "call_control": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "urgency": {
+          "value": "IMMEDIATE",
+          "knowledge_status": "OBSERVED"
+        }
+      },
+      "annotation_warnings": [
+        "SOURCE_SCENARIO_CLASS_CONFLICT: turns are identical to FACT-01~10 HIGH cases; semantic gold is not weakened by source class."
+      ]
+    },
+    {
+      "case_id": "FACT-20",
+      "source_scenario_class": "MIXED",
+      "human_semantic_template": "RISKY_TEMPLATE_A",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": [
+            "AUTHORITY_IMPERSONATION",
+            "CRIME_INVOLVEMENT_CLAIM"
+          ]
+        },
+        {
+          "turn": 2,
+          "patterns": [
+            "AUTH_REQUEST"
+          ]
+        },
+        {
+          "turn": 3,
+          "patterns": [
+            "ISOLATION"
+          ]
+        },
+        {
+          "turn": 4,
+          "patterns": [
+            "TRANSFER_REQUEST",
+            "SAFE_ACCOUNT_PRETEXT"
+          ]
+        },
+        {
+          "turn": 5,
+          "patterns": [
+            "URGENCY",
+            "THREAT_PRESSURE",
+            "CALL_CONTROL",
+            "DIRECT_COMMAND"
+          ]
+        }
+      ],
+      "canonical_summary": {
+        "claimed_organization": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "claimed_role": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "crime_involvement_claim": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "auth_code_disclosure_requested": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "auth_code_shared": {
+          "value": null,
+          "knowledge_status": "UNKNOWN"
+        },
+        "password_shared": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "remote_app_requested": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "isolation_family": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "isolation_bank_staff": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "transfer_requested_or_instructed": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "transfer_amount_krw": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "safe_account_destination_claimed": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "call_control": {
+          "value": true,
+          "knowledge_status": "OBSERVED"
+        },
+        "urgency": {
+          "value": "IMMEDIATE",
+          "knowledge_status": "OBSERVED"
+        }
+      },
+      "annotation_warnings": [
+        "SOURCE_SCENARIO_CLASS_CONFLICT: turns are identical to FACT-01~10 HIGH cases; semantic gold is not weakened by source class."
+      ]
+    },
+    {
+      "case_id": "FACT-21",
+      "source_scenario_class": "LOW",
+      "human_semantic_template": "LOW_TEMPLATE_B",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": []
+        },
+        {
+          "turn": 2,
+          "patterns": []
+        },
+        {
+          "turn": 3,
+          "patterns": []
+        },
+        {
+          "turn": 4,
+          "patterns": []
+        },
+        {
+          "turn": 5,
+          "patterns": []
+        }
+      ],
+      "canonical_summary": {
+        "claimed_organization": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "claimed_role": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "auth_code_shared": {
+          "value": false,
+          "knowledge_status": "REPORTED"
+        },
+        "password_shared": {
+          "value": false,
+          "knowledge_status": "REPORTED"
+        },
+        "remote_app_requested": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "isolation_family": {
+          "value": false,
+          "knowledge_status": "REPORTED_COUNTEREVIDENCE"
+        },
+        "isolation_bank_staff": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "transfer_requested": {
+          "value": false,
+          "knowledge_status": "REPORTED"
+        },
+        "transfer_amount_krw": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "call_ended": {
+          "value": true,
+          "knowledge_status": "REPORTED"
+        }
+      },
+      "annotation_warnings": []
+    },
+    {
+      "case_id": "FACT-22",
+      "source_scenario_class": "LOW",
+      "human_semantic_template": "LOW_TEMPLATE_B",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": []
+        },
+        {
+          "turn": 2,
+          "patterns": []
+        },
+        {
+          "turn": 3,
+          "patterns": []
+        },
+        {
+          "turn": 4,
+          "patterns": []
+        },
+        {
+          "turn": 5,
+          "patterns": []
+        }
+      ],
+      "canonical_summary": {
+        "claimed_organization": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "claimed_role": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "auth_code_shared": {
+          "value": false,
+          "knowledge_status": "REPORTED"
+        },
+        "password_shared": {
+          "value": false,
+          "knowledge_status": "REPORTED"
+        },
+        "remote_app_requested": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "isolation_family": {
+          "value": false,
+          "knowledge_status": "REPORTED_COUNTEREVIDENCE"
+        },
+        "isolation_bank_staff": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "transfer_requested": {
+          "value": false,
+          "knowledge_status": "REPORTED"
+        },
+        "transfer_amount_krw": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "call_ended": {
+          "value": true,
+          "knowledge_status": "REPORTED"
+        }
+      },
+      "annotation_warnings": []
+    },
+    {
+      "case_id": "FACT-23",
+      "source_scenario_class": "LOW",
+      "human_semantic_template": "LOW_TEMPLATE_B",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": []
+        },
+        {
+          "turn": 2,
+          "patterns": []
+        },
+        {
+          "turn": 3,
+          "patterns": []
+        },
+        {
+          "turn": 4,
+          "patterns": []
+        },
+        {
+          "turn": 5,
+          "patterns": []
+        }
+      ],
+      "canonical_summary": {
+        "claimed_organization": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "claimed_role": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "auth_code_shared": {
+          "value": false,
+          "knowledge_status": "REPORTED"
+        },
+        "password_shared": {
+          "value": false,
+          "knowledge_status": "REPORTED"
+        },
+        "remote_app_requested": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "isolation_family": {
+          "value": false,
+          "knowledge_status": "REPORTED_COUNTEREVIDENCE"
+        },
+        "isolation_bank_staff": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "transfer_requested": {
+          "value": false,
+          "knowledge_status": "REPORTED"
+        },
+        "transfer_amount_krw": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "call_ended": {
+          "value": true,
+          "knowledge_status": "REPORTED"
+        }
+      },
+      "annotation_warnings": []
+    },
+    {
+      "case_id": "FACT-24",
+      "source_scenario_class": "LOW",
+      "human_semantic_template": "LOW_TEMPLATE_B",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": []
+        },
+        {
+          "turn": 2,
+          "patterns": []
+        },
+        {
+          "turn": 3,
+          "patterns": []
+        },
+        {
+          "turn": 4,
+          "patterns": []
+        },
+        {
+          "turn": 5,
+          "patterns": []
+        }
+      ],
+      "canonical_summary": {
+        "claimed_organization": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "claimed_role": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "auth_code_shared": {
+          "value": false,
+          "knowledge_status": "REPORTED"
+        },
+        "password_shared": {
+          "value": false,
+          "knowledge_status": "REPORTED"
+        },
+        "remote_app_requested": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "isolation_family": {
+          "value": false,
+          "knowledge_status": "REPORTED_COUNTEREVIDENCE"
+        },
+        "isolation_bank_staff": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "transfer_requested": {
+          "value": false,
+          "knowledge_status": "REPORTED"
+        },
+        "transfer_amount_krw": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "call_ended": {
+          "value": true,
+          "knowledge_status": "REPORTED"
+        }
+      },
+      "annotation_warnings": []
+    },
+    {
+      "case_id": "FACT-25",
+      "source_scenario_class": "LOW",
+      "human_semantic_template": "LOW_TEMPLATE_B",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": []
+        },
+        {
+          "turn": 2,
+          "patterns": []
+        },
+        {
+          "turn": 3,
+          "patterns": []
+        },
+        {
+          "turn": 4,
+          "patterns": []
+        },
+        {
+          "turn": 5,
+          "patterns": []
+        }
+      ],
+      "canonical_summary": {
+        "claimed_organization": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "claimed_role": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "auth_code_shared": {
+          "value": false,
+          "knowledge_status": "REPORTED"
+        },
+        "password_shared": {
+          "value": false,
+          "knowledge_status": "REPORTED"
+        },
+        "remote_app_requested": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "isolation_family": {
+          "value": false,
+          "knowledge_status": "REPORTED_COUNTEREVIDENCE"
+        },
+        "isolation_bank_staff": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "transfer_requested": {
+          "value": false,
+          "knowledge_status": "REPORTED"
+        },
+        "transfer_amount_krw": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "call_ended": {
+          "value": true,
+          "knowledge_status": "REPORTED"
+        }
+      },
+      "annotation_warnings": []
+    },
+    {
+      "case_id": "FACT-26",
+      "source_scenario_class": "LOW",
+      "human_semantic_template": "LOW_TEMPLATE_B",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": []
+        },
+        {
+          "turn": 2,
+          "patterns": []
+        },
+        {
+          "turn": 3,
+          "patterns": []
+        },
+        {
+          "turn": 4,
+          "patterns": []
+        },
+        {
+          "turn": 5,
+          "patterns": []
+        }
+      ],
+      "canonical_summary": {
+        "claimed_organization": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "claimed_role": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "auth_code_shared": {
+          "value": false,
+          "knowledge_status": "REPORTED"
+        },
+        "password_shared": {
+          "value": false,
+          "knowledge_status": "REPORTED"
+        },
+        "remote_app_requested": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "isolation_family": {
+          "value": false,
+          "knowledge_status": "REPORTED_COUNTEREVIDENCE"
+        },
+        "isolation_bank_staff": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "transfer_requested": {
+          "value": false,
+          "knowledge_status": "REPORTED"
+        },
+        "transfer_amount_krw": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "call_ended": {
+          "value": true,
+          "knowledge_status": "REPORTED"
+        }
+      },
+      "annotation_warnings": []
+    },
+    {
+      "case_id": "FACT-27",
+      "source_scenario_class": "LOW",
+      "human_semantic_template": "LOW_TEMPLATE_B",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": []
+        },
+        {
+          "turn": 2,
+          "patterns": []
+        },
+        {
+          "turn": 3,
+          "patterns": []
+        },
+        {
+          "turn": 4,
+          "patterns": []
+        },
+        {
+          "turn": 5,
+          "patterns": []
+        }
+      ],
+      "canonical_summary": {
+        "claimed_organization": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "claimed_role": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "auth_code_shared": {
+          "value": false,
+          "knowledge_status": "REPORTED"
+        },
+        "password_shared": {
+          "value": false,
+          "knowledge_status": "REPORTED"
+        },
+        "remote_app_requested": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "isolation_family": {
+          "value": false,
+          "knowledge_status": "REPORTED_COUNTEREVIDENCE"
+        },
+        "isolation_bank_staff": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "transfer_requested": {
+          "value": false,
+          "knowledge_status": "REPORTED"
+        },
+        "transfer_amount_krw": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "call_ended": {
+          "value": true,
+          "knowledge_status": "REPORTED"
+        }
+      },
+      "annotation_warnings": []
+    },
+    {
+      "case_id": "FACT-28",
+      "source_scenario_class": "LOW",
+      "human_semantic_template": "LOW_TEMPLATE_B",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": []
+        },
+        {
+          "turn": 2,
+          "patterns": []
+        },
+        {
+          "turn": 3,
+          "patterns": []
+        },
+        {
+          "turn": 4,
+          "patterns": []
+        },
+        {
+          "turn": 5,
+          "patterns": []
+        }
+      ],
+      "canonical_summary": {
+        "claimed_organization": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "claimed_role": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "auth_code_shared": {
+          "value": false,
+          "knowledge_status": "REPORTED"
+        },
+        "password_shared": {
+          "value": false,
+          "knowledge_status": "REPORTED"
+        },
+        "remote_app_requested": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "isolation_family": {
+          "value": false,
+          "knowledge_status": "REPORTED_COUNTEREVIDENCE"
+        },
+        "isolation_bank_staff": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "transfer_requested": {
+          "value": false,
+          "knowledge_status": "REPORTED"
+        },
+        "transfer_amount_krw": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "call_ended": {
+          "value": true,
+          "knowledge_status": "REPORTED"
+        }
+      },
+      "annotation_warnings": []
+    },
+    {
+      "case_id": "FACT-29",
+      "source_scenario_class": "LOW",
+      "human_semantic_template": "LOW_TEMPLATE_B",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": []
+        },
+        {
+          "turn": 2,
+          "patterns": []
+        },
+        {
+          "turn": 3,
+          "patterns": []
+        },
+        {
+          "turn": 4,
+          "patterns": []
+        },
+        {
+          "turn": 5,
+          "patterns": []
+        }
+      ],
+      "canonical_summary": {
+        "claimed_organization": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "claimed_role": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "auth_code_shared": {
+          "value": false,
+          "knowledge_status": "REPORTED"
+        },
+        "password_shared": {
+          "value": false,
+          "knowledge_status": "REPORTED"
+        },
+        "remote_app_requested": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "isolation_family": {
+          "value": false,
+          "knowledge_status": "REPORTED_COUNTEREVIDENCE"
+        },
+        "isolation_bank_staff": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "transfer_requested": {
+          "value": false,
+          "knowledge_status": "REPORTED"
+        },
+        "transfer_amount_krw": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "call_ended": {
+          "value": true,
+          "knowledge_status": "REPORTED"
+        }
+      },
+      "annotation_warnings": []
+    },
+    {
+      "case_id": "FACT-30",
+      "source_scenario_class": "LOW",
+      "human_semantic_template": "LOW_TEMPLATE_B",
+      "source_declared_patterns": [
+        {
+          "turn": 1,
+          "patterns": []
+        },
+        {
+          "turn": 2,
+          "patterns": []
+        },
+        {
+          "turn": 3,
+          "patterns": []
+        },
+        {
+          "turn": 4,
+          "patterns": []
+        },
+        {
+          "turn": 5,
+          "patterns": []
+        }
+      ],
+      "canonical_summary": {
+        "claimed_organization": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "claimed_role": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "auth_code_shared": {
+          "value": false,
+          "knowledge_status": "REPORTED"
+        },
+        "password_shared": {
+          "value": false,
+          "knowledge_status": "REPORTED"
+        },
+        "remote_app_requested": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "isolation_family": {
+          "value": false,
+          "knowledge_status": "REPORTED_COUNTEREVIDENCE"
+        },
+        "isolation_bank_staff": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "transfer_requested": {
+          "value": false,
+          "knowledge_status": "REPORTED"
+        },
+        "transfer_amount_krw": {
+          "value": null,
+          "knowledge_status": "MISSING"
+        },
+        "call_ended": {
+          "value": true,
+          "knowledge_status": "REPORTED"
+        }
+      },
+      "annotation_warnings": []
+    }
+  ]
+}

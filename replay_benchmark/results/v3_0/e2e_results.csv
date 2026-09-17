@@ -1,0 +1,2 @@
+case_id,fact_id,semantic_key,gold_value,criticality,message_saved,fact_extracted,fact_correct,evidence_linked,polarity_correct,context_present,panel_present,reload_present,ai_context_present,ai_answer_correct,status,reason
+,,,,,,,,,,,,,,,NOT RUN,Live AI provider and isolated MySQL/Docker environment are unavailable.

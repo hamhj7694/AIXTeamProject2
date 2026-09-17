@@ -27,6 +27,11 @@ export const updateContextTask = (caseId: string, taskId: string, version: numbe
   { method: 'PATCH', body: JSON.stringify({ expected_version: version, status }) },
 );
 
+export const deleteRejectedContextFact = (caseId: string, factId: string, version: number) => request<void>(
+  `/api/cases/${encodeURIComponent(caseId)}/context-v2/facts/${encodeURIComponent(factId)}?actor_user_id=${encodeURIComponent(CURRENT_BANK_USER.user_id)}&expected_version=${version}`,
+  { method: 'DELETE' },
+);
+
 export const editContextTask = (caseId: string, taskId: string, version: number, title: string, description: string) => request(
   `/api/cases/${encodeURIComponent(caseId)}/context-v2/tasks/${encodeURIComponent(taskId)}?actor_user_id=${encodeURIComponent(CURRENT_BANK_USER.user_id)}`,
   { method: 'PATCH', body: JSON.stringify({ expected_version: version, title, description }) },

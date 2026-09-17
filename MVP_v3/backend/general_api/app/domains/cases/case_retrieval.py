@@ -97,6 +97,7 @@ retriever = CaseRetriever()
 # Explicit contract mapping only: never guess a fact's meaning from its label.
 SEMANTIC_FIELDS = {
     "transfer.actual.status": "transfer_status",
+    "transfer.requested.amount": "requested_amount_krw",
     "transfer.purpose": "transfer_purpose",
     "exposure.personal_information": "personal_information_exposure",
     "exposure.authentication_information": "authentication_information_exposure",

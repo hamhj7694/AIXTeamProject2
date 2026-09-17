@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import unittest
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 
 import general_api.app.main as main
 from ai_api.app.domains.case_support.context_fact_extraction_service import ContextFactExtractionService
+from contracts.public_api.case_context_v2 import PublicCaseContextResourcesV2
 from general_api.app.domains.cases.context_v3.panel import build_context_panel_v3
 from general_api.app.domains.cases.repository import InMemoryCaseRepository
 
@@ -35,6 +37,55 @@ class ContextV3VerticalSliceTest(unittest.IsolatedAsyncioTestCase):
         panel = build_context_panel_v3(repository._records[0], resources, view="bank", verifications=[], actions=[], messages=[], progress=[])
         populated = {section.section_id for section in panel.sections if section.items or any(section.groups.values())}
         self.assertTrue({"EXPOSURE", "IMPERSONATION_CONTACT", "FRAUD_CIRCUMSTANCES"}.issubset(populated))
+
+    async def test_structured_a_result_is_projected_for_bank_only(self) -> None:
+        case = {
+            "case_id": "VP-STRUCTURED", "context_revision": 4,
+            "initial_brief": "구조화 분석", "status": "TRIAGE",
+            "diagnosis": {
+                "semantic_atoms": [{
+                    "atom_id": "ATM-1", "atom_class": "ACTION_REQUEST", "predicate": "DISCLOSE_OTP",
+                    "action_state": "REQUESTED", "modality": None, "claim_status": "UNVERIFIED", "source_turn_id": 1,
+                }],
+                "semantic_relations": [],
+                "context_signals": [{
+                    "signal_id": "SIG-1", "signal_code": "AUTH_INFO_REQUEST", "severity": "HIGH",
+                    "confidence": 0.9, "claim_status": "CALLER_CLAIM", "atom_ids": ["ATM-1"],
+                }],
+                "case_context_features": {"requested_action_codes": ["REQUEST_AUTH_INFO"]},
+            },
+        }
+        resources = PublicCaseContextResourcesV2(case_id="VP-STRUCTURED", context_revision=4)
+        bank_panel = build_context_panel_v3(case, resources, view="bank", verifications=[], actions=[], messages=[], progress=[])
+        customer_panel = build_context_panel_v3(case, resources, view="customer", verifications=[], actions=[], messages=[], progress=[])
+
+        self.assertIsNotNone(bank_panel.structured_context)
+        self.assertEqual(len(bank_panel.structured_context.signals), 1)
+        self.assertEqual(bank_panel.structured_context.signals[0].atom_ids, ["ATM-1"])
+        self.assertIsNone(customer_panel.structured_context)
+
+    def test_bank_evidence_ref_has_lineage_summary(self) -> None:
+        now = datetime.now(timezone.utc)
+        case = {
+            "case_id": "VP-EVIDENCE", "context_revision": 1,
+            "initial_brief": "근거 연결", "status": "TRIAGE",
+            "diagnosis": {
+                "semantic_atoms": [{"atom_id": "ATM-1", "atom_class": "ACTION_REQUEST", "predicate": "DISCLOSE_OTP", "source_turn_id": 1}],
+                "context_signals": [{"signal_id": "SIG-1", "signal_code": "AUTH_INFO_REQUEST", "severity": "HIGH", "confidence": 0.9, "claim_status": "CALLER_CLAIM", "atom_ids": ["ATM-1"]}],
+            },
+        }
+        resources = PublicCaseContextResourcesV2.model_validate({
+            "case_id": "VP-EVIDENCE", "context_revision": 1, "facts": [{
+                "fact_id": "FACT-1", "case_id": "VP-EVIDENCE", "semantic_key": "exposure.authentication_information",
+                "display_label": "인증정보 노출", "value": {"status": "REQUESTED"}, "display_value": "인증정보 제공 요구",
+                "source_kind": "AI_EXTRACTION", "status": "PROPOSED",
+                "evidence_refs": [{"type": "STRUCTURED_SIGNAL", "id": "SIG-1"}],
+                "visibility": "BANK_INTERNAL", "version": 1, "created_at": now, "updated_at": now,
+            }],
+        })
+        panel = build_context_panel_v3(case, resources, view="bank", verifications=[], actions=[], messages=[], progress=[])
+        item = panel.sections[1].items[0]
+        self.assertEqual(item.evidence_refs[0].summary, "분석 근거 · 인증정보 제공 요구")
 
 
 if __name__ == "__main__":

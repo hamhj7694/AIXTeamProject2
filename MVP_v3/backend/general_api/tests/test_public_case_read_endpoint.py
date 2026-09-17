@@ -14,6 +14,7 @@ RECORD = {
     "input_text": "검찰청이라며 송금을 요구했습니다.",
     "risk": "HIGH",
     "risk_score": 98.5,
+    "case_name": "보이스피싱 의심 사건",
     "mode": "PREVENT",
     "status": "TRIAGE",
     "initial_brief": "기관 사칭과 송금 요구 정황이 확인되었습니다.",
@@ -50,9 +51,10 @@ class PublicCaseReadEndpointTest(unittest.TestCase):
         self.assertEqual(item["case_id"], "VP-READ001")
         self.assertEqual(item["risk"], "HIGH")
         self.assertEqual(item["initial_brief"], RECORD["initial_brief"])
+        self.assertEqual(item["case_name"], RECORD["case_name"])
         self.assertNotIn("internal_only", item)
         self.assertEqual(set(item), {
-            "case_id", "version", "client_request_id", "input_text", "risk", "risk_score", "mode", "status",
+            "case_id", "version", "case_name", "client_request_id", "input_text", "risk", "risk_score", "mode", "status",
             "initial_brief", "diagnosis", "initial_report", "created_at", "updated_at",
             "victim_transfer_status",
         })
