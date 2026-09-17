@@ -215,6 +215,8 @@ class CaseActivityEndpointTest(unittest.TestCase):
         self.assertEqual([voice.status_code, active.status_code, transcript.status_code, final.status_code], [201, 200, 201, 200])
         self.assertEqual(final.json()["status"], "FINAL")
         self.generate_final_report.assert_awaited_once()
+        report_input = self.generate_final_report.await_args.args[0]
+        self.assertIn("위험도", report_input["case_summary"])
         finalize_args = self.repository.finalize_report.await_args.args
         self.assertEqual(finalize_args[:3], ("VP-ACTIVITY", 1, "종료"))
         self.assertEqual(finalize_args[4]["title"], FINAL_AI_REPORT["title"])
@@ -223,9 +225,11 @@ class CaseActivityEndpointTest(unittest.TestCase):
             [
                 "title", "executive_summary", "incident_summary", "customer_impact_summary",
                 "verified_facts", "verification_results", "actions_taken", "unresolved_items",
-                "decision_basis", "resolution", "follow_up", "cautions",
+                "decision_basis", "resolution", "follow_up", "cautions", "report_metadata",
             ],
         )
+        metadata = next(item for item in finalize_args[3] if item["section_key"] == "report_metadata")
+        self.assertEqual(metadata["content"]["summary_source_revision"], 1)
 
     def test_closed_bank_bundle_includes_canonical_final_report(self) -> None:
         self.repository.get.return_value = {**BUNDLE_CASE, "status": "CLOSED", "mode": "CLOSED"}

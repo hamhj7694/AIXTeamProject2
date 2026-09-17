@@ -11,6 +11,8 @@ export interface TimelineEntry {
   data: CaseMessage | CustomerQuestion | VerificationTask | CaseAction | CaseEvent | InitialReport;
 }
 
+export const actionTimelineOccurredAt = (action: CaseAction): string => action.updated_at || action.created_at;
+
 export const buildTimeline = (bundle: CaseBundle, includeTechnicalEvents: boolean): TimelineEntry[] => {
   let sequence = 0;
   const entries: TimelineEntry[] = [];
@@ -42,7 +44,9 @@ export const buildTimeline = (bundle: CaseBundle, includeTechnicalEvents: boolea
     }
   }
 
-  for (const action of bundle.recent_actions ?? []) entries.push({ id: `action-${action.action_id}`, kind: 'ACTION', occurredAt: action.created_at, sequence: sequence++, data: action });
+  for (const action of bundle.recent_actions ?? []) {
+    entries.push({ id: `action-${action.action_id}`, kind: 'ACTION', occurredAt: actionTimelineOccurredAt(action), sequence: sequence++, data: action });
+  }
   if (bundle.final_report) entries.push({ id: `final-report-${bundle.final_report.report_id}-${bundle.final_report.report_version}`, kind: 'FINAL_REPORT', occurredAt: bundle.final_report.created_at, sequence: sequence++, data: bundle.final_report });
   if (includeTechnicalEvents) for (const event of bundle.recent_events ?? []) entries.push({ id: `event-${event.event_id}`, kind: 'EVENT', occurredAt: event.occurred_at, sequence: sequence++, data: event });
 

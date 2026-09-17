@@ -133,7 +133,7 @@ from .domains.cases.case_context_v2_repository import (
 )
 from .domains.cases.mysql_repository import MySqlCaseRepository
 from .domains.cases.context_v3.semantic_keys import ALLOWED_SEMANTIC_KEYS, proposal_dedupe_key
-from .domains.cases.context_v3.panel import build_context_panel_v3
+from .domains.cases.context_v3.panel import build_context_panel_v3, build_summary_projection
 from .domains.cases.service import AnalyzeCaseService, InvalidCaseTransitionError, transition_case
 
 
@@ -2227,11 +2227,17 @@ async def update_case_action(case_id: str, action_id: str, actor_user_id: str, r
         if current is None and request.status is None:
             raise KeyError(action_id)
         next_status = request.status or current.get('status', 'REQUESTED')
-        if request.note is None:
-            updated = await repository.update_action(case_id, action_id, next_status, request.updated_by)
-        else:
-            updated = await repository.update_action(case_id, action_id, next_status, request.updated_by, request.note)
+        updated = await repository.update_action(
+            case_id, action_id, next_status, request.updated_by,
+            note=request.note, expected_version=request.expected_version,
+            title=request.title, visibility=request.visibility,
+        )
         return to_public_action(updated)
+    except CaseVersionConflictError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "VERSION_CONFLICT", "message": "Action has changed.", "current_version": exc.current_version},
+        ) from exc
     except KeyError as exc:
         raise HTTPException(status_code=404, detail={"code": "CASE_ACTION_NOT_FOUND", "message": "체크리스트 항목을 찾을 수 없습니다."}) from exc
 
@@ -2283,7 +2289,7 @@ async def get_case_bundle(case_id: str, view: Literal["entry", "customer", "bank
     if view != "customer" and (record.get("status") == "CLOSED" or record.get("mode") == "CLOSED"):
         stored_final_report = await repository.get_final_report(case_id)
         if stored_final_report:
-            final_report = PublicReportResponse.model_validate(stored_final_report)
+            final_report = PublicReportResponse.model_validate(_annotate_report_revision(stored_final_report, record))
     if view == "customer":
         questions = [to_public_customer_question_view(item).model_dump(mode="json") for item in question_records]
         customer_verification_results = [
@@ -2352,6 +2358,29 @@ async def get_live_report(case_id: str) -> dict:
     return record["initial_report"]
 
 
+def _enforce_proposed_fact_caution(report: dict[str, Any], report_facts: list[dict[str, Any]]) -> dict[str, Any]:
+    """Keep upstream PROPOSED facts explicitly unconfirmed in report prose."""
+    proposed = [item for item in report_facts if item.get("status") == "PROPOSED"]
+    if not proposed:
+        return report
+    marker = "PROPOSED (NOT CONFIRMED)"
+    terms = {
+        token.lower()
+        for item in proposed
+        for token in re.findall(r"[A-Za-z0-9가-힣]{2,}", str(item.get("value") or ""))
+    }
+    for key in ("executive_summary", "incident_summary", "customer_impact_summary"):
+        text = str(report.get(key) or "").strip()
+        if text and marker not in text and any(term in text.lower() for term in terms):
+            report[key] = f"{marker}: {text}"
+    facts = []
+    for item in report.get("verified_facts") or []:
+        value = str(item)
+        facts.append(value if marker in value or "확인 전" in value or "미확인" in value or not any(term in value.lower() for term in terms) else f"{marker}: {value}")
+    report["verified_facts"] = facts
+    return report
+
+
 @app.post("/api/cases/{case_id}/reports/finalize", response_model=PublicReportResponse)
 async def finalize_case_report(case_id: str, request: AdminCaseFinalizeRequest) -> PublicReportResponse:
     require_admin_password(request.password)
@@ -2359,21 +2388,49 @@ async def finalize_case_report(case_id: str, request: AdminCaseFinalizeRequest) 
         case = await repository.get(case_id)
         if case is None:
             raise KeyError(case_id)
-        facts, verifications, actions, messages, questions = await asyncio.gather(
+        resources, facts, verifications, actions, messages, questions = await asyncio.gather(
+            case_context_v2_repository().list_resources(case_id),
             repository.list_case_facts(case_id),
             repository.list_verifications(case_id),
             repository.list_actions(case_id),
             repository.list_messages(case_id),
             repository.list_customer_questions(case_id),
         )
+        if isinstance(repository, MySqlCaseRepository):
+            display_store = await context_display_repository(case_id)
+            display_items = await display_store.list_items(case_id, include_deleted=True)
+        else:
+            display_records = getattr(repository, "_display_items", {})
+            display_items = list(display_records.values()) if isinstance(display_records, dict) else []
+        summary = build_summary_projection(case, resources, verifications, actions, display_items)
+        merged_facts, _ = merge_support_records(resources, facts, actions)
+        v2_fact_ids = {fact.fact_id for fact in resources.facts}
+        v2_fact_fields = {
+            SEMANTIC_FIELDS[fact.semantic_key]
+            for fact in resources.facts
+            if fact.semantic_key in SEMANTIC_FIELDS
+        }
+        report_facts = [
+            item for item in merged_facts
+            if item.get("status") not in {"REJECTED", "SUPERSEDED"}
+            and (
+                item.get("fact_id") in v2_fact_ids
+                or normalize_target_field(str(item.get("field", ""))) not in v2_fact_fields
+            )
+        ]
+        report_actions = [
+            item for item in actions
+            if item.get("actor_type") in {None, "BANK_STAFF"}
+            and not str(item.get("action_type", "")).startswith("CUSTOMER_PROGRESS:")
+        ]
         staff = await read_staff_context_records(case_id)
         ai_report = await service.ai_client.generate_final_report({
             "case_id": case_id,
-            "case_summary": case.get("initial_brief", ""),
+            "case_summary": summary["text"],
             "workflow_status": case.get("status", "TRIAGE"),
             "case_mode": case.get("mode", "PREVENT"),
             "staff_context": staff_context(staff),
-            "known_facts": [user_text(f"{item.get('field')}: {item.get('value')} ({item.get('status')})") for item in facts[:40]],
+            "known_facts": [user_text(f"{item.get('field')}: {item.get('value')} ({item.get('status')})") for item in report_facts[:40]],
             "recent_conversation": [
                 f"{item.get('actor_display_name', item.get('actor_type', '작성자'))}: {item.get('content', '')[:500]}"
                 for item in messages[-30:] if item.get("message_kind") != "REPORT_CARD" and item.get("visibility") != "AI_PRIVATE"
@@ -2383,8 +2440,8 @@ async def finalize_case_report(case_id: str, request: AdminCaseFinalizeRequest) 
                 for item in verifications[:30]
             ],
             "action_results": [
-                user_text(f"{item.get('action_type')}: {item.get('note') or '상세 내용 없음'} ({item.get('status')})")
-                for item in actions_for_ai(actions)[:30]
+                user_text(f"{item.get('title') or item.get('action_type')}: {item.get('note') or '상세 내용 없음'} ({item.get('status')})")
+                for item in report_actions[:30]
             ],
             "customer_answers": [
                 f"질문: {item.get('question_text')} / 고객 답변: {item.get('answer_text')}"
@@ -2392,6 +2449,7 @@ async def finalize_case_report(case_id: str, request: AdminCaseFinalizeRequest) 
             ][:30],
             "closure_note": request.note,
         })
+        ai_report = _enforce_proposed_fact_caution(ai_report, report_facts)
         report_card = {
             "title": ai_report["title"],
             "executive_summary": ai_report["executive_summary"],
@@ -2420,6 +2478,9 @@ async def finalize_case_report(case_id: str, request: AdminCaseFinalizeRequest) 
             {"section_key": "resolution", "content": {"text": report_card["resolution"], "closure_note": request.note}},
             {"section_key": "follow_up", "content": {"items": report_card["follow_up"]}},
             {"section_key": "cautions", "content": {"items": report_card["cautions"]}},
+            {"section_key": "report_metadata", "content": {
+                "summary_source_revision": summary["source_revision"],
+            }},
         ]
         report = await repository.finalize_report(case_id, request.expected_version, request.note, sections, report_card)
     except AiServiceQuotaError as exc:
@@ -2434,7 +2495,8 @@ async def finalize_case_report(case_id: str, request: AdminCaseFinalizeRequest) 
         raise HTTPException(status_code=409, detail={"code": str(exc), "message": "현재 사건 상태에서는 요청한 변경을 수행할 수 없습니다."}) from exc
     except KeyError as exc:
         raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case not found."}) from exc
-    return PublicReportResponse.model_validate(report)
+    latest_case = await repository.get(case_id) or case
+    return PublicReportResponse.model_validate(_annotate_report_revision(report, latest_case))
 
 
 @app.post("/api/cases/{case_id}/reopen", response_model=PublicCaseReadResponse, response_model_exclude_none=True)
@@ -2454,10 +2516,28 @@ async def reopen_closed_case(case_id: str, request: AdminCaseReopenRequest) -> P
 @app.get("/api/cases/{case_id}/reports/final", response_model=PublicReportResponse)
 async def get_final_case_report(case_id: str) -> PublicReportResponse:
     await require_case(case_id)
+    case = await repository.get(case_id)
+    if case is None:
+        raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case not found."})
     report = await repository.get_final_report(case_id)
     if report is None:
         raise HTTPException(status_code=404, detail={"code": "FINAL_REPORT_NOT_FOUND", "message": "Final report not found."})
-    return PublicReportResponse.model_validate(report)
+    return PublicReportResponse.model_validate(_annotate_report_revision(report, case))
+
+
+def _annotate_report_revision(report: dict, case: dict) -> dict:
+    metadata = next((item.get("content") or {} for item in report.get("sections", []) if item.get("section_key") == "report_metadata"), {})
+    source = metadata.get("summary_source_revision")
+    current = max(1, int(case.get("context_revision", 1)))
+    # Finalization itself writes one REPORT_CARD message and closes the Case;
+    # both are non-input mutations that advance context_revision by two.
+    generated_revision = int(source) + 2 if source is not None else None
+    return {
+        **report,
+        "summary_source_revision": int(source) if source is not None else None,
+        "current_context_revision": current,
+        "is_stale": source is not None and current not in {int(source), generated_revision},
+    }
 
 
 def _report_export_lines(case_id: str, report: dict) -> list[tuple[str, list[str]]]:
@@ -2470,6 +2550,8 @@ def _report_export_lines(case_id: str, report: dict) -> list[tuple[str, list[str
     }
     blocks: list[tuple[str, list[str]]] = [("보고서 정보", [f"Case ID: {case_id}", f"보고서 버전: {report.get('report_version', 1)}", f"생성 시각: {report.get('created_at', '')}"])]
     for section in report.get("sections", []):
+        if section.get("section_key") == "report_metadata":
+            continue
         content = section.get("content") or {}
         lines: list[str] = []
         if content.get("text"):

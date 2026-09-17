@@ -104,16 +104,23 @@ export const casesApi = {
       customer_visible: values.customer_visible ?? false,
     }),
   }),
-  createAction: (caseId: string, actionType: string, note: string) => request<CaseAction>(`/api/cases/${encodeURIComponent(caseId)}/actions`, {
-    method: 'POST', body: JSON.stringify({ action_type: actionType, actor_type: 'BANK_STAFF', note }),
+  createAction: (caseId: string, actionType: string, note: string, title?: string | null) => request<CaseAction>(`/api/cases/${encodeURIComponent(caseId)}/actions`, {
+    method: 'POST', body: JSON.stringify({ action_type: actionType, actor_type: 'BANK_STAFF', note, title: title?.trim() || null, visibility: 'BANK_INTERNAL' }),
   }),
   updateCustomerProgress: (caseId: string, step: ProgressStep, values: UpdateCustomerProgress) => request<CustomerProgressItem[]>(`/api/cases/${encodeURIComponent(caseId)}/customer-progress/${step}`, {
     method: 'PUT', body: JSON.stringify(values),
   }),
   requestProgressConfirmation: (caseId: string, step: ProgressStep) => request<CustomerProgressItem[]>(`/api/cases/${encodeURIComponent(caseId)}/customer-progress/${step}/confirmation-request`, { method: 'POST' }),
-  updateAction: (caseId: string, actionId: string, values: { status?: 'REQUESTED' | 'COMPLETED' | 'CANCELLED'; note?: string }) => request<CaseAction>(`/api/cases/${encodeURIComponent(caseId)}/actions/${encodeURIComponent(actionId)}`, {
-    method: 'PATCH', body: JSON.stringify({ ...values, updated_by: CURRENT_BANK_USER.display_name }),
-  }),
+  updateAction: async (caseId: string, actionId: string, versionOrValues: number | { status?: 'REQUESTED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'; title?: string; note?: string }, legacyValues?: { status?: 'REQUESTED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'; title?: string; note?: string }) => {
+    const values = typeof versionOrValues === 'number' ? (legacyValues ?? {}) : versionOrValues;
+    const version = typeof versionOrValues === 'number'
+      ? versionOrValues
+      : (await request<CaseAction[]>(`/api/cases/${encodeURIComponent(caseId)}/actions?actor_user_id=${encodeURIComponent(CURRENT_BANK_USER.user_id)}`)).find((item) => item.action_id === actionId)?.version;
+    if (!version) throw new Error('Action 최신 버전을 확인하지 못했습니다. 최신 Case 정보를 다시 불러와 주세요.');
+    return request<CaseAction>(`/api/cases/${encodeURIComponent(caseId)}/actions/${encodeURIComponent(actionId)}`, {
+      method: 'PATCH', body: JSON.stringify({ ...values, expected_version: version, updated_by: CURRENT_BANK_USER.display_name }),
+    });
+  },
   uploadAttachment: async (caseId: string, file: File, visibility: MessageVisibility): Promise<Attachment> => {
     const path = `/api/cases/${encodeURIComponent(caseId)}/attachments?file_name=${encodeURIComponent(file.name)}&uploaded_by=${encodeURIComponent(CURRENT_BANK_USER.display_name)}&visibility=${encodeURIComponent(visibility)}`;
     const response = await fetch(apiUrl(path), {

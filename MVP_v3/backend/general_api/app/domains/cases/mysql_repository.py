@@ -699,45 +699,50 @@ class MySqlCaseRepository:
                             return {}
                         record = prepared
                     await cursor.execute(
-                        "INSERT INTO actions (action_id, case_id, action_type, status, actor_type, note, created_at) VALUES (%s,%s,%s,'REQUESTED',%s,%s,%s)",
-                        (action_id, case_id, record["action_type"], record["actor_type"], record["note"], now),
+                        "INSERT INTO actions (action_id, case_id, action_type, title, status, actor_type, version, note, created_at, updated_at, updated_by, visibility) VALUES (%s,%s,%s,%s,'REQUESTED',%s,1,%s,%s,%s,NULL,%s)",
+                        (action_id, case_id, record["action_type"], record.get("title"), record["actor_type"], record["note"], now, now, record.get("visibility", "BANK_INTERNAL")),
                     )
                     await cursor.execute(
                         "INSERT INTO case_events (case_id, event_type, actor_type, payload_json, occurred_at) VALUES (%s,'BANK_ACTION_ADDED',%s,%s,%s)",
-                        (case_id, record["actor_type"], json.dumps({"action_id": action_id}), now),
+                        (case_id, record["actor_type"], json.dumps({"action_id": action_id, "version": 1, "visibility": record.get("visibility", "BANK_INTERNAL")}), now),
                     )
                     await cursor.execute("UPDATE cases SET updated_at=%s WHERE case_id=%s", (now, case_id))
                 await connection.commit()
             except Exception:
                 await connection.rollback()
                 raise
-        return {"action_id": action_id, "case_id": case_id, **record, "status": "REQUESTED", "created_at": _utc_iso(now)}
+        return {"action_id": action_id, "case_id": case_id, **record, "title": record.get("title"), "status": "REQUESTED", "version": 1, "visibility": record.get("visibility", "BANK_INTERNAL"), "created_at": _utc_iso(now), "updated_at": _utc_iso(now), "updated_by": None}
 
     async def list_actions(self, case_id: str) -> list[dict[str, Any]]:
         pool = await self._get_pool()
         async with pool.acquire() as connection, connection.cursor(aiomysql.DictCursor) as cursor:
-            await cursor.execute("SELECT action_id, case_id, action_type, status, actor_type, note, created_at FROM actions WHERE case_id=%s ORDER BY created_at, action_id", (case_id,))
-            return [{**row, "created_at": _utc_iso(row["created_at"])} for row in await cursor.fetchall()]
+            await cursor.execute("SELECT action_id, case_id, action_type, title, status, actor_type, version, note, created_at, updated_at, updated_by, visibility FROM actions WHERE case_id=%s ORDER BY created_at, action_id", (case_id,))
+            return [{**row, "created_at": _utc_iso(row["created_at"]), "updated_at": _utc_iso(row["updated_at"])} for row in await cursor.fetchall()]
 
-    async def update_action(self, case_id: str, action_id: str, status: str, updated_by: str, note: str | None = None) -> dict[str, Any]:
+    async def update_action(self, case_id: str, action_id: str, status: str, updated_by: str, note: str | None = None, *, expected_version: int | None = None, title: str | None = None, visibility: str | None = None) -> dict[str, Any]:
         pool = await self._get_pool()
         now = datetime.now()
         async with pool.acquire() as connection:
             try:
                 async with connection.cursor(aiomysql.DictCursor) as cursor:
                     await cursor.execute(
-                        "SELECT action_id FROM actions WHERE case_id=%s AND action_id=%s FOR UPDATE",
+                        "SELECT version FROM actions WHERE case_id=%s AND action_id=%s FOR UPDATE",
                         (case_id, action_id),
                     )
-                    if not await cursor.fetchone():
+                    row = await cursor.fetchone()
+                    if not row:
                         raise KeyError(action_id)
+                    current_version = int(row["version"])
+                    if expected_version is not None and current_version != expected_version:
+                        raise CaseVersionConflictError(current_version)
+                    next_version = current_version + 1
                     await cursor.execute(
-                        "UPDATE actions SET status=%s, note=COALESCE(%s, note) WHERE case_id=%s AND action_id=%s",
-                        (status, note.strip() if note is not None else None, case_id, action_id),
+                        "UPDATE actions SET status=%s, title=COALESCE(%s, title), note=COALESCE(%s, note), visibility=COALESCE(%s, visibility), version=%s, updated_at=%s, updated_by=%s WHERE case_id=%s AND action_id=%s",
+                        (status, title.strip() if title is not None else None, note.strip() if note is not None else None, visibility, next_version, now, updated_by, case_id, action_id),
                     )
                     await cursor.execute(
                         "INSERT INTO case_events (case_id, event_type, actor_type, payload_json, occurred_at) VALUES (%s,'CASE_CHECKLIST_UPDATED','BANK_STAFF',%s,%s)",
-                        (case_id, json.dumps({"action_id": action_id, "status": status, "updated_by": updated_by, "note_changed": note is not None}), now),
+                        (case_id, json.dumps({"action_id": action_id, "status": status, "version": next_version, "updated_by": updated_by, "title_changed": title is not None, "note_changed": note is not None, "visibility_changed": visibility is not None}), now),
                     )
                     await cursor.execute("UPDATE cases SET updated_at=%s WHERE case_id=%s", (now, case_id))
                 await connection.commit()

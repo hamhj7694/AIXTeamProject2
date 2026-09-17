@@ -46,6 +46,9 @@ export interface InitialReport {
   sections: InitialReportSection[];
   created_at: string;
   note?: string | null;
+  summary_source_revision?: number | null;
+  current_context_revision?: number | null;
+  is_stale?: boolean | null;
 }
 
 export interface AnalyzeCaseResponse {
@@ -167,7 +170,10 @@ export interface CaseAction {
   action_type: string;
   status: string;
   actor_type: string;
+  title?: string | null;
   note: string;
+  version?: number;
+  visibility?: 'BANK_INTERNAL' | 'CUSTOMER_SHARED';
   created_at: string;
   updated_at?: string | null;
   updated_by?: string | null;

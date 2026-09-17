@@ -7,7 +7,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 from contracts.public_api.case_context_v2 import PublicCaseContextResourcesV2
 import general_api.app.main as main
-from general_api.app.domains.cases.context_v3.panel import build_context_panel_v3
+from general_api.app.domains.cases.context_v3.panel import ACTION_LABELS, build_context_panel_v3
 from general_api.app.domains.cases.repository import InMemoryCaseRepository
 
 
@@ -24,8 +24,30 @@ class ContextTimelinePanelSyncTests(unittest.TestCase):
         items = [item for section in panel.sections for group in section.groups.values() for item in group]
         projected = next(item for item in items if item.item_id == action_id)
         self.assertEqual(projected.source_kind, "ACTION_RECORD")
+        self.assertEqual(projected.label, ACTION_LABELS["CUSTOMER_CALLBACK"])
         self.assertEqual(projected.visibility, "BANK_INTERNAL")
         self.assertEqual(panel.source_revision, 7)
+
+    def test_action_journal_uses_persisted_title_version_and_visibility(self):
+        panel = build_context_panel_v3(
+            {"case_id": "VP-1", "initial_brief": "brief", "context_revision": 7},
+            PublicCaseContextResourcesV2(case_id="VP-1", context_revision=7),
+            view="bank", verifications=[],
+            actions=[{
+                "action_id": "action-expanded-1", "action_type": "CUSTOMER_CALLBACK",
+                "actor_type": "BANK_STAFF", "status": "IN_PROGRESS", "title": "고객 재확인 진행",
+                "note": "송금 여부를 다시 확인 중", "version": 4, "visibility": "CUSTOMER_SHARED",
+            }],
+            messages=[], progress=[],
+        )
+        action = next(
+            item for section in panel.sections for group in section.groups.values() for item in group
+            if item.item_id == "action-expanded-1"
+        )
+        self.assertEqual(action.label, "고객 재확인 진행")
+        self.assertEqual(action.display_value, "송금 여부를 다시 확인 중")
+        self.assertEqual(action.version, 4)
+        self.assertEqual(action.visibility, "CUSTOMER_SHARED")
 
     def test_customer_projection_excludes_staff_action_journal(self):
         panel = build_context_panel_v3(
