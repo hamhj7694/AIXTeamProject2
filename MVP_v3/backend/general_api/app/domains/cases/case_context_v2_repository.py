@@ -137,6 +137,16 @@ def _decision(row: dict[str, Any]) -> PublicDecisionRecordV2:
     })
 
 
+def _observation(row: dict[str, Any]) -> dict[str, Any]:
+    payload = _json_load(row.get("payload_json"), {})
+    if not isinstance(payload, dict):
+        payload = {}
+    payload.update({"observation_id": row.get("observation_id"), "case_id": row.get("case_id"),
+                    "status": row.get("status"), "created_by": row.get("created_by"),
+                    "created_at": _aware(row.get("created_at")), "updated_at": _aware(row.get("updated_at"))})
+    return payload
+
+
 def _model_json(model: Any) -> str:
     return _json_dump(model.model_dump(mode="json"))
 
@@ -156,7 +166,7 @@ class InMemoryCaseContextV2Repository:
 
     def __init__(self, cases: Any) -> None:
         self.cases = cases
-        for name in ("_context_v2_facts", "_context_v2_gaps", "_context_v2_suggestions", "_context_v2_tasks", "_context_v2_decisions", "_context_v2_requests", "_context_v2_history"):
+        for name in ("_context_v2_facts", "_context_v2_gaps", "_context_v2_suggestions", "_context_v2_tasks", "_context_v2_decisions", "_context_v2_observations", "_context_v2_requests", "_context_v2_history"):
             if not hasattr(cases, name):
                 setattr(cases, name, {}) if name != "_context_v2_history" else setattr(cases, name, [])
 
@@ -186,7 +196,25 @@ class InMemoryCaseContextV2Repository:
             ai_suggestions=[deepcopy(v) for (cid, _), v in self.cases._context_v2_suggestions.items() if cid == case_id],
             tasks=[deepcopy(v) for (cid, _), v in self.cases._context_v2_tasks.items() if cid == case_id],
             decisions=[deepcopy(v) for (cid, _), v in self.cases._context_v2_decisions.items() if cid == case_id],
+            unmapped_observations=[deepcopy(v) for (cid, _), v in self.cases._context_v2_observations.items() if cid == case_id],
         )
+
+    async def create_unmapped_observation(self, case_id: str, data: dict[str, Any], actor: str) -> dict[str, Any]:
+        await self._case(case_id)
+        async with self.cases._lock:
+            observation_id = str(data.get("observation_id") or f"obs-{uuid4().hex}")
+            key = (case_id, observation_id)
+            existing = self.cases._context_v2_observations.get(key)
+            if existing:
+                return deepcopy(existing)
+            now = _now()
+            item = {**deepcopy(data), "observation_id": observation_id, "case_id": case_id,
+                    "status": data.get("status", "UNMAPPED"), "created_by": actor,
+                    "created_at": now, "updated_at": now}
+            self.cases._context_v2_observations[key] = item
+            self._history(case_id, "OBSERVATION", observation_id, 1, "CREATE", actor, None, item)
+            self._touch(case_id, now)
+            return deepcopy(item)
 
     async def list_gap_history(self, case_id: str) -> list[dict[str, Any]]:
         await self._case(case_id)
@@ -520,8 +548,39 @@ class MySqlCaseContextV2Repository:
             tasks = [_task(row) for row in await cursor.fetchall()]
             await cursor.execute("SELECT * FROM case_decisions WHERE case_id=%s ORDER BY created_at,decision_id", (case_id,))
             decisions = [_decision(row) for row in await cursor.fetchall()]
+            await cursor.execute("SELECT * FROM case_context_observations WHERE case_id=%s ORDER BY created_at,observation_id", (case_id,))
+            observations = [_observation(row) for row in await cursor.fetchall()]
             await connection.rollback()  # Release the read snapshot before returning to the pool.
-        return PublicCaseContextResourcesV2(case_id=case_id, context_revision=revision, facts=facts, gaps=gaps, ai_suggestions=suggestions, tasks=tasks, decisions=decisions)
+        return PublicCaseContextResourcesV2(case_id=case_id, context_revision=revision, facts=facts, gaps=gaps, ai_suggestions=suggestions, tasks=tasks, decisions=decisions, unmapped_observations=observations)
+
+    async def create_unmapped_observation(self, case_id: str, data: dict[str, Any], actor: str) -> dict[str, Any]:
+        pool = await self.cases._get_pool()
+        async with pool.acquire() as connection:
+            try:
+                await connection.begin()
+                async with connection.cursor(aiomysql.DictCursor) as cursor:
+                    await self._case_revision(cursor, case_id, lock=True)
+                    observation_id = str(data.get("observation_id") or f"obs-{uuid4().hex}")
+                    await cursor.execute("SELECT * FROM case_context_observations WHERE case_id=%s AND observation_id=%s", (case_id, observation_id))
+                    row = await cursor.fetchone()
+                    if row:
+                        await connection.rollback()
+                        return dict(row)
+                    now = _now()
+                    await cursor.execute(
+                        """INSERT INTO case_context_observations
+                        (observation_id,case_id,observation_type,payload_json,status,created_by,created_at,updated_at)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s)""",
+                        (observation_id, case_id, data.get("observation_type", "UNCLASSIFIED"),
+                         _json_dump(data), data.get("status", "UNMAPPED"), actor, _naive_utc(now), _naive_utc(now)),
+                    )
+                    await cursor.execute("UPDATE cases SET context_revision=context_revision+1 WHERE case_id=%s", (case_id,))
+                    await self._history(cursor, case_id, "OBSERVATION", observation_id, 1, "CREATE", actor, None, data)
+                await connection.commit()
+                return {**deepcopy(data), "observation_id": observation_id, "case_id": case_id, "status": data.get("status", "UNMAPPED")}
+            except BaseException:
+                await connection.rollback()
+                raise
 
     async def list_gap_history(self, case_id: str) -> list[dict[str, Any]]:
         pool = await self.cases._get_pool()

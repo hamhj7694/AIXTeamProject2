@@ -557,6 +557,12 @@ async def process_message_context_extraction(case_id: str, message_id: str) -> N
                 "evidence_refs": [{"type": "MESSAGE", "id": message_id}], "visibility": "BANK_INTERNAL",
             }, message.get("actor_user_id") or "context-extractor",
                 source_kind="CUSTOMER_STATEMENT" if message["actor_type"] == "CUSTOMER" else "STAFF_OBSERVATION")
+        for observation in getattr(output, "unmapped_observations", []):
+            await store.create_unmapped_observation(
+                case_id,
+                observation.model_dump(mode="json"),
+                message.get("actor_user_id") or "context-extractor",
+            )
         await repository.complete_message_extraction(message_id, output.model_version, output.prompt_version)
     except Exception as exc:
         logger.exception("Context fact extraction failed for message %s", message_id)

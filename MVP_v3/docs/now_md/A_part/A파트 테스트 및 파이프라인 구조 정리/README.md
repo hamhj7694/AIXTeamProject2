@@ -20,8 +20,8 @@
 All A-part comparison planning, fixtures, reports, checklists, and the
 executable evaluator are kept in this folder.
 
-- `compare_v30_v31.py`: consumes the existing v3.0 corrected-Gold/token artifacts and an optional v3.1 structured 30-case output.
-- `run_comparison/`: generated `comparison_metrics.json` and `comparison_report.md`.
+- `run_official_a_part_comparison.py`: the single official v3.0/v3.1 comparison entry point; it records honest NOT_RUN/PENDING states when raw v3.1 evidence is absent.
+- `run_comparison/`: generated `official_comparison_metrics.json` and `official_comparison_report.md`.
 - Without `--v31-output`, the evaluator deliberately reports v3.1 as `NOT_RUN`; it never fabricates a score.
 - The 6.5 checklists are prerequisites for a publishable v3.1 comparison, but the evaluator can be run earlier to expose exactly which artifact is missing.
 ## Single source of truth

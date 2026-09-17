@@ -8,7 +8,7 @@ from typing import Any
 
 SEMANTIC_LABELS = {
     "transfer.actual.status": "실제 이체 여부", "transfer.requested.amount": "요구 금액",
-    "transfer.actual.amount": "실제 이체 금액", "exposure.personal_information": "개인정보 노출",
+    "transfer.actual.amount": "실제 이체 금액", "transfer.promised_return.amount": "반환 약속 금액", "exposure.personal_information": "개인정보 노출",
     "exposure.account_information": "계좌정보 노출", "exposure.authentication_information": "인증정보 노출",
     "exposure.identity_or_card": "신분증·카드정보 노출", "exposure.occurred_at": "노출 시점",
     "device.remote_control_app": "원격제어 앱", "offender.claimed_organization": "사칭 기관",

@@ -222,11 +222,25 @@ measurement. The split is:
 
 ### Unified evaluator
 
-The executable comparison entry point is `compare_v30_v31.py` in this folder.
+The executable comparison entry point is `run_official_a_part_comparison.py` in this folder.
 It can be run now to validate the v3.0 artifacts and will keep v3.1 as
 `NOT_RUN` until a structured 30-case result is supplied:
 
 ```powershell
-python "MVP_v3/docs/now_md/A_part/A파트 테스트 및 파이프라인 구조 정리/compare_v30_v31.py"
-python "MVP_v3/docs/now_md/A_part/A파트 테스트 및 파이프라인 구조 정리/compare_v30_v31.py" --v31-output path/to/v3_1_structured_output.json
+python "MVP_v3/docs/now_md/A_part/A파트 테스트 및 파이프라인 구조 정리/run_official_a_part_comparison.py"
+python "MVP_v3/docs/now_md/A_part/A파트 테스트 및 파이프라인 구조 정리/run_official_a_part_comparison.py" --v31-output path/to/v3_1_structured_output.json
 ```
+# 최신 측정 결과 연결 (2026-09-17)
+
+사람이 읽는 최신 결과는 `run_comparison/official_comparison_report.md`를 기준으로 한다. 이 보고서에는 v3.0 corrected-Gold 점수, v3.0 기능별 토큰 기준, v3.1 30-case Raw Replay 비용·지연시간, 그리고 피처 분해·재맥락화·의미 보존·근거·정정·안전 지표의 영어명과 한글 설명이 함께 기록되어 있다.
+
+현재 v3.1의 Raw 증거는 완성됐지만, 아래 의미 점수는 projection Gold와 evaluator 실행 전까지 미산출 상태다.
+
+- Context Feature Precision / Recall / F1 (문맥 피처 정확도·재현율·F1)
+- Critical Fact Recall / Fact Precision (핵심 사실 재현율·정밀도)
+- Status / Polarity Accuracy (상태·극성 보존 정확도)
+- Relation Accuracy (사실 관계 정확도)
+- Evidence Grounding / Fact Lineage Completeness (근거 연결·사실 계보 완전성)
+- Correction Resolution Accuracy (정정 반영 정확도)
+- Section Projection Accuracy (섹션 투영 정확도)
+- Critical Contradiction / Hallucination / Privacy Leak (치명적 모순·환각·개인정보 유출)
