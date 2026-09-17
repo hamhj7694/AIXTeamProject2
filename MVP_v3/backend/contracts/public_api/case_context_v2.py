@@ -232,6 +232,7 @@ class PublicCaseContextResourcesV2(CaseContextV2Model):
     ai_suggestions: list[PublicAiSuggestionV2] = Field(default_factory=list)
     tasks: list[PublicCaseTaskV2] = Field(default_factory=list)
     decisions: list[PublicDecisionRecordV2] = Field(default_factory=list)
+    unmapped_observations: list[dict[str, Any]] = Field(default_factory=list, max_length=200)
 
 
 class PublicSuggestionReviewResultV2(CaseContextV2Model):

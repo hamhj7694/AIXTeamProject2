@@ -497,6 +497,23 @@ def build_context_panel_v3(
                 value={"priority": gap.priority}, source_kind=gap.source, status=gap.status,
                 evidence_refs=_enrich_evidence_refs(gap.evidence_refs, case=case, messages=messages, view=view), version=gap.version,
             ))
+        # Open-world extension records are staff-only until explicitly mapped.
+        for observation in resources.unmapped_observations:
+            if str(observation.get("status", "UNMAPPED")) in {"MAPPED", "DISMISSED"}:
+                continue
+            terms = [str(item.get("surface_form")) for item in observation.get("observed_terms", []) if item.get("surface_form")]
+            categories = [str(item) for item in observation.get("candidate_categories", []) if item]
+            label = "분류 대기 · " + (", ".join(categories) or "기타 관찰")
+            display = "관찰 키워드: " + (", ".join(dict.fromkeys(terms)) or "추가 분류 필요")
+            sections["FACT_VERIFICATION"].groups.setdefault("unmapped_observations", []).append(_item(
+                item_id=str(observation.get("observation_id")), semantic_key="observation.unmapped",
+                label=label, display_value=display, value={
+                    "candidate_categories": categories,
+                    "source_turn_id": observation.get("source_turn_id"),
+                    "polarity": observation.get("polarity", "POSITIVE"),
+                }, source_kind="AI_OBSERVATION", status=str(observation.get("status", "UNMAPPED")),
+                confidence=observation.get("confidence"), version=1,
+            ))
         for verification in verifications:
             group = "confirmed" if verification.get("status") == "COMPLETED" else "failed" if verification.get("status") == "FAILED" else "in_progress"
             sections["FACT_VERIFICATION"].groups.setdefault(group, []).append(_item(

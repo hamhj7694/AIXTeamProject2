@@ -1,0 +1,205 @@
+{
+  "schema_version": "official-a-part-comparison.v1",
+  "reference": {
+    "status": "PASS",
+    "reference_status": "AI_ASSISTED_REFERENCE_DRAFT_FOR_HUMAN_SIGNOFF",
+    "case_count": 30,
+    "source_hash_match": true
+  },
+  "v3_0": {
+    "status": "READY",
+    "metrics_path": "C:\\Users\\mbc\\Documents\\GitHub\\AIXTeamProject2\\MVP_v3\\tests\\context_test\\run_gold_v2\\metrics.json",
+    "baseline_metrics": {
+      "status": "FULL_30_CASE_SCORE",
+      "case_count": 30,
+      "sample_weighted": {
+        "canonical_comparable_recall": 0.14,
+        "canonical_comparable_precision": 1.0,
+        "canonical_comparable_f1": 0.24561403508771928,
+        "tp": 14,
+        "fp": 0,
+        "fn": 86,
+        "tn": 0,
+        "comparable_expected": 100
+      },
+      "unique_sequence_weighted": "NOT_RUN",
+      "non_comparable_observed_fact_keys": [
+        "call_control",
+        "isolation_bank_staff",
+        "isolation_family"
+      ]
+    },
+    "dataset_profile": {
+      "case_count": 30,
+      "turn_count": 150,
+      "unique_turn_sequence_count": 2,
+      "scenario_class_counts": {
+        "HIGH": 10,
+        "MIXED": 10,
+        "LOW": 10
+      },
+      "sequences": [
+        {
+          "sequence_hash": "eeccdbc060d2cffda5128eeac2bfd11bde42bd1154d20016fb471713133afe49",
+          "member_case_ids": [
+            "FACT-01",
+            "FACT-02",
+            "FACT-03",
+            "FACT-04",
+            "FACT-05",
+            "FACT-06",
+            "FACT-07",
+            "FACT-08",
+            "FACT-09",
+            "FACT-10",
+            "FACT-11",
+            "FACT-12",
+            "FACT-13",
+            "FACT-14",
+            "FACT-15",
+            "FACT-16",
+            "FACT-17",
+            "FACT-18",
+            "FACT-19",
+            "FACT-20"
+          ],
+          "member_count": 20
+        },
+        {
+          "sequence_hash": "7a459de4ee0f9153f7db3e2db9eafc21eb96a4b0ab7dfea49c76dd47f98e6803",
+          "member_case_ids": [
+            "FACT-21",
+            "FACT-22",
+            "FACT-23",
+            "FACT-24",
+            "FACT-25",
+            "FACT-26",
+            "FACT-27",
+            "FACT-28",
+            "FACT-29",
+            "FACT-30"
+          ],
+          "member_count": 10
+        }
+      ]
+    },
+    "token_baseline": {
+      "status": "READY",
+      "features": {
+        "case_creation_diagnosis": {
+          "runs": 3,
+          "live_runs": 3,
+          "avg_total_tokens": 3526.33,
+          "avg_calls": 6.0
+        },
+        "bank_staff_chat_ai": {
+          "runs": 3,
+          "live_runs": 3,
+          "avg_total_tokens": 725.33,
+          "avg_calls": 1.0
+        },
+        "customer_confirmation_question_ai": {
+          "runs": 3,
+          "live_runs": 3,
+          "avg_total_tokens": 869.0,
+          "avg_calls": 1.0
+        },
+        "verification_ai": {
+          "runs": 3,
+          "live_runs": 3,
+          "avg_total_tokens": 877.33,
+          "avg_calls": 1.0
+        },
+        "action_work_ai": {
+          "runs": 3,
+          "live_runs": 3,
+          "avg_total_tokens": 892.33,
+          "avg_calls": 1.0
+        },
+        "customer_chat_ai": {
+          "runs": 3,
+          "live_runs": 3,
+          "avg_total_tokens": 1949.33,
+          "avg_calls": 1.0
+        },
+        "final_report_ai": {
+          "runs": 3,
+          "live_runs": 3,
+          "avg_total_tokens": 815.0,
+          "avg_calls": 1.0
+        }
+      }
+    },
+    "unique_sequence": {
+      "status": "PARTIAL_NA",
+      "weighting": "UNIQUE_SEQUENCE_MACRO",
+      "sequence_count": 2,
+      "scored_sequence_count": 1,
+      "sequence_macro": {
+        "precision": 1.0,
+        "recall": 0.14,
+        "f1": 0.245614
+      },
+      "sequences": [
+        {
+          "sequence_hash": "eeccdbc060d2cffda5128eeac2bfd11bde42bd1154d20016fb471713133afe49",
+          "member_count": 20,
+          "status": "SCORED",
+          "metrics": {
+            "tp": 14,
+            "predicted": 14,
+            "expected": 100,
+            "precision": 1.0,
+            "recall": 0.14,
+            "f1": 0.245614
+          }
+        },
+        {
+          "sequence_hash": "7a459de4ee0f9153f7db3e2db9eafc21eb96a4b0ab7dfea49c76dd47f98e6803",
+          "member_count": 10,
+          "status": "NOT_APPLICABLE",
+          "metrics": {
+            "tp": 0,
+            "predicted": 0,
+            "expected": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          }
+        }
+      ]
+    }
+  },
+  "v3_1": {
+    "status": "FULL_RAW_ARTIFACT_AVAILABLE",
+    "raw_output_path": "C:\\Users\\mbc\\Documents\\GitHub\\AIXTeamProject2\\MVP_v3\\docs\\now_md\\A_part\\A파트 테스트 및 파이프라인 구조 정리\\run_comparison\\v3_1_live_ai_20260917_30case.json",
+    "replay_summary": {
+      "case_count": 30,
+      "live_cases": 30,
+      "error_cases": 0,
+      "llm_call_count": 210,
+      "input_tokens": 416078,
+      "output_tokens": 61215,
+      "total_tokens": 477293,
+      "avg_total_tokens_per_case": 15909.77,
+      "avg_calls_per_case": 7.0,
+      "latency_ms": {
+        "p50": 26163.71,
+        "p95": 34062.66,
+        "max": 35782.24
+      },
+      "raw_provider_output_count": 210
+    }
+  },
+  "hard_gates": {
+    "status": "PENDING_SEMANTIC_SCORING"
+  },
+  "latency": {
+    "status": "NOT_RUN",
+    "reason": "Requires successful provider replay for both versions"
+  },
+  "projection_gold": {
+    "status": "MISSING_FROM_CHECKOUT",
+    "reference_path": "C:\\Users\\mbc\\Documents\\GitHub\\AIXTeamProject2\\MVP_v3\\docs\\now_md\\A_part\\A파트 테스트 및 파이프라인 구조 정리\\fixtures\\official_gold\\FACT_CONTEXT_CANONICAL_REFERENCE_WITH_EVIDENCE_v1.json"
+  }
+}

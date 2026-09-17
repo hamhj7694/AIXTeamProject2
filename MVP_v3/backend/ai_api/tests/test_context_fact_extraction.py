@@ -62,6 +62,12 @@ class ContextFactExtractionTests(unittest.IsolatedAsyncioTestCase):
         proposal = next(item for item in result.proposals if item.semantic_key == "transfer.requested.amount")
         self.assertEqual(proposal.value["amount_scope"], "FINAL")
 
+    async def test_promised_return_amount_is_separate_from_actual_refund(self):
+        result = await self.extract("3천만원 보내면 5천만원으로 돌려줄게요")
+        proposal = next(item for item in result.proposals if item.semantic_key == "transfer.promised_return.amount")
+        self.assertEqual(proposal.value["amount_krw"], 50_000_000)
+        self.assertEqual(proposal.value["promise_status"], "PROMISED")
+
     async def test_prosecutor_impersonation(self):
         result = await self.extract("서울중앙지검 검사라고 말했어요")
         keys = {item.semantic_key for item in result.proposals}
@@ -78,6 +84,14 @@ class ContextFactExtractionTests(unittest.IsolatedAsyncioTestCase):
         result = await self.extract("상대가 시켜서 애니데스크 원격제어 앱을 설치했어요")
         proposal = next(item for item in result.proposals if item.semantic_key == "device.remote_control_app")
         self.assertEqual(proposal.value["status"], "INSTALLED")
+
+    async def test_unknown_domain_term_is_retained_as_review_observation(self):
+        result = await self.extract("수수료를 먼저 납부하면 처리가 가능하다고 안내받았습니다.")
+        self.assertEqual(len(result.unmapped_observations), 1)
+        observation = result.unmapped_observations[0]
+        self.assertEqual(observation.status, "UNMAPPED")
+        self.assertIn("DOMAIN.FEE", observation.lexical_codes)
+        self.assertEqual(observation.observed_terms[0]["surface_form"], "수수료")
 
 
 if __name__ == "__main__":
