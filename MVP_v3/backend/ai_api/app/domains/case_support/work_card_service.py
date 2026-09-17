@@ -14,6 +14,7 @@ from .copilot_service import (
     CaseCopilotProviderError,
     CaseCopilotQuotaError,
 )
+from .question_policy import QuestionSource, normalize_question
 
 WORK_CARD_SCHEMA = {
     "type": "object", "additionalProperties": False,
@@ -241,7 +242,21 @@ class CaseWorkCardService:
         try:
             card = CaseWorkCardOutput.model_validate(_fill_empty_proposal(payload, fallback))
             if request.card_type == "QUESTION_PLAN":
-                card = card.model_copy(update={"questions": card.questions[:3]})
+                normalized_questions = []
+                for question in card.questions[:3]:
+                    normalized = normalize_question(
+                        question.model_dump(mode="python"), source=QuestionSource.LLM,
+                    )
+                    normalized_questions.append(question.model_copy(update={
+                        "question_text": normalized.question_text,
+                        "reason": normalized.reason,
+                        "priority": normalized.priority,
+                        "options": normalized.options,
+                        "customer_explanation": normalized.customer_explanation,
+                        "answer_mode": normalized.answer_mode,
+                        "allow_free_text": normalized.allow_free_text,
+                    }))
+                card = card.model_copy(update={"questions": normalized_questions})
             return card
         except (TypeError, ValueError):
             raise CaseCopilotProviderError(
