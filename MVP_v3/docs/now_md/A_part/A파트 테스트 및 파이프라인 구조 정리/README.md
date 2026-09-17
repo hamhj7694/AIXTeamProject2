@@ -29,3 +29,5 @@ executable evaluator are kept in this folder.
 Use `A_6_5_MASTER_CHECKLIST.md` for the current 6.5/v3.0-v3.1 status,
 ownership, execution gates, and next actions. The other checklists and reports
 remain as detailed evidence and historical references.
+- 6.5 실행 체크리스트는 `A_6_5_MASTER_CHECKLIST.md` 하나만 사용한다. 이전 중복 체크리스트는 제거했다.
+- The removed `A_6_5_TEST_AND_PIPELINE_CHECKLIST.md` is superseded by `A_6_5_MASTER_CHECKLIST.md`; use only the master checklist for current status.

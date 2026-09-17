@@ -496,6 +496,14 @@ cd MVP_v3/backend
 - [x] 금액 단위 정규화 및 `amount_scope(EVENT/FINAL/CUMULATIVE)` 보존
 - [x] 반복 금액을 하나의 Fact로 합치지 않고 `amount_event_id`·Atom·turn 근거로 분리
 - [x] 직원 확정(`CONFIRMED`) 금액만 공식 요약·순손실 계산에 반영
+
+## C파트 요약 AI 전달 계약 (2026-09-17)
+
+- [x] `CaseContextProjection`에 확정 Fact·검토 대기 Fact·미확인 항목·기관 확인·직원 조치·금액 이벤트·`projection_revision`을 추가
+- [x] 기존 `situation_summary`, `key_signals`, `offender_claims`, `offender_demands`, `manipulation_tactics`, `customer_exposure`, `next_actions` 필드와 하위 호환 유지
+- [ ] C파트 요약 AI가 위 projection을 입력으로 받아 사건 개요 → 확정 사실 → 주요 정황 → 미확인 사항 → 다음 조치 순서로 문장화
+- [ ] 요약 AI는 `PROPOSED`를 확정 사실로 표현하지 않고, `REJECTED`·`SUPERSEDED`를 현재 사실에서 제외
+- [ ] 요약 생성 결과의 `projection_revision`과 화면 revision 일치 검증
 - [x] AI 추천(`PROPOSED`) 금액은 공식 합계에서 제외하고 개별 Fact로만 노출
 - [x] 반환 금액은 실제 송금과 분리하고 순손실을 `송금 합계 - 반환 합계`로 계산
 - [x] 최종 표현이 명시된 요구 금액은 `FINAL` 우선 정책으로 표시
@@ -510,3 +518,4 @@ cd MVP_v3/backend
 - [x] 삭제 후 Context Panel 재조회
 - [x] 제외된 Fact 전 항목(피해·노출, 사칭·접촉, 사기 정황, 사실·확인)의 복구·완전 삭제 동작 연결
 > 6.5단계와 v3.0→v3.1 측정의 단일 최신 기준은 `A파트 테스트 및 파이프라인 구조 정리/A_6_5_MASTER_CHECKLIST.md`다. 본 문서는 구현 이력으로 보존한다.
+> 링크 정리: 기존 `A_6_5_TEST_AND_PIPELINE_CHECKLIST.md`는 제거되었고, 현재 6.5단계 실행 기준은 `A파트 테스트 및 파이프라인 구조 정리/A_6_5_MASTER_CHECKLIST.md`다.

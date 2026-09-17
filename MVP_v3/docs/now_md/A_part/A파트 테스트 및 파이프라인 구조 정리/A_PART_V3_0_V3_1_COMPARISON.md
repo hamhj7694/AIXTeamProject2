@@ -183,10 +183,28 @@ The four A-part documents now share the same evidence-backed status. The compari
 
 See the synchronized checklists and report addendum in:
 - `A_IMPLEMENTATION_CHECKLIST.md`
-- `A_6_5_TEST_AND_PIPELINE_CHECKLIST.md`
+- `A_6_5_MASTER_CHECKLIST.md`
 - `A_6_5_FINAL_A_PART_COMPREHENSIVE_REPORT.md`
 
 No pending item above should be represented as a completed v3.1 improvement in Notion.
+
+### v3.0 unique-sequence result (2026-09-17)
+
+The existing v3.0 corrected-Gold case results were reweighted by the two
+unique turn sequences. One sequence has comparable Gold facts and one has no
+comparable observed facts, so the result is reported as `PARTIAL_NA` rather
+than pretending both sequences were scored.
+
+| Metric | Unique-sequence result |
+|---|---:|
+| Sequence count | 2 |
+| Scored sequences | 1 |
+| Precision | 100.0% |
+| Recall | 14.0% |
+| F1 | 24.6% |
+
+Artifact: `run_comparison/v30_unique_sequence_metrics.json`  
+Runner: `measure_v30_unique_sequence.py`
 
 ### 6.5 dependency rule
 

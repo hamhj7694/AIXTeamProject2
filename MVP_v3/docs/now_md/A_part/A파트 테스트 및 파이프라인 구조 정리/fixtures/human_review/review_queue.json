@@ -1,0 +1,45 @@
+{
+  "schema_version": "a-part-human-review-queue.v1",
+  "review_status": "AI_ASSISTED_DESIGN_REVIEW_COMPLETE__V3_1_RAW_REPLAY_PENDING",
+  "human_signoff": "PENDING",
+  "reviewer": "ChatGPT GPT-5.6 Sol (AI-assisted reviewer; not human sign-off)",
+  "review_date": "2026-09-17",
+  "source_of_truth": {
+    "turn_text": "replay_benchmark/fact_context_cases.json",
+    "canonical_human_gold": "FACT_CONTEXT_CANONICAL_HUMAN_GOLD_v1.json",
+    "v3_0_projection": "FACT_CONTEXT_GOLD_v3_0_CORRECTED.json",
+    "v3_1_projection": "FACT_CONTEXT_GOLD_v3_1_HIGH_FIDELITY.json"
+  },
+  "dataset_findings": [
+    "30 cases total; 2 unique 5-turn sequences",
+    "FACT-01 through FACT-20 share one sequence; FACT-21 through FACT-30 share another",
+    "FACT-01, FACT-02, and FACT-03 are text-identical and must not be treated as different semantic scenarios",
+    "legacy atomic_facts are audit-only and are not Human Gold"
+  ],
+  "cases": [
+    {
+      "case_id": "FACT-01",
+      "status": "CODEX_PROVISIONAL",
+      "human_decision": "PENDING",
+      "review_note": "Risky sequence review target: crime claim, auth-code request, isolation, transfer/safe-account pretext, urgency/call control. Unsupported organization, amount, actual disclosure, and remote-app facts remain UNKNOWN/MISSING."
+    },
+    {
+      "case_id": "FACT-02",
+      "status": "NEEDS_REVIEW",
+      "human_decision": "PENDING",
+      "review_note": "Text is identical to FACT-01. Existing description suggesting negation/conditional/verification-state coverage is not supported by the actual turns."
+    },
+    {
+      "case_id": "FACT-03",
+      "status": "NEEDS_REVIEW",
+      "human_decision": "PENDING",
+      "review_note": "Text is identical to FACT-01. Existing description suggesting multiple requests, amount, and action-state coverage is not supported by the actual turns."
+    }
+  ],
+  "hard_gate_status": "PENDING_RAW_REPLAY",
+  "hard_gate_policy": {
+    "critical_contradiction": 0,
+    "unsupported_critical_claim": 0,
+    "privacy_leak": 0
+  }
+}

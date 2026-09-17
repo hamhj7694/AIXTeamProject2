@@ -50,6 +50,15 @@ class PublicCaseContextProjection(PublicWorkflowModel):
     manipulation_tactics: list[str] = Field(default_factory=list)
     customer_exposure: list[str] = Field(default_factory=list)
     next_actions: list[str] = Field(default_factory=list)
+    # AI가 계산한 금액 이벤트를 Context Panel에 전달한다.
+    # 원문이 아닌 개인정보 비식별 구조화 값만 공개 투영에 포함한다.
+    money_events: list[dict[str, Any]] = Field(default_factory=list, max_length=100)
+    confirmed_facts: list[dict[str, Any]] = Field(default_factory=list, max_length=100)
+    proposed_facts: list[dict[str, Any]] = Field(default_factory=list, max_length=100)
+    unresolved_items: list[str] = Field(default_factory=list, max_length=100)
+    verification_records: list[dict[str, Any]] = Field(default_factory=list, max_length=100)
+    staff_actions: list[dict[str, Any]] = Field(default_factory=list, max_length=100)
+    projection_revision: int | None = Field(default=None, ge=1)
 
 
 class PublicUnresolvedItemResponse(PublicWorkflowModel):

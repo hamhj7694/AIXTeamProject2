@@ -985,7 +985,8 @@ async def _read_case_support_source(case_id: str, *, attempts: int = 3) -> tuple
 def _case_support_ai_input(case_id: str, case: dict, facts: list[dict], questions: list[dict], verifications: list[dict], actions: list[dict]) -> dict:
     actions = actions_for_ai(actions)
     return {
-        "case_id": case_id, "diagnosis": case.get("diagnosis"),
+        "case_id": case_id, "source_revision": max(1, int(case.get("context_revision", 1))),
+        "diagnosis": case.get("diagnosis"),
         "question_context": build_question_recommendation_context(facts, questions, case),
         "questions": [{
             "question_id": item["question_id"],

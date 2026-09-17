@@ -61,6 +61,7 @@ React Frontend :5176
 - Context V3 본문은 좁은 패널에서 카드 가용 폭을 확보하도록 전용 스크롤 영역의 좌우 padding을 4px로 사용한다.
 - Context 근거 상세는 내부 enum·UUID·revision·일반 confidence 수치를 노출하지 않고 대화 기록·고객 답변·기관 확인 결과 등 직원용 근거 종류와 건수로 표시한다.
 - Context Panel은 `TRANSFERRED`·`PROPOSED` 같은 내부 상태와 미등록 source/status/event/actor 값을 직원 화면에 노출하지 않고 한국어 표시값 또는 안전한 일반 문구를 사용한다.
+- Case Context Projection에 `confirmed_facts`, `proposed_facts`, `unresolved_items`, `verification_records`, `staff_actions`, `money_events`, `projection_revision`을 함께 전달하는 하위 호환 계약을 추가했다. C파트 요약 AI는 이 상태 보존 projection을 입력으로 사용해야 한다.
 
 - 은행 `고객 공유 결과` Section은 `CustomerProgressEditor`를 바로 표시한다. 중복 notice, lane, count, empty state를 제거했다.
 - Summary의 중복 `위험도 · 진행 상태` 문구는 구조화 Case metadata와 정확히 일치하는 deterministic item만 표시에서 제외한다. Case의 risk/status 데이터는 유지한다.

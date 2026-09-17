@@ -55,7 +55,18 @@ export const CaseListPane: React.FC<Props> = ({ cases, selectedCaseId, loading, 
       <strong>{incidentTitle(item)}</strong>
       <span className="case-item-bottom"><span>{statusLabel(item.status, item.mode)}</span><time title={new Date(sortField === 'CREATED_AT' ? item.created_at : item.updated_at).toLocaleString('ko-KR')}>{sortField === 'CREATED_AT' ? '생성 ' : sortField === 'UPDATED_AT' ? '수정 ' : ''}{relativeTime(sortField === 'CREATED_AT' ? item.created_at : item.updated_at)}</time></span>
     </>;
-    return <div key={item.case_id} className={`case-list-item ${selectedCaseId === item.case_id ? 'selected' : ''}`}>
+    const selectFromCard = (event: React.MouseEvent<HTMLDivElement>) => {
+      // The rename control is intentionally an exception: clicking it must not
+      // navigate away from the inline editor.
+      if ((event.target as HTMLElement).closest('button, form, input')) return;
+      openCase(item.case_id);
+    };
+    const selectFromKeyboard = (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) return;
+      event.preventDefault();
+      openCase(item.case_id);
+    };
+    return <div key={item.case_id} className={`case-list-item ${selectedCaseId === item.case_id ? 'selected' : ''}`} role="button" tabIndex={0} aria-current={selectedCaseId === item.case_id ? 'page' : undefined} onClick={selectFromCard} onKeyDown={selectFromKeyboard}>
       {editing ? <form className="case-item-rename" onSubmit={(event) => { event.preventDefault(); void saveRename(item); }}>
         <span className="case-item-top"><b>{item.case_id}</b><span className={`risk-pill ${caseStateTone(caseState(item))}`}>{caseStateLabel(caseState(item))}</span></span>
         <label className="sr-only" htmlFor={`case-name-${item.case_id}`}>사건 이름</label><input id={`case-name-${item.case_id}`} value={renameValue} maxLength={200} autoFocus onChange={(event) => { setRenameValue(event.target.value); setRenameError(''); }}/>
