@@ -184,11 +184,66 @@ python "MVP_v3/docs/now_md/A_part/A파트 테스트 및 파이프라인 구조 �
 
 위 조건을 모두 충족하기 전까지 종합 보고서는 `DRAFT`로 유지한다.
 
+## 9. 2026-09-17 Codex verification log
+
+- [x] `replay_benchmark/evaluator.py validate` 재실행: 30 cases / 270 atomic facts / 20 prompts / 10 E2E cases
+- [x] 통합 비교기 dry-run 재실행: v3.0 `READY`, v3.1 `NOT_RUN`, hard gates `NOT_RUN`
+- [x] 기존 sample `developer-structure.json` privacy scan 재실행: `PASS`, issues 0
+- [x] 중복 6.5 실행 체크리스트 제거 및 본 문서를 단일 실행 기준으로 지정
+
+### 지금 사람이 해야 하는 일
+
+1. 공식 Gold annotation과 critical fixture의 정답성을 승인한다.
+2. v3.1 replay에 사용할 commit·model·환경을 승인한다.
+3. 대표 critical case의 의미 보존과 문장 자연스러움을 검토한다.
+4. hard gate acceptance 기준을 승인한다.
+
+사람 승인 전에는 Codex가 v3.1 점수나 `FINAL` 판정을 확정하지 않는다.
+
+### AI-assisted review and fixture finding
+
+- [x] Actual benchmark turn text verified: `FACT-01 == FACT-02 == FACT-03`
+- [x] AI-assisted design review artifact recorded in `fixtures/human_review/REVIEW_DECISIONS_AI_ASSISTED.json`
+- [x] Review queue recorded in `fixtures/human_review/review_queue.json`
+- [x] Gold policy recorded in `fixtures/official_gold/FACT_CONTEXT_GOLD_README.md`
+- [x] Human review guide corrected so FACT-02/03 are not misrepresented as distinct scenarios
+- [ ] Human sign-off remains pending; AI-assisted review is not `HUMAN_CONFIRMED`
+
+### 승인 반영
+
+- [x] 사용자 승인: 공식 Gold annotation은 정답 기준으로 사용한다. (2026-09-17)
+- [x] 사용자 승인: v3.1 replay commit·model·환경을 승인하고 실행을 진행한다. (2026-09-17)
+- [ ] 실제 선택된 commit·model·환경값을 replay manifest에 기록
+- [ ] 대표 critical case 사람 검토: [HUMAN_REVIEW_GUIDE.md](fixtures/human_review/HUMAN_REVIEW_GUIDE.md)
+- [ ] safety hard gate 사람 검토: 같은 안내서의 `Critical contradiction / hallucination / privacy leak` 기준
+
+## 10. v3.0 추가 측정 판단
+
+v3.0의 핵심 corrected-Gold 점수와 token baseline은 이미 재사용 가능한 상태다. v3.0 전체를 처음부터 다시 실행할 필요는 없다.
+
+다만 v3.1과 동일한 비교표를 완성하려면 다음 두 항목은 추가로 산출해야 한다.
+
+- [x] `UNIQUE_SEQUENCE_WEIGHTED`: 중복 case 30건을 unique turn sequence 기준으로 재가중 — 2 sequences 중 1개 scored, 1개 `NOT_APPLICABLE`
+- [ ] latency P50 / P95 / MAX: v3.1과 동일 provider·model·환경에서 v3.0 재실행
+
+기존 `replay_benchmark/results/v3_0_live_20260916/latency.json`은 `NOT RUN`이고,
+`hard_gates.json`은 DB/live-chat 미실행을 명시한 partial replay다. 따라서 historical
+contradiction/hallucination 수치를 공식 hard gate 결과로 사용하지 않는다.
+
+v3.0에서 추가로 다시 실행할 필요가 없는 항목:
+
+산출물: `run_comparison/v30_unique_sequence_metrics.json`  
+실행 코드: `measure_v30_unique_sequence.py`
+
+- corrected-Gold comparable Recall / Precision / F1
+- 7개 기능 × 3회 token usage baseline
+- 공식 commit·dataset·Gold hash 확인
+
 ## 8. 관련 문서의 역할
 
 - `A_6_5_MASTER_CHECKLIST.md`: **현재 문서 — 단일 실행 기준**
-- `A_6_5_TEST_AND_PIPELINE_CHECKLIST.md`: 기존 상세 체크리스트·이력
-- `A_IMPLEMENTATION_CHECKLIST.md`: 1~10단계 구현 체크리스트·이력
+- `A_6_5_TEST_AND_PIPELINE_DESIGN.md`: 6.5단계 설계·평가 계약
+- `A_IMPLEMENTATION_CHECKLIST.md`: 1~10단계 구현 체크리스트·이력(6.5 항목 포함)
 - `A_6_5_FINAL_A_PART_COMPREHENSIVE_REPORT.md`: 결과 보고서 초안
 - `A_PART_V3_0_V3_1_COMPARISON.md`: 비교 지표·해석 기준
 - `A_HIGH_FIDELITY_SEMANTIC_CONTEXT_DESIGN.md`: v3.1 설계·계약 기준

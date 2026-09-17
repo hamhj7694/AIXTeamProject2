@@ -50,14 +50,25 @@ const summaryCountPattern = /^확정 사실 \d+건 · 검토 대기 \d+건$/;
 
 export const visibleSummaryItems = (section: ContextPanelSectionV3, risk: string, status: string) => {
   const caseMetadata = `위험도 ${risk} · 진행 상태 ${status}`;
-  return section.items.filter((item) => item.source_kind !== 'DETERMINISTIC_PROJECTION' || item.display_value !== caseMetadata).filter((item) => !summaryCountPattern.test(item.display_value));
+  return section.items
+    .filter((item) => item.source_kind !== 'DETERMINISTIC_PROJECTION' || item.display_value !== caseMetadata)
+    .filter((item) => !summaryCountPattern.test(item.display_value))
+    // 금액 건수·합계는 피해·노출 Section의 전용 요약에서 표시한다.
+    .filter((item) => !/^확인된 사실 · 실제 이체 \d+건 · 합계 /.test(item.display_value));
 };
 
 const summaryCount = (section: ContextPanelSectionV3) => section.items.find((item) => summaryCountPattern.test(item.display_value))?.display_value ?? '확정 사실 0건 · 검토 대기 0건';
 
 export const SummarySection: React.FC<{ section: ContextPanelSectionV3; caseRisk: string; caseStatus: string; projectionStatus: string; editing: boolean; onEdit: () => void; onReset: () => void; editor: React.ReactNode }> = ({ section, caseRisk, caseStatus, projectionStatus, editing, onEdit, onReset, editor }) => <section id="context-section-summary" className="context-summary-area">
   <header><div><span>현재 사건 요약</span><StatusBadge status={projectionStatus}/></div>{!editing && <div className="context-summary-actions"><button type="button" onClick={onEdit} aria-label="표시 요약 편집" title="표시 요약 편집"><Pencil size={13}/><span>표시 요약 편집</span></button><MoreMenu label="요약 추가 작업"><button onClick={onReset}><RotateCcw size={13}/>자동 요약으로 복원</button></MoreMenu></div>}</header>
-  {editing ? editor : <div className="context-summary-copy">{visibleSummaryItems(section, caseRisk, caseStatus).map((item) => <p key={item.item_id}>{item.display_value}</p>)}</div>}
+  {editing ? editor : <div className="context-summary-copy">{visibleSummaryItems(section, caseRisk, caseStatus).map((item) => {
+    const amountMatch = item.display_value.match(/^확인된 사실 · 실제 이체 (\d+)건 · 합계 ([^:]+): (.+)$/);
+    if (!amountMatch) return <p key={item.item_id}>{item.display_value}</p>;
+    return <div className="context-summary-amount" key={item.item_id}>
+      <div><span>확인된 실제 이체</span><strong>{amountMatch[1]}건</strong></div>
+      <div><span>확정 합계</span><strong>{amountMatch[2]}</strong></div>
+    </div>;
+  })}</div>}
   <footer><span className="context-summary-count">{summaryCount(section)}</span><span>사건 정보 기준 자동 요약</span></footer>
 </section>;
 

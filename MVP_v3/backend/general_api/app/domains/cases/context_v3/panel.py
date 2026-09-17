@@ -31,7 +31,13 @@ def _item(**values: Any) -> PublicContextPanelItemV3:
 def _grounded_display(fact: Any, case: dict[str, Any] | None = None) -> str:
     """Render a persisted Fact and enforce its epistemic status before display."""
     plan = grounded_fact_item(fact, context=case)
-    validate_grounded_fact(fact, plan["text"], case)
+    try:
+        validate_grounded_fact(fact, plan["text"], case)
+    except ValueError:
+        # A historical or malformed proposal must not take down the entire
+        # Context Panel. Keep the item visible as an explicitly unresolved
+        # review item instead of exposing a semantically broadened sentence.
+        return f"{fact.display_label}: 구조화 근거 불일치로 재검토 필요"
     return str(plan["text"])
 
 
@@ -45,6 +51,33 @@ def _projection_marker(fact: Any, target: str, display: str) -> tuple[str, str, 
         None,
     )
     return target, display, atom_id
+
+
+def _canonical_confirmed_facts(facts: list[Any]) -> list[Any]:
+    """Collapse the confirmed view without discarding multi-event transfers.
+
+    A Context Fact table is an audit-friendly history, not a ready-made
+    sentence.  Summary text must therefore remove superseded/rejected rows,
+    use the newest row for ordinary semantic slots, and retain distinct
+    confirmed money events so the UI does not silently lose a real transfer.
+    """
+    active = [fact for fact in facts if fact.status == "CONFIRMED"]
+    grouped: dict[str, list[Any]] = {}
+    for fact in active:
+        grouped.setdefault(str(fact.semantic_key), []).append(fact)
+    result: list[Any] = []
+    for semantic_key, group in grouped.items():
+        ordered = sorted(group, key=lambda item: getattr(item, "updated_at", None), reverse=True)
+        if semantic_key == "transfer.actual.amount":
+            seen: set[str] = set()
+            for fact in reversed(ordered):
+                marker = str(fact.display_value)
+                if marker not in seen:
+                    seen.add(marker)
+                    result.append(fact)
+            continue
+        result.append(ordered[0])
+    return sorted(result, key=lambda item: getattr(item, "updated_at", None), reverse=True)
 
 
 def _preferred_atom_id(
@@ -256,12 +289,26 @@ def _build_summary_lines(
             continue
         seen_fact_markers.add(marker)
         active_facts.append(fact)
-    confirmed_facts = [fact for fact in active_facts if fact.status == "CONFIRMED"]
+    confirmed_facts = _canonical_confirmed_facts(active_facts)
     proposed_count = sum(1 for fact in active_facts if fact.status == "PROPOSED")
     lines.append(f"확정 사실 {len(confirmed_facts)}건 · 검토 대기 {proposed_count}건")
 
     fact_parts: list[str] = []
-    for fact in confirmed_facts[:2]:
+    actual_amounts = [fact for fact in confirmed_facts if fact.semantic_key == "transfer.actual.amount"]
+    if actual_amounts:
+        values = [
+            mask_sensitive_text(fact.display_value) if fact.semantic_key in SENSITIVE_KEYS else fact.display_value
+            for fact in actual_amounts
+        ]
+        total = sum(
+            int(fact.value.get("amount_krw") or 0)
+            for fact in actual_amounts
+            if isinstance(fact.value, dict) and str(fact.value.get("amount_krw", "")).lstrip("-").isdigit()
+        )
+        fact_parts.append(
+            f"실제 이체 {len(values)}건 · 합계 {total:,}원: " + ", ".join(values)
+        )
+    for fact in [fact for fact in confirmed_facts if fact.semantic_key != "transfer.actual.amount"][:2]:
         value = mask_sensitive_text(fact.display_value) if fact.semantic_key in SENSITIVE_KEYS else fact.display_value
         fact_parts.append(f"{fact.display_label}: {value}")
     if fact_parts:

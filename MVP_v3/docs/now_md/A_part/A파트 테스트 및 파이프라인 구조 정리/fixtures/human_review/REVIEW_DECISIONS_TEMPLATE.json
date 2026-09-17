@@ -1,0 +1,25 @@
+{
+  "review_status": "PENDING_HUMAN_REVIEW",
+  "reviewer": "",
+  "review_date": "",
+  "cases": [
+    {
+      "case_id": "FACT-01",
+      "decision": "PENDING",
+      "semantic_note": "",
+      "safety_note": ""
+    },
+    {
+      "case_id": "FACT-02",
+      "decision": "PENDING",
+      "semantic_note": "",
+      "safety_note": ""
+    },
+    {
+      "case_id": "FACT-03",
+      "decision": "PENDING",
+      "semantic_note": "",
+      "safety_note": ""
+    }
+  ]
+}

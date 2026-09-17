@@ -45,10 +45,34 @@ class CaseSnapshotAction(StrictModel):
     note: str = ""
 
 
+class CaseContextFactProjection(StrictModel):
+    """Status-preserving Fact supplied to downstream summary/brief agents."""
+    fact_id: str
+    field: str
+    value: str
+    status: Literal["PROPOSED", "CONFIRMED", "UNRESOLVED"]
+
+
+class CaseContextVerificationProjection(StrictModel):
+    verification_task_id: str
+    target: str
+    claim: str
+    status: str
+    result_summary: str | None = None
+
+
+class CaseContextActionProjection(StrictModel):
+    action_id: str
+    action_type: str
+    status: str
+    note: str = ""
+
+
 class CaseSnapshotAiInput(StrictModel):
     """AI workflow가 초기 진단과 최신 Shared Case 상태를 함께 보는 입력이다."""
 
     case_id: str | None = None
+    source_revision: int | None = Field(default=None, ge=1)
     diagnosis: DiagnosisResult | None = None
     question_context: QuestionRecommendationContext = Field(default_factory=QuestionRecommendationContext)
     questions: list[CaseSnapshotQuestion] = Field(default_factory=list)
@@ -70,6 +94,13 @@ class CaseContextProjection(StrictModel):
     next_actions: list[str] = Field(default_factory=list)
     # Privacy-safe canonical money events shared by Copilot and Context Panel.
     money_events: list[dict[str, Any]] = Field(default_factory=list, max_length=100)
+    # Canonical, status-preserving inputs for the summary/brief owner (C).
+    confirmed_facts: list[CaseContextFactProjection] = Field(default_factory=list, max_length=100)
+    proposed_facts: list[CaseContextFactProjection] = Field(default_factory=list, max_length=100)
+    unresolved_items: list[str] = Field(default_factory=list, max_length=100)
+    verification_records: list[CaseContextVerificationProjection] = Field(default_factory=list, max_length=100)
+    staff_actions: list[CaseContextActionProjection] = Field(default_factory=list, max_length=100)
+    projection_revision: int | None = Field(default=None, ge=1)
 
 
 class CaseSnapshotPresentation(StrictModel):

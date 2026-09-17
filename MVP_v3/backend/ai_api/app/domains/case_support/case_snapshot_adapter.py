@@ -43,6 +43,7 @@ class CaseSnapshotAiAdapter:
 
         return CaseSnapshotAiInput(
             case_id=case_id,
+            source_revision=self._positive_int(snapshot.get("source_revision")),
             diagnosis=diagnosis,
             question_context=self._question_context_from(snapshot.get("question_context")),
             questions=snapshot.get("questions") or [],
@@ -330,6 +331,19 @@ class CaseSnapshotAiAdapter:
                     "scope": atom.amount_scope or "EVENT",
                 })
 
+        confirmed_facts = [
+            {"fact_id": fact.fact_id, "field": fact.field, "value": fact.value, "status": fact.status}
+            for fact in ai_input.facts if fact.status == "CONFIRMED"
+        ]
+        proposed_facts = [
+            {"fact_id": fact.fact_id, "field": fact.field, "value": fact.value, "status": fact.status}
+            for fact in ai_input.facts if fact.status == "PROPOSED"
+        ]
+        unresolved_items = [
+            str(getattr(item, "description", "추가 확인 필요"))
+            for item in brief.unresolved_items
+        ]
+
         return CaseContextProjection(
             situation_summary=brief.summary,
             key_signals=CaseSnapshotAiAdapter._unique(key_signals)[:8],
@@ -339,6 +353,12 @@ class CaseSnapshotAiAdapter:
             customer_exposure=CaseSnapshotAiAdapter._unique(customer_exposure)[:6],
             next_actions=CaseSnapshotAiAdapter._unique(brief.next_checks)[:8],
             money_events=money_events[:100],
+            confirmed_facts=confirmed_facts[:100],
+            proposed_facts=proposed_facts[:100],
+            unresolved_items=unresolved_items[:100],
+            verification_records=[item.model_dump(mode="python") for item in ai_input.verifications][:100],
+            staff_actions=[item.model_dump(mode="python") for item in ai_input.actions][:100],
+            projection_revision=ai_input.source_revision,
         )
 
     @staticmethod
@@ -499,6 +519,14 @@ class CaseSnapshotAiAdapter:
     @staticmethod
     def _non_empty_string(value: Any) -> str | None:
         return value.strip() if isinstance(value, str) and value.strip() else None
+
+    @staticmethod
+    def _positive_int(value: Any) -> int | None:
+        try:
+            number = int(value)
+        except (TypeError, ValueError):
+            return None
+        return number if number >= 1 else None
 
     @staticmethod
     def _warnings_from(value: Any) -> list[str]:

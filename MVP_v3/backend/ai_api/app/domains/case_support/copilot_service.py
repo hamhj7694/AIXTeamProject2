@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import re
 import time
@@ -15,6 +16,8 @@ from contracts.ai_internal.case_copilot import CaseCopilotInput, CaseCopilotOutp
 
 from .copilot_quality import CopilotQualityEvaluator
 from .copilot_accumulation import asks_total, review_transfers
+
+logger = logging.getLogger(__name__)
 
 
 class CaseCopilotQuotaError(RuntimeError):
@@ -382,6 +385,10 @@ class CaseCopilotService:
         except CaseCopilotQuotaError:
             raise
         except Exception as exc:
+            logger.exception(
+                "CaseCopilot provider call failed: type=%s message=%s model=%s mode=%s",
+                type(exc).__name__, str(exc), model, request.assistant_mode,
+            )
             raise CaseCopilotProviderError(
                 "실제 AI 서버에 연결하지 못해 답변을 생성하지 않았습니다. 잠시 후 다시 시도해 주세요."
             ) from exc
