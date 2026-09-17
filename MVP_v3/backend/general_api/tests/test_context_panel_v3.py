@@ -139,5 +139,23 @@ class ContextPanelV3Tests(unittest.TestCase):
         self.assertIn("상대방이 은행에 연락하지 말라고 요구한 정황입니다.", texts)
 
 
+    def test_unmapped_observation_is_staff_review_only(self):
+        resources = PublicCaseContextResourcesV2(
+            case_id="VP-UNMAPPED", context_revision=2,
+            unmapped_observations=[{
+                "observation_id": "obs-1", "observation_type": "UNCLASSIFIED_DOMAIN_TERM",
+                "candidate_categories": ["FEE"], "observed_terms": [{"surface_form": "수수료"}],
+                "status": "UNMAPPED", "source_turn_id": 1, "confidence": 0.55,
+            }],
+        )
+        bank = build_context_panel_v3({"case_id": "VP-UNMAPPED", "initial_brief": "검토", "context_revision": 2}, resources,
+                                      view="bank", verifications=[], actions=[], messages=[], progress=[])
+        verification = next(section for section in bank.sections if section.section_id == "FACT_VERIFICATION")
+        self.assertEqual(verification.groups["unmapped_observations"][0].status, "UNMAPPED")
+        customer = build_context_panel_v3({"case_id": "VP-UNMAPPED", "initial_brief": "검토", "context_revision": 2}, resources,
+                                          view="customer", verifications=[], actions=[], messages=[], progress=[])
+        self.assertFalse(any(item.semantic_key == "observation.unmapped" for section in customer.sections for item in section.items))
+
+
 if __name__ == "__main__":
     unittest.main()
