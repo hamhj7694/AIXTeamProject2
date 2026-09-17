@@ -11,6 +11,8 @@ from general_api.app.domains.cases.context_v3.grounded import (
     validate_no_unlinked_fact_join,
     validate_grounded_fact,
     validate_grounded_statement_scope,
+    validate_unknown_not_upgraded,
+    validate_semantic_slot_preservation,
 )
 
 
@@ -65,6 +67,20 @@ def test_unknown_and_conditional_states_are_visible_in_staff_sentence() -> None:
     denied = _fact({"action_state": "DENIED", "polarity": "POSITIVE"})
     denied_plan = grounded_fact_item(denied, _context("DENIED"))
     assert "부인되었거나 실행되지 않은" in denied_plan["text"]
+
+
+def test_unknown_state_cannot_be_rendered_as_a_concrete_fact() -> None:
+    fact = _fact({"action_state": "UNKNOWN", "polarity": "POSITIVE"})
+    with pytest.raises(ValueError, match="cannot be upgraded"):
+        validate_unknown_not_upgraded(fact, "The customer transferred the funds.", _context("UNKNOWN"))
+
+
+def test_amount_slot_cannot_be_broadened_to_generic_money_statement() -> None:
+    fact = _fact({"action_state": "REQUESTED", "polarity": "POSITIVE", "amount_krw": 3000000})
+    context = _context("REQUESTED")
+    context["diagnosis"]["semantic_atoms"][0]["amount_krw"] = 3000000
+    with pytest.raises(ValueError, match="amount semantic slot"):
+        validate_semantic_slot_preservation(fact, "상대방이 금전을 요구한 정황입니다.", context)
 
 
 def test_statement_scope_rejects_an_unobserved_institution() -> None:

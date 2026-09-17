@@ -638,7 +638,7 @@ AMOUNT_SCOPE, CLAIMED_PURPOSE, VERIFICATION_STATUS
 
 ```powershell
 # UTF-8 및 Markdown 확인
-Get-Content MVP_v3/docs/now_md/A_HIGH_FIDELITY_SEMANTIC_CONTEXT_DESIGN.md -Encoding UTF8
+Get-Content MVP_v3/docs/now_md/A_part/A_HIGH_FIDELITY_SEMANTIC_CONTEXT_DESIGN.md -Encoding UTF8
 
 # 문서 외 변경이 없는지 확인
 

@@ -253,7 +253,7 @@ React Frontend :5176
 - Context observation은 surface form을 복제하지 않고 `source_atom_ids`, `observed_lexical_codes`, `semantic_features`로 Atom lineage를 참조한다.
 - OTP·계좌번호·인증 secret 값, raw phrase, token dump, source에 없는 lexical cue는 저장하지 않도록 targeted tests를 추가했다.
 - ML feature vector/model artifact와 Frontend는 변경하지 않았고, 기존 JSON persistence 컬럼을 확장하므로 DB migration은 필요하지 않다.
-- `MVP_v3/docs/now_md`에는 현재 `A_IMPLEMENTATION_CHECKLIST.md`, `A_HIGH_FIDELITY_SEMANTIC_CONTEXT_DESIGN.md`만 확인되며, 프롬프트에 명시된 나머지 문서는 현재 working tree에 없다.
+- `MVP_v3/docs/now_md/A_part`에 A파트 기준 문서를 모아 관리한다. 기존 문서의 historical note는 당시 상태를 기록한 것이다.
 - 현재 Grounded 문장화는 존재하지만 일부 Panel projection이 여러 세부 Fact를 넓은 문장으로 합칠 수 있어 specificity 손실 가능성이 남아 있다.
 - 다음 A 구현은 `Fine-Grained Grounded Statement`, one-Fact-one-Statement 기본 정책, semantic slot/action-state/polarity/unknown 보존, 다중 Fact 분리 projection과 Relation-aware 문장화를 대상으로 한다.
 - Context Signal의 상위 label을 그대로 직원용 문장으로 사용하지 않고 supporting Atom/Fact의 구체 의미를 우선하는 방향으로 보강한다.
@@ -263,7 +263,7 @@ React Frontend :5176
 - 2026-09-16 다음 작업으로 2.5단계 `Semantic Feature Audit Agent`를 추가했다. Atom 누락·혼합·slot 불일치·unsupported lexicalization·lineage 단절을 감사하고, 원본을 자동 확정/삭제하지 않은 채 `PASS / NEEDS_REVIEW / REEXTRACTION_REQUIRED`로 판정하는 범위다.
 - 2026-09-16 2.5단계 1차 구현으로 `SemanticAuditResult` 계약과 결정적 감사기를 추가하고 `DiagnosisResult.semantic_audit`에 연결했다. 감사기는 원문을 결과에 반환하지 않으며 Atom·Relation·Signal coverage, 혼합 Atom, observed term source 불일치, orphan lineage를 검사한다. 관련 테스트 47개 통과.
 - 2026-09-16 2.5단계 2차 구현으로 `SemanticAuditReview` LLM 검토기와 selected-turn targeted re-extraction을 연결하고, 원문·근거 문장을 제거한 개발자용 JSON export 명령 `backend/scripts/export_diagnosis_report.py`를 추가했다. LLM 검토 실패 시 결정적 감사 결과를 유지하며 자동 확정/삭제하지 않는다. AI API 전체 테스트 158개 통과.
-- 2026-09-16 4~6단계 구현 메모 `now_md/A_4_TO_6_IMPLEMENTATION_HANDOFF.md`를 추가했다. 4단계 Fact 저장·human review·revision 규칙, 5단계 기존 7개 패널 Fact projection, 6단계 one-Fact-one-Statement grounded 문장화와 완료 조건을 분리해 기록했다. 기존 Context V2 계약 테스트 33개가 통과했으며, 다음 구현 대상은 미완료 Fact projection과 semantic slot 보존이다.
+- 2026-09-16 4~6단계 구현 메모 `now_md/A_part/A_4_TO_6_IMPLEMENTATION_HANDOFF.md`를 추가했다. 4단계 Fact 저장·human review·revision 규칙, 5단계 기존 7개 패널 Fact projection, 6단계 one-Fact-one-Statement grounded 문장화와 완료 조건을 분리해 기록했다. 기존 Context V2 계약 테스트 33개가 통과했으며, 다음 구현 대상은 미완료 Fact projection과 semantic slot 보존이다.
 - 현재는 전체 semantic slot과 모든 semantic key를 완전히 보존하는 단계가 아니므로 broad abstraction validator, 부정·조건·UNKNOWN 전 범위 검증, revision/conflict는 후속 작업으로 남아 있다.
 
 ## 2026-09-15 Prework Step 2 Frontend Freeze Contract

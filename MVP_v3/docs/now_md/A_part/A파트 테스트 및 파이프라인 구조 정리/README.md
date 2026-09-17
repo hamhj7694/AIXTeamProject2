@@ -15,3 +15,12 @@
 ## 금지 대상
 
 통화 원문, raw transcript, 전체 evidence span, 전화번호·계좌번호·OTP·PIN·비밀번호 등 민감 literal은 저장하지 않는다.
+## Unified comparison entry point (2026-09-17)
+
+All A-part comparison planning, fixtures, reports, checklists, and the
+executable evaluator are kept in this folder.
+
+- `compare_v30_v31.py`: consumes the existing v3.0 corrected-Gold/token artifacts and an optional v3.1 structured 30-case output.
+- `run_comparison/`: generated `comparison_metrics.json` and `comparison_report.md`.
+- Without `--v31-output`, the evaluator deliberately reports v3.1 as `NOT_RUN`; it never fabricates a score.
+- The 6.5 checklists are prerequisites for a publishable v3.1 comparison, but the evaluator can be run earlier to expose exactly which artifact is missing.

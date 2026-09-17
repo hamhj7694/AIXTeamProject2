@@ -264,6 +264,8 @@ def validate_grounded_fact(fact: Any, text: str, context: dict[str, Any] | None 
     ):
         raise ValueError("고객 진술 완료를 공식 확인 완료로 승격할 수 없습니다.")
     validate_grounded_statement_scope(fact, text, context)
+    validate_unknown_not_upgraded(fact, text, context)
+    validate_semantic_slot_preservation(fact, text, context)
 
 
 def validate_no_unlinked_fact_join(
@@ -292,6 +294,58 @@ def validate_no_unlinked_fact_join(
             atom_ids.append(str(atom["atom_id"]))
     if len(atom_ids) >= 2 and frozenset(atom_ids[:2]) not in relation_pairs:
         raise ValueError("Relation이 없는 Fact들을 인과·목적 관계로 결합할 수 없습니다.")
+
+
+def validate_unknown_not_upgraded(
+    fact: Any, text: str, context: dict[str, Any] | None = None,
+) -> None:
+    """Reject reconstruction that turns an unknown state into a concrete claim."""
+    atom = _supporting_atom(fact, context)
+    value = getattr(fact, "value", {}) or {}
+    state = str(atom.get("action_state") or value.get("action_state") or "").upper()
+    if state not in {"UNKNOWN", "MISSING"}:
+        return
+    disclaimer = _state_disclaimer(atom or {"action_state": state})
+    if disclaimer and disclaimer not in text:
+        raise ValueError("UNKNOWN/MISSING state cannot be upgraded to a concrete fact.")
+
+
+def validate_semantic_slot_preservation(
+    fact: Any, text: str, context: dict[str, Any] | None = None,
+) -> None:
+    """Ensure concrete slots that drive a sentence remain visible after rendering."""
+    atom = _supporting_atom(fact, context)
+    if not atom:
+        return
+    lowered = _text(text).casefold()
+    value = getattr(fact, "value", {}) or {}
+
+    amount = atom.get("amount_krw", value.get("amount_krw"))
+    if amount is not None:
+        try:
+            rendered_amount = f"{int(float(amount)):,}"
+        except (TypeError, ValueError):
+            rendered_amount = _text(str(amount))
+        if rendered_amount and rendered_amount.casefold() not in lowered:
+            raise ValueError("amount semantic slot was not preserved during rendering.")
+
+    key = str(getattr(fact, "semantic_key", ""))
+    required_prefixes: tuple[str, ...] = ()
+    if key == "offender.claimed_organization":
+        required_prefixes = ("ORG.", "INSTITUTION.")
+    elif key == "exposure.authentication_information":
+        required_prefixes = ("AUTH.",)
+    elif key in {"transfer.requested.amount", "circumstance.demand"}:
+        required_prefixes = ("TERM.SAFE_ACCOUNT", "TERM.PROTECTIVE_ACCOUNT", "TERM.SECURE_ACCOUNT")
+    if required_prefixes:
+        concrete_terms = [
+            _text(term.get("surface_form")).casefold()
+            for term in atom.get("observed_terms", []) or []
+            if any(str(term.get("normalized_code") or "").startswith(prefix) for prefix in required_prefixes)
+            and _text(term.get("surface_form"))
+        ]
+        if concrete_terms and not any(term in lowered for term in concrete_terms):
+            raise ValueError("a concrete semantic slot was broadened during rendering.")
 
 
 def validate_grounded_statement_scope(fact: Any, text: str, context: dict[str, Any] | None = None) -> None:

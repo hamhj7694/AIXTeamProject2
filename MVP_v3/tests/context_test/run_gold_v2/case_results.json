@@ -1,0 +1,752 @@
+[
+  {
+    "case_id": "FACT-01",
+    "comparable": {
+      "crime_involvement_claim": {
+        "expected": true,
+        "found": true,
+        "knowledge_status": "OBSERVED"
+      },
+      "auth_code_disclosure_requested": {
+        "expected": true,
+        "found": true,
+        "knowledge_status": "OBSERVED"
+      },
+      "transfer_requested_or_instructed": {
+        "expected": true,
+        "found": true,
+        "knowledge_status": "OBSERVED"
+      },
+      "safe_account_destination_claimed": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "urgency": {
+        "expected": true,
+        "found": true,
+        "knowledge_status": "OBSERVED"
+      }
+    },
+    "non_comparable": [
+      "isolation_family",
+      "isolation_bank_staff",
+      "call_control"
+    ]
+  },
+  {
+    "case_id": "FACT-02",
+    "comparable": {
+      "crime_involvement_claim": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "auth_code_disclosure_requested": {
+        "expected": true,
+        "found": true,
+        "knowledge_status": "OBSERVED"
+      },
+      "transfer_requested_or_instructed": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "safe_account_destination_claimed": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "urgency": {
+        "expected": true,
+        "found": true,
+        "knowledge_status": "OBSERVED"
+      }
+    },
+    "non_comparable": [
+      "isolation_family",
+      "isolation_bank_staff",
+      "call_control"
+    ]
+  },
+  {
+    "case_id": "FACT-03",
+    "comparable": {
+      "crime_involvement_claim": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "auth_code_disclosure_requested": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "transfer_requested_or_instructed": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "safe_account_destination_claimed": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "urgency": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      }
+    },
+    "non_comparable": [
+      "isolation_family",
+      "isolation_bank_staff",
+      "call_control"
+    ]
+  },
+  {
+    "case_id": "FACT-04",
+    "comparable": {
+      "crime_involvement_claim": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "auth_code_disclosure_requested": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "transfer_requested_or_instructed": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "safe_account_destination_claimed": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "urgency": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      }
+    },
+    "non_comparable": [
+      "isolation_family",
+      "isolation_bank_staff",
+      "call_control"
+    ]
+  },
+  {
+    "case_id": "FACT-05",
+    "comparable": {
+      "crime_involvement_claim": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "auth_code_disclosure_requested": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "transfer_requested_or_instructed": {
+        "expected": true,
+        "found": true,
+        "knowledge_status": "OBSERVED"
+      },
+      "safe_account_destination_claimed": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "urgency": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      }
+    },
+    "non_comparable": [
+      "isolation_family",
+      "isolation_bank_staff",
+      "call_control"
+    ]
+  },
+  {
+    "case_id": "FACT-06",
+    "comparable": {
+      "crime_involvement_claim": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "auth_code_disclosure_requested": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "transfer_requested_or_instructed": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "safe_account_destination_claimed": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "urgency": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      }
+    },
+    "non_comparable": [
+      "isolation_family",
+      "isolation_bank_staff",
+      "call_control"
+    ]
+  },
+  {
+    "case_id": "FACT-07",
+    "comparable": {
+      "crime_involvement_claim": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "auth_code_disclosure_requested": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "transfer_requested_or_instructed": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "safe_account_destination_claimed": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "urgency": {
+        "expected": true,
+        "found": true,
+        "knowledge_status": "OBSERVED"
+      }
+    },
+    "non_comparable": [
+      "isolation_family",
+      "isolation_bank_staff",
+      "call_control"
+    ]
+  },
+  {
+    "case_id": "FACT-08",
+    "comparable": {
+      "crime_involvement_claim": {
+        "expected": true,
+        "found": true,
+        "knowledge_status": "OBSERVED"
+      },
+      "auth_code_disclosure_requested": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "transfer_requested_or_instructed": {
+        "expected": true,
+        "found": true,
+        "knowledge_status": "OBSERVED"
+      },
+      "safe_account_destination_claimed": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "urgency": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      }
+    },
+    "non_comparable": [
+      "isolation_family",
+      "isolation_bank_staff",
+      "call_control"
+    ]
+  },
+  {
+    "case_id": "FACT-09",
+    "comparable": {
+      "crime_involvement_claim": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "auth_code_disclosure_requested": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "transfer_requested_or_instructed": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "safe_account_destination_claimed": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "urgency": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      }
+    },
+    "non_comparable": [
+      "isolation_family",
+      "isolation_bank_staff",
+      "call_control"
+    ]
+  },
+  {
+    "case_id": "FACT-10",
+    "comparable": {
+      "crime_involvement_claim": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "auth_code_disclosure_requested": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "transfer_requested_or_instructed": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "safe_account_destination_claimed": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "urgency": {
+        "expected": true,
+        "found": true,
+        "knowledge_status": "OBSERVED"
+      }
+    },
+    "non_comparable": [
+      "isolation_family",
+      "isolation_bank_staff",
+      "call_control"
+    ]
+  },
+  {
+    "case_id": "FACT-11",
+    "comparable": {
+      "crime_involvement_claim": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "auth_code_disclosure_requested": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "transfer_requested_or_instructed": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "safe_account_destination_claimed": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "urgency": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      }
+    },
+    "non_comparable": [
+      "isolation_family",
+      "isolation_bank_staff",
+      "call_control"
+    ]
+  },
+  {
+    "case_id": "FACT-12",
+    "comparable": {
+      "crime_involvement_claim": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "auth_code_disclosure_requested": {
+        "expected": true,
+        "found": true,
+        "knowledge_status": "OBSERVED"
+      },
+      "transfer_requested_or_instructed": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "safe_account_destination_claimed": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "urgency": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      }
+    },
+    "non_comparable": [
+      "isolation_family",
+      "isolation_bank_staff",
+      "call_control"
+    ]
+  },
+  {
+    "case_id": "FACT-13",
+    "comparable": {
+      "crime_involvement_claim": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "auth_code_disclosure_requested": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "transfer_requested_or_instructed": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "safe_account_destination_claimed": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "urgency": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      }
+    },
+    "non_comparable": [
+      "isolation_family",
+      "isolation_bank_staff",
+      "call_control"
+    ]
+  },
+  {
+    "case_id": "FACT-14",
+    "comparable": {
+      "crime_involvement_claim": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "auth_code_disclosure_requested": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "transfer_requested_or_instructed": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "safe_account_destination_claimed": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "urgency": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      }
+    },
+    "non_comparable": [
+      "isolation_family",
+      "isolation_bank_staff",
+      "call_control"
+    ]
+  },
+  {
+    "case_id": "FACT-15",
+    "comparable": {
+      "crime_involvement_claim": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "auth_code_disclosure_requested": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "transfer_requested_or_instructed": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "safe_account_destination_claimed": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "urgency": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      }
+    },
+    "non_comparable": [
+      "isolation_family",
+      "isolation_bank_staff",
+      "call_control"
+    ]
+  },
+  {
+    "case_id": "FACT-16",
+    "comparable": {
+      "crime_involvement_claim": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "auth_code_disclosure_requested": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "transfer_requested_or_instructed": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "safe_account_destination_claimed": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "urgency": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      }
+    },
+    "non_comparable": [
+      "isolation_family",
+      "isolation_bank_staff",
+      "call_control"
+    ]
+  },
+  {
+    "case_id": "FACT-17",
+    "comparable": {
+      "crime_involvement_claim": {
+        "expected": true,
+        "found": true,
+        "knowledge_status": "OBSERVED"
+      },
+      "auth_code_disclosure_requested": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "transfer_requested_or_instructed": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "safe_account_destination_claimed": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "urgency": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      }
+    },
+    "non_comparable": [
+      "isolation_family",
+      "isolation_bank_staff",
+      "call_control"
+    ]
+  },
+  {
+    "case_id": "FACT-18",
+    "comparable": {
+      "crime_involvement_claim": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "auth_code_disclosure_requested": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "transfer_requested_or_instructed": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "safe_account_destination_claimed": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "urgency": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      }
+    },
+    "non_comparable": [
+      "isolation_family",
+      "isolation_bank_staff",
+      "call_control"
+    ]
+  },
+  {
+    "case_id": "FACT-19",
+    "comparable": {
+      "crime_involvement_claim": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "auth_code_disclosure_requested": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "transfer_requested_or_instructed": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "safe_account_destination_claimed": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "urgency": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      }
+    },
+    "non_comparable": [
+      "isolation_family",
+      "isolation_bank_staff",
+      "call_control"
+    ]
+  },
+  {
+    "case_id": "FACT-20",
+    "comparable": {
+      "crime_involvement_claim": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "auth_code_disclosure_requested": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "transfer_requested_or_instructed": {
+        "expected": true,
+        "found": true,
+        "knowledge_status": "OBSERVED"
+      },
+      "safe_account_destination_claimed": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      },
+      "urgency": {
+        "expected": true,
+        "found": false,
+        "knowledge_status": "OBSERVED"
+      }
+    },
+    "non_comparable": [
+      "isolation_family",
+      "isolation_bank_staff",
+      "call_control"
+    ]
+  },
+  {
+    "case_id": "FACT-21",
+    "comparable": {},
+    "non_comparable": []
+  },
+  {
+    "case_id": "FACT-22",
+    "comparable": {},
+    "non_comparable": []
+  },
+  {
+    "case_id": "FACT-23",
+    "comparable": {},
+    "non_comparable": []
+  },
+  {
+    "case_id": "FACT-24",
+    "comparable": {},
+    "non_comparable": []
+  },
+  {
+    "case_id": "FACT-25",
+    "comparable": {},
+    "non_comparable": []
+  },
+  {
+    "case_id": "FACT-26",
+    "comparable": {},
+    "non_comparable": []
+  },
+  {
+    "case_id": "FACT-27",
+    "comparable": {},
+    "non_comparable": []
+  },
+  {
+    "case_id": "FACT-28",
+    "comparable": {},
+    "non_comparable": []
+  },
+  {
+    "case_id": "FACT-29",
+    "comparable": {},
+    "non_comparable": []
+  },
+  {
+    "case_id": "FACT-30",
+    "comparable": {},
+    "non_comparable": []
+  }
+]
