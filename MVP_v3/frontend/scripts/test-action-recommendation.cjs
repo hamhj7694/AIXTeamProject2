@@ -123,6 +123,16 @@ const props = {caseId: 'CASE-1', recovery: false, onDone: async () => {}, onClos
   find(failure.render(), node => node.type === 'form').props.onSubmit({preventDefault() {}}); await flush();
   assert.equal(failureWrites, 1, 'manual task save must remain available after AI failure');
 
+  let createdPayload;
+  const create = component(props, {
+    createAction: async (...args) => { createdPayload = args; },
+    generateWorkCard: async () => ({ suggested_action_type: 'CUSTOMER_CALLBACK', suggested_action_note: '' }),
+  });
+  field(create.render(), 'input').props.onChange({target: {value: '고객 재확인'}});
+  field(create.render(), 'textarea').props.onChange({target: {value: '최신 고객 확인'}});
+  find(create.render(), node => node.type === 'form').props.onSubmit({preventDefault() {}}); await flush();
+  assert.deepEqual(createdPayload, ['CASE-1', 'CUSTOMER_CALLBACK', '최신 고객 확인', '고객 재확인']);
+
   let cancelled = 0, cancelledWrites = 0;
   const cancel = component({...props, onClose: () => { cancelled += 1; }}, {generateWorkCard: async () => ({
     suggested_action_type: 'CUSTOMER_CALLBACK', suggested_action_note: '저장하지 않을 추천',

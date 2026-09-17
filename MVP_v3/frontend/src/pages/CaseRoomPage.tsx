@@ -56,6 +56,8 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
   const [caseItem, setCaseItem] = useState<StoredCase | null>(null);
   const [bundle, setBundle] = useState<CaseBundle | null>(null);
   const [support, setSupport] = useState<CaseSupportSnapshot | null>(null);
+  const [contextSummary, setContextSummary] = useState<string | null>(null);
+  const handleContextSummaryChange = useCallback((summary: string | null) => setContextSummary(summary), []);
   const [facts, setFacts] = useState<CaseFact[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -86,6 +88,7 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
     if (caseName === undefined) return;
     setCaseItem((current) => current && current.case_id === caseId ? { ...current, case_name: caseName } : current);
   }, [caseId, caseName]);
+  useEffect(() => { setContextSummary(null); }, [caseId]);
 
   const load = useCallback(async (quiet = false, refreshSupport = !quiet) => {
     if (!caseId) return;
@@ -337,11 +340,11 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
       <main className="conversation-column">
         {partialWarnings.length > 0 && <div className="partial-warning"><AlertCircle size={15}/><span>{partialWarnings.join(' ')}</span></div>}
         <div className="conversation-toolbar"><div><button className={view === 'conversation' ? 'active' : ''} onClick={() => setView('conversation')}>대화</button><button className={view === 'timeline' ? 'active' : ''} onClick={() => setView('timeline')}>전체 기록</button></div><span>{refreshing ? '업데이트 확인 중' : '변경 시 AI 사건 맥락 자동 반영'}</span></div>
-        <SharedConversation caseItem={caseItem} bundle={bundle} view={view} bookmarkedIds={new Set(bookmarks.map((item) => item.entryId))} onToggleBookmark={toggleBookmark} onEditVerification={(task) => setDialog({ type: 'verification', task })} onRetryMessage={retryMessage} onDismissMessage={dismissMessage}/>
+        <SharedConversation caseItem={caseItem} bundle={bundle} latestSummary={contextSummary} view={view} bookmarkedIds={new Set(bookmarks.map((item) => item.entryId))} onToggleBookmark={toggleBookmark} onEditVerification={(task) => setDialog({ type: 'verification', task })} onRetryMessage={retryMessage} onDismissMessage={dismissMessage}/>
         {error && <div className="partial-warning danger composer-warning"><AlertCircle size={15}/><span>{error}</span></div>}
         <ConversationComposer busy={busy} aiBusy={aiPendingCount > 0} onSend={send} onOpenQuestions={() => setDialog({ type: 'questions' })} onOpenVerification={() => setDialog({ type: 'verification' })} onOpenAction={() => setDialog({ type: 'action' })} onInvokeAi={() => void invokeAi()} onOpenNotes={() => setNoteOpen(true)} onOpenBookmarks={() => setBookmarkOpen(true)} bookmarkCount={bookmarks.length}/>
       </main>
-      <ContextPanelV3 accessRevision={accessRevision} caseItem={caseItem} bundle={bundle} open={contextOpen} onToggle={() => onContextOpenChange(!contextOpen)} onCreateVerification={() => setDialog({ type: 'verification' })} onEditVerification={(task) => setDialog({ type: 'verification', task })} onProgressSaved={(items) => { loadRequestRef.current += 1; setBundle((current) => current ? { ...current, customer_progress: items } : current); void load(true); }}/>
+      <ContextPanelV3 accessRevision={accessRevision} caseItem={caseItem} bundle={bundle} open={contextOpen} onToggle={() => onContextOpenChange(!contextOpen)} onSummaryChange={handleContextSummaryChange} onCreateVerification={() => setDialog({ type: 'verification' })} onEditVerification={(task) => setDialog({ type: 'verification', task })} onProgressSaved={(items) => { loadRequestRef.current += 1; setBundle((current) => current ? { ...current, customer_progress: items } : current); void load(true); }}/>
     </CaseContextLayout>
     {dialog?.type === 'questions' && <QuestionDialog caseId={caseId} initial={support?.recommended_questions ?? []} onDone={refreshAfterMutation} onClose={() => setDialog(null)}/>} 
     {dialog?.type === 'verification' && <VerificationDialog caseId={caseId} task={dialog.task} onDone={refreshAfterMutation} onClose={() => setDialog(null)}/>} 

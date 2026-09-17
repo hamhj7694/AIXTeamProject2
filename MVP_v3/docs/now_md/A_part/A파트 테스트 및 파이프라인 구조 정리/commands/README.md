@@ -9,7 +9,7 @@ fixture 실행, JSON export, 지표 산출, privacy scan, E2E 검증 명령과 �
 ```powershell
 ..\.venv\Scripts\python.exe -m scripts.export_context_quality_report `
   --input <transient-fixture.txt> `
-  --output-dir "..\docs\now_md\A파트 테스트 및 파이프라인 구조 정리\reports\YYYYMMDD"
+  --output-dir "..\docs\now_md\A_part\A파트 테스트 및 파이프라인 구조 정리\reports\YYYYMMDD"
 ```
 
 기존 `DiagnosisResult` JSON을 재분석 없이 보고서화하는 경우:
@@ -17,7 +17,7 @@ fixture 실행, JSON export, 지표 산출, privacy scan, E2E 검증 명령과 �
 ```powershell
 ..\.venv\Scripts\python.exe -m scripts.export_context_quality_report `
   --diagnosis-json <diagnosis-result.json> `
-  --output-dir "..\docs\now_md\A파트 테스트 및 파이프라인 구조 정리\reports\YYYYMMDD"
+  --output-dir "..\docs\now_md\A_part\A파트 테스트 및 파이프라인 구조 정리\reports\YYYYMMDD"
 ```
 
 두 명령 모두 `developer-structure.json`과 `human-review-report.md`를 생성한다.
@@ -29,7 +29,7 @@ fixture 실행, JSON export, 지표 산출, privacy scan, E2E 검증 명령과 �
 ..\.venv\Scripts\python.exe -m scripts.evaluate_6_5_metrics `
   --predicted <developer-structure.json> `
   --gold <gold-annotation.json> `
-  --output-dir "..\docs\now_md\A파트 테스트 및 파이프라인 구조 정리\reports\YYYYMMDD-metrics"
+  --output-dir "..\docs\now_md\A_part\A파트 테스트 및 파이프라인 구조 정리\reports\YYYYMMDD-metrics"
 ```
 
 annotation이 아직 비어 있으면 결과 상태는 `PENDING_HUMAN_ANNOTATION`이며 점수를 만들지 않는다.
@@ -42,7 +42,7 @@ v3.0 benchmark의 Case·atomic fact·패널 섹션 분포 요약:
 ```powershell
 ..\.venv\Scripts\python.exe -m scripts.summarize_6_5_benchmark `
   --input ..\..\replay_benchmark\fact_context_cases.json `
-  --output-dir "..\docs\now_md\A파트 테스트 및 파이프라인 구조 정리\reports\v3_0-benchmark-summary"
+  --output-dir "..\docs\now_md\A_part\A파트 테스트 및 파이프라인 구조 정리\reports\v3_0-benchmark-summary"
 ```
 
 산출물 privacy scan:
@@ -65,5 +65,5 @@ v3.0 baseline과 v3.1 현재 구조 비교:
 ..\.venv\Scripts\python.exe -m scripts.build_6_5_baseline_comparison `
   --baseline ..\..\replay_benchmark\results\v3_0_core_metrics_20260916\core_metrics.json `
   --current <developer-structure.json> `
-  --output-dir "..\docs\now_md\A파트 테스트 및 파이프라인 구조 정리\reports\YYYYMMDD-baseline"
+  --output-dir "..\docs\now_md\A_part\A파트 테스트 및 파이프라인 구조 정리\reports\YYYYMMDD-baseline"
 ```

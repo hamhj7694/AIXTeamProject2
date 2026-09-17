@@ -75,7 +75,7 @@ export const relativeTime = (value: string) => {
 const unique = (items: Array<string | null | undefined>) => Array.from(new Set(items.map((item) => item?.trim()).filter((item): item is string => Boolean(item))));
 
 export const incidentTitle = (item: StoredCase) => item.case_name?.trim() || item.diagnosis.context?.incident_type || '보이스피싱 의심 사건';
-export const caseSummary = (item: StoredCase) => item.diagnosis.context?.summary || item.initial_brief;
+export const caseSummary = (item: StoredCase, latestSummary?: string | null) => latestSummary?.trim() || item.diagnosis.context?.summary || item.initial_brief;
 export const caseClaims = (item: StoredCase) => unique(item.diagnosis.context?.claims ?? []);
 export const caseDemands = (item: StoredCase) => unique((item.diagnosis.events ?? [])
   .filter((event: DiagnosisEvent) => ['ACTION_REQUEST', 'MONEY_MOVEMENT', 'AMOUNT'].includes(event.event_family))

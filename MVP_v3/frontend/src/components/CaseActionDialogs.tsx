@@ -241,6 +241,7 @@ const normalizeRecommendedActionType = (value?: string | null) =>
 
 export const ActionDialog: React.FC<{ caseId: string; recovery: boolean; onDone: () => Promise<void>; onClose: () => void }> = ({ caseId, recovery, onDone, onClose }) => {
   const [type, setType] = useState(recovery ? 'PAYMENT_HOLD_REVIEW' : 'CUSTOMER_CALLBACK');
+  const [title, setTitle] = useState('');
   const [note, setNote] = useState('');
   const [recommendation, setRecommendation] = useState<ActionRecommendation | null>(null);
   const [recommending, setRecommending] = useState(false);
@@ -257,7 +258,7 @@ export const ActionDialog: React.FC<{ caseId: string; recovery: boolean; onDone:
     recommendationRequest.current += 1;
     draftTouched.current = false;
     setType(recovery ? 'PAYMENT_HOLD_REVIEW' : 'CUSTOMER_CALLBACK');
-    setNote(''); setRecommendation(null); setRecommending(false); setAiError(''); setAiNote('');
+    setTitle(''); setNote(''); setRecommendation(null); setRecommending(false); setAiError(''); setAiNote('');
   }, [caseId, recovery]);
 
   const recommendAction = async () => {
@@ -299,7 +300,7 @@ export const ActionDialog: React.FC<{ caseId: string; recovery: boolean; onDone:
   const submit = async (event: FormEvent) => {
     event.preventDefault(); if (!note.trim() || saving || recommending) return; setSaving(true); setError('');
     try {
-      await casesApi.createAction(caseId, type, note.trim());
+      await casesApi.createAction(caseId, type, note.trim(), title.trim() || null);
       await onDone(); onClose();
     }
     catch (reason) { setError(reason instanceof Error ? reason.message : '대응 업무를 기록하지 못했습니다.'); }
@@ -311,6 +312,7 @@ export const ActionDialog: React.FC<{ caseId: string; recovery: boolean; onDone:
       {aiNote && <p className="ai-recommendation-note">{aiNote}</p>}
       {recommendation && <section className="action-recommendation-preview"><div><span>추천 업무 유형</span><b>{actionLabel(recommendation.type)}</b><p>{recommendation.note}</p></div><button type="button" onClick={applyRecommendation} disabled={saving}>추천 적용</button></section>}
       <DialogError message={aiError}/>
+      <label>Action title<input value={title} onChange={(event) => { draftTouched.current = true; setTitle(event.target.value); }} maxLength={300} placeholder={`${actionLabel(type)} (optional)`}/></label>
       <label>업무 유형<select value={type} onChange={(event) => { draftTouched.current = true; setType(event.target.value); }}>{actionTypes.map((value) => <option key={value} value={value}>{actionLabel(value)}</option>)}</select></label>
       <label>업무 내용<textarea value={note} onChange={(event) => { draftTouched.current = true; setNote(event.target.value); }} rows={4} maxLength={3000} placeholder="확인 대상, 수행할 조치, 인수인계할 내용을 구체적으로 적어주세요." required/></label>
       <p className="safety-notice">이 기록은 실제 지급정지나 신고를 자동 실행하지 않습니다. 은행 권한과 공식 승인 절차를 별도로 진행해야 합니다.</p><DialogError message={error}/>

@@ -14,6 +14,38 @@
 진행 원칙: A파트(Context Signal Pipeline) 우선 구현 후 B/C/통합 연결
 ```
 
+## 2026-09-17 Evaluation and comparison refresh
+
+### Completed evidence
+- [x] Official Gold fixtures registered and SHA-256 recorded
+- [x] v3.0 corrected-Gold 30-case projection audit executed
+- [x] v3.0 comparable recall / precision / F1 recorded: 14.0% / 100.0% / 24.6%
+- [x] v3.0 OpenAI token usage measured for 7 features x 3 runs
+- [x] v3.0 token baseline recorded: 9,654.67 total tokens / 12 calls (average)
+- [x] v3.0 vs v3.1 metric compatibility and non-comparable fields documented
+- [x] v3.1 sample structural evidence separated from the not-yet-run full score
+- [x] Provider smoke and LIVE replay evidence archived
+
+### Remaining TODO
+- [ ] Freeze v3.1 structured output for the same 30 cases / 150 turns
+- [ ] Run canonical and high-fidelity mappings together
+- [ ] Produce ALL_CASES_WEIGHTED and UNIQUE_SEQUENCE_WEIGHTED scores
+- [ ] Produce case-macro F1 and category-macro F1
+- [ ] Measure status, polarity, UNKNOWN preservation, and correction resolution
+- [ ] Measure relation accuracy, fact-lineage completeness, and section projection accuracy
+- [ ] Execute critical contradiction / hallucination / privacy hard gates
+- [ ] Repeat v3.1 token, call, and latency measurements three times
+- [ ] Calculate token per correct critical fact
+- [ ] Run DB persistence, pipeline completion, and browser E2E checks
+- [ ] Publish final Notion payload and promote the comprehensive report from DRAFT to FINAL
+
+### Measurement runner added (2026-09-17)
+- [x] Added `tests/context_test/compare_v30_v31.py` as the unified comparison evaluator.
+- [x] Runner consumes the existing v3.0 corrected-Gold/token artifacts.
+- [x] Runner accepts `--v31-output` for the future structured 30-case v3.1 artifact.
+- [x] Runner emits explicit `NOT_RUN`, `INCOMPLETE_ARTIFACT`, or `FULL_30_CASE_SCORE` states.
+- [ ] Execute the runner with a real v3.1 30-case output after the v3.1 replay is captured.
+
 > 기존 `[x]`는 기본 계약과 1차 구현이 완료되었다는 뜻이다. 아래 `[ ]`는 기존 구현 위에 추가로 필요한 High-Fidelity 2차 개선 TODO이며, 완료 전까지 추정으로 `[x]` 처리하지 않는다.
 
 ## 0단계 — 기준과 담당 범위 고정
@@ -173,7 +205,7 @@
 - [x] Context Panel 문장 생성
 - [x] `CLAIMED → VERIFIED` 변질 차단
 - [x] `REQUESTED → COMPLETED` 변질 차단
-- [ ] `UNKNOWN → 구체값` 추정 차단
+- [x] `UNKNOWN → 구체값` 추정 차단
 - [x] 부정·조건·긴급성 보존 Validator
 - [x] one Fact / one semantic statement 기본 정책(패널 Fact별 개별 projection)
 - [x] 전체 Semantic slot preservation 적용
@@ -183,7 +215,7 @@
 - [x] `communication_control` 세부 유형별 문장화
 - [x] 다중 Fact separate statement projection 및 specificity 유지
 - [x] Relation 없는 Fact의 임의 연결 차단(명시적 supporting Atom만 사용)
-- [ ] broad abstraction / semantic broadening validator
+- [x] broad abstraction / semantic broadening validator
 - [x] Fine-Grained Grounded Statement regression test
 
 > 2026-09-16 진행 기록: `atom_fact_projection.py`를 추가해 Semantic Atom별 독립 Fact 후보와 Atom lineage를 연결했고,
@@ -194,7 +226,7 @@
 
 - [x] Statement Plan을 실제 내부 projection 계약으로 구현
 - [x] one Fact / one Statement 기본 정책을 전체 semantic key에 적용
-- [ ] 모든 semantic slot이 문장화 전후 동일한지 검증
+- [x] 모든 semantic slot이 문장화 전후 동일한지 검증
   - 운영 웹 UI/API에는 노출하지 않고, 성능·회귀 테스트와 내부 JSON 리포트에서만 사용
 - [x] `REQUESTED`와 `INSTRUCTED` 문장 표현 분리
 - [x] `CUSTOMER_REPORTED_COMPLETED`를 `VERIFIED COMPLETED`로 승격하지 않는 검증
@@ -233,7 +265,7 @@
 - [ ] 최종 Feature/Fact의 다중 값 보존·합산·중복 제거 지표 산출
 - [x] DB 저장 성공·transaction rollback·idempotency·revision 관련 회귀 테스트 실행
 - [ ] 원문 비보관·민감 literal 제거·visibility 격리 검사
-- [ ] 문장화 semantic slot preservation·polarity·modality·action state 일치율 산출
+- [x] 문장화 semantic slot preservation·polarity·modality·action state 일치율 산출
 - [ ] 원문 의미와 재구성 문장의 semantic fidelity 평가(원문 자체 저장 없이 annotation 비교)
 - [ ] 우측 Context Panel 기존 섹션 projection 및 문장 표시 E2E 검증
 - [x] 텍스트 입력부터 Case Room 생성까지 파이프라인 sequence/data-flow 도표 작성
@@ -403,6 +435,14 @@ cd MVP_v3/backend
 - General API Context Panel 및 grounded 문장화 테스트 7개, 전체 선택 회귀 테스트 16개 통과
 - 다음 확인 대상은 전체 Fact projection, 다중 값 합계, 요약·질문 grounded 검증
 
+## 6단계 validator 보강 완료 기록 (2026-09-17)
+
+- [x] `UNKNOWN / MISSING` 상태가 문장화 과정에서 구체적인 사실로 승격되지 않도록 차단
+- [x] `broad abstraction / semantic broadening` 검사로 금액·기관·인증정보·목적의 구체 슬롯 손실 차단
+- [x] 문장화 전후 핵심 semantic slot 보존 검사 연결
+- [x] 위 검사는 운영 웹 UI/API에 추가 노출하지 않고 내부 품질·회귀 테스트에서만 실행
+- [x] `test_grounded_semantic_validation.py` 회귀 테스트 11건 통과
+
 ## 현재 테스트 가능 범위
 
 - [x] 터미널에서 AI API의 `DiagnosisResult`와 Atom/Relation/Signal 생성 결과를 테스트 가능
@@ -469,3 +509,4 @@ cd MVP_v3/backend
 - [x] `expected_version` 검증 및 `HARD_DELETE` 감사 tombstone 기록
 - [x] 삭제 후 Context Panel 재조회
 - [x] 제외된 Fact 전 항목(피해·노출, 사칭·접촉, 사기 정황, 사실·확인)의 복구·완전 삭제 동작 연결
+> 6.5단계와 v3.0→v3.1 측정의 단일 최신 기준은 `A파트 테스트 및 파이프라인 구조 정리/A_6_5_MASTER_CHECKLIST.md`다. 본 문서는 구현 이력으로 보존한다.

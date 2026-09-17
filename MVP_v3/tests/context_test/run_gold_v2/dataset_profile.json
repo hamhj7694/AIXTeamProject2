@@ -1,0 +1,54 @@
+{
+  "case_count": 30,
+  "turn_count": 150,
+  "unique_turn_sequence_count": 2,
+  "scenario_class_counts": {
+    "HIGH": 10,
+    "MIXED": 10,
+    "LOW": 10
+  },
+  "sequences": [
+    {
+      "sequence_hash": "eeccdbc060d2cffda5128eeac2bfd11bde42bd1154d20016fb471713133afe49",
+      "member_case_ids": [
+        "FACT-01",
+        "FACT-02",
+        "FACT-03",
+        "FACT-04",
+        "FACT-05",
+        "FACT-06",
+        "FACT-07",
+        "FACT-08",
+        "FACT-09",
+        "FACT-10",
+        "FACT-11",
+        "FACT-12",
+        "FACT-13",
+        "FACT-14",
+        "FACT-15",
+        "FACT-16",
+        "FACT-17",
+        "FACT-18",
+        "FACT-19",
+        "FACT-20"
+      ],
+      "member_count": 20
+    },
+    {
+      "sequence_hash": "7a459de4ee0f9153f7db3e2db9eafc21eb96a4b0ab7dfea49c76dd47f98e6803",
+      "member_case_ids": [
+        "FACT-21",
+        "FACT-22",
+        "FACT-23",
+        "FACT-24",
+        "FACT-25",
+        "FACT-26",
+        "FACT-27",
+        "FACT-28",
+        "FACT-29",
+        "FACT-30"
+      ],
+      "member_count": 10
+    }
+  ]
+}

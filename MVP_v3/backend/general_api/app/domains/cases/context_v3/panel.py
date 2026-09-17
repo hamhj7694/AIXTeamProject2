@@ -228,6 +228,122 @@ def _structured_context(case: dict[str, Any], *, view: str) -> PublicStructuredC
         atoms=atoms, relations=relations, signals=signals, feature_codes=feature_codes,
     )
 
+def _build_summary_lines(
+    case: dict[str, Any],
+    resources: PublicCaseContextResourcesV2,
+    verifications: list[dict[str, Any]],
+    actions: list[dict[str, Any]],
+    summary_override: Any | None,
+) -> list[str]:
+    """Build the deterministic Summary projection from current Case state."""
+    if summary_override is not None:
+        lines = str(summary_override.staff_text).splitlines()
+    else:
+        lines = [str(case.get("initial_brief") or "사건 초기 내용이 등록되었습니다.")]
+
+    lines.append(
+        f"위험도 {case.get('risk_level', case.get('risk', '확인 중'))} · "
+        f"진행 상태 {case.get('status', 'TRIAGE')}"
+    )
+
+    active_facts = []
+    seen_fact_markers: set[tuple[str, str, str | None]] = set()
+    for fact in resources.facts:
+        if fact.status not in {"CONFIRMED", "PROPOSED"}:
+            continue
+        marker = _projection_marker(fact, section_for_key(fact.semantic_key), _grounded_display(fact, case))
+        if marker in seen_fact_markers:
+            continue
+        seen_fact_markers.add(marker)
+        active_facts.append(fact)
+    confirmed_facts = [fact for fact in active_facts if fact.status == "CONFIRMED"]
+    proposed_count = sum(1 for fact in active_facts if fact.status == "PROPOSED")
+    lines.append(f"확정 사실 {len(confirmed_facts)}건 · 검토 대기 {proposed_count}건")
+
+    fact_parts: list[str] = []
+    for fact in confirmed_facts[:2]:
+        value = mask_sensitive_text(fact.display_value) if fact.semantic_key in SENSITIVE_KEYS else fact.display_value
+        fact_parts.append(f"{fact.display_label}: {value}")
+    if fact_parts:
+        lines.append("확인된 사실 · " + " / ".join(fact_parts))
+
+    completed_verifications = [
+        verification for verification in verifications
+        if verification.get("status") == "COMPLETED"
+    ]
+    if completed_verifications:
+        lines.append(f"확인 완료 {len(completed_verifications)}건")
+        verification_parts = [
+            str(
+                verification.get("result_summary")
+                or verification.get("claim")
+                or verification.get("target")
+                or "확인 완료"
+            )
+            for verification in completed_verifications[:2]
+        ]
+        lines.append("확인 결과 · " + " / ".join(verification_parts))
+
+    action_parts: list[str] = []
+    action_status_labels = {
+        "REQUESTED": "진행 중 조치",
+        "IN_PROGRESS": "진행 중 조치",
+        "COMPLETED": "완료된 조치",
+    }
+    for action in actions:
+        if action.get("actor_type") not in {None, "BANK_STAFF"}:
+            continue
+        action_type = str(action.get("action_type") or "OTHER")
+        if action_type.startswith("CUSTOMER_PROGRESS:"):
+            continue
+        status = str(action.get("status") or "REQUESTED")
+        status_label = action_status_labels.get(status)
+        if status_label is None:
+            continue
+        title = str(action.get("title") or ACTION_LABELS.get(action_type, "담당자 조치"))
+        note = str(action.get("note") or "").strip()
+        action_parts.append(f"{title} ({status_label})" + (f": {note}" if note else ""))
+        if len(action_parts) >= 2:
+            break
+    if action_parts:
+        lines.append("직원 조치 · " + " / ".join(action_parts))
+
+    return lines
+
+
+def build_summary_projection(
+    case: dict[str, Any],
+    resources: PublicCaseContextResourcesV2,
+    verifications: list[dict[str, Any]],
+    actions: list[dict[str, Any]],
+    display_items: list[Any] | None = None,
+) -> dict[str, Any]:
+    """Return the current deterministic Summary and its source revision.
+
+    Final Report preparation can reuse this read-only projection without
+    recreating an older ``initial_brief``-only input.  No persistence occurs.
+    """
+    revision = max(1, int(case.get("context_revision", 1)))
+    override = next(
+        (
+            item for item in (display_items or [])
+            if item.section == "SUMMARY"
+            and item.semantic_key == "display"
+            and item.deleted_by is None
+            and item.staff_text
+            and item.base_projection_revision == revision
+        ),
+        None,
+    )
+    lines = _build_summary_lines(case, resources, verifications, actions, override)
+    return {
+        "text": "\n".join(lines),
+        "lines": lines,
+        "source_revision": revision,
+        "override_applied": override is not None,
+        "override": override,
+    }
+
 
 def build_context_panel_v3(
     case: dict[str, Any], resources: PublicCaseContextResourcesV2, *, view: str,
@@ -259,10 +375,18 @@ def build_context_panel_v3(
     confirmed_count = sum(status == "CONFIRMED" for status in projected_fact_statuses.values())
     proposed_count = sum(status == "PROPOSED" for status in projected_fact_statuses.values())
     summary_lines.append(f"확정 사실 {confirmed_count}건 · 검토 대기 {proposed_count}건")
-    for index, text in enumerate(summary_lines[:5]):
+    summary_projection = build_summary_projection(case, resources, verifications, actions, display_items)
+    revision = summary_projection["source_revision"]
+    summary_override = summary_projection["override"]
+    summary_lines = summary_projection["lines"]
+
+    override_line_count = len(str(summary_override.staff_text).splitlines()) if summary_override else 0
+    for index, text in enumerate(summary_lines[:8]):
         sections["SUMMARY"].items.append(_item(
             item_id=f"summary-{index}", semantic_key=f"summary.bullet_{index + 1}", label="요약",
-            display_value=text, value={"text": text}, source_kind="STAFF_OVERRIDE" if summary_override and index < len(str(summary_override.staff_text).splitlines()) else "DETERMINISTIC_PROJECTION", status="CURRENT",
+            display_value=text, value={"text": text},
+            source_kind="STAFF_OVERRIDE" if summary_override and index < override_line_count else "DETERMINISTIC_PROJECTION",
+            status="CURRENT",
         ))
 
     if view == "bank":
@@ -273,10 +397,12 @@ def build_context_panel_v3(
             status = str(action.get("status", "REQUESTED"))
             status = {"REQUESTED": "TODO", "IN_PROGRESS": "IN_PROGRESS", "COMPLETED": "COMPLETED", "CANCELLED": "CANCELLED"}.get(status, status)
             action_type = str(action.get("action_type") or "OTHER")
+            title = str(action.get("title") or ACTION_LABELS.get(action_type, "담당자 조치"))
             sections["STAFF_ACTIONS"].groups.setdefault("completed" if status in {"COMPLETED", "CANCELLED"} else "active", []).append(_item(
                 item_id=str(action["action_id"]), semantic_key=f"action.{str(action.get('action_type', 'record')).lower()}",
-                label=ACTION_LABELS.get(action_type, "담당자 조치"), display_value=str(action.get("note") or ""),
-                value={}, source_kind="ACTION_RECORD", status=status, visibility="BANK_INTERNAL", version=1,
+                label=title, display_value=str(action.get("note") or ""),
+                value={}, source_kind="ACTION_RECORD", status=status,
+                visibility=str(action.get("visibility") or "BANK_INTERNAL"), version=int(action.get("version", 1)),
             ))
         seen_fact_projections: set[tuple[str, str, str | None]] = set()
         for fact in sorted(resources.facts, key=lambda item: fact_status_order.get(item.status, 9)):

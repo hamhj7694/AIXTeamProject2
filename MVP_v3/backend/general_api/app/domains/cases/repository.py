@@ -58,7 +58,7 @@ class CaseRepository(Protocol):
     async def update_verification(self, case_id: str, verification_task_id: str, expected_version: int, status: str, details: dict[str, Any] | None = None) -> dict[str, Any]: ...
     async def create_action(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]: ...
     async def list_actions(self, case_id: str) -> list[dict[str, Any]]: ...
-    async def update_action(self, case_id: str, action_id: str, status: str, updated_by: str, note: str | None = None) -> dict[str, Any]: ...
+    async def update_action(self, case_id: str, action_id: str, status: str, updated_by: str, note: str | None = None, *, expected_version: int | None = None, title: str | None = None, visibility: str | None = None) -> dict[str, Any]: ...
     async def update_case(self, case_id: str, expected_version: int, changes: dict[str, Any]) -> dict[str, Any]: ...
     async def create_voice_session(self, case_id: str, participants: list[str]) -> dict[str, Any]: ...
     async def update_voice_session(self, case_id: str, session_id: str, status: str) -> dict[str, Any]: ...
@@ -451,24 +451,37 @@ class InMemoryCaseRepository:
                 if prepared is None:
                     return {}
                 record = prepared
-            item = {"action_id": f"act-{uuid4().hex}", "case_id": case_id, **record, "status": "REQUESTED", "created_at": now}
+            item = {
+                "action_id": f"act-{uuid4().hex}", "case_id": case_id, **record,
+                "title": record.get("title"), "status": "REQUESTED", "version": 1,
+                "visibility": record.get("visibility", "BANK_INTERNAL"),
+                "created_at": now, "updated_at": now, "updated_by": None,
+            }
             self._actions.append(item)
-            self._events.append({"event_id": len(self._events) + 1, "case_id": case_id, "event_type": "BANK_ACTION_ADDED", "actor_type": item["actor_type"], "payload": {"action_id": item["action_id"]}, "occurred_at": now})
+            self._events.append({"event_id": len(self._events) + 1, "case_id": case_id, "event_type": "BANK_ACTION_ADDED", "actor_type": item["actor_type"], "payload": {"action_id": item["action_id"], "version": item["version"], "visibility": item["visibility"]}, "occurred_at": now})
             self._touch_case(case_id, now)
             return deepcopy(item)
 
     async def list_actions(self, case_id: str) -> list[dict[str, Any]]:
         return [deepcopy(item) for item in self._actions if item["case_id"] == case_id]
 
-    async def update_action(self, case_id: str, action_id: str, status: str, updated_by: str, note: str | None = None) -> dict[str, Any]:
+    async def update_action(self, case_id: str, action_id: str, status: str, updated_by: str, note: str | None = None, *, expected_version: int | None = None, title: str | None = None, visibility: str | None = None) -> dict[str, Any]:
         async with self._lock:
             item = next((row for row in self._actions if row["case_id"] == case_id and row["action_id"] == action_id), None)
             if item is None:
                 raise KeyError(action_id)
+            current_version = int(item.get("version", 1))
+            if expected_version is not None and current_version != expected_version:
+                raise CaseVersionConflictError(current_version)
             now = datetime.now(timezone.utc).isoformat()
             item["status"] = status
+            if title is not None:
+                item["title"] = title.strip()
             if note is not None:
                 item["note"] = note.strip()
+            if visibility is not None:
+                item["visibility"] = visibility
+            item["version"] = current_version + 1
             item["updated_at"] = now
             item["updated_by"] = updated_by
             self._events.append({
@@ -476,7 +489,7 @@ class InMemoryCaseRepository:
                 "case_id": case_id,
                 "event_type": "CASE_CHECKLIST_UPDATED",
                 "actor_type": "BANK_STAFF",
-                "payload": {"action_id": action_id, "status": status, "note_changed": note is not None},
+                "payload": {"action_id": action_id, "status": status, "version": item["version"], "updated_by": updated_by, "title_changed": title is not None, "note_changed": note is not None, "visibility_changed": visibility is not None},
                 "occurred_at": now,
             })
             self._touch_case(case_id, now)

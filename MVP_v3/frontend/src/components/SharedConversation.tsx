@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef } from 'react';
 import { Bookmark, Bot, CheckCircle2, CircleDot, Download, FileText, Landmark, MessageCircleQuestion, ShieldCheck, UserRound } from 'lucide-react';
 import { casesApi, CURRENT_BANK_USER } from '../api/cases';
 import type { CaseAction, CaseEvent, CaseMessage, CustomerQuestion, InitialReport, InitialReportSection, StoredCase, VerificationTask } from '../api/types';
-import { actionLabel, formatClock, verificationStatusLabel } from '../presentation';
+import { actionLabel, caseSummary, formatClock, verificationStatusLabel } from '../presentation';
 import { buildTimeline, type TimelineEntry } from '../timeline';
 import type { CaseBundle } from '../api/types';
 import type { BankBookmark } from '../bank/bookmarks';
@@ -12,6 +12,7 @@ import { SafeMarkdown } from './SafeMarkdown';
 interface Props {
   caseItem: StoredCase;
   bundle: CaseBundle;
+  latestSummary?: string | null;
   view: 'conversation' | 'timeline';
   onEditVerification: (task: VerificationTask) => void;
   bookmarkedIds: Set<string>;
@@ -19,6 +20,8 @@ interface Props {
   onRetryMessage: (message: CaseMessage) => void;
   onDismissMessage: (message: CaseMessage) => void;
 }
+
+const actionTimelineTitle = (action: CaseAction): string => action.title?.trim() || actionLabel(action.action_type);
 
 const bookmarkDetails = (entry: TimelineEntry): Pick<BankBookmark, 'label' | 'summary'> => {
   if (entry.kind === 'MESSAGE') {
@@ -36,7 +39,7 @@ const bookmarkDetails = (entry: TimelineEntry): Pick<BankBookmark, 'label' | 'su
   }
   if (entry.kind === 'ACTION') {
     const action = entry.data as CaseAction;
-    return { label: '대응 업무 기록', summary: action.note || actionLabel(action.action_type) };
+    return { label: '대응 업무 기록', summary: action.note || actionTimelineTitle(action) };
   }
   if (entry.kind === 'FINAL_REPORT') return { label: 'AI 최종 결과 보고서', summary: '사건 종결 시점의 최종 결과 보고서' };
   return { label: 'Case 이벤트', summary: eventLabel((entry.data as CaseEvent).event_type) };
@@ -57,6 +60,7 @@ interface FinalReportCardPayload {
   resolution: string;
   follow_up: string[];
   cautions: string[];
+  is_stale?: boolean | null;
 }
 
 const parseFinalReport = (content: string): FinalReportCardPayload | null => {
@@ -99,6 +103,7 @@ const storedReportPayload = (stored: InitialReport): FinalReportCardPayload => (
   resolution: sectionText(stored, 'resolution') || stored.note || '담당자 승인에 따라 사건을 종결했습니다. 실제 금융 조치 결과는 기록된 근거를 기준으로 확인해야 합니다.',
   follow_up: sectionItems(stored, 'follow_up'),
   cautions: sectionItems(stored, 'cautions'),
+  is_stale: stored.is_stale,
 });
 
 const FinalReportCard: React.FC<{ report: FinalReportCardPayload; caseId: string; createdAt: string; bookmark: React.ReactNode }> = ({ report, caseId, createdAt, bookmark }) => {
@@ -110,7 +115,7 @@ const FinalReportCard: React.FC<{ report: FinalReportCardPayload; caseId: string
   }
   const list = (title: string, items: string[]) => items.length > 0 && <section><h4>{title}</h4><ul>{items.map((item, index) => <li key={`${title}-${index}`}>{userText(item)}</li>)}</ul></section>;
   return <article className="final-report-card">
-    <header><span><FileText size={18}/></span><div><small>AI FINAL REPORT · v{report.report_version}</small><h3>{report.title}</h3></div>{bookmark}</header>
+    <header><span><FileText size={18}/></span><div><small>AI FINAL REPORT · v{report.report_version}</small><h3>{report.title}</h3>{report.is_stale && <small className="partial-warning">현재 사건 변경 후 다시 생성이 필요합니다.</small>}</div>{bookmark}</header>
     <p className="final-report-summary">{report.executive_summary}</p>
     <div className="final-report-sections">
       <section><h4>사건 개요</h4><p>{report.incident_summary}</p></section>
@@ -177,13 +182,14 @@ const EntryCard: React.FC<{ entry: TimelineEntry; bookmark: React.ReactNode; onE
   }
   if (entry.kind === 'ACTION') {
     const action = entry.data as CaseAction;
-    return <article className="timeline-card action-card"><div className="timeline-card-icon"><ShieldCheck size={17}/></div><div><div className="entry-meta"><b>대응 업무 기록</b>{bookmark}<time>{formatClock(entry.occurredAt)}</time></div><p className="timeline-title">{actionLabel(action.action_type)}</p><p>{action.note}</p><small>업무 기록이며 실제 금융 조치 완료를 의미하지 않습니다.</small></div></article>;
+    const changed = Boolean(action.updated_at && action.updated_at !== action.created_at);
+    return <article className="timeline-card action-card"><div className="timeline-card-icon"><ShieldCheck size={17}/></div><div><div className="entry-meta"><b>대응 업무 기록</b>{bookmark}<time>{formatClock(entry.occurredAt)}</time></div><p className="timeline-title">{actionTimelineTitle(action)}</p><p>{action.note}</p><div className="entry-actions"><span className="status-chip">{action.status}</span></div><small>생성 {formatClock(action.created_at)}{changed ? ` · 최종 수정 ${formatClock(action.updated_at!)}` : ''}</small><small>업무 기록이며 실제 금융 조치 완료를 의미하지 않습니다.</small></div></article>;
   }
   const event = entry.data as CaseEvent;
   return <article className="timeline-event"><CircleDot size={13}/><span>{eventLabel(event.event_type)}</span>{bookmark}<time>{formatClock(event.occurred_at)}</time></article>;
 };
 
-export const SharedConversation: React.FC<Props> = ({ caseItem, bundle, view, onEditVerification, bookmarkedIds, onToggleBookmark, onRetryMessage, onDismissMessage }) => {
+export const SharedConversation: React.FC<Props> = ({ caseItem, bundle, latestSummary, view, onEditVerification, bookmarkedIds, onToggleBookmark, onRetryMessage, onDismissMessage }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const initialized = useRef(false);
   const followLatest = useRef(true);
@@ -197,9 +203,10 @@ export const SharedConversation: React.FC<Props> = ({ caseItem, bundle, view, on
     initialized.current = true;
   }, [latestEntryKey]);
   const briefId = `brief-${caseItem.case_id}`;
-  const briefBookmark = <button type="button" className={`bank-entry-bookmark ${bookmarkedIds.has(briefId) ? 'active' : ''}`} aria-label={bookmarkedIds.has(briefId) ? '북마크 해제' : '북마크 추가'} aria-pressed={bookmarkedIds.has(briefId)} onClick={() => onToggleBookmark({ entryId: briefId, label: 'AI 사건 정리', summary: caseItem.initial_brief, createdAt: caseItem.created_at })}><Bookmark size={14} fill={bookmarkedIds.has(briefId) ? 'currentColor' : 'none'}/></button>;
+  const displayedSummary = caseSummary(caseItem, latestSummary);
+  const briefBookmark = <button type="button" className={`bank-entry-bookmark ${bookmarkedIds.has(briefId) ? 'active' : ''}`} aria-label={bookmarkedIds.has(briefId) ? '북마크 해제' : '북마크 추가'} aria-pressed={bookmarkedIds.has(briefId)} onClick={() => onToggleBookmark({ entryId: briefId, label: 'AI 사건 정리', summary: displayedSummary, createdAt: caseItem.created_at })}><Bookmark size={14} fill={bookmarkedIds.has(briefId) ? 'currentColor' : 'none'}/></button>;
   return <div ref={scrollRef} onScroll={(event) => { const node = event.currentTarget; followLatest.current = node.scrollHeight - node.scrollTop - node.clientHeight < 80; }} className="conversation-scroll" aria-live="polite">
-    <div id={briefId} className="bank-initial-brief"><article className="timeline-brief"><div className="entry-kicker"><Bot size={15}/>AI BRIEF{briefBookmark}</div><p>{caseItem.initial_brief}</p><time>{formatClock(caseItem.created_at)}</time></article></div>
+    <div id={briefId} className="bank-initial-brief"><article className="timeline-brief"><div className="entry-kicker"><Bot size={15}/>AI BRIEF{briefBookmark}</div><p>{displayedSummary}</p><time>{formatClock(caseItem.created_at)}</time></article></div>
     {entries.length === 0 ? <div className="conversation-empty">아직 Case 기록이 없습니다.</div> : entries.map((entry) => <div id={entry.id} className="bank-timeline-entry" key={entry.id}><EntryCard entry={entry} bookmark={<EntryBookmark entry={entry} active={bookmarkedIds.has(entry.id)} onToggle={onToggleBookmark}/>} onEditVerification={onEditVerification} onRetryMessage={onRetryMessage} onDismissMessage={onDismissMessage}/></div>) }
   </div>;
 };

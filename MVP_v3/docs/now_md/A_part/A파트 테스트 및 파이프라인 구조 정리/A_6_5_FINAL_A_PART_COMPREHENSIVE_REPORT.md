@@ -85,3 +85,26 @@ canonical human gold는 최종 사람 기준에 사용한다.
 
 정답 annotation 확정, v3.0 비교 지표 산출, hard gate 확인, DB 저장 검증,
 우측 패널 E2E 확인, privacy scan 통과 후 상태를 `FINAL`로 변경한다.
+## 2026-09-17 Addendum - current evidence reconciliation
+
+This report remains DRAFT. The following status is based only on artifacts that exist in the repository.
+
+| Area | Evidence-backed status | Current result |
+|---|---|---|
+| Official Gold registration | DONE | Gold SHA-256 values recorded |
+| v3.0 corrected 30-case audit | DONE | Recall 14.0%, precision 100.0%, F1 24.6% |
+| v3.0 token baseline | DONE | 7 features x 3 runs; average 9,654.67 total tokens / 12 calls |
+| v3.1 full 30-case score | NOT RUN | No full raw structured-output artifact yet |
+| v3.1 structural sample | SAMPLE ONLY | Event 5, Atom 9, Relation 2, Context Signal 0; VP-18 lineage samples 1.0 |
+| Safety hard gates | NOT RUN | Contradiction / hallucination / privacy gate suite pending |
+| DB and panel E2E | BLOCKED / NOT RUN | Requires controlled live environment and captured artifacts |
+
+### Required work before FINAL
+- [ ] Freeze and archive v3.1 raw output for all 30 cases / 150 turns.
+- [ ] Run canonical and high-fidelity mappings, macro scores, status/polarity, correction, relation, lineage, and projection metrics.
+- [ ] Execute safety hard gates and record case-level pass/fail for critical fixtures.
+- [ ] Repeat token/call/latency measurements and calculate token per correct critical fact.
+- [ ] Complete persistence, pipeline, API, and browser E2E evidence.
+- [ ] Regenerate the final metric bundle, diff report, privacy scan, and Notion payload.
+
+Until these items are complete, this document must not be promoted from DRAFT to FINAL.

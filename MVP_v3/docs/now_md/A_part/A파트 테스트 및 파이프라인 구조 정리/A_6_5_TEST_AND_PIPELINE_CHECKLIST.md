@@ -117,3 +117,27 @@
 - [ ] 한국어 공유용 최종 보고서 `FINAL` 판정
 
 최종 보고서 초안/템플릿: `A_6_5_FINAL_A_PART_COMPREHENSIVE_REPORT.md`
+## 2026-09-17 Latest reconciliation
+
+This addendum records evidence-backed status only. Items without a raw artifact remain NOT RUN or BLOCKED.
+
+### Completed
+- [x] Official Gold fixtures and SHA-256 registration
+- [x] v3.0 corrected-Gold 30-case projection audit
+- [x] v3.0 token baseline: 7 features x 3 runs, 21 LIVE runs, 36 calls
+- [x] Provider smoke / LIVE replay evidence and comparison documentation
+- [x] Sample structural lineage evidence (Event -> Atom -> Relation/Context Signal)
+- [x] All local servers stopped and verified OFF after measurement
+
+### TODO before v3.1 comparison is publishable
+- [ ] Freeze v3.1 raw structured output for 30 cases / 150 turns
+- [ ] Run canonical + high-fidelity Gold mappings and case/category macro scores
+- [ ] Measure status, polarity, UNKNOWN, correction resolution, and case pass/fail
+- [ ] Measure relation accuracy, fact-lineage completeness, and section projection accuracy
+- [ ] Execute contradiction, hallucination, and privacy hard gates
+- [ ] Run DB persistence, pipeline completion, and browser/API E2E checks
+- [ ] Repeat token/call/latency measurements three times and calculate token per correct critical fact
+- [ ] Generate final metric JSON, diff artifacts, privacy scan, and Notion payload
+
+Note: the earlier `APIConnectionError` entry above describes an initial failed attempt. It is superseded for connectivity by the later provider smoke / LIVE replay artifacts; it does not constitute a v3.1 full-score result.
+> 최신 통합 기준은 같은 폴더의 `A_6_5_MASTER_CHECKLIST.md`다. 이 문서는 상세 항목과 과거 실행 이력을 보존하며, 현재 담당자·게이트·최종 상태는 마스터 체크리스트를 우선한다.
