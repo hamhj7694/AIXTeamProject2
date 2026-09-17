@@ -24,3 +24,8 @@ executable evaluator are kept in this folder.
 - `run_comparison/`: generated `comparison_metrics.json` and `comparison_report.md`.
 - Without `--v31-output`, the evaluator deliberately reports v3.1 as `NOT_RUN`; it never fabricates a score.
 - The 6.5 checklists are prerequisites for a publishable v3.1 comparison, but the evaluator can be run earlier to expose exactly which artifact is missing.
+## Single source of truth
+
+Use `A_6_5_MASTER_CHECKLIST.md` for the current 6.5/v3.0-v3.1 status,
+ownership, execution gates, and next actions. The other checklists and reports
+remain as detailed evidence and historical references.
