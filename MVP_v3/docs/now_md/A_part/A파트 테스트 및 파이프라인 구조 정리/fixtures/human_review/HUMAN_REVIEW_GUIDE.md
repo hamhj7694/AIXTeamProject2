@@ -82,3 +82,24 @@ amount/action-state flow are not supported by the frozen benchmark turns.
 
 The AI-assisted design findings are in `REVIEW_DECISIONS_AI_ASSISTED.json`.
 They are provisional and do not equal human sign-off.
+
+## 5. Current approved review purposes
+
+The authoritative human decisions are in `review_queue.json`.
+
+- `FACT-01` — `REPRESENTATIVE_RISKY_SEQUENCE`
+- `FACT-02` — `DUPLICATE_SEQUENCE_CONSISTENCY`
+- `FACT-03` — `UNSUPPORTED_CONCRETE_VALUE_GUARD`
+
+FACT-02 and FACT-03 intentionally reuse the same actual turns as FACT-01.
+They are not separate negation, conditional, amount, or multi-request
+scenarios. Their purpose is to test deterministic consistency and resistance to
+legacy metadata hallucination.
+
+## 6. Current canonical reference file
+
+The current repository contains `fixtures/official_gold/FACT_CONTEXT_CANONICAL_REFERENCE_WITH_EVIDENCE_v1.json` as the evidence-backed canonical reference. Its metadata is `AI_ASSISTED_REFERENCE_DRAFT_FOR_HUMAN_SIGNOFF`; the human case decisions are recorded separately in `review_queue.json`.
+
+The older split projection files are not currently present in this checkout.
+Do not recreate or substitute them from legacy atomic facts without an explicit
+versioned projection step.

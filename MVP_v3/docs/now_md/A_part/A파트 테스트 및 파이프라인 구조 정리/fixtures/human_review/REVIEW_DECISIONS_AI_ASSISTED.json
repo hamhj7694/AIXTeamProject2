@@ -2,6 +2,7 @@
   "review_status": "AI_ASSISTED_DESIGN_REVIEW_COMPLETE__V3_1_RAW_REPLAY_PENDING",
   "reviewer": "ChatGPT GPT-5.6 Sol (AI-assisted reviewer; not human sign-off)",
   "review_date": "2026-09-17",
+  "superseded_for_human_decisions_by": "review_queue.json",
   "cases": [
     {
       "case_id": "FACT-01",

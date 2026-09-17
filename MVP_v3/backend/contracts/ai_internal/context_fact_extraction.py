@@ -10,6 +10,7 @@ SemanticKey = Literal[
     "transfer.actual.status",
     "transfer.requested.amount",
     "transfer.actual.amount",
+    "transfer.promised_return.amount",
     "exposure.personal_information",
     "exposure.account_information",
     "exposure.authentication_information",
@@ -62,7 +63,7 @@ class ContextFactProposal(ContextFactExtractionModel):
     @model_validator(mode="after")
     def validate_typed_value(self):
         value = self.value
-        if self.semantic_key in {"transfer.requested.amount", "transfer.actual.amount"}:
+        if self.semantic_key in {"transfer.requested.amount", "transfer.actual.amount", "transfer.promised_return.amount"}:
             amount = value.get("amount_krw")
             if not isinstance(amount, int) or isinstance(amount, bool) or amount < 0 or value.get("currency") != "KRW":
                 raise ValueError("금액 사실은 0 이상의 정수 amount_krw와 currency=KRW가 필요합니다.")
@@ -89,9 +90,30 @@ class ContextFactProposal(ContextFactExtractionModel):
         return self
 
 
+class ContextUnmappedObservation(ContextFactExtractionModel):
+    """Safe extension envelope for information not covered by SemanticKey."""
+
+    observation_id: str = Field(min_length=1, max_length=100)
+    observation_type: str = Field(min_length=1, max_length=80)
+    candidate_categories: list[str] = Field(default_factory=list, max_length=12)
+    lexical_codes: list[str] = Field(default_factory=list, max_length=20)
+    observed_terms: list[dict[str, str]] = Field(default_factory=list, max_length=12)
+    speech_act: str | None = Field(default=None, max_length=60)
+    action_state: str | None = Field(default=None, max_length=40)
+    polarity: str = Field(default="POSITIVE", max_length=40)
+    modality: str | None = Field(default=None, max_length=40)
+    amount_role: str | None = Field(default=None, max_length=40)
+    amount_value_krw: int | None = Field(default=None, ge=0)
+    source_turn_id: int = Field(ge=1)
+    source_event_id: str | None = Field(default=None, max_length=100)
+    confidence: float = Field(ge=0, le=1)
+    status: Literal["UNMAPPED", "REVIEWED", "MAPPED", "DISMISSED"] = "UNMAPPED"
+
+
 class ContextFactExtractionOutput(ContextFactExtractionModel):
     schema_version: Literal["context-fact-proposals.v1"] = "context-fact-proposals.v1"
     proposals: list[ContextFactProposal] = Field(default_factory=list, max_length=24)
+    unmapped_observations: list[ContextUnmappedObservation] = Field(default_factory=list, max_length=24)
     model_version: str = Field(default="deterministic-v1", max_length=100)
     prompt_version: str = Field(default="context-fact-v1", max_length=100)
 

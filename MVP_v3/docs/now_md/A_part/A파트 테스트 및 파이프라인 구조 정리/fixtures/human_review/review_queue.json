@@ -1,8 +1,8 @@
 {
   "schema_version": "a-part-human-review-queue.v1",
-  "review_status": "AI_ASSISTED_DESIGN_REVIEW_COMPLETE__V3_1_RAW_REPLAY_PENDING",
-  "human_signoff": "PENDING",
-  "reviewer": "ChatGPT GPT-5.6 Sol (AI-assisted reviewer; not human sign-off)",
+  "review_status": "HUMAN_REVIEW_COMPLETE__V3_1_RAW_REPLAY_PENDING",
+  "human_signoff": "CONFIRMED_FOR_CASES_1_TO_3",
+  "reviewer": "User-provided human decisions",
   "review_date": "2026-09-17",
   "source_of_truth": {
     "turn_text": "replay_benchmark/fact_context_cases.json",
@@ -11,29 +11,74 @@
     "v3_1_projection": "FACT_CONTEXT_GOLD_v3_1_HIGH_FIDELITY.json"
   },
   "dataset_findings": [
-    "30 cases total; 2 unique 5-turn sequences",
-    "FACT-01 through FACT-20 share one sequence; FACT-21 through FACT-30 share another",
-    "FACT-01, FACT-02, and FACT-03 are text-identical and must not be treated as different semantic scenarios",
-    "legacy atomic_facts are audit-only and are not Human Gold"
+    "30 cases total; 2 unique five-turn sequences",
+    "FACT-01 through FACT-20 share one risky sequence; FACT-21 through FACT-30 share another",
+    "FACT-01, FACT-02, and FACT-03 are text-identical",
+    "legacy atomic_facts are audit-only and never override actual turn text"
   ],
   "cases": [
     {
       "case_id": "FACT-01",
       "status": "CODEX_PROVISIONAL",
-      "human_decision": "PENDING",
-      "review_note": "Risky sequence review target: crime claim, auth-code request, isolation, transfer/safe-account pretext, urgency/call control. Unsupported organization, amount, actual disclosure, and remote-app facts remain UNKNOWN/MISSING."
+      "human_decision": "APPROVED",
+      "review_purpose": "REPRESENTATIVE_RISKY_SEQUENCE",
+      "review_note": "대표 risky sequence의 Canonical 의미와 안전성 기준을 확인한다.",
+      "expected_semantic_behavior": [
+        "crime involvement claim, auth-code request, isolation, transfer/safe-account pretext, urgency/call control are preserved",
+        "unsupported organization, role, amount, actual disclosure, and remote-app facts remain UNKNOWN or MISSING"
+      ]
     },
     {
       "case_id": "FACT-02",
-      "status": "NEEDS_REVIEW",
-      "human_decision": "PENDING",
-      "review_note": "Text is identical to FACT-01. Existing description suggesting negation/conditional/verification-state coverage is not supported by the actual turns."
+      "status": "CODEX_PROVISIONAL",
+      "human_decision": "APPROVED",
+      "review_purpose": "DUPLICATE_SEQUENCE_CONSISTENCY",
+      "review_note": "FACT-01과 실제 turn text가 동일한 반복 입력 Case다. 별도의 negation/conditional 시나리오로 해석하지 않고, 동일한 입력이 Case ID나 legacy metadata 차이와 무관하게 동일한 Canonical 의미로 재구성되는지 검증한다.",
+      "expected_semantic_behavior": [
+        "Canonical semantic result는 FACT-01과 동일해야 한다.",
+        "claimed_organization과 claimed_role은 MISSING이어야 한다.",
+        "auth_code_disclosure_requested는 true / OBSERVED여야 한다.",
+        "auth_code_shared는 null / UNKNOWN이어야 한다.",
+        "transfer_requested_or_instructed는 true / OBSERVED여야 한다.",
+        "transfer_amount_krw는 null / MISSING이어야 한다.",
+        "isolation_family과 isolation_bank_staff는 true / OBSERVED여야 한다.",
+        "safe_account_destination_claimed와 call_control은 true / OBSERVED여야 한다.",
+        "urgency는 IMMEDIATE / OBSERVED여야 한다."
+      ],
+      "consistency_gate": {
+        "same_input_same_canonical_semantics": true,
+        "case_id_must_not_change_semantics": true,
+        "legacy_metadata_must_not_override_turn_text": true
+      },
+      "human_note": "기존 fixture 설명 오류를 수정함. FACT-02는 동일 입력에 대한 의미 재구성 일관성 검증 Case로 사용한다."
     },
     {
       "case_id": "FACT-03",
-      "status": "NEEDS_REVIEW",
-      "human_decision": "PENDING",
-      "review_note": "Text is identical to FACT-01. Existing description suggesting multiple requests, amount, and action-state coverage is not supported by the actual turns."
+      "status": "CODEX_PROVISIONAL",
+      "human_decision": "APPROVED",
+      "review_purpose": "UNSUPPORTED_CONCRETE_VALUE_GUARD",
+      "review_note": "FACT-01과 실제 turn text는 동일하지만 legacy atomic_facts에는 원문에 없는 기관명, 역할, 송금액, 인증정보 공유 여부, 원격앱 요청 등이 포함되어 있다. 이 Case는 모델 또는 후처리 로직이 이러한 legacy concrete value를 원문보다 우선하여 환각하지 않는지 검증한다.",
+      "expected_semantic_behavior": [
+        "원문에 없는 특정 기관명·역할명·송금 금액을 생성하지 않는다.",
+        "인증번호 제공 요청을 실제 인증번호 제공 완료로 승격하지 않는다.",
+        "비밀번호 공유 여부를 false 또는 true로 임의 확정하지 않는다.",
+        "원격앱 요청을 생성하지 않는다.",
+        "REQUESTED 또는 INSTRUCTED 상태를 COMPLETED로 승격하지 않는다."
+      ],
+      "forbidden_inferences": [
+        "specific claimed organization",
+        "specific claimed role",
+        "transfer amount",
+        "actual authentication-code disclosure",
+        "password disclosure",
+        "remote-app request"
+      ],
+      "safety_gate": {
+        "unsupported_concrete_value_count": 0,
+        "false_completion_count": 0,
+        "critical_contradiction_count": 0
+      },
+      "human_note": "기존 amount/multi-request 시나리오 설명을 수정함. FACT-03은 legacy concrete label을 모델이 따라가지 않는지 확인하는 grounding 검증 Case로 사용한다."
     }
   ],
   "hard_gate_status": "PENDING_RAW_REPLAY",
