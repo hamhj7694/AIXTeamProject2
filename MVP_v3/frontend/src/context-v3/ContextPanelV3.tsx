@@ -12,6 +12,7 @@ import type { ContextPanelItemV3, ContextPanelSectionV3, ContextPanelV3 as Conte
 
 interface Props {
   accessRevision: number; caseItem: StoredCase; bundle: CaseBundle; open: boolean; onToggle: () => void;
+  onSummaryChange?: (summary: string | null, revision: number) => void;
   onCreateVerification: () => void; onEditVerification: (task: VerificationTask) => void; onProgressSaved: (items: CustomerProgressItem[]) => void;
 }
 
@@ -108,10 +109,19 @@ export const ContextPanelV3: React.FC<Props> = (props) => {
 
   const load = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
-    try { setError(''); setData(await loadContextPanelV3(props.caseItem.case_id, signal)); }
+    try {
+      setError('');
+      const panel = await loadContextPanelV3(props.caseItem.case_id, signal);
+      const summary = panel.sections.find((section) => section.section_id === 'SUMMARY');
+      const summaryItems = summary ? visibleSummaryItems(summary, props.caseItem.risk, props.caseItem.status)
+        .filter((item, index, items) => !/^확정 사실 \d+건 · 검토 대기 \d+건$/.test(item.display_value)
+          || items.findIndex((candidate) => candidate.display_value === item.display_value) === index) : [];
+      props.onSummaryChange?.(summaryItems.map((item) => item.display_value).join('\n') || null, panel.source_revision);
+      setData(panel);
+    }
     catch (reason) { if (!signal?.aborted) setError(reason instanceof Error ? reason.message : '맥락 패널을 불러오지 못했습니다.'); }
     finally { if (!signal?.aborted) setLoading(false); }
-  }, [props.caseItem.case_id]);
+  }, [props.caseItem.case_id, props.onSummaryChange]);
   useEffect(() => { const controller = new AbortController(); void load(controller.signal); return () => controller.abort(); }, [load, props.accessRevision, props.bundle.cursor, props.bundle.case.context_revision]);
 
   const visibleData = data?.case_id === props.caseItem.case_id ? data : null;
