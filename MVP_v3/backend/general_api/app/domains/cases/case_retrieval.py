@@ -14,6 +14,11 @@ from collections import Counter, OrderedDict
 from dataclasses import dataclass
 
 from contracts.user_text import user_text
+from contracts.ai_internal.case_copilot import (
+    BankCopilotSourceContext, CopilotLegacyFact, CopilotQuestionAnswer,
+    CopilotVerification, CopilotMessage,
+)
+from contracts.question_target import decode_follow_up_target
 
 
 @dataclass(frozen=True)
@@ -188,3 +193,44 @@ def staff_context(records: list[CaseRecord]) -> list[str]:
     # Include current staff decisions even when they do not match query words.
     return [f"{r.kind}: {r.text[:350]}" for kind in ("사실", "담당자 업무", "담당자 결정")
             for r in [r for r in records if r.kind == kind][-6:]]
+
+
+def bank_source_context(case_id: str, resources, *, facts, questions, verifications, messages) -> BankCopilotSourceContext:
+    """Preserve stored provenance before lexical/string projection; never promote sources."""
+    if resources.case_id != case_id:
+        raise ValueError("Case context source mismatch")
+    if any(fact.case_id != case_id for fact in resources.facts):
+        raise ValueError("Case fact source mismatch")
+    for collection in (facts, questions, verifications, messages):
+        if any(item.get("case_id", case_id) != case_id for item in collection):
+            raise ValueError("Case context record mismatch")
+    from .repository import normalize_target_field
+    legacy = [CopilotLegacyFact(
+        fact_id=item["fact_id"], case_id=case_id,
+        field=normalize_target_field(item.get("field", item.get("field_name", ""))),
+        value=str(item.get("value", "")), source=item.get("source", ""), status=item["status"],
+        **{key: item.get(key) for key in ("evidence_message_id", "source_question_id", "confirmed_by", "confirmed_at", "created_at")},
+    ) for item in facts[-100:]]
+    answers = []
+    for item in questions[-50:]:
+        target = decode_follow_up_target(normalize_target_field(item["target_field"]))
+        answers.append(CopilotQuestionAnswer(
+            question_id=item["question_id"], case_id=case_id, canonical_scope=target.canonical_scope,
+            parent_question_id=target.parent_question_id, question_text=item["question_text"],
+            answer_text=item.get("answer_text"), status=item["status"],
+            **{key: item.get(key) for key in ("answer_message_id", "created_at", "asked_at", "answered_at")},
+        ))
+    checks = [CopilotVerification(
+        verification_task_id=item["verification_task_id"], case_id=case_id,
+        target=item.get("target", ""), claim=item.get("claim", ""), status=item["status"],
+        **{key: item.get(key) for key in ("result_summary", "version", "evidence_url", "verified_by", "rag_source", "created_at", "updated_at")},
+    ) for item in verifications[-20:]]
+    human_messages = [item for item in messages if item.get("actor_type") in {"CUSTOMER", "BANK_STAFF"}
+                      and item.get("message_kind") not in {"AI_RESPONSE", "REPORT_CARD"}][-20:]
+    return BankCopilotSourceContext(
+        facts=resources.facts[-100:], legacy_facts=legacy, questions=answers, verifications=checks,
+        messages=[CopilotMessage(message_id=item["message_id"], case_id=case_id,
+            actor_type=item["actor_type"], content=item.get("content", ""), created_at=item.get("created_at")) for item in human_messages],
+        truncated=any(len(items) > limit for items, limit in (
+            (resources.facts, 100), (facts, 100), (questions, 50), (verifications, 20), (messages, 20))),
+    )
