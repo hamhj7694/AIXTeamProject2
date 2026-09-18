@@ -5,7 +5,8 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from contracts.ai_internal.case_copilot import CaseCopilotInput
+from contracts.ai_internal.case_copilot import CaseCopilotInput, BankCopilotSourceContext
+from contracts.public_api.case_context_v2 import PublicCaseFactV2
 from ai_api.app.domains.case_support.copilot_quality import CopilotQualityEvaluator
 from ai_api.app.domains.case_support.copilot_service import CaseCopilotService, CaseCopilotProviderError
 
@@ -113,3 +114,146 @@ class FactGroundingProviderTest(unittest.IsolatedAsyncioTestCase):
                 "CUSTOMER_SUPPORT", ["질문: 송금 여부 / 고객 답변: 송금했어요"],
                 "송금한 것이 확인되었습니다.", recent_conversation=["이전 AI: 송금함 (CONFIRMED)"],
             )
+
+
+def source_fact(source="CUSTOMER_STATEMENT", status="PROPOSED", **updates):
+    data = dict(fact_id="f-transfer", case_id="SOURCE-CASE", semantic_key="transfer.actual.status",
+        display_label="송금", value={"status": "TRANSFERRED", "amount_krw": 10_000_000},
+        display_value="1,000만원 송금함", source_kind=source, status=status, version=1,
+        created_at="2026-09-18T01:00:00Z", updated_at="2026-09-18T01:00:00Z")
+    if status == "CONFIRMED":
+        data.update(confirmed_by="staff", confirmed_at="2026-09-18T02:00:00Z")
+    if status == "SUPERSEDED":
+        data["supersedes_fact_id"] = "f-current"
+    data.update(updates)
+    return PublicCaseFactV2.model_validate(data)
+
+
+class SourceAwareGroundingTest(unittest.TestCase):
+    def check(self, response, facts=(), verifications=(), **extra):
+        return CopilotQualityEvaluator.evaluate(assistant_mode="BANK_INTERNAL", prompt="송금 근거는 무엇인가요?",
+            response=response, grounding_context=["송금함 (CONFIRMED) 공식 확인 결과"],
+            source_context=BankCopilotSourceContext(facts=list(facts), verifications=list(verifications), **extra))
+
+    def test_customer_statement_is_attributed_and_objective_claim_blocked(self):
+        fact = source_fact()
+        good = "고객은 1,000만원을 송금했다고 진술했습니다. 현재 전달된 거래 Evidence만으로 실제 이체 완료 여부는 확인되지 않았습니다."
+        self.assertNotIn("unsupported_certainty", self.check(good, [fact]).failed_criteria)
+        for bad in ("고객이 1,000만원을 송금했습니다.", "고객이 1,000만원을 보냈습니다.",
+                    "고객 진술로 1,000만원 송금한 사실이 확정되었습니다."):
+            with self.subTest(reply=bad):
+                self.assertIn("unsupported_certainty", self.check(bad, [fact]).failed_criteria)
+
+    def test_bank_record_allows_only_its_own_value(self):
+        reply = "은행 거래기록에서 1,000만원 이체 내역이 확인됩니다."
+        self.assertNotIn("unsupported_certainty", self.check(reply, [source_fact("BANK_RECORD", "CONFIRMED")]).failed_criteria)
+        for fact in (source_fact(), source_fact("BANK_RECORD"), source_fact("STAFF_OBSERVATION", "CONFIRMED")):
+            with self.subTest(source=fact.source_kind, status=fact.status):
+                self.assertIn("unsupported_certainty", self.check(reply, [fact]).failed_criteria)
+        self.assertIn("unsupported_certainty", self.check(reply.replace("1,000", "2,000"), [source_fact("BANK_RECORD", "CONFIRMED")]).failed_criteria)
+
+    def test_confirmed_customer_source_stays_customer_and_staff_confirmation_is_separate(self):
+        fact = source_fact(status="CONFIRMED")
+        self.assertIn("unsupported_certainty", self.check("은행 거래기록에서 1,000만원 이체 내역이 확인됩니다.", [fact]).failed_criteria)
+        self.assertIn("unsupported_certainty", self.check("고객이 1,000만원을 송금했습니다.", [fact]).failed_criteria)
+        self.assertNotIn("unsupported_certainty", self.check("고객은 1,000만원을 송금했다고 진술했습니다. 담당자가 이 송금 내용을 확인했습니다.", [fact]).failed_criteria)
+        self.assertIn("unsupported_certainty", self.check("담당자가 이 송금 내용을 확인했습니다.", [source_fact()]).failed_criteria)
+
+    def test_reference_alone_never_authorizes_verification(self):
+        fact = source_fact(evidence_refs=[{"type": "BANK_TRANSACTION", "id": "transaction"}])
+        self.assertIn("unsupported_certainty", self.check("1,000만원 송금한 것이 공식 검증되었습니다.", [fact]).failed_criteria)
+
+    def test_only_completed_linked_revision_authorizes_its_claim(self):
+        fact = source_fact(evidence_refs=[{"type": "VERIFICATION_RESULT", "id": "verification", "revision": 2}])
+        base = dict(verification_task_id="verification", case_id="SOURCE-CASE", target="송금 거래",
+                    claim="1,000만원 송금 여부", result_summary="1,000만원 송금한 기록 확인", version=2)
+        reply = "1,000만원 송금한 것이 공식 검증되었습니다."
+        self.assertNotIn("unsupported_certainty", self.check(reply, [fact], [dict(base, status="COMPLETED")]).failed_criteria)
+        for changes in (dict(status="PENDING"), dict(status="FAILED"), dict(status="COMPLETED", result_summary=""),
+                        dict(status="COMPLETED", version=1), dict(status="COMPLETED", verification_task_id="unrelated")):
+            with self.subTest(changes=changes):
+                self.assertIn("unsupported_certainty", self.check(reply, [fact], [dict(base, **changes)]).failed_criteria)
+
+    def test_unrelated_completed_result_does_not_verify_transfer(self):
+        fact = source_fact(semantic_key="offender.claimed_organization", display_value="검찰청 주장",
+            value={"text": "검찰청"}, evidence_refs=[{"type": "VERIFICATION_RESULT", "id": "v-org"}])
+        check = dict(verification_task_id="v-org", case_id="SOURCE-CASE", target="검찰청 기관",
+            claim="기관 실재 여부", status="COMPLETED", result_summary="기관 실재 확인")
+        self.assertIn("unsupported_certainty", self.check("1,000만원 송금한 것이 공식 검증되었습니다.", [fact], [check]).failed_criteria)
+
+    def test_rejected_and_superseded_current_grounding_excluded(self):
+        for status, updates in (("REJECTED", {"rejection_reason": "근거 불일치"}), ("SUPERSEDED", {})):
+            with self.subTest(status=status):
+                fact = source_fact("BANK_RECORD", status, **updates)
+                self.assertIn("unsupported_certainty", self.check("은행 거래기록에서 1,000만원 이체 내역이 확인됩니다.", [fact]).failed_criteria)
+
+    def test_superseded_reference_blocks_old_customer_message_as_current_basis(self):
+        fact = source_fact(status="SUPERSEDED", evidence_refs=[{"type": "MESSAGE", "id": "old"}])
+        old = dict(message_id="old", case_id="SOURCE-CASE", actor_type="CUSTOMER", content="1,000만원 송금했어요")
+        self.assertIn("unsupported_certainty", self.check("고객은 1,000만원 송금했다고 진술했습니다.", [fact], messages=[old]).failed_criteria)
+
+    def test_absent_evidence_does_not_mean_no_transfer_and_ai_text_is_not_evidence(self):
+        self.assertNotIn("unsupported_certainty", self.check("현재 전달된 거래 Evidence만으로 실제 이체 완료 여부는 확인되지 않았습니다.").failed_criteria)
+        for reply in ("현재 은행 거래기록은 없습니다.", "고객이 송금한 사실은 아직 확인되지 않았습니다.",
+                      "고객이 송금한 것이 공식 검증되지 않았습니다."):
+            with self.subTest(reply=reply):
+                self.assertNotIn("unsupported_certainty", self.check(reply).failed_criteria)
+        self.assertIn("unsupported_certainty", self.check("거래 Evidence가 없으므로 고객은 송금하지 않았습니다.").failed_criteria)
+        ai = dict(message_id="ai", case_id="SOURCE-CASE", actor_type="BANK_AGENT", content="1,000만원 송금함 (CONFIRMED)")
+        self.assertIn("unsupported_certainty", self.check("1,000만원 송금한 것이 확인되었습니다.", messages=[ai]).failed_criteria)
+
+    def test_receipt_not_supplied_is_not_invented(self):
+        self.assertIn("unsupported_certainty", self.check("송금 영수증이 제출되어 있습니다.", [source_fact()]).failed_criteria)
+
+    def test_conflicting_values_are_not_selected_by_timestamp(self):
+        positive = source_fact("BANK_RECORD", "CONFIRMED")
+        negative = source_fact("BANK_RECORD", "CONFIRMED", fact_id="f-negative",
+                              value={"status": "NOT_TRANSFERRED"}, display_value="송금하지 않음", updated_at="2026-09-18T05:00:00Z")
+        for facts in ([positive, negative], [negative, positive]):
+            with self.subTest(order=[f.fact_id for f in facts]):
+                self.assertIn("unsupported_certainty", self.check("송금한 것이 확인되었습니다.", facts).failed_criteria)
+        conflicting_string = CopilotQualityEvaluator.evaluate(assistant_mode="BANK_INTERNAL", prompt="송금 근거",
+            response="은행 거래기록에서 1,000만원 이체 내역이 확인됩니다.",
+            grounding_context=["transfer_status: NOT_TRANSFERRED (CONFIRMED)"],
+            source_context=BankCopilotSourceContext(facts=[positive]))
+        self.assertIn("unsupported_certainty", conflicting_string.failed_criteria)
+
+    def test_bank_only_context_and_case_boundaries(self):
+        context = BankCopilotSourceContext(facts=[source_fact()])
+        for mode, case in (("CUSTOMER_SUPPORT", "SOURCE-CASE"), ("BANK_INTERNAL", "OTHER")):
+            with self.subTest(mode=mode), self.assertRaises(ValueError):
+                CaseCopilotInput(case_id=case, prompt="근거", assistant_mode=mode, source_context=context)
+
+
+class SourceAwareProviderTest(unittest.IsolatedAsyncioTestCase):
+    async def generate(self, reply, *, error=None, context=None):
+        create = AsyncMock(return_value=SimpleNamespace(output_text=reply), side_effect=error)
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}), patch(
+            "ai_api.app.domains.case_support.copilot_service.AsyncOpenAI",
+            return_value=SimpleNamespace(responses=SimpleNamespace(create=create)),
+        ):
+            result = await CaseCopilotService().generate(CaseCopilotInput(case_id="SOURCE-CASE", prompt="송금 근거를 설명해 주세요",
+                source_context=context or BankCopilotSourceContext(facts=[source_fact()])))
+        return result, create.await_args.kwargs
+
+    async def test_source_preserved_to_provider_and_direct_answer_policy_kept(self):
+        reply = "고객은 1,000만원을 송금했다고 진술했습니다. 실제 거래기록은 아직 확인이 필요합니다."
+        result, args = await self.generate(reply)
+        self.assertEqual(result.content, reply)
+        self.assertIn('"source_kind":"CUSTOMER_STATEMENT"', args["input"])
+        self.assertIn('"status":"PROPOSED"', args["input"])
+        for rule in ("실제 질문에 직접 답변", "CONFIRMED여도 BANK_RECORD가 아닙니다", "timestamp만으로", "Evidence 미전달은 거래 미발생이 아닙니다"):
+            self.assertIn(rule, args["instructions"])
+
+    async def test_unsupported_objective_reply_is_not_delivered(self):
+        with self.assertRaises(CaseCopilotProviderError):
+            await self.generate("고객이 1,000만원 송금했습니다.")
+
+    async def test_bank_record_reply_delivered_without_promoting_customer_source(self):
+        result, _ = await self.generate("은행 거래기록에서 1,000만원 이체 내역이 확인됩니다.",
+            context=BankCopilotSourceContext(facts=[source_fact("BANK_RECORD", "CONFIRMED")]))
+        self.assertIn("거래기록", result.content)
+
+    async def test_provider_failure_stays_error(self):
+        with self.assertRaises(CaseCopilotProviderError):
+            await self.generate("", error=RuntimeError("provider unavailable"))

@@ -8,7 +8,9 @@ from contracts.public_api.case_context_v2 import PublicCaseContextResourcesV2
 from general_api.app.domains.cases.case_retrieval import (
     CaseRecord, CaseRetriever, collect_records, merge_support_records,
     retrieve_context, similar_question, workspace_records,
+    bank_source_context,
 )
+from contracts.question_target import encode_follow_up_target
 from general_api.app.domains.cases.repository import InMemoryCaseRepository
 import general_api.app.main as main
 
@@ -101,6 +103,7 @@ class RetrievalWiringTest(unittest.TestCase):
         CaseCopilotInput.model_validate(customer_input)
         self.assertNotIn('은행 내부 제한 정보', str(customer_input))
         self.assertEqual(customer_input['retrieved_context'], [])
+        self.assertNotIn('source_context', customer_input)
 
     def test_staff_confirmation_reaches_support_without_rewriting_legacy_fact(self):
         store = main.case_context_v2_repository()
@@ -116,3 +119,83 @@ class RetrievalWiringTest(unittest.TestCase):
         self.assertEqual(facts[0]['status'], 'CONFIRMED')
         self.assertEqual(legacy[0]['value'], 'YES')
         self.assertIn('transfer_status', main.build_question_recommendation_context(facts, [])['confirmed_fields'])
+
+    def test_bank_production_input_preserves_source_status_evidence_and_freshness(self):
+        store = main.case_context_v2_repository()
+        fact = asyncio.run(store.create_fact('VP-RAG', {
+            'client_request_id': 'typed-fact-001', 'semantic_key': 'transfer.actual.status',
+            'display_label': '송금', 'value': {'status': 'TRANSFERRED', 'amount_krw': 10_000_000},
+            'display_value': '1,000만원 송금함',
+            'evidence_refs': [{'type': 'QUESTION_ANSWER', 'id': 'msg-answer', 'revision': 1}],
+        }, 'customer-answer', source_kind='CUSTOMER_STATEMENT'))
+        confirmed = asyncio.run(store.review_fact('VP-RAG', fact.fact_id, 1, 'CONFIRM', '진술 확인', 'staff'))
+        self.repo._customer_questions = [dict(question_id='cq-parent', case_id='VP-RAG', target_field='transfer_status',
+            question_text='송금하셨나요?', status='ANSWERED', answer_text='기억이 잘 안 나요', sequence=1,
+            created_at='2026-09-18T01:00:00Z', answered_at='2026-09-18T02:00:00Z'),
+            dict(question_id='cq-child', case_id='VP-RAG', target_field=encode_follow_up_target('transfer_status', 'cq-parent'),
+            question_text='거래내역을 확인할 수 있나요?', status='ANSWERED', answer_text='1,000만원 송금했어요', sequence=2,
+            answer_message_id='msg-answer', answered_at='2026-09-18T03:00:00Z')]
+        self.repo._messages = [dict(message_id='old-ai', case_id='VP-RAG', actor_type='BANK_AGENT',
+            content='없는 거래 영수증이 확인되었습니다', message_kind='AI_RESPONSE', visibility='BANK_INTERNAL', channel='TEAM')]
+        response = self.client.post('/api/cases/VP-RAG/ai/invocations', json={
+            'prompt': '송금 근거를 설명해 주세요', 'channel': 'TEAM', 'requester_user_id': 'staff', 'requester_display_name': '담당자',
+        })
+        self.assertEqual(response.status_code, 201, response.text)
+        payload = self.ai.await_args.args[0]
+        parsed = CaseCopilotInput.model_validate(payload)
+        transmitted = parsed.source_context.facts[0]
+        self.assertEqual(transmitted.model_dump(), confirmed.model_dump())
+        self.assertEqual((transmitted.source_kind, transmitted.status), ('CUSTOMER_STATEMENT', 'CONFIRMED'))
+        self.assertEqual(parsed.source_context.questions[1].canonical_scope, 'transfer_status')
+        self.assertEqual(parsed.source_context.questions[1].parent_question_id, 'cq-parent')
+        self.assertIsNotNone(parsed.source_context.questions[1].answered_at)
+        self.assertEqual(parsed.source_context.messages, [])
+        self.assertNotIn('없는 거래 영수증', str(payload['recent_conversation']))
+        self.assertNotIn('source_context', response.json())
+
+    def test_superseded_records_and_completed_verification_are_transmitted_without_source_promotion(self):
+        store = main.case_context_v2_repository()
+        old = asyncio.run(store.create_fact('VP-RAG', {
+            'client_request_id': 'typed-old', 'semantic_key': 'offender.claimed_organization',
+            'display_label': '기관', 'value': {'text': '검찰청'}, 'display_value': '검찰청 주장',
+        }, 'staff'))
+        asyncio.run(store.review_fact('VP-RAG', old.fact_id, old.version, 'CONFIRM', '기존 사실 확인', 'staff'))
+        new = asyncio.run(store.create_fact('VP-RAG', {
+            'client_request_id': 'typed-new', 'semantic_key': 'offender.claimed_organization',
+            'display_label': '기관', 'value': {'text': '기관 사칭'}, 'display_value': '기관 사칭 확인',
+            'evidence_refs': [{'type': 'VERIFICATION_RESULT', 'id': 'verification', 'revision': 2}],
+        }, 'staff', source_kind='OFFICIAL_VERIFICATION'))
+        asyncio.run(store.review_fact('VP-RAG', new.fact_id, 1, 'CONFIRM', '확인 결과', 'staff', old.fact_id))
+        self.repo._verifications = [dict(verification_task_id='verification', case_id='VP-RAG', target='검찰청',
+            claim='기관 실재', status='COMPLETED', result_summary='기관 사칭 확인', version=2,
+            verified_by='staff', evidence_url='https://example.invalid/result', updated_at='2026-09-18T03:00:00Z')]
+        resources = asyncio.run(store.list_resources('VP-RAG'))
+        context = bank_source_context('VP-RAG', resources, facts=[], questions=[], messages=[], verifications=self.repo._verifications)
+        by_id = {f.fact_id: f for f in context.facts}
+        self.assertEqual(by_id[old.fact_id].status, 'SUPERSEDED')
+        self.assertEqual(by_id[old.fact_id].supersedes_fact_id, new.fact_id)
+        self.assertEqual(by_id[new.fact_id].source_kind, 'OFFICIAL_VERIFICATION')
+        self.assertEqual(context.verifications[0].version, 2)
+        self.assertEqual(context.verifications[0].verified_by, 'staff')
+        self.assertIsNotNone(context.verifications[0].updated_at)
+
+    def test_cross_case_context_rejected_and_record_limits_are_explicit(self):
+        resources = PublicCaseContextResourcesV2(case_id='VP-RAG', context_revision=1)
+        messages = [dict(message_id=f'm-{i}', case_id='VP-RAG', actor_type='CUSTOMER', content='송금했어요') for i in range(25)]
+        context = bank_source_context('VP-RAG', resources, facts=[], questions=[], verifications=[], messages=messages)
+        self.assertEqual(len(context.messages), 20)
+        self.assertTrue(context.truncated)
+        messages[0]['case_id'] = 'OTHER'
+        with self.assertRaises(ValueError):
+            bank_source_context('VP-RAG', resources, facts=[], questions=[], verifications=[], messages=messages)
+
+    def test_legacy_fact_provenance_preserved_without_inferred_customer_or_bank_source(self):
+        resources = PublicCaseContextResourcesV2(case_id='VP-RAG', context_revision=1)
+        raw = dict(fact_id='legacy', case_id='VP-RAG', field='transfer_status', value='송금했어요',
+            source='AI_EXTRACTED', status='PROPOSED', evidence_message_id='msg', source_question_id='cq-parent',
+            created_at='2026-09-18T01:00:00Z')
+        context = bank_source_context('VP-RAG', resources, facts=[raw], questions=[], messages=[], verifications=[])
+        self.assertEqual(context.legacy_facts[0].source, 'AI_EXTRACTED')
+        self.assertEqual(context.legacy_facts[0].evidence_message_id, 'msg')
+        self.assertEqual(context.legacy_facts[0].source_question_id, 'cq-parent')
+        self.assertIsNone(context.legacy_facts[0].confirmed_at)
