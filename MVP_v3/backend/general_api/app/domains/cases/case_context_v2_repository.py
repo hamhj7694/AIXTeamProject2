@@ -170,6 +170,15 @@ class InMemoryCaseContextV2Repository:
         if hasattr(self.cases, "_touch_case"):
             self.cases._touch_case(case_id, _iso(now))
 
+    def _task_event(self, case_id: str, event_type: str, actor: str, task: PublicCaseTaskV2, operation: str) -> None:
+        self.cases._events.append({
+            "event_id": len(self.cases._events) + 1, "case_id": case_id,
+            "event_type": event_type, "actor_type": "BANK_STAFF",
+            "payload": {"task_id": task.task_id, "version": task.version, "status": task.status,
+                        "assignee_user_id": task.assignee_user_id, "operation": operation},
+            "occurred_at": task.updated_at,
+        })
+
     def _history(self, case_id: str, entity_type: str, entity_id: str, version: int, operation: str, actor: str, before: Any, after: Any) -> None:
         self.cases._context_v2_history.append({
             "case_id": case_id, "entity_type": entity_type, "entity_id": entity_id,
@@ -379,6 +388,7 @@ class InMemoryCaseContextV2Repository:
                 self.cases._context_v2_tasks[(case_id, task.task_id)] = task
                 after = before.model_copy(update={"status": "ACCEPTED", "accepted_task_id": task.task_id, "reviewed_by": actor, "reviewed_at": now, "version": before.version + 1, "updated_at": now})
                 self._history(case_id, "TASK", task.task_id, 1, "CREATE_FROM_SUGGESTION", actor, None, task)
+                self._task_event(case_id, "TASK_CREATED", actor, task, "CREATE_FROM_SUGGESTION")
             else:
                 after = before.model_copy(update={"status": "DISMISSED", "dismissal_reason": data["reason"], "reviewed_by": actor, "reviewed_at": now, "version": before.version + 1, "updated_at": now})
             self.cases._context_v2_suggestions[(case_id, suggestion_id)] = after
@@ -404,6 +414,7 @@ class InMemoryCaseContextV2Repository:
             self.cases._context_v2_tasks[(case_id, item.task_id)] = item
             self.cases._context_v2_requests[(case_id, "TASK", data.get("client_request_id"))] = item.task_id
             self._history(case_id, "TASK", item.task_id, 1, "CREATE", actor, None, item)
+            self._task_event(case_id, "TASK_CREATED", actor, item, "CREATE")
             self._touch(case_id, now)
             return deepcopy(item)
 
@@ -425,6 +436,12 @@ class InMemoryCaseContextV2Repository:
             after = before.model_copy(update=changes)
             self.cases._context_v2_tasks[(case_id, task_id)] = after
             self._history(case_id, "TASK", task_id, after.version, "UPDATE", actor, before, after)
+            if reopening or ("status" in data and data.get("status") != before.status):
+                self._task_event(case_id, "TASK_STATUS_UPDATED", actor, after, "UPDATE")
+            if "assignee_user_id" in data and data.get("assignee_user_id") != before.assignee_user_id:
+                self._task_event(case_id, "TASK_ASSIGNEE_UPDATED", actor, after, "UPDATE")
+            if not ((reopening or ("status" in data and data.get("status") != before.status)) or ("assignee_user_id" in data and data.get("assignee_user_id") != before.assignee_user_id)):
+                self._task_event(case_id, "TASK_UPDATED", actor, after, "UPDATE")
             self._touch(case_id, now)
             return deepcopy(after)
 
@@ -452,6 +469,7 @@ class InMemoryCaseContextV2Repository:
             after = before.model_copy(update=changes)
             self.cases._context_v2_tasks[(case_id, task_id)] = after
             self._history(case_id, "TASK", task_id, after.version, status, actor, before, after)
+            self._task_event(case_id, "TASK_COMPLETED" if status == "COMPLETED" else "TASK_CANCELLED", actor, after, status)
             self._touch(case_id, now)
             return deepcopy(after)
 
@@ -504,6 +522,15 @@ class MySqlCaseContextV2Repository:
                VALUES (%s,%s,%s,%s,%s,%s,%s,%s)""",
             (case_id, entity_type, entity_id, version, operation, actor,
              _model_json(before) if before else None, _model_json(after)),
+        )
+
+    @staticmethod
+    async def _task_event(cursor: Any, case_id: str, event_type: str, actor: str, task: PublicCaseTaskV2, operation: str) -> None:
+        await cursor.execute(
+            "INSERT INTO case_events (case_id,event_type,actor_type,payload_json,occurred_at) VALUES (%s,%s,'BANK_STAFF',%s,%s)",
+            (case_id, event_type, json.dumps({"task_id": task.task_id, "version": task.version,
+             "status": task.status, "assignee_user_id": task.assignee_user_id, "operation": operation}, ensure_ascii=False),
+             _naive_utc(task.updated_at)),
         )
 
     async def list_resources(self, case_id: str) -> PublicCaseContextResourcesV2:
@@ -793,6 +820,7 @@ class MySqlCaseContextV2Repository:
                         await cursor.execute("UPDATE case_ai_suggestions SET status='ACCEPTED',accepted_task_id=%s,reviewed_by=%s,reviewed_at=%s,version=version+1,updated_at=%s WHERE suggestion_id=%s", (task_id, actor, _naive_utc(now), _naive_utc(now), suggestion_id))
                         task = _task(await self._one(cursor, "case_tasks", "task_id", case_id, task_id))
                         await self._history(cursor, case_id, "TASK", task_id, 1, "CREATE_FROM_SUGGESTION", actor, None, task)
+                        await self._task_event(cursor, case_id, "TASK_CREATED", actor, task, "CREATE_FROM_SUGGESTION")
                     else:
                         await cursor.execute("UPDATE case_ai_suggestions SET status='DISMISSED',dismissal_reason=%s,reviewed_by=%s,reviewed_at=%s,version=version+1,updated_at=%s WHERE suggestion_id=%s", (data["reason"], actor, _naive_utc(now), _naive_utc(now), suggestion_id))
                     after = _suggestion(await self._one(cursor, "case_ai_suggestions", "suggestion_id", case_id, suggestion_id))
@@ -828,6 +856,7 @@ class MySqlCaseContextV2Repository:
                     )
                     item = _task(await self._one(cursor, "case_tasks", "task_id", case_id, task_id))
                     await self._history(cursor, case_id, "TASK", task_id, 1, "CREATE", actor, None, item)
+                    await self._task_event(cursor, case_id, "TASK_CREATED", actor, item, "CREATE")
                 await connection.commit()
                 return item
             except BaseException:
@@ -878,6 +907,19 @@ class MySqlCaseContextV2Repository:
                         await cursor.execute("UPDATE case_tasks SET status='CANCELLED',cancellation_reason=%s,version=version+1,updated_at=%s WHERE task_id=%s", (data["reason"], _naive_utc(now), task_id))
                     after = _task(await self._one(cursor, "case_tasks", "task_id", case_id, task_id))
                     await self._history(cursor, case_id, "TASK", task_id, after.version, operation, actor, before, after)
+                    if operation == "COMPLETED":
+                        await self._task_event(cursor, case_id, "TASK_COMPLETED", actor, after, operation)
+                    elif operation == "CANCELLED":
+                        await self._task_event(cursor, case_id, "TASK_CANCELLED", actor, after, operation)
+                    else:
+                        status_changed = data.get("status") is not None and data.get("status") != before.status
+                        assignee_changed = "assignee_user_id" in data and data.get("assignee_user_id") != before.assignee_user_id
+                        if status_changed:
+                            await self._task_event(cursor, case_id, "TASK_STATUS_UPDATED", actor, after, operation)
+                        if assignee_changed:
+                            await self._task_event(cursor, case_id, "TASK_ASSIGNEE_UPDATED", actor, after, operation)
+                        if not status_changed and not assignee_changed:
+                            await self._task_event(cursor, case_id, "TASK_UPDATED", actor, after, operation)
                 await connection.commit()
                 return after
             except BaseException:

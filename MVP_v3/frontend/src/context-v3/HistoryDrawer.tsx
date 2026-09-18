@@ -14,6 +14,10 @@ const eventLabels: Record<string, string> = {
 const actorLabels: Record<string, string> = { BANK_STAFF: '은행 직원', CUSTOMER: '고객', SYSTEM: '시스템', BANK_AGENT: '직원 지원 AI', CUSTOMER_AGENT: '고객 응대 AI', VERIFICATION: '기관 확인' };
 const eventLabel = (value: string) => eventLabels[value] ?? '기타 사건 기록';
 const actorLabel = (value: string) => actorLabels[value] ?? '알 수 없는 수행자';
+Object.assign(eventLabels, {
+  TASK_CREATED: '업무 생성', TASK_UPDATED: '업무 변경', TASK_ASSIGNEE_UPDATED: '업무 담당자 변경',
+  TASK_STATUS_UPDATED: '업무 상태 변경', TASK_COMPLETED: '업무 완료', TASK_CANCELLED: '업무 취소',
+});
 export const HistoryDrawer: React.FC<{ open: boolean; events: CaseEvent[]; onClose: () => void }> = ({ open, events, onClose }) => {
   const closeRef = useRef<HTMLButtonElement>(null);
   const drawerRef = useRef<HTMLElement>(null);
