@@ -37,7 +37,7 @@ def _uncertain_answer(answer: str) -> bool:
     """typed uncertainty가 없을 때만 사용하는 제한된 문자열 fallback."""
     compact = re.sub(r"\s+", "", answer)
     return any(term in compact for term in (
-        "기억이안나", "기억안나", "기억나지않", "모르겠", "잘모르",
+        "기억이안나", "기억이잘안나", "기억안나", "기억나지않", "모르겠", "잘모르",
         "확실하지않", "애매", "헷갈",
     ))
 

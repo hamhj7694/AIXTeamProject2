@@ -12,6 +12,7 @@ from pymysql.err import IntegrityError
 from request_trace import trace_stage
 
 from .repository import CaseCreationConflictError, CaseVersionConflictError, normalize_target_field, answer_receipt
+from contracts.question_target import canonical_question_scope, is_follow_up_target, follow_up_registration_allowed
 
 
 def _utc_naive(value: str) -> datetime:
@@ -942,12 +943,16 @@ class MySqlCaseRepository:
                     if not await cursor.fetchone():
                         raise KeyError(case_id)
                     await cursor.execute("SELECT COALESCE(MAX(sequence),0) FROM customer_questions WHERE case_id=%s", (case_id,)); sequence = int((await cursor.fetchone())[0])
-                    await cursor.execute("SELECT target_field,question_text FROM customer_questions WHERE case_id=%s AND status IN ('PENDING','ASKED','ANSWERED')", (case_id,)); handled = await cursor.fetchall()
+                    await cursor.execute("SELECT target_field,question_text,question_id,status FROM customer_questions WHERE case_id=%s", (case_id,)); rows = await cursor.fetchall()
+                    history = [dict(zip(("target_field", "question_text", "question_id", "status"), row)) for row in rows]
+                    handled = [row for row in rows if row[3] in {"PENDING", "ASKED", "ANSWERED"}]
                     active_fields = {normalize_target_field(row[0]) for row in handled}
                     active_texts = {" ".join(str(row[1]).split()).casefold() for row in handled}
                     for question in questions:
                         target_field = normalize_target_field(question["target_field"])
                         normalized_text = " ".join(str(question["question_text"]).split()).casefold()
+                        if is_follow_up_target(target_field) and not follow_up_registration_allowed(target_field, question["question_text"], history):
+                            continue
                         if target_field in active_fields or normalized_text in active_texts:
                             continue
                         # Candidate IDs are shared across Cases; persisted instances need unique IDs.
@@ -955,6 +960,7 @@ class MySqlCaseRepository:
                         created_ids.append(qid)
                         active_fields.add(target_field)
                         active_texts.add(normalized_text)
+                        history.append({"question_id": qid, "target_field": target_field, "question_text": question["question_text"], "status": "PENDING"})
                         await cursor.execute("INSERT INTO customer_questions (question_id,case_id,source,target_field,question_text,reason,priority,status,sequence,requested_by,options_json,allow_multi_select,created_at) VALUES (%s,%s,%s,%s,%s,%s,%s,'PENDING',%s,%s,%s,%s,%s)", (qid, case_id, question.get("source", "BANK_SELECTED"), target_field, question["question_text"], question["reason"], question["priority"], sequence, requested_by, json.dumps(question.get("options", []), ensure_ascii=False), bool(question.get("allow_multi_select", False)), now))
                     if created_ids:
                         await cursor.execute("INSERT INTO case_events (case_id,event_type,actor_type,payload_json,occurred_at) VALUES (%s,'CUSTOMER_QUESTIONS_QUEUED','BANK_STAFF',%s,%s)", (case_id, json.dumps({"question_ids": created_ids}), now))
@@ -1045,10 +1051,12 @@ class MySqlCaseRepository:
                          (receipt_id, case_id, 'BANK_AGENT', 'case-copilot', 'CaseCopilot', 'BANK_AGENT',
                           answer_receipt(row['question_text'], answer_text), 'AI_INTERNAL', 'BANK_INTERNAL', 'AI_PRIVATE', 'SYSTEM_EVENT', message_id, now)],
                     )
-                    field = normalize_target_field(row['target_field'])
+                    field = canonical_question_scope(normalize_target_field(row['target_field']))
+                    follow_up = is_follow_up_target(row['target_field'])
                     await cursor.execute("SELECT * FROM case_facts WHERE case_id=%s AND status='PROPOSED' FOR UPDATE", (case_id,))
                     candidates = await cursor.fetchall()
-                    fact = next((f for f in candidates if normalize_target_field(f['field_name']) == field), None)
+                    fact = next((f for f in candidates if normalize_target_field(f['field_name']) == field
+                                 and (not follow_up or f.get('source_question_id') == question_id)), None)
                     fact_id = fact['fact_id'] if fact else f'fact-{uuid.uuid4().hex}'
                     if fact:
                         await cursor.execute('UPDATE case_facts SET value=%s,evidence_message_id=%s,source_question_id=%s WHERE fact_id=%s', (answer_text, message_id, question_id, fact_id))
@@ -1081,16 +1089,18 @@ class MySqlCaseRepository:
                 async with connection.cursor(aiomysql.DictCursor) as cursor:
                     await cursor.execute("SELECT target_field FROM customer_questions WHERE case_id=%s AND question_id=%s", (case_id, question_id)); question = await cursor.fetchone()
                     if not question: raise KeyError(question_id)
-                    canonical_field = normalize_target_field(question["target_field"])
+                    canonical_field = canonical_question_scope(normalize_target_field(question["target_field"]))
+                    follow_up = is_follow_up_target(question["target_field"])
                     await cursor.execute("SELECT * FROM case_facts WHERE case_id=%s AND status='PROPOSED' FOR UPDATE", (case_id,)); candidates = await cursor.fetchall()
-                    fact = next((item for item in candidates if normalize_target_field(item["field_name"]) == canonical_field), None)
+                    fact = next((item for item in candidates if normalize_target_field(item["field_name"]) == canonical_field
+                                 and (not follow_up or item.get("source_question_id") == question_id)), None)
                     if fact:
                         await cursor.execute("UPDATE case_facts SET value=%s,evidence_message_id=%s,source_question_id=%s WHERE fact_id=%s", (value, evidence_message_id, question_id, fact["fact_id"]))
                         fact["value"] = value; fact["evidence_message_id"] = evidence_message_id; fact["source_question_id"] = question_id
                     else:
                         field_name = canonical_field
                         fact_id = f"fact-{uuid.uuid4().hex}"; await cursor.execute("INSERT INTO case_facts (fact_id,case_id,field_name,value,source,status,confidence,evidence_message_id,source_question_id,created_at) VALUES (%s,%s,%s,%s,'AI_EXTRACTED','PROPOSED',0.7000,%s,%s,%s)", (fact_id, case_id, field_name, value, evidence_message_id, question_id, now)); fact = {"fact_id": fact_id, "case_id": case_id, "field_name": field_name, "value": value, "source": "AI_EXTRACTED", "status": "PROPOSED", "confidence": 0.7, "evidence_message_id": evidence_message_id, "source_question_id": question_id, "created_at": now}
-                    await cursor.execute("INSERT INTO case_events (case_id,event_type,actor_type,payload_json,occurred_at) VALUES (%s,'CASE_FACT_PROPOSED','CUSTOMER_AGENT',%s,%s)", (case_id, json.dumps({"fact_id": fact["fact_id"], "field": question["target_field"]}), now))
+                    await cursor.execute("INSERT INTO case_events (case_id,event_type,actor_type,payload_json,occurred_at) VALUES (%s,'CASE_FACT_PROPOSED','CUSTOMER_AGENT',%s,%s)", (case_id, json.dumps({"fact_id": fact["fact_id"], "field": canonical_field}), now))
                     await cursor.execute("UPDATE cases SET updated_at=%s WHERE case_id=%s", (now, case_id))
                 await connection.commit()
             except Exception: await connection.rollback(); raise

@@ -31,6 +31,8 @@ from contracts.ai_internal.context_fact_extraction import ContextFactExtractionI
 from contracts.ai_internal.mvp_workflow import TargetField
 from ai_api.app.domains.case_support.answer_service import CustomerAnswerStructuringService
 from ai_api.app.domains.case_support.case_snapshot_adapter import CaseSnapshotAiAdapter
+from ai_api.app.domains.case_support.question_policy import validate_follow_up_question
+from contracts.question_target import canonical_question_scope, is_follow_up_target
 from contracts.public_api.customer_progress import CustomerProgressItem, ProgressStep, UpdateCustomerProgress
 from .domains.cases.customer_progress import PREFIX as PROGRESS_PREFIX, ProgressConflict, progress_items as build_customer_progress, progress_ai_context, actions_for_ai
 from request_trace import install_request_trace
@@ -879,6 +881,7 @@ def filter_contextual_questions(
     baseline: list[PublicQuestionCandidateResponse],
     persisted: list[dict],
     drafts: list[PublicQuestionCandidateResponse],
+    follow_up_parents: dict | None = None,
 ) -> list:
     """Keep only safe, novel QUESTION_PLAN drafts and assign non-canonical fields."""
     baseline_fields = BASELINE_QUESTION_FIELDS | {normalize_target_field(item.target_field) for item in baseline}
@@ -899,8 +902,30 @@ def filter_contextual_questions(
     for question in generated:
         text = question.question_text.strip()
         reason = question.reason.strip()
-        source_field = normalize_target_field(question.target_field)
+        try:
+            source_field = normalize_target_field(question.target_field)
+        except ValueError:
+            continue
         if not text or not reason or _unsafe_contextual_question(text):
+            continue
+        if is_follow_up_target(source_field):
+            parent = (follow_up_parents or {}).get(source_field)
+            if parent is None or source_field in covered_fields:
+                continue
+            try:
+                normalized = validate_follow_up_question(question.model_dump(mode="python"), parent)
+            except ValueError:
+                continue
+            if any(_same_question(text, item.question_text) for item in [*covered, *accepted]):
+                continue
+            if any(canonical_question_scope(item.target_field) == canonical_question_scope(source_field)
+                   for item in [*drafts, *accepted]):
+                continue
+            accepted.append(question.model_copy(update={
+                **normalized.model_dump(exclude={"source", "allow_multi_select"}), "question_id": source_field,
+            }))
+            if len(accepted) == 3:
+                break
             continue
         if source_field in baseline_fields or source_field in covered_fields:
             continue
@@ -1125,11 +1150,24 @@ async def list_customer_questions(case_id: str, view: Literal["bank", "customer"
 async def queue_customer_questions(case_id: str, request: PublicQueueCustomerQuestionsRequest) -> list[PublicCustomerQuestionResponse]:
     await require_case(case_id)
     try:
+        question_payloads = [item.model_dump() for item in request.questions]
+        if any(is_follow_up_target(item.target_field) for item in request.questions):
+            state = await _live_question_state(case_id, await repository.get(case_id))
+            parents = CaseSnapshotAiAdapter.follow_up_parents(state)
+            for index, item in enumerate(request.questions):
+                if is_follow_up_target(item.target_field):
+                    parent = parents.get(item.target_field)
+                    if parent is None:
+                        raise HTTPException(status_code=409, detail={"code": "FOLLOW_UP_NOT_ALLOWED"})
+                    normalized = validate_follow_up_question(item.model_dump(mode="python"), parent)
+                    question_payloads[index] = normalized.model_dump(exclude={"source"})
         items = await repository.queue_customer_questions(
-            case_id, [item.model_dump() for item in request.questions], request.requested_by
+            case_id, question_payloads, request.requested_by
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."}) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail={"code": "INVALID_FOLLOW_UP", "message": str(exc)}) from exc
     await dispatch_next_customer_question_message(case_id)
     return [to_public_customer_question(item) for item in items]
 
@@ -1190,7 +1228,7 @@ def _structured_answer_fact_payload(question: dict, answer_text: str, answer_mes
     if not answer_message_id:
         return None
     try:
-        target_field = TargetField(normalize_target_field(str(question["target_field"])))
+        target_field = TargetField(canonical_question_scope(normalize_target_field(str(question["target_field"]))))
     except (KeyError, ValueError):
         # Contextual questions and unsupported fields retain the existing raw-answer path.
         return None
@@ -1625,11 +1663,24 @@ def build_mvp_copilot_reply(case: dict, verifications: list[dict], prompt: str) 
     )
 
 
+async def _live_question_state(case_id: str, case: dict):
+    facts = await repository.list_case_facts(case_id)
+    resources = await case_context_v2_repository().list_resources(case_id)
+    facts, _ = merge_support_records(resources, facts, [])
+    questions = await repository.list_customer_questions(case_id)
+    return CaseSnapshotAiAdapter().adapt(_case_support_ai_input(case_id, case, facts, questions, [], []))
+
+
 @app.post("/api/cases/{case_id}/ai/work-cards", response_model=CaseWorkCardOutput)
 async def generate_case_work_card(case_id: str, request: PublicWorkCardGenerateRequest) -> CaseWorkCardOutput:
     case = await repository.get(case_id)
     if case is None:
         raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."})
+    try:
+        for draft in request.question_drafts:
+            normalize_target_field(draft.target_field)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail={"code": "INVALID_FOLLOW_UP", "message": str(exc)}) from exc
     facts = await repository.list_case_facts(case_id)
     verifications = await repository.list_verifications(case_id)
     actions = await repository.list_actions(case_id)
@@ -1643,6 +1694,7 @@ async def generate_case_work_card(case_id: str, request: PublicWorkCardGenerateR
         case_id, messages=messages, questions=previous_questions, facts=facts, verifications=verifications, staff=staff,
     ))
     try:
+        live_state = await _live_question_state(case_id, case) if request.card_type == "QUESTION_PLAN" else None
         known_facts = [
             f"{item.get('field')}: {item.get('value')} ({item.get('status')})" for item in facts[:30]
         ]
@@ -1689,11 +1741,15 @@ async def generate_case_work_card(case_id: str, request: PublicWorkCardGenerateR
             "unresolved_items": [f"{item.priority}: {item.description}" for item in support.unresolved_items[:20]],
             "pending_verifications": [f"{item.get('target')}: {item.get('claim')}" for item in verifications if item.get("status") != "COMPLETED"][:20],
             "question_candidates": [item.model_dump(mode="python") for item in candidates[:10]],
+            "question_state": live_state.model_dump(mode="json") if live_state else None,
         })
         card = CaseWorkCardOutput.model_validate(payload)
         if request.card_type == "QUESTION_PLAN":
+            # Provider 대기 중 상태가 바뀌었으면 최신 B policy로 초안을 다시 걸러낸다.
+            live_state = await _live_question_state(case_id, await repository.get(case_id))
             card.questions = filter_contextual_questions(
-                card.questions, candidates, previous_questions, request.question_drafts
+                card.questions, candidates, [q.model_dump() for q in live_state.questions], request.question_drafts,
+                CaseSnapshotAiAdapter.follow_up_parents(live_state),
             )
         return card
     except AiServiceQuotaError as exc:

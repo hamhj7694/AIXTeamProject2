@@ -7,6 +7,7 @@ from typing import Literal
 from pydantic import Field
 
 from contracts.diagnosis import StrictModel
+from contracts.ai_internal.case_snapshot import CaseSnapshotAiInput
 
 
 WorkCardType = Literal["FACT_REVIEW", "QUESTION_PLAN", "VERIFICATION_REQUEST", "BANK_ACTION", "CUSTOMER_NOTICE", "CASE_TRANSITION"]
@@ -40,6 +41,7 @@ class CaseWorkCardInput(StrictModel):
     unresolved_items: list[str] = Field(default_factory=list, max_length=20)
     pending_verifications: list[str] = Field(default_factory=list, max_length=20)
     question_candidates: list[WorkCardQuestion] = Field(default_factory=list, max_length=10)
+    question_state: CaseSnapshotAiInput | None = None
 
 
 class CaseWorkCardOutput(StrictModel):

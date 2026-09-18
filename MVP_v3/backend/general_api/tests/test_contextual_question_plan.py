@@ -116,6 +116,9 @@ class ContextualQuestionEndpointTest(unittest.IsolatedAsyncioTestCase):
         try:
             with patch.object(main, "get_case_support_snapshot", AsyncMock(return_value=support)), \
                  patch.object(main, "list_customer_question_candidates", AsyncMock(return_value=baseline)), \
+                 patch.object(main, "_live_question_state", AsyncMock(return_value=main.CaseSnapshotAiAdapter().adapt(
+                     main._case_support_ai_input("CASE-CONTEXT", repository.get.return_value, [], repository.list_customer_questions.return_value, [], [])
+                 ))), \
                  patch.object(main, "read_staff_context_records", AsyncMock(return_value=[])):
                 result = await main.generate_case_work_card(
                     "CASE-CONTEXT",

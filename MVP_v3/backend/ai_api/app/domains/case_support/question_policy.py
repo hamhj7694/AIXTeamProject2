@@ -54,9 +54,50 @@ def question_eligibility_from_context(
     )
 
 
+def dynamic_follow_up_allowed(eligibility: QuestionEligibility) -> bool:
+    """P3-3 production 입력에는 conflict 관계가 없어 UNCERTAIN 보완만 연결한다."""
+    return eligibility.allow_follow_up and eligibility.evaluation.state == QuestionSemanticState.UNCERTAIN
+
+
 class QuestionSource(str, Enum):
     DETERMINISTIC = "DETERMINISTIC"
     LLM = "LLM"
+
+
+# 목적은 서버가 scope별로 제한한다. 새로운 public purpose enum을 만들지 않는다.
+FOLLOW_UP_PURPOSES = {
+    "transfer_status": ("은행 앱·거래내역·거래 알림에서 실제 이체 기록 확인", ("거래내역", "거래알림", "문자알림", "은행앱", "이체내역")),
+    "transfer_purpose": ("당시 대화나 메시지 기록에서 요구한 송금 명목 확인", ("대화기록", "메시지", "문자", "통화기록")),
+    "claimed_organization": ("당시 메시지·통화 기록에서 상대방이 주장한 기관명 확인", ("메시지", "문자", "통화기록", "대화기록")),
+    "incident_claim": ("당시 메시지·대화 기록에서 주장한 사건 내용 확인", ("메시지", "문자", "대화기록", "통화기록")),
+    "personal_information_exposure": ("당시 대화나 전송 기록에서 개인정보 전달 행동 확인; 실제 값 요구 금지", ("메시지", "전송기록", "대화기록")),
+    "authentication_information_exposure": ("인증번호를 읽어주거나 메시지로 보낸 행동의 기억 확인; 실제 값 요구 금지", ("읽어", "메시지", "전송기록")),
+    "remote_control_app": ("기기의 설치 앱 목록·설치 기록에서 해당 앱 존재 확인; 설치 지시 금지", ("앱목록", "설치기록", "설치된앱")),
+}
+
+
+def validate_follow_up_question(raw: Mapping[str, Any], parent: Any) -> NormalizedQuestion:
+    """Eligibility와 별개로 허용한 다음 확인 행동을 담았는지 좁게 검사한다."""
+    normalized = normalize_question(raw, source=QuestionSource.LLM)
+    from contracts.question_target import decode_follow_up_target
+    target = decode_follow_up_target(normalized.target_field)
+    if not target.is_follow_up or target.parent_question_id != parent.question_id or target.canonical_scope != parent.target_field:
+        raise ValueError("follow-up parent/scope mismatch")
+    compact = re.sub(r"\s+", "", normalized.question_text).casefold()
+    previous = re.sub(r"\s+", "", parent.question_text).casefold()
+    markers = FOLLOW_UP_PURPOSES[target.canonical_scope][1]
+    if compact == previous or not any(marker in compact for marker in markers) or not any(
+        marker in compact for marker in ("확인", "기억", "살펴", "조회")
+    ):
+        raise ValueError("follow-up must request an evidence check, not repeat the basic question")
+    # 설명도 고객에게 전달되는 텍스트이므로 동일 안전 기준으로 검증한다.
+    _reject_unsafe_question(normalized.customer_explanation or "", [])
+    customer_text = re.sub(r"\s+", "", " ".join([
+        normalized.question_text, normalized.customer_explanation or "", *normalized.options,
+    ])).casefold()
+    if any(term in customer_text for term in ("설치하세요", "설치해", "다운로드하", "깔아주세요")):
+        raise ValueError("follow-up must not instruct app installation")
+    return normalized
 
 
 class NormalizedQuestion(StrictModel):
