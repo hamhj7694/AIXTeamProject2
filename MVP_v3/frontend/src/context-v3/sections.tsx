@@ -117,3 +117,4 @@ export const StaffActionSection: React.FC<OpenStateProps & { section: ContextPan
 export const CustomerShareSection: React.FC<OpenStateProps & { section: ContextPanelSectionV3; progressEditor: React.ReactNode }> = ({ progressEditor, open, onOpenChange }) => <SectionShell id="CUSTOMER_SHARE" title="고객 공유 결과" open={open} onOpenChange={onOpenChange}>
   {progressEditor}
 </SectionShell>;
+export const CustomerSharedTaskResults: React.FC<{ section: ContextPanelSectionV3 }> = ({ section }) => section.items.length === 0 ? null : <div className="context-fact-list">{section.items.map((item) => <FactRow key={item.item_id} item={item} busy={false} onConfirm={() => undefined} onReject={() => undefined} onCorrect={() => undefined} onUnconfirm={() => undefined} onInvalidate={() => undefined}/>)}</div>;

@@ -527,7 +527,9 @@ def build_context_panel_v3(
             group = "completed" if task.status in {"COMPLETED", "CANCELLED"} else "active"
             sections["STAFF_ACTIONS"].groups.setdefault(group, []).append(_item(
                 item_id=task.task_id, semantic_key=f"task.{task.task_type.lower()}", label=task.title,
-                display_value=task.result_summary or task.description, value={"priority": task.priority},
+                display_value=task.result_summary or task.description,
+                value={"priority": task.priority, "result_code": task.result_code,
+                       "assignee_user_id": task.assignee_user_id},
                 source_kind=task.source, status=task.status, evidence_refs=_enrich_evidence_refs(task.evidence_refs, case=case, messages=messages, view=view), version=task.version,
             ))
         for suggestion in resources.ai_suggestions:
@@ -554,6 +556,15 @@ def build_context_panel_v3(
         if task.status == "COMPLETED" and task.customer_visibility == "RESULT_PUBLISHED":
             shared.append(_item(item_id=task.task_id, semantic_key="customer.task_result", label=task.title,
                                 display_value=task.result_summary or "완료", value={}, source_kind="STAFF_RECORD", status="PUBLISHED"))
+    published_tasks = {task.task_id: task for task in resources.tasks
+                       if task.status == "COMPLETED" and task.customer_visibility == "RESULT_PUBLISHED"}
+    if published_tasks:
+        shared = [item.model_copy(update={
+            "value": {"result_code": published_tasks[item.item_id].result_code},
+            "evidence_refs": _enrich_evidence_refs(published_tasks[item.item_id].evidence_refs, case=case, messages=messages, view="customer"),
+            "visibility": "CUSTOMER_SHARED",
+        }) if item.item_id in published_tasks else item for item in shared]
+
     for item in progress:
         status = getattr(item, "status", "UNKNOWN")
         if status == "UNKNOWN":
