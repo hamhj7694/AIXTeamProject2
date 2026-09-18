@@ -66,11 +66,11 @@ export const CaseListPane: React.FC<Props> = ({ cases, selectedCaseId, loading, 
       event.preventDefault();
       openCase(item.case_id);
     };
-    return <div key={item.case_id} className={`case-list-item ${selectedCaseId === item.case_id ? 'selected' : ''}`} role="button" tabIndex={0} aria-current={selectedCaseId === item.case_id ? 'page' : undefined} onClick={selectFromCard} onKeyDown={selectFromKeyboard}>
+    return <div key={item.case_id} className={`case-list-item ${selectedCaseId === item.case_id ? 'selected' : ''}`} role="button" tabIndex={0} aria-current={selectedCaseId === item.case_id ? 'page' : undefined} aria-disabled={editing || undefined} onClick={selectFromCard} onKeyDown={selectFromKeyboard}>
       {editing ? <form className="case-item-rename" onSubmit={(event) => { event.preventDefault(); void saveRename(item); }}>
         <span className="case-item-top"><b>{item.case_id}</b><span className={`risk-pill ${caseStateTone(caseState(item))}`}>{caseStateLabel(caseState(item))}</span></span>
         <label className="sr-only" htmlFor={`case-name-${item.case_id}`}>사건 이름</label><input id={`case-name-${item.case_id}`} value={renameValue} maxLength={200} autoFocus onChange={(event) => { setRenameValue(event.target.value); setRenameError(''); }}/>
-        <span className="case-item-bottom"><span>{statusLabel(item.status, item.mode)}</span><time>{relativeTime(sortField === 'CREATED_AT' ? item.created_at : item.updated_at)}</time></span>
+        <span className="case-item-bottom"><span>{statusLabel(item.status, item.mode)}</span><time className="case-item-created-time" title={new Date(item.created_at).toLocaleString('ko-KR')}>생성 {relativeTime(item.created_at)}</time><time className="case-item-updated-time" title={new Date(item.updated_at).toLocaleString('ko-KR')}>수정 {relativeTime(item.updated_at)}</time></span>
         {renameError && <span className="case-item-rename-error" role="alert">{renameError}</span>}
         <span className="case-item-rename-actions"><button type="button" onClick={cancelRename} disabled={renameBusy}>취소</button><button type="submit" disabled={renameBusy || !renameValue.trim()}>저장</button></span>
       </form> : <>

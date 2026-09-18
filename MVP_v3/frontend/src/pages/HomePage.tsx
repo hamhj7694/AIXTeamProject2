@@ -1,4 +1,4 @@
-import React, { FormEvent, useRef, useState } from 'react';
+import React, { FormEvent, useEffect, useRef, useState } from 'react';
 import { AlertCircle, ArrowLeftRight, BrainCircuit, CheckCircle2, ChevronRight, FileSearch, Loader2, MessageSquareText, Play, ShieldAlert, ShieldCheck, Sparkles, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { casesApi } from '../api/cases';
@@ -233,9 +233,10 @@ const AnalysisResult: React.FC<{ result: AnalyzeCaseResponse; caseItem?: StoredC
 interface HomePageProps {
   embedded?: boolean;
   onCloseEmbedded?: () => void;
+  onAnalysisBusyChange?: (busy: boolean) => void;
 }
 
-export const HomePage: React.FC<HomePageProps> = ({ embedded = false, onCloseEmbedded }) => {
+export const HomePage: React.FC<HomePageProps> = ({ embedded = false, onCloseEmbedded, onAnalysisBusyChange }) => {
   const navigate = useNavigate();
   const [open, setOpen] = useState(embedded);
   const [text, setText] = useState('');
@@ -246,6 +247,10 @@ export const HomePage: React.FC<HomePageProps> = ({ embedded = false, onCloseEmb
   const [error, setError] = useState('');
   const [lastSample, setLastSample] = useState<Partial<Record<SampleType, number>>>({});
   const analysisRequestRef = useRef<AnalysisRequest | null>(null);
+  useEffect(() => {
+    onAnalysisBusyChange?.(state === 'ANALYZING');
+    return () => onAnalysisBusyChange?.(false);
+  }, [onAnalysisBusyChange, state]);
   const applySample = (type: SampleType) => {
     const samples = CALL_SAMPLES[type];
     const previous = lastSample[type];

@@ -71,6 +71,46 @@ class MySqlCaseRepository:
         await self._pool.wait_closed()
         self._pool = None
 
+    async def list_bank_staff(self) -> list[dict[str, Any]]:
+        pool = await self._get_pool()
+        async with pool.acquire() as connection, connection.cursor(aiomysql.DictCursor) as cursor:
+            await cursor.execute("SELECT staff_id, display_name, role_label, position_title, status_text, status_color_key, linked_user_id, created_at, updated_at FROM bank_staff_directory WHERE deleted_at IS NULL ORDER BY display_name, staff_id")
+            rows = await cursor.fetchall()
+        return [{**row, "created_at": _utc_iso(row["created_at"]), "updated_at": _utc_iso(row["updated_at"])} for row in rows]
+
+    async def create_bank_staff(self, record: dict[str, Any]) -> dict[str, Any]:
+        pool = await self._get_pool()
+        staff_id = record.get("staff_id") or f"staff-{uuid.uuid4().hex}"
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        async with pool.acquire() as connection, connection.cursor(aiomysql.DictCursor) as cursor:
+            await cursor.execute("INSERT INTO bank_staff_directory (staff_id, display_name, role_label, position_title, status_text, status_color_key, linked_user_id, created_at, updated_at) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)", (staff_id, record["display_name"], record["role_label"], record.get("position_title"), record.get("status_text", "근무 중"), record.get("status_color_key", "GREEN"), record.get("linked_user_id"), now, now))
+            await connection.commit()
+        rows = await self.list_bank_staff()
+        return next(row for row in rows if row["staff_id"] == staff_id)
+
+    async def update_bank_staff(self, staff_id: str, changes: dict[str, Any]) -> dict[str, Any] | None:
+        allowed = ("display_name", "role_label", "position_title", "status_text", "status_color_key", "linked_user_id")
+        fields = [(key, changes[key]) for key in allowed if key in changes]
+        if not fields:
+            rows = await self.list_bank_staff()
+            return next((row for row in rows if row["staff_id"] == staff_id), None)
+        assignments = ", ".join(f"{key}=%s" for key, _ in fields)
+        pool = await self._get_pool()
+        async with pool.acquire() as connection, connection.cursor() as cursor:
+            await cursor.execute(f"UPDATE bank_staff_directory SET {assignments}, updated_at=%s WHERE staff_id=%s AND deleted_at IS NULL", [value for _, value in fields] + [datetime.now(timezone.utc).replace(tzinfo=None), staff_id])
+            changed = cursor.rowcount
+            await connection.commit()
+        if not changed:
+            return None
+        rows = await self.list_bank_staff()
+        return next((row for row in rows if row["staff_id"] == staff_id), None)
+
+    async def delete_bank_staff(self, staff_id: str) -> None:
+        pool = await self._get_pool()
+        async with pool.acquire() as connection, connection.cursor() as cursor:
+            await cursor.execute("UPDATE bank_staff_directory SET deleted_at=%s, updated_at=%s WHERE staff_id=%s AND deleted_at IS NULL", (datetime.now(timezone.utc).replace(tzinfo=None), datetime.now(timezone.utc).replace(tzinfo=None), staff_id))
+            await connection.commit()
+
     async def find_by_client_request_id(self, client_request_id: str) -> dict[str, Any] | None:
         pool = await self._get_pool()
         async with pool.acquire() as connection, connection.cursor() as cursor:

@@ -127,8 +127,13 @@ from contracts.public_api.collaboration import (
     PublicPrimaryAssigneeRequest,
     PublicPrimaryAssigneeResponse,
 )
+from contracts.public_api.bank_staff import (
+    PublicBankStaffCreateRequest,
+    PublicBankStaffResponse,
+    PublicBankStaffUpdateRequest,
+)
 
-from .clients.diagnosis_ai import AiServiceAuthenticationError, AiServiceError, AiServiceQuotaError, HttpDiagnosisAiClient
+from .clients.diagnosis_ai import AiServiceAuthenticationError, AiServiceBudgetError, AiServiceError, AiServiceQuotaError, HttpDiagnosisAiClient
 from .domains.cases.repository import CasePersistenceError, CaseVersionConflictError, normalize_target_field
 from .domains.cases.context_projection_repository import ContextProjectionRepository
 from .domains.cases.case_context_v2_repository import (
@@ -165,6 +170,7 @@ AUTONOMOUS_P0_QUESTION_FIELDS = {
 }
 BASELINE_QUESTION_FIELDS = AUTONOMOUS_P0_QUESTION_FIELDS | {"impersonated_institution"}
 AI_CHECKLIST_ACTION_PREFIX = "AI_CHECKLIST:"
+CURRENT_BANK_USER_ID = os.getenv("CURRENT_BANK_USER_ID", "mvp-v3-bank-operator")
 STAFF_JUDGMENT_ACTION_TYPE = "STAFF_JUDGMENT"
 CHECKLIST_FIELD_LABELS = {
     "transfer_status": "실제 송금 여부",
@@ -367,6 +373,9 @@ async def analyze_case(request: PublicAnalyzeCaseRequest) -> PublicAnalyzeCaseRe
     except ValueError as exc:
         failure = public_failed_response("INVALID_INPUT", str(exc), retryable=False)
         return JSONResponse(status_code=400, content=failure.model_dump(mode="json"))
+    except AiServiceBudgetError as exc:
+        failure = public_failed_response("AI_BUDGET_LIMIT_REACHED", str(exc), retryable=False)
+        return JSONResponse(status_code=429, content=failure.model_dump(mode="json"))
     except AiServiceQuotaError as exc:
         failure = public_failed_response("OPENAI_QUOTA_EXHAUSTED", str(exc), retryable=False)
         return JSONResponse(status_code=429, content=failure.model_dump(mode="json"))
@@ -404,6 +413,36 @@ async def to_case_read(record: dict) -> PublicCaseReadResponse:
 @app.get("/api/cases", response_model=list[PublicCaseReadResponse], response_model_exclude_none=True)
 async def list_cases() -> list[PublicCaseReadResponse]:
     return [await to_case_read(record) for record in await repository.list()]
+
+
+def _bank_staff_response(item: dict) -> PublicBankStaffResponse:
+    return PublicBankStaffResponse.model_validate({**item, "is_self": item.get("linked_user_id") == CURRENT_BANK_USER_ID})
+
+
+@app.get("/api/bank/staff", response_model=list[PublicBankStaffResponse])
+async def list_bank_staff() -> list[PublicBankStaffResponse]:
+    return [_bank_staff_response(item) for item in await repository.list_bank_staff()]
+
+
+@app.post("/api/bank/staff", response_model=PublicBankStaffResponse, status_code=201)
+async def create_bank_staff(request: PublicBankStaffCreateRequest) -> PublicBankStaffResponse:
+    return _bank_staff_response(await repository.create_bank_staff(request.model_dump()))
+
+
+@app.patch("/api/bank/staff/{staff_id}", response_model=PublicBankStaffResponse)
+async def update_bank_staff(staff_id: str, request: PublicBankStaffUpdateRequest) -> PublicBankStaffResponse:
+    updated = await repository.update_bank_staff(staff_id, request.model_dump())
+    if updated is None:
+        raise HTTPException(status_code=404, detail={"code": "BANK_STAFF_NOT_FOUND", "message": "은행 담당자를 찾을 수 없습니다."})
+    return _bank_staff_response(updated)
+
+
+@app.delete("/api/bank/staff/{staff_id}", status_code=204)
+async def delete_bank_staff(staff_id: str) -> None:
+    existing = next((item for item in await repository.list_bank_staff() if item.get("staff_id") == staff_id), None)
+    if existing is None:
+        raise HTTPException(status_code=404, detail={"code": "BANK_STAFF_NOT_FOUND", "message": "은행 담당자를 찾을 수 없습니다."})
+    await repository.delete_bank_staff(staff_id)
 
 
 def require_admin_password(password: str) -> None:

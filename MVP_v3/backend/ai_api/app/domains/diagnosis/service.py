@@ -43,8 +43,16 @@ class DiagnosisService:
                 "amount_values_krw": event_context_features.amount_values_krw,
                 "requested_amount_values_krw": event_context_features.requested_amount_values_krw,
             })
+            # Build the detailed, privacy-safe atom layer before narration so
+            # the summary model can use named roles/institutions and purposes,
+            # not only grouped event labels.
+            semantic_atoms = merge_semantic_atoms(
+                window_result.semantic_atoms, window_result.events,
+            )
             # The context LLM receives codes and references, never raw utterances.
-            payload = signal_context_payload(window_result.events)
+            payload = signal_context_payload(
+                window_result.events, semantic_atoms=semantic_atoms,
+            )
             payload["case_context_features"] = context_features.model_dump(mode="json")
             with trace_stage("ai.context_summary"):
                 context: ContextResult = await self.full_context_llm.analyze(payload)
@@ -52,9 +60,6 @@ class DiagnosisService:
             window_result, context, case_id=case_id,
         )
         update: dict[str, object] = {"case_context_features": context_features}
-        semantic_atoms = merge_semantic_atoms(
-            window_result.semantic_atoms, window_result.events,
-        )
         context_features = attach_context_observation_lineage(context_features, semantic_atoms)
         update["case_context_features"] = context_features
         semantic_relations = build_semantic_relations(semantic_atoms)

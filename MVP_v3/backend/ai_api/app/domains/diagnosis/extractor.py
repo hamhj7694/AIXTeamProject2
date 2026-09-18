@@ -106,7 +106,11 @@ def build_case_context_features(events: list[ExtractedEvent]) -> CaseContextFeat
     )
 
 
-def signal_context_payload(events: list[ExtractedEvent]) -> dict[str, Any]:
+def signal_context_payload(
+    events: list[ExtractedEvent],
+    *,
+    semantic_atoms: list[SemanticAtom] | None = None,
+) -> dict[str, Any]:
     """Project transient event extraction into the only payload context LLM may see.
 
     `evidence_text` and `amount_context` can contain a caller's exact words. They
@@ -127,12 +131,54 @@ def signal_context_payload(events: list[ExtractedEvent]) -> dict[str, Any]:
         if event.is_requested is not None:
             item["is_requested"] = event.is_requested
         signals.append(item)
-    return {
+    payload: dict[str, Any] = {
         "source": "STRUCTURED_CONTEXT_FEATURES_ONLY",
         "signal_count": len(signals),
         "signals": signals,
         "case_context_features": build_case_context_features(events).model_dump(mode="json"),
     }
+    if semantic_atoms:
+        # Atoms are the privacy-safe detail layer. They carry short, source-
+        # verified lexical cues (for example `서울지검` or `수사관`) and
+        # normalized meaning, but never evidence_text or the call transcript.
+        payload["semantic_atoms"] = [
+            {
+                "atom_id": atom.atom_id,
+                "source_turn_id": atom.source_turn_id,
+                "atom_class": atom.atom_class,
+                "predicate": atom.predicate,
+                "subject": atom.subject,
+                "actor": atom.actor,
+                "target": atom.target,
+                "object": atom.object,
+                "destination": atom.destination,
+                "action_state": atom.action_state,
+                "modality": atom.modality,
+                "polarity": atom.polarity,
+                "claim_status": atom.claim_status,
+                "speech_act": atom.speech_act,
+                "obligation": atom.obligation,
+                "urgency": atom.urgency,
+                "authority_pressure": atom.authority_pressure,
+                "fear_pressure": atom.fear_pressure,
+                "secrecy_pressure": atom.secrecy_pressure,
+                "isolation_pressure": atom.isolation_pressure,
+                "financial_pressure": atom.financial_pressure,
+                "communication_control": atom.communication_control,
+                "auth_secret_type": atom.auth_secret_type,
+                "amount_scope": atom.amount_scope,
+                "amount_value_krw": atom.amount_value_krw,
+                "amount_role": atom.amount_role,
+                "amount_direction": atom.amount_direction,
+                "claimed_organization": atom.claimed_organization,
+                "claimed_role": atom.claimed_role,
+                "claimed_purpose": atom.claimed_purpose,
+                "lexical_cues": atom.lexical_cues,
+                "observed_terms": [term.model_dump(mode="json") for term in atom.observed_terms],
+            }
+            for atom in semantic_atoms
+        ]
+    return payload
 
 
 def _openai_timeout_seconds() -> float:
@@ -504,7 +550,13 @@ async def extract_context_from_signal_payload(
         model=os.getenv("OPENAI_CONTEXT_MODEL", os.getenv("OPENAI_EVENT_MODEL", "gpt-4o-mini")),
         instructions=(
             "You receive only structured anti-fraud signals, never a call transcript. "
-            "Write a concise Korean case summary, distinguish claims from verified facts, "
+            "Write a grounded Korean case summary using the most specific observed_terms "
+            "and semantic atom fields available. Preserve concrete institution/role terms "
+            "such as a named prosecution office and investigator role; do not replace them "
+            "with a generic '기관 사칭' when the term is present. Reconstruct a natural "
+            "sentence from the atoms, for example '서울지검 수사관을 자칭하며 고객 명의 "
+            "계좌가 범죄에 연루됐다고 주장하고 자금 추적을 위한 계좌 검증과 안전계좌 "
+            "이체를 요구함'. Distinguish claims from verified facts, "
             "Use plain Korean for every user-facing string including incident_type; keep schema keys unchanged. "
             "separately describe claims, requested actions, and manipulation tactics, "
             "and recommend safe next checks. Do not invent names, account numbers, quoted "

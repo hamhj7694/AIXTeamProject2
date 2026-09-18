@@ -24,6 +24,13 @@ class _CueRule:
 
 # Longest patterns run first so "은행 직원" wins over the shorter "은행".
 _RULES = (
+    # Preserve the concrete phrases that make a reconstruction useful. The
+    # normalized code remains stable while surface_form is short and verified
+    # against the transient turn only.
+    _CueRule("\uC11C\uC6B8\uC9C0\uAC80", "TERM.PROSECUTION_SEOUL", "INSTITUTION", "PROSECUTION_SERVICE"),
+    _CueRule("\uC790\uAE08\\s*\uCD94\uC801", "TERM.FUND_TRACE", "SCAM_TERM", "INVESTIGATION"),
+    _CueRule("\uACC4\uC88C\\s*\uAC80\uC99D", "ACTION.ACCOUNT_VERIFY", "ACTION", "ACCOUNT_VERIFICATION"),
+    _CueRule("\uBA85\uC758\\s*\uACC4\uC88C", "TARGET.NAMED_ACCOUNT", "SCAM_TERM", "CUSTOMER_ACCOUNT"),
     _CueRule(r"금융\s*감독원", "TERM.FINANCIAL_SUPERVISORY_SERVICE", "INSTITUTION", "FINANCIAL_SUPERVISORY_SERVICE"),
     _CueRule(r"은행\s*직원", "ROLE.BANK_EMPLOYEE", "ROLE", "BANK_EMPLOYEE", "은행직원"),
     _CueRule(r"보안\s*카드", "AUTH.SECURITY_CARD", "AUTH_SECRET_TYPE", "SECURITY_CARD", "보안카드"),

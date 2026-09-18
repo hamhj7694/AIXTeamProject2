@@ -396,6 +396,20 @@ export interface CaseMember {
   updated_at: string;
 }
 
+export type BankStaffColor = 'GREEN' | 'BLUE' | 'YELLOW' | 'ORANGE' | 'RED' | 'PURPLE' | 'GRAY';
+export interface BankStaff {
+  staff_id: string;
+  display_name: string;
+  role_label: string;
+  position_title?: string | null;
+  status_text: string;
+  status_color_key: BankStaffColor;
+  linked_user_id?: string | null;
+  is_self: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface CasePresence {
   case_id: string;
   user_id: string;

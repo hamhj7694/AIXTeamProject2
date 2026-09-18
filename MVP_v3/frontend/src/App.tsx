@@ -3,7 +3,6 @@ import { List, ShieldCheck, Wifi } from 'lucide-react';
 import { BrowserRouter, Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { casesApi } from './api/cases';
 import type { StoredCase } from './api/types';
-import { TrashWorkspace } from './components/TrashWorkspace';
 import { CaseRoomPage } from './pages/CaseRoomPage';
 import { CustomerCaseRoomPage } from './pages/CustomerCaseRoomPage';
 import { HomeDashboardPage } from './pages/HomeDashboardPage';
@@ -19,6 +18,7 @@ const Workspace: React.FC = () => {
   const [trashLoading, setTrashLoading] = useState(true);
   const [trashError, setTrashError] = useState('');
   const [trashOpen, setTrashOpen] = useState(false);
+  const [analysisBusy, setAnalysisBusy] = useState(false);
   const [contextOpen, setContextOpen] = useState(() => typeof window === 'undefined' || !window.matchMedia('(max-width: 1180px)').matches);
   const loadCases = useCallback(async () => {
     try { setCases(await casesApi.list()); setError(''); }
@@ -51,7 +51,7 @@ const Workspace: React.FC = () => {
   };
   return <div className="app-shell">
     <header className="app-header">
-      <Link className="brand" to="/"><span><ShieldCheck size={19}/></span><div><b>CSR | Case Share Room</b><small>보이스피싱 양방향 상담·대응 플랫폼</small></div></Link>
+      <Link className={`brand ${analysisBusy ? 'is-disabled' : ''}`} to="/" aria-disabled={analysisBusy || undefined} onClick={(event) => { if (analysisBusy) event.preventDefault(); }}><span><ShieldCheck size={19}/></span><div><b>CSR | Case Share Room</b><small>보이스피싱 양방향 상담·대응 플랫폼</small></div></Link>
       <div className="app-header-actions">
         {selectedCaseId && <div className="active-case-header-actions">
           <Link className="customer-preview-link" to={`/customer/cases/${encodeURIComponent(selectedCaseId)}`}>고객 화면 열기</Link>
@@ -60,7 +60,7 @@ const Workspace: React.FC = () => {
       </div>
     </header>
     <div className="workspace-body">
-      <div className="workspace-main">{trashOpen ? <TrashWorkspace cases={trashedCases} loading={trashLoading} error={trashError} onRetry={() => void loadTrash()} onClose={() => setTrashOpen(false)} onRestore={restoreCase} onPurge={purgeCase}/> : <Routes><Route path="/" element={<HomeDashboardPage cases={cases} selectedCaseId={selectedCaseId} loading={loading} error={error} trashCount={trashedCases.length} onRetry={() => void loadCases()} onOpenTrash={() => setTrashOpen(true)} onSelectCase={() => setTrashOpen(false)} onRenameCase={renameCase}/>}/><Route path="/analyze" element={<HomePage/>}/><Route path="/cases" element={<Navigate to="/" replace/>}/><Route path="/cases/:caseId" element={<CaseRoomPage caseName={cases.find((item) => item.case_id === selectedCaseId)?.case_name} onMutated={refreshLists} contextOpen={contextOpen} onContextOpenChange={setContextOpen}/>}/><Route path="*" element={<Navigate to="/" replace/>}/></Routes>}</div>
+      <div className="workspace-main"><Routes><Route path="/" element={<HomeDashboardPage cases={cases} selectedCaseId={selectedCaseId} loading={loading} error={error} trashCount={trashedCases.length} onRetry={() => void loadCases()} onOpenTrash={() => setTrashOpen(true)} onSelectCase={() => setTrashOpen(false)} onRenameCase={renameCase} onAnalysisBusyChange={setAnalysisBusy} trashOpen={trashOpen} trashedCases={trashedCases} trashLoading={trashLoading} trashError={trashError} onCloseTrash={() => setTrashOpen(false)} onRestoreCase={restoreCase} onPurgeCase={purgeCase}/>}/><Route path="/analyze" element={<HomePage onAnalysisBusyChange={setAnalysisBusy}/>}/><Route path="/cases" element={<Navigate to="/" replace/>}/><Route path="/cases/:caseId" element={<CaseRoomPage caseName={cases.find((item) => item.case_id === selectedCaseId)?.case_name} onMutated={refreshLists} contextOpen={contextOpen} onContextOpenChange={setContextOpen}/>}/><Route path="*" element={<Navigate to="/" replace/>}/></Routes></div>
     </div>
   </div>;
 };

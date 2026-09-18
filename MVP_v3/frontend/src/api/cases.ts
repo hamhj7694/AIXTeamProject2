@@ -3,7 +3,7 @@ import type {
   CustomerProgressItem, ProgressStep, UpdateCustomerProgress,
   AiInvocationResult, AnalyzeCaseResponse, Attachment, CaseAction, CaseBundle, CaseFact, CaseMember, CaseMessage, CasePresence, CaseWorkCard, InitialReport,
   CaseSupportSnapshot, CustomerQuestion, MessageChannel, MessageVisibility,
-  PersonalNote, QuestionCandidate, StructuredQuestionAnswer, StoredCase, VerificationTask, WorkCardType,
+  PersonalNote, QuestionCandidate, StructuredQuestionAnswer, StoredCase, VerificationTask, WorkCardType, BankStaff,
 } from './types';
 import { generateUuid } from '../uuid';
 
@@ -20,6 +20,10 @@ export const CURRENT_CUSTOMER_USER = {
 } as const;
 
 export const casesApi = {
+  listBankStaff: () => request<BankStaff[]>('/api/bank/staff'),
+  createBankStaff: (staff: Omit<BankStaff, 'staff_id' | 'is_self' | 'created_at' | 'updated_at'>) => request<BankStaff>('/api/bank/staff', { method: 'POST', body: JSON.stringify(staff) }),
+  updateBankStaff: (staffId: string, staff: Omit<BankStaff, 'staff_id' | 'is_self' | 'created_at' | 'updated_at'>) => request<BankStaff>(`/api/bank/staff/${encodeURIComponent(staffId)}`, { method: 'PATCH', body: JSON.stringify(staff) }),
+  deleteBankStaff: (staffId: string) => request<void>(`/api/bank/staff/${encodeURIComponent(staffId)}`, { method: 'DELETE' }),
   list: () => request<StoredCase[]>('/api/cases'),
   listTrash: () => request<StoredCase[]>('/api/cases/trash'),
   updateCase: (caseId: string, expectedVersion: number, values: { case_name?: string }) => request<StoredCase>(`/api/cases/${encodeURIComponent(caseId)}`, {

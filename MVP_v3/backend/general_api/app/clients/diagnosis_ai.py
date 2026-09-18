@@ -31,6 +31,13 @@ class AiServiceQuotaError(AiServiceError):
     code = "AI_PROVIDER_RATE_LIMITED"
 
 
+class AiServiceBudgetError(AiServiceError):
+    """The local case-analysis safety budget rejected the request."""
+
+    code = "AI_BUDGET_LIMIT_REACHED"
+    retryable = False
+
+
 class AiServiceAuthenticationError(AiServiceError):
     code = "AI_PROVIDER_AUTH_ERROR"
     retryable = False
@@ -54,6 +61,8 @@ class HttpDiagnosisAiClient:
                     payload = response.json()
                     detail = payload.get("detail", {})
                     message = detail.get("message", "AI 분석 서버가 요청을 처리하지 못했습니다.")
+                    if response.status_code == 429 and detail.get("code") == "AI_BUDGET_LIMIT_REACHED":
+                        raise AiServiceBudgetError(message)
                     if response.status_code == 429:
                         raise AiServiceQuotaError(message)
                     if response.status_code == 401:

@@ -15,6 +15,7 @@ export const errorMessage = (payload: unknown, status: number) => {
     ADMIN_AUTH_NOT_CONFIGURED: '관리자 암호 설정이 필요합니다.',
     OPENAI_AUTHENTICATION_FAILED: 'AI 연결 인증에 실패했습니다. 관리자에게 API 키 설정 확인을 요청해 주세요.',
     OPENAI_QUOTA_EXHAUSTED: 'AI 사용 한도에 도달했습니다. 관리자에게 사용량 확인을 요청해 주세요.',
+    AI_BUDGET_LIMIT_REACHED: '이번 분석 내용이 현재 AI 처리 한도를 넘어섰습니다. 입력을 나누거나 잠시 후 다시 시도해 주세요.',
     AI_FINAL_REPORT_FAILED: 'AI 최종 보고서 생성에 실패했습니다. 연결 상태 확인 후 다시 시도해 주세요.',
   };
   if (payload && typeof payload === 'object') {

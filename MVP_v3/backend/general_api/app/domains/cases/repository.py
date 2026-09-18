@@ -28,6 +28,10 @@ def normalize_target_field(value: str) -> str:
 
 
 class CaseRepository(Protocol):
+    async def list_bank_staff(self) -> list[dict[str, Any]]: ...
+    async def create_bank_staff(self, record: dict[str, Any]) -> dict[str, Any]: ...
+    async def update_bank_staff(self, staff_id: str, changes: dict[str, Any]) -> dict[str, Any] | None: ...
+    async def delete_bank_staff(self, staff_id: str) -> None: ...
     async def next_case_id(self) -> str: ...
     async def find_by_client_request_id(self, client_request_id: str) -> dict[str, Any] | None: ...
     async def get(self, case_id: str) -> dict[str, Any] | None: ...
@@ -117,6 +121,7 @@ class InMemoryCaseRepository:
         self._voice_sessions: list[dict[str, Any]] = []
         self._transcripts: list[dict[str, Any]] = []
         self._members: list[dict[str, Any]] = []
+        self._bank_staff: list[dict[str, Any]] = []
         self._presence: list[dict[str, Any]] = []
         self._customer_questions: list[dict[str, Any]] = []
         self._case_facts: list[dict[str, Any]] = []
@@ -154,6 +159,29 @@ class InMemoryCaseRepository:
         expired = [item["case_id"] for item in self._records if item.get("deleted_at") and datetime.fromisoformat(item["deleted_at"]) <= cutoff]
         for case_id in expired:
             self._remove_case_records(case_id)
+
+    async def list_bank_staff(self) -> list[dict[str, Any]]:
+        return [deepcopy(item) for item in self._bank_staff if not item.get("deleted_at")]
+
+    async def create_bank_staff(self, record: dict[str, Any]) -> dict[str, Any]:
+        now = datetime.now(timezone.utc).isoformat()
+        item = {"staff_id": record.get("staff_id") or f"staff-{uuid4().hex}", **record, "created_at": now, "updated_at": now, "deleted_at": None}
+        self._bank_staff.append(item)
+        return deepcopy(item)
+
+    async def update_bank_staff(self, staff_id: str, changes: dict[str, Any]) -> dict[str, Any] | None:
+        item = next((row for row in self._bank_staff if row["staff_id"] == staff_id and not row.get("deleted_at")), None)
+        if item is None:
+            return None
+        item.update(changes)
+        item["updated_at"] = datetime.now(timezone.utc).isoformat()
+        return deepcopy(item)
+
+    async def delete_bank_staff(self, staff_id: str) -> None:
+        item = next((row for row in self._bank_staff if row["staff_id"] == staff_id and not row.get("deleted_at")), None)
+        if item is not None:
+            item["deleted_at"] = datetime.now(timezone.utc).isoformat()
+            item["updated_at"] = item["deleted_at"]
 
     async def find_by_client_request_id(self, client_request_id: str) -> dict[str, Any] | None:
         return next((deepcopy(row) for row in self._records if row.get("client_request_id") == client_request_id), None)

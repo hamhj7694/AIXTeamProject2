@@ -62,6 +62,14 @@ async def readiness() -> dict[str, object]:
         "status": "ready" if os.getenv("OPENAI_API_KEY") else "degraded",
         "provider_configured": bool(os.getenv("OPENAI_API_KEY")),
         "provider_live_check": False,
+        "diagnosis_limits": {
+            "max_calls": int(os.getenv("OPENAI_MAX_CALLS_PER_DIAGNOSIS", "31")),
+            "max_total_tokens": int(os.getenv("OPENAI_MAX_TOTAL_TOKENS_PER_DIAGNOSIS", "16000")),
+            "max_input_chars": int(os.getenv("DIAGNOSIS_MAX_INPUT_CHARS", "6000")),
+            "max_turns": int(os.getenv("DIAGNOSIS_MAX_TURNS", "30")),
+            "event_output_tokens": int(os.getenv("OPENAI_EVENT_MAX_OUTPUT_TOKENS", "1800")),
+            "context_output_tokens": int(os.getenv("OPENAI_CONTEXT_MAX_OUTPUT_TOKENS", "500")),
+        },
     }
 
 
