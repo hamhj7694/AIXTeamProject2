@@ -30,6 +30,23 @@ def _item(**values: Any) -> PublicContextPanelItemV3:
 
 def _grounded_display(fact: Any, case: dict[str, Any] | None = None) -> str:
     """Render a persisted Fact and enforce its epistemic status before display."""
+    value = getattr(fact, "value", {}) or {}
+    # Provider-generated copy is already the result of reading the complete
+    # evidence set.  Preserve that tailored sentence instead of rebuilding a
+    # generic template from a semantic key in Python.
+    if isinstance(value, dict) and value.get("display_origin") == "LLM_PROVIDER":
+        provider_text = str(getattr(fact, "display_value", "") or "").strip()
+        # Very short enum-like provider values (e.g. "TRANSFERRED") are
+        # still rendered through the grounded sentence builder so the panel
+        # remains understandable. Full provider summaries take precedence.
+        if provider_text and (len(provider_text) >= 8 or any(mark in provider_text for mark in (".", "。", "입니다", "정황"))):
+            try:
+                validate_grounded_fact(fact, provider_text, case)
+            except ValueError:
+                # Keep provider text visible for review, but never replace it
+                # with a broader code-derived claim.
+                return provider_text
+            return provider_text
     plan = grounded_fact_item(fact, context=case)
     try:
         validate_grounded_fact(fact, plan["text"], case)
@@ -41,16 +58,103 @@ def _grounded_display(fact: Any, case: dict[str, Any] | None = None) -> str:
     return str(plan["text"])
 
 
+def _fact_lineage_id(fact: Any) -> str | None:
+    """Return the narrowest persisted identity for one semantic event.
+
+    Display text is intentionally not an identity: two separate transfers can
+    have the same amount and wording. Prefer the fine-grained amount/Atom
+    event id, then fall back to the source message evidence used by chat
+    extraction. This still collapses an idempotent retry of the same message.
+    """
+    value = getattr(fact, "value", {})
+    if isinstance(value, dict):
+        for key in ("amount_event_id", "atom_id", "source_event_id", "source_message_id"):
+            candidate = value.get(key)
+            if candidate not in (None, ""):
+                return str(candidate)
+    for ref in (getattr(fact, "evidence_refs", None) or []):
+        ref_type = ref.get("type") if isinstance(ref, dict) else getattr(ref, "type", None)
+        ref_id = ref.get("id") if isinstance(ref, dict) else getattr(ref, "id", None)
+        if ref_id and ref_type in {"STRUCTURED_ATOM", "MESSAGE", "QUESTION_ANSWER", "BANK_TRANSACTION"}:
+            return f"{ref_type}:{ref_id}"
+    return None
+
+
 def _projection_marker(fact: Any, target: str, display: str) -> tuple[str, str, str | None]:
-    """Deduplicate retries, but keep distinct Atom-backed facts visible."""
-    atom_id = next(
-        (str(ref.get("id") if isinstance(ref, dict) else ref.id)
-         for ref in (fact.evidence_refs or [])
-         if str(ref.get("type") if isinstance(ref, dict) else ref.type) == "STRUCTURED_ATOM"
-         and (ref.get("id") if isinstance(ref, dict) else ref.id)),
-        None,
-    )
-    return target, display, atom_id
+    """Deduplicate retries while retaining repeated same-value events."""
+    return target, display, _fact_lineage_id(fact)
+
+
+def _is_redundant_transfer_status(fact: Any, facts: list[Any]) -> bool:
+    """Hide a status-only row when its amount Fact already states the event.
+
+    ``transfer.actual.status=TRANSFERRED`` and ``transfer.actual.amount`` are
+    emitted together for one chat turn. Showing both creates two visually
+    separate confirmations for a single transfer. Keep the status in storage
+    for audit/history, but project the amount row as the user-facing source of
+    truth. A status without a corresponding amount remains visible.
+    """
+    if getattr(fact, "semantic_key", None) != "transfer.actual.status":
+        return False
+    if str((getattr(fact, "value", {}) or {}).get("status") or "").upper() != "TRANSFERRED":
+        return False
+    lineage = _fact_lineage_id(fact)
+    source_message_id = _message_id_for_fact(fact)
+    for candidate in facts:
+        if getattr(candidate, "semantic_key", None) != "transfer.actual.amount":
+            continue
+        if getattr(candidate, "status", None) in {"REJECTED", "SUPERSEDED"}:
+            continue
+        candidate_lineage = _fact_lineage_id(candidate)
+        candidate_source_message_id = _message_id_for_fact(candidate)
+        if source_message_id and candidate_source_message_id and source_message_id == candidate_source_message_id:
+            return True
+        if lineage is None or candidate_lineage is None or lineage == candidate_lineage:
+            return True
+    return False
+
+
+def _message_id_for_fact(fact: Any) -> str | None:
+    value = getattr(fact, "value", {}) or {}
+    if isinstance(value, dict) and value.get("source_message_id"):
+        return str(value["source_message_id"])
+    for ref in getattr(fact, "evidence_refs", None) or []:
+        ref_type = ref.get("type") if isinstance(ref, dict) else getattr(ref, "type", None)
+        ref_id = ref.get("id") if isinstance(ref, dict) else getattr(ref, "id", None)
+        if str(ref_type) == "MESSAGE" and ref_id:
+            return str(ref_id)
+    return None
+
+
+def _reconfirmation_amount_key(
+    fact: Any, facts: list[Any], messages: list[dict[str, Any]],
+) -> tuple[Any, ...] | None:
+    """Identify legacy duplicate amount rows from non-additive chat repeats."""
+    if getattr(fact, "semantic_key", None) != "transfer.actual.amount":
+        return None
+    value = getattr(fact, "value", {}) or {}
+    if not isinstance(value, dict):
+        return None
+    message_by_id = {str(item.get("message_id")): item for item in messages if item.get("message_id")}
+    source_id = _message_id_for_fact(fact)
+    content = message_by_id.get(source_id, {}).get("content") if source_id else None
+    normalized = re.sub(r"[^\w가-힣]+", "", str(content or "").casefold())
+    compact = re.sub(r"\s+", "", str(content or "").casefold())
+    if not normalized or any(term in compact for term in ("더", "추가", "또", "한번더", "별도로", "두번째")):
+        return None
+    key = (value.get("amount_krw"), value.get("direction"), value.get("amount_role"), value.get("amount_scope"))
+    for candidate in facts:
+        if candidate is fact or getattr(candidate, "semantic_key", None) != "transfer.actual.amount":
+            continue
+        candidate_value = getattr(candidate, "value", {}) or {}
+        if tuple(candidate_value.get(name) for name in ("amount_krw", "direction", "amount_role", "amount_scope")) != key:
+            continue
+        candidate_id = _message_id_for_fact(candidate)
+        candidate_content = message_by_id.get(candidate_id, {}).get("content") if candidate_id else None
+        candidate_normalized = re.sub(r"[^\w가-힣]+", "", str(candidate_content or "").casefold())
+        if candidate_normalized == normalized and candidate_id != source_id:
+            return key
+    return None
 
 
 def _canonical_confirmed_facts(facts: list[Any]) -> list[Any]:
@@ -61,7 +165,11 @@ def _canonical_confirmed_facts(facts: list[Any]) -> list[Any]:
     use the newest row for ordinary semantic slots, and retain distinct
     confirmed money events so the UI does not silently lose a real transfer.
     """
-    active = [fact for fact in facts if fact.status == "CONFIRMED"]
+    active = [
+        fact for fact in facts
+        if fact.status == "CONFIRMED" and not _is_redundant_transfer_status(fact, facts)
+    ]
+    active = _collapse_redundant_facts(active)
     grouped: dict[str, list[Any]] = {}
     for fact in active:
         grouped.setdefault(str(fact.semantic_key), []).append(fact)
@@ -71,13 +179,80 @@ def _canonical_confirmed_facts(facts: list[Any]) -> list[Any]:
         if semantic_key == "transfer.actual.amount":
             seen: set[str] = set()
             for fact in reversed(ordered):
-                marker = str(fact.display_value)
+                # Same display amount does not imply the same transfer. Keep
+                # distinct message/Atom/event lineages in the summary.
+                marker = _fact_lineage_id(fact) or f"fact:{getattr(fact, 'fact_id', id(fact))}"
                 if marker not in seen:
                     seen.add(marker)
                     result.append(fact)
             continue
         result.append(ordered[0])
     return sorted(result, key=lambda item: getattr(item, "updated_at", None), reverse=True)
+
+
+def _fact_concrete_identity(fact: Any) -> tuple[str, str]:
+    """Return a semantic identity used only for visual de-duplication."""
+    key = str(getattr(fact, "semantic_key", ""))
+    value = getattr(fact, "value", {}) or {}
+    if not isinstance(value, dict):
+        value = {}
+    if key == "transfer.actual.amount":
+        return key, _fact_lineage_id(fact) or str(value.get("amount_krw") or "")
+    if key == "offender.claimed_organization":
+        candidate = value.get("organization_code") or value.get("organization") or value.get("name") or value.get("claimed_organization")
+        normalized = re.sub(r"\s+", "", str(candidate or "").casefold())
+        if normalized in {"", "other", "unknown", "none", "null", "특정기관"}:
+            normalized = "__generic__"
+        return key, normalized
+    if key == "offender.claimed_person_or_role":
+        candidate = value.get("role") or value.get("role_or_title") or value.get("claimed_role")
+        return key, re.sub(r"\s+", "", str(candidate or "").casefold()) or "__generic__"
+    if key in {"circumstance.tactic", "circumstance.demand", "offender.incident_claim"}:
+        # Legacy Atom projections may represent distinct communication
+        # controls (family vs. bank) with the same broad kind. Preserve those
+        # audit rows; provider summaries carry display_origin and are already
+        # semantically consolidated.
+        if value.get("display_origin") != "LLM_PROVIDER":
+            legacy_lineage = value.get("atom_id") or _fact_lineage_id(fact)
+            if legacy_lineage:
+                return key, f"atom:{legacy_lineage}"
+        candidate = value.get("text") or value.get("kind") or getattr(fact, "display_value", "")
+        normalized = re.sub(r"\s+", "", str(candidate or "").casefold())
+        return key, normalized or "__generic__"
+    return key, re.sub(r"\s+", "", str(getattr(fact, "display_value", "") or "").casefold()) or "__generic__"
+
+
+def _fact_detail_score(fact: Any) -> tuple[int, int, int]:
+    value = getattr(fact, "value", {}) or {}
+    if not isinstance(value, dict):
+        value = {}
+    concrete = sum(1 for field in (
+        "organization_code", "organization", "name", "role", "role_or_title", "claimed_role",
+        "amount_krw", "text", "threat_type", "kind", "observed_terms",
+    ) if value.get(field) not in (None, "", [], {}))
+    display_length = len(str(getattr(fact, "display_value", "") or ""))
+    evidence_count = len(getattr(fact, "evidence_refs", None) or [])
+    return concrete, evidence_count, display_length
+
+
+def _collapse_redundant_facts(facts: list[Any]) -> list[Any]:
+    """Keep the most concrete AI fact for one semantic identity.
+
+    Generic OTHER/UNKNOWN organization rows are discarded when a concrete
+    organization exists. Distinct transfer lineages remain separate.
+    """
+    grouped: dict[tuple[str, str], list[Any]] = {}
+    for fact in facts:
+        grouped.setdefault(_fact_concrete_identity(fact), []).append(fact)
+    result: list[Any] = []
+    for (semantic_key, identity), group in grouped.items():
+        if identity == "__generic__" and any(
+            other_key == semantic_key and other_identity != "__generic__"
+            for other_key, other_identity in grouped
+        ):
+            continue
+        result.append(max(group, key=_fact_detail_score))
+    return result
 
 
 def _preferred_atom_id(
@@ -267,6 +442,7 @@ def _build_summary_lines(
     verifications: list[dict[str, Any]],
     actions: list[dict[str, Any]],
     summary_override: Any | None,
+    messages: list[dict[str, Any]] | None = None,
 ) -> list[str]:
     """Build the deterministic Summary projection from current Case state."""
     if summary_override is not None:
@@ -281,9 +457,17 @@ def _build_summary_lines(
 
     active_facts = []
     seen_fact_markers: set[tuple[str, str, str | None]] = set()
+    reconfirmation_amounts: set[tuple[Any, ...]] = set()
     for fact in resources.facts:
         if fact.status not in {"CONFIRMED", "PROPOSED"}:
             continue
+        if _is_redundant_transfer_status(fact, resources.facts):
+            continue
+        repeated_amount = _reconfirmation_amount_key(fact, resources.facts, messages or [])
+        if repeated_amount is not None:
+            if repeated_amount in reconfirmation_amounts:
+                continue
+            reconfirmation_amounts.add(repeated_amount)
         marker = _projection_marker(fact, section_for_key(fact.semantic_key), _grounded_display(fact, case))
         if marker in seen_fact_markers:
             continue
@@ -364,6 +548,7 @@ def build_summary_projection(
     verifications: list[dict[str, Any]],
     actions: list[dict[str, Any]],
     display_items: list[Any] | None = None,
+    messages: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Return the current deterministic Summary and its source revision.
 
@@ -382,7 +567,7 @@ def build_summary_projection(
         ),
         None,
     )
-    lines = _build_summary_lines(case, resources, verifications, actions, override)
+    lines = _build_summary_lines(case, resources, verifications, actions, override, messages)
     return {
         "text": "\n".join(lines),
         "lines": lines,
@@ -414,15 +599,23 @@ def build_context_panel_v3(
     summary_lines.append(f"위험도 {case.get('risk_level', case.get('risk', '확인 중'))} · 진행 상태 {case.get('status', 'TRIAGE')}")
     projected_fact_statuses: dict[tuple[str, str, str | None], str] = {}
     fact_status_order = {"CONFIRMED": 0, "PROPOSED": 1, "REJECTED": 2, "SUPERSEDED": 3}
+    projected_reconfirmation_amounts: set[tuple[Any, ...]] = set()
     for fact in sorted(resources.facts, key=lambda item: fact_status_order.get(item.status, 9)):
         if fact.status in {"REJECTED", "SUPERSEDED"}:
             continue
+        if _is_redundant_transfer_status(fact, resources.facts):
+            continue
+        repeated_amount = _reconfirmation_amount_key(fact, resources.facts, messages)
+        if repeated_amount is not None:
+            if repeated_amount in projected_reconfirmation_amounts:
+                continue
+            projected_reconfirmation_amounts.add(repeated_amount)
         marker = _projection_marker(fact, section_for_key(fact.semantic_key), _grounded_display(fact, case))
         projected_fact_statuses.setdefault(marker, fact.status)
     confirmed_count = sum(status == "CONFIRMED" for status in projected_fact_statuses.values())
     proposed_count = sum(status == "PROPOSED" for status in projected_fact_statuses.values())
     summary_lines.append(f"확정 사실 {confirmed_count}건 · 검토 대기 {proposed_count}건")
-    summary_projection = build_summary_projection(case, resources, verifications, actions, display_items)
+    summary_projection = build_summary_projection(case, resources, verifications, actions, display_items, messages)
     revision = summary_projection["source_revision"]
     summary_override = summary_projection["override"]
     summary_lines = summary_projection["lines"]
@@ -452,6 +645,14 @@ def build_context_panel_v3(
                 visibility=str(action.get("visibility") or "BANK_INTERNAL"), version=int(action.get("version", 1)),
             ))
         seen_fact_projections: set[tuple[str, str, str | None]] = set()
+        reconfirmation_amounts: set[tuple[Any, ...]] = set()
+        collapsed_active_ids = {
+            str(getattr(fact, "fact_id", ""))
+            for fact in _collapse_redundant_facts([
+                item for item in resources.facts
+                if item.status not in {"REJECTED", "SUPERSEDED"}
+            ])
+        }
         for fact in sorted(resources.facts, key=lambda item: fact_status_order.get(item.status, 9)):
             if fact.status == "REJECTED":
                 target = section_for_key(fact.semantic_key)
@@ -470,6 +671,15 @@ def build_context_panel_v3(
                 continue
             if fact.status == "SUPERSEDED":
                 continue
+            if str(getattr(fact, "fact_id", "")) not in collapsed_active_ids:
+                continue
+            if _is_redundant_transfer_status(fact, resources.facts):
+                continue
+            repeated_amount = _reconfirmation_amount_key(fact, resources.facts, messages)
+            if repeated_amount is not None:
+                if repeated_amount in reconfirmation_amounts:
+                    continue
+                reconfirmation_amounts.add(repeated_amount)
             masked = fact.semantic_key in SENSITIVE_KEYS
             display = mask_sensitive_text(_grounded_display(fact, case))
             target = section_for_key(fact.semantic_key)
@@ -541,7 +751,7 @@ def build_context_panel_v3(
 
     shared: list[PublicContextPanelItemV3] = []
     for fact in resources.facts:
-        if fact.status == "CONFIRMED" and fact.visibility == "CUSTOMER_SHARED":
+        if fact.status == "CONFIRMED" and fact.visibility == "CUSTOMER_SHARED" and not _is_redundant_transfer_status(fact, resources.facts):
             shared.append(_item(item_id=fact.fact_id, semantic_key=fact.semantic_key, label=fact.display_label,
                                 display_value=_grounded_display(fact, case), value=fact.value, source_kind=fact.source_kind,
                                 status=fact.status, evidence_refs=_enrich_evidence_refs(fact.evidence_refs, case=case, messages=messages, view=view, semantic_key=fact.semantic_key, display_value=fact.display_value), visibility=fact.visibility, version=fact.version))

@@ -38,6 +38,67 @@ class ContextV3VerticalSliceTest(unittest.IsolatedAsyncioTestCase):
         populated = {section.section_id for section in panel.sections if section.items or any(section.groups.values())}
         self.assertTrue({"EXPOSURE", "IMPERSONATION_CONTACT", "FRAUD_CIRCUMSTANCES"}.issubset(populated))
 
+    async def test_repeated_same_amount_in_later_chat_turns_keeps_two_event_lineages(self) -> None:
+        repository = InMemoryCaseRepository()
+        repository._records = [{"case_id": "VP-REPEAT-AMOUNT", "context_revision": 1, "initial_brief": "반복 이체", "status": "TRIAGE"}]
+        first = await repository.append_message("VP-REPEAT-AMOUNT", {
+            "actor_type": "CUSTOMER", "actor_user_id": "customer", "actor_display_name": "고객",
+            "content": "200만원 보냈어요.", "channel": "CUSTOMER", "audience": "CUSTOMER",
+            "visibility": "CUSTOMER", "message_kind": "CHAT",
+        })
+        second = await repository.append_message("VP-REPEAT-AMOUNT", {
+            "actor_type": "CUSTOMER", "actor_user_id": "customer", "actor_display_name": "고객",
+            "content": "이후에 200만원 더 보냈어요.", "channel": "CUSTOMER", "audience": "CUSTOMER",
+            "visibility": "CUSTOMER", "message_kind": "CHAT",
+        })
+        extractor = ContextFactExtractionService()
+        with patch.object(main, "repository", repository), patch.object(
+            main.service.ai_client, "extract_context_facts", new=AsyncMock(side_effect=extractor.extract),
+        ):
+            await main.enqueue_context_extraction(first)
+            await main.process_message_context_extraction("VP-REPEAT-AMOUNT", first["message_id"])
+            await main.enqueue_context_extraction(second)
+            await main.process_message_context_extraction("VP-REPEAT-AMOUNT", second["message_id"])
+            resources = await main.case_context_v2_repository().list_resources("VP-REPEAT-AMOUNT")
+
+        amounts = [item for item in resources.facts if item.semantic_key == "transfer.actual.amount"]
+        self.assertEqual(len(amounts), 2)
+        self.assertEqual({item.value["source_message_id"] for item in amounts}, {first["message_id"], second["message_id"]})
+        event_ids = {item.value["amount_event_id"] for item in amounts}
+        self.assertEqual(len(event_ids), 2)
+        self.assertTrue(all(any(event_id.startswith(f"{message_id}:amount:") for message_id in (first["message_id"], second["message_id"])) for event_id in event_ids))
+        panel = build_context_panel_v3(
+            repository._records[0], resources, view="bank", verifications=[], actions=[], messages=[], progress=[]
+        )
+        exposure = next(section for section in panel.sections if section.section_id == "EXPOSURE")
+        self.assertEqual(len([item for item in exposure.items if item.semantic_key == "transfer.actual.amount"]), 2)
+
+    async def test_identical_followup_confirmation_does_not_create_second_transfer(self) -> None:
+        repository = InMemoryCaseRepository()
+        repository._records = [{"case_id": "VP-RECONFIRM", "context_revision": 1, "initial_brief": "반복 확인", "status": "TRIAGE"}]
+        first = await repository.append_message("VP-RECONFIRM", {
+            "actor_type": "BANK_STAFF", "actor_user_id": "staff", "actor_display_name": "은행 내부",
+            "content": "300만원 보냈데!", "channel": "BANK_INTERNAL", "audience": "BANK_INTERNAL",
+            "visibility": "BANK_INTERNAL", "message_kind": "CHAT",
+        })
+        second = await repository.append_message("VP-RECONFIRM", {
+            "actor_type": "BANK_STAFF", "actor_user_id": "staff", "actor_display_name": "은행 내부",
+            "content": "300만원 보냈데", "channel": "BANK_INTERNAL", "audience": "BANK_INTERNAL",
+            "visibility": "BANK_INTERNAL", "message_kind": "CHAT",
+        })
+        extractor = ContextFactExtractionService()
+        with patch.object(main, "repository", repository), patch.object(
+            main.service.ai_client, "extract_context_facts", new=AsyncMock(side_effect=extractor.extract),
+        ):
+            await main.enqueue_context_extraction(first)
+            await main.process_message_context_extraction("VP-RECONFIRM", first["message_id"])
+            await main.enqueue_context_extraction(second)
+            await main.process_message_context_extraction("VP-RECONFIRM", second["message_id"])
+            resources = await main.case_context_v2_repository().list_resources("VP-RECONFIRM")
+
+        self.assertEqual(len([item for item in resources.facts if item.semantic_key == "transfer.actual.amount"]), 1)
+        self.assertEqual(len([item for item in resources.facts if item.semantic_key == "transfer.actual.status"]), 1)
+
     async def test_structured_a_result_is_projected_for_bank_only(self) -> None:
         case = {
             "case_id": "VP-STRUCTURED", "context_revision": 4,

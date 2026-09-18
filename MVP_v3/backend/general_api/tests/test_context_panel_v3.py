@@ -48,6 +48,155 @@ class ContextPanelV3Tests(unittest.TestCase):
         self.assertEqual(tactics[0].display_value, "외부 연락이나 주변 상의를 제한한 정황입니다.")
         self.assertIn("확정 사실 0건 · 검토 대기 1건", panel.sections[0].items[-1].display_value)
 
+    def test_same_amount_from_different_chat_events_is_not_collapsed(self):
+        now = datetime.now(timezone.utc)
+        facts = [
+            PublicCaseFactV2(
+                fact_id="fact-transfer-1", case_id="VP-REPEAT-AMOUNT", semantic_key="transfer.actual.amount",
+                display_label="실제 이체 금액", value={"amount_krw": 2_000_000, "currency": "KRW"},
+                display_value="2,000,000원 이체", source_kind="CUSTOMER_STATEMENT", status="CONFIRMED",
+                evidence_refs=[{"type": "MESSAGE", "id": "msg-transfer-1"}], version=1,
+                confirmed_by="reviewer", confirmed_at=now,
+                created_at=now, updated_at=now,
+            ),
+            PublicCaseFactV2(
+                fact_id="fact-transfer-2", case_id="VP-REPEAT-AMOUNT", semantic_key="transfer.actual.amount",
+                display_label="실제 이체 금액", value={"amount_krw": 2_000_000, "currency": "KRW"},
+                display_value="2,000,000원 이체", source_kind="CUSTOMER_STATEMENT", status="CONFIRMED",
+                evidence_refs=[{"type": "MESSAGE", "id": "msg-transfer-2"}], version=1,
+                confirmed_by="reviewer", confirmed_at=now,
+                created_at=now, updated_at=now,
+            ),
+        ]
+        panel = build_context_panel_v3(
+            {"case_id": "VP-REPEAT-AMOUNT", "initial_brief": "반복 이체", "context_revision": 2},
+            PublicCaseContextResourcesV2(case_id="VP-REPEAT-AMOUNT", context_revision=2, facts=facts),
+            view="bank", verifications=[], actions=[], messages=[], progress=[],
+        )
+        exposure = next(section for section in panel.sections if section.section_id == "EXPOSURE")
+        self.assertEqual(len([item for item in exposure.items if item.semantic_key == "transfer.actual.amount"]), 2)
+        self.assertFalse(any(item.semantic_key == "transfer.actual.status" for item in exposure.items))
+        summary_text = " ".join(item.display_value for item in panel.sections[0].items)
+        self.assertIn("실제 이체 2건", summary_text)
+        self.assertIn("합계 4,000,000원", summary_text)
+
+    def test_chat_fact_values_keep_concrete_organization_role_and_threat(self):
+        """Post-initial chat extraction must not regress to generic labels."""
+        now = datetime.now(timezone.utc)
+        facts = [
+            PublicCaseFactV2(
+                fact_id="fact-chat-org", case_id="VP-CHAT-FIDELITY", semantic_key="offender.claimed_organization",
+                display_label="사칭 기관", value={"name": "경찰", "claimed": True}, display_value="경찰 사칭",
+                source_kind="CUSTOMER_STATEMENT", status="PROPOSED", evidence_refs=[{"type": "MESSAGE", "id": "msg-1"}],
+                version=1, created_at=now, updated_at=now,
+            ),
+            PublicCaseFactV2(
+                fact_id="fact-chat-role", case_id="VP-CHAT-FIDELITY", semantic_key="offender.claimed_person_or_role",
+                display_label="사칭 인물·역할", value={"role": "수사관"}, display_value="수사관",
+                source_kind="CUSTOMER_STATEMENT", status="PROPOSED", evidence_refs=[{"type": "MESSAGE", "id": "msg-1"}],
+                version=1, created_at=now, updated_at=now,
+            ),
+            PublicCaseFactV2(
+                fact_id="fact-chat-threat", case_id="VP-CHAT-FIDELITY", semantic_key="circumstance.tactic",
+                display_label="압박·조작 수법", value={"text": "경찰이라고 하며 협박하고 지금 당장 보내라고 했다", "threat_type": "THREAT"},
+                display_value="경찰이라고 하며 협박하고 지금 당장 보내라고 했다", source_kind="CUSTOMER_STATEMENT",
+                status="PROPOSED", evidence_refs=[{"type": "MESSAGE", "id": "msg-1"}], version=1,
+                created_at=now, updated_at=now,
+            ),
+            PublicCaseFactV2(
+                fact_id="fact-chat-auth", case_id="VP-CHAT-FIDELITY", semantic_key="exposure.authentication_information",
+                display_label="인증정보 노출", value={"status": "EXPOSED", "types": ["OTP_OR_AUTH_CODE"]},
+                display_value="OTP 제공", source_kind="CUSTOMER_STATEMENT", status="PROPOSED",
+                evidence_refs=[{"type": "MESSAGE", "id": "msg-1"}], version=1,
+                created_at=now, updated_at=now,
+            ),
+        ]
+        panel = build_context_panel_v3(
+            {"case_id": "VP-CHAT-FIDELITY", "initial_brief": "경찰 사칭", "context_revision": 2},
+            PublicCaseContextResourcesV2(case_id="VP-CHAT-FIDELITY", context_revision=2, facts=facts),
+            view="bank", verifications=[], actions=[], messages=[], progress=[],
+        )
+        rendered = {}
+        for section in panel.sections:
+            for item in section.items:
+                rendered[item.item_id] = item.display_value
+            for grouped_items in section.groups.values():
+                for item in grouped_items:
+                    rendered[item.item_id] = item.display_value
+        self.assertIn("경찰을 사칭한 정황", rendered["fact-chat-org"])
+        self.assertIn("수사관을 내세운 정황", rendered["fact-chat-role"])
+        self.assertIn("협박·위협성 표현", rendered["fact-chat-threat"])
+        self.assertIn("제공했다고 진술", rendered["fact-chat-auth"])
+
+    def test_normalized_organization_code_is_rendered_as_concrete_label(self):
+        """A-part normalized codes must not regress to '특정 기관'."""
+        now = datetime.now(timezone.utc)
+        fact = PublicCaseFactV2(
+            fact_id="fact-code-org", case_id="VP-CODE-ORG", semantic_key="offender.claimed_organization",
+            display_label="사칭 기관", value={"organization_code": "POLICE_SERVICE", "claimed": True},
+            display_value="경찰 사칭", source_kind="AI_EXTRACTION", status="PROPOSED",
+            evidence_refs=[{"type": "MESSAGE", "id": "msg-code-org"}], version=1,
+            created_at=now, updated_at=now,
+        )
+        panel = build_context_panel_v3(
+            {"case_id": "VP-CODE-ORG", "initial_brief": "경찰 사칭", "context_revision": 1},
+            PublicCaseContextResourcesV2(case_id="VP-CODE-ORG", context_revision=1, facts=[fact]),
+            view="bank", verifications=[], actions=[], messages=[], progress=[],
+        )
+        rendered = [item.display_value for section in panel.sections for item in section.items]
+        rendered.extend(item.display_value for section in panel.sections for group in section.groups.values() for item in group)
+        self.assertTrue(any("경찰을 사칭한 정황" in value for value in rendered))
+
+    def test_legacy_identical_staff_amount_reconfirmations_project_once(self):
+        now = datetime.now(timezone.utc)
+        facts = [
+            PublicCaseFactV2(
+                fact_id=f"fact-repeat-{index}", case_id="VP-LEGACY-REPEAT", semantic_key="transfer.actual.amount",
+                display_label="실제 이체 금액", value={"amount_krw": 3_000_000, "direction": "OUT", "amount_role": "TRANSFER_OUT", "amount_scope": "EVENT", "source_message_id": f"msg-{index}"},
+                display_value="3,000,000원 송금", source_kind="STAFF_OBSERVATION", status="PROPOSED",
+                evidence_refs=[{"type": "MESSAGE", "id": f"msg-{index}"}], version=1,
+                created_at=now, updated_at=now,
+            )
+            for index in (1, 2)
+        ]
+        panel = build_context_panel_v3(
+            {"case_id": "VP-LEGACY-REPEAT", "initial_brief": "반복 확인", "context_revision": 1},
+            PublicCaseContextResourcesV2(case_id="VP-LEGACY-REPEAT", context_revision=1, facts=facts),
+            view="bank", verifications=[], actions=[],
+            messages=[
+                {"message_id": "msg-1", "actor_type": "BANK_STAFF", "content": "300만원 보냈데!"},
+                {"message_id": "msg-2", "actor_type": "BANK_STAFF", "content": "300만원 보냈데"},
+            ], progress=[],
+        )
+        exposure = next(section for section in panel.sections if section.section_id == "EXPOSURE")
+        self.assertEqual(len([item for item in exposure.items if item.semantic_key == "transfer.actual.amount"]), 1)
+        summary_text = " ".join(item.display_value for item in panel.sections[0].items)
+        self.assertIn("검토 대기 1건", summary_text)
+
+    def test_transfer_status_is_hidden_when_amount_fact_carries_event_id(self):
+        now = datetime.now(timezone.utc)
+        facts = [
+            PublicCaseFactV2(
+                fact_id="fact-status", case_id="VP-STATUS-AMOUNT", semantic_key="transfer.actual.status",
+                display_label="실제 이체 여부", value={"status": "TRANSFERRED", "source_message_id": "msg-1"},
+                display_value="이체함", source_kind="STAFF_OBSERVATION", status="PROPOSED",
+                evidence_refs=[{"type": "MESSAGE", "id": "msg-1"}], version=1, created_at=now, updated_at=now,
+            ),
+            PublicCaseFactV2(
+                fact_id="fact-amount", case_id="VP-STATUS-AMOUNT", semantic_key="transfer.actual.amount",
+                display_label="실제 이체 금액", value={"amount_krw": 3_000_000, "direction": "OUT", "amount_role": "TRANSFER_OUT", "amount_event_id": "msg-1:amount:1", "source_message_id": "msg-1"},
+                display_value="3,000,000원 송금", source_kind="STAFF_OBSERVATION", status="PROPOSED",
+                evidence_refs=[{"type": "MESSAGE", "id": "msg-1"}], version=1, created_at=now, updated_at=now,
+            ),
+        ]
+        panel = build_context_panel_v3(
+            {"case_id": "VP-STATUS-AMOUNT", "initial_brief": "이체", "context_revision": 1},
+            PublicCaseContextResourcesV2(case_id="VP-STATUS-AMOUNT", context_revision=1, facts=facts),
+            view="bank", verifications=[], actions=[], messages=[], progress=[],
+        )
+        exposure = next(section for section in panel.sections if section.section_id == "EXPOSURE")
+        self.assertEqual([item.semantic_key for item in exposure.items], ["transfer.actual.amount"])
+
     def test_exact_sections_masking_and_customer_allowlist(self):
         now = datetime.now(timezone.utc)
         facts = [

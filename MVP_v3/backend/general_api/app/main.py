@@ -28,8 +28,6 @@ from .core.actor_context import normalize_legacy_actor
 
 from contracts.diagnosis import AnalyzeTextRequest
 from contracts.ai_internal.context_fact_extraction import ContextFactExtractionInput, ContextFactExtractionMessage, ExistingContextFact
-from contracts.ai_internal.mvp_workflow import TargetField
-from ai_api.app.domains.case_support.answer_service import CustomerAnswerStructuringService
 from contracts.public_api.customer_progress import CustomerProgressItem, ProgressStep, UpdateCustomerProgress
 from .domains.cases.customer_progress import PREFIX as PROGRESS_PREFIX, ProgressConflict, progress_items as build_customer_progress, progress_ai_context, actions_for_ai
 from request_trace import install_request_trace
@@ -524,13 +522,72 @@ def _message_is_context_extractable(message: dict) -> bool:
     )
 
 
+def _normalized_reconfirmation_text(content: object) -> str:
+    """Normalize a chat turn for repeat/reconfirmation detection.
+
+    Punctuation, whitespace, and case are presentation differences rather than
+    evidence of a new event (e.g. ``300만원 보냈데!`` vs ``300만원 보냈데``).
+    """
+    return re.sub(r"[^\w가-힣]+", "", str(content or "").casefold())
+
+
+def _has_explicit_additive_language(content: object) -> bool:
+    compact = re.sub(r"\s+", "", str(content or "").casefold())
+    return any(term in compact for term in ("더", "추가", "또", "한번더", "한번더", "별도로", "두번째"))
+
+
+def _is_reconfirmation_message(message: dict, messages: list[dict]) -> bool:
+    """Return whether a turn is a non-additive follow-up confirmation.
+
+    We intentionally do not require identical wording. The extracted semantic
+    proposal is compared with existing Facts below, so phrases such as
+    ``실제로 300만원 송금했어요`` can confirm an earlier ``300만원 보냈데``
+    without manufacturing a second transfer. Explicit additive language keeps
+    the event distinct.
+    """
+    if _has_explicit_additive_language(message.get("content")):
+        return False
+    actor_type = message.get("actor_type")
+    return any(
+        item.get("message_id") != message.get("message_id")
+        and item.get("actor_type") == actor_type
+        for item in messages
+    )
+
+
+def _proposal_matches_existing_fact(proposal: object, fact: ExistingContextFact) -> bool:
+    """Compare semantic content while ignoring source/event lineage fields."""
+    if proposal.semantic_key != fact.semantic_key:
+        return False
+    proposal_value = dict(proposal.value or {})
+    existing_value = dict(fact.value or {})
+    if proposal.semantic_key in {"transfer.actual.amount", "transfer.requested.amount", "transfer.promised_return.amount"}:
+        return all(
+            proposal_value.get(key) == existing_value.get(key)
+            for key in ("amount_krw", "direction", "amount_role", "amount_scope")
+        )
+    if proposal.semantic_key == "transfer.actual.status":
+        return proposal_value.get("status") == existing_value.get("status")
+    # For narrative facts, compare typed values while ignoring lineage and
+    # punctuation. ExistingContextFact intentionally omits display text.
+    def canonical(value: dict) -> str:
+        cleaned = {
+            key: _normalized_reconfirmation_text(item) if isinstance(item, str) else item
+            for key, item in value.items()
+            if key not in {"source_message_id", "amount_event_id", "atom_id", "source_event_id"}
+        }
+        return json.dumps(cleaned, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return canonical(proposal_value) == canonical(existing_value)
+
+
 async def process_message_context_extraction(case_id: str, message_id: str) -> None:
     """Process one durable extraction job; failures remain available for bounded retry."""
     job = await repository.claim_message_extraction(message_id)
     if job is None:
         return
     try:
-        message = next((item for item in await repository.list_messages(case_id) if item.get("message_id") == message_id), None)
+        case_messages = await repository.list_messages(case_id)
+        message = next((item for item in case_messages if item.get("message_id") == message_id), None)
         if message is None or not _message_is_context_extractable(message):
             await repository.complete_message_extraction(message_id, "not-applicable", "context-fact-v1")
             return
@@ -546,17 +603,39 @@ async def process_message_context_extraction(case_id: str, message_id: str) -> N
                 content=message["content"], created_at=message.get("created_at"),
             ), existing_facts=existing,
         ))
-        for proposal in output.proposals:
+        reconfirmation = _is_reconfirmation_message(message, case_messages)
+        for proposal_index, proposal in enumerate(output.proposals):
             if proposal.semantic_key not in ALLOWED_SEMANTIC_KEYS or proposal.evidence_message_id != message_id:
                 raise ValueError("AI extraction returned an out-of-contract proposal")
+            # Preserve source-event identity in the typed value. Without this,
+            # two different chat turns saying "200만원 보냈어요" become
+            # indistinguishable during panel projection.
+            fact_value = dict(proposal.value)
+            fact_value.setdefault("source_message_id", message_id)
+            # Record the provider identity alongside the proposal.  The
+            # message remains the evidence source, but the fact itself was
+            # created by the AI extraction boundary—not by lexical code.
+            fact_value.setdefault("extraction_model", output.model_version)
+            fact_value["display_origin"] = "LLM_PROVIDER"
+            if proposal.semantic_key in {"transfer.actual.amount", "transfer.requested.amount", "transfer.promised_return.amount"}:
+                fact_value.setdefault("amount_event_id", f"{message_id}:amount:{proposal_index}")
+            if reconfirmation and any(
+                item.status not in {"REJECTED", "SUPERSEDED"}
+                and _proposal_matches_existing_fact(proposal, item)
+                for item in resources.facts
+            ):
+                # A repeated confirmation should not manufacture another
+                # transfer. Explicit additive language is handled above and
+                # remains a new event.
+                continue
             await store.create_fact(case_id, {
-                "client_request_id": proposal_dedupe_key(message_id, proposal.semantic_key, proposal.value),
+                "client_request_id": proposal_dedupe_key(message_id, proposal.semantic_key, fact_value),
                 "semantic_key": proposal.semantic_key, "display_label": proposal.display_label,
-                "value": proposal.value, "display_value": proposal.display_value,
+                "value": fact_value, "display_value": proposal.display_value,
                 "confidence": proposal.confidence,
                 "evidence_refs": [{"type": "MESSAGE", "id": message_id}], "visibility": "BANK_INTERNAL",
             }, message.get("actor_user_id") or "context-extractor",
-                source_kind="CUSTOMER_STATEMENT" if message["actor_type"] == "CUSTOMER" else "STAFF_OBSERVATION")
+                source_kind="AI_EXTRACTION")
         for observation in getattr(output, "unmapped_observations", []):
             await store.create_unmapped_observation(
                 case_id,
@@ -583,6 +662,86 @@ async def seed_initial_context_facts(case_id: str) -> None:
     if not case:
         return
     diagnosis = case.get("diagnosis") or {}
+    # A Context V3 fact is an AI proposal, never a rule/lexical projection.
+    # If the diagnosis used a local safety fallback or was partial, leave the
+    # panel empty until a real provider-backed extraction succeeds.  This
+    # prevents a provider outage from silently turning code-derived signals
+    # into persisted panel facts.
+    model_metadata = diagnosis.get("model_metadata") or {}
+    extractor_model = str(model_metadata.get("extractor_model") or "").strip().casefold()
+    warnings = diagnosis.get("warnings") or []
+    if (
+        not extractor_model
+        or extractor_model.startswith(("local", "deterministic", "rule", "fixture", "sample"))
+        or bool(diagnosis.get("partial_failure"))
+        or any("로컬 안전" in str(item) or "fallback" in str(item).casefold() for item in warnings)
+    ):
+        logger.warning(
+            "Skipping initial Context V3 facts for %s: diagnosis is not fully provider-backed (%s)",
+            case_id,
+            extractor_model or "unknown",
+        )
+        return
+    # Initial panel facts must come from one provider pass over the complete
+    # persisted diagnosis snapshot.  Do not persist the legacy rule/template
+    # candidates below: they duplicate Atom projections and expose generic
+    # values such as OTHER/UNKNOWN.  If this provider pass fails, leave the
+    # panel empty and surface the retry path instead of inventing text in code.
+    diagnosis_snapshot = {
+        "snapshot_type": "INITIAL_CASE_CONTEXT_SNAPSHOT",
+        "initial_summary": case.get("initial_brief") or "",
+        "risk": case.get("risk"),
+        "risk_score": case.get("risk_score"),
+        "context": diagnosis.get("context") or {},
+        "context_features": diagnosis.get("case_context_features") or {},
+        "semantic_atoms": diagnosis.get("semantic_atoms") or [],
+        "semantic_relations": diagnosis.get("semantic_relations") or [],
+        "context_signals": diagnosis.get("context_signals") or [],
+    }
+    initial_message_id = f"initial-context-{case_id}"
+    try:
+        output = await service.ai_client.extract_context_facts(ContextFactExtractionInput(
+            message=ContextFactExtractionMessage(
+                message_id=initial_message_id, case_id=case_id,
+                actor_type="BANK_STAFF",
+                content=json.dumps(diagnosis_snapshot, ensure_ascii=False)[:9_800],
+                created_at=case.get("created_at"),
+            ),
+            existing_facts=[],
+        ))
+    except Exception:
+        logger.exception("Provider initial Context V3 extraction failed for %s", case_id)
+        return
+
+    store = case_context_v2_repository()
+    seen: set[tuple[str, str]] = set()
+    for index, proposal in enumerate(output.proposals):
+        if proposal.semantic_key not in ALLOWED_SEMANTIC_KEYS:
+            continue
+        value = dict(proposal.value)
+        value.setdefault("source_message_id", initial_message_id)
+        value.setdefault("extraction_model", output.model_version)
+        value["display_origin"] = "LLM_PROVIDER"
+        if proposal.semantic_key in {"transfer.actual.amount", "transfer.requested.amount", "transfer.promised_return.amount"}:
+            value.setdefault("amount_event_id", f"{initial_message_id}:amount:{index}")
+        marker = (proposal.semantic_key, json.dumps(value, ensure_ascii=False, sort_keys=True))
+        if marker in seen:
+            continue
+        seen.add(marker)
+        await store.create_fact(case_id, {
+            "client_request_id": proposal_dedupe_key(initial_message_id, proposal.semantic_key, value),
+            "semantic_key": proposal.semantic_key,
+            "display_label": proposal.display_label,
+            "value": value,
+            "display_value": proposal.display_value,
+            "confidence": proposal.confidence,
+            "evidence_refs": [{"type": "MESSAGE", "id": initial_message_id}],
+            "visibility": "BANK_INTERNAL",
+        }, "system:initial-ai-summary", source_kind="AI_EXTRACTION")
+    # Provider output is the only initial source.  The historical deterministic
+    # candidate builder remains below for fixture compatibility, but is never
+    # reached by the production path.
+    return
     context = diagnosis.get("context") or {}
     diagnosis_signals = diagnosis.get("context_signals") or []
     diagnosis_atoms = diagnosis.get("semantic_atoms") or []
@@ -1187,68 +1346,6 @@ async def dispatch_next_customer_question_message(case_id: str) -> PublicMessage
     return to_public_message(message)
 
 
-def _structured_answer_fact_payload(question: dict, answer_text: str, answer_message_id: str | None) -> dict | None:
-    """Map only deterministic, unambiguous answers to an unconfirmed Context V2 Fact."""
-    if not answer_message_id:
-        return None
-    try:
-        target_field = TargetField(normalize_target_field(str(question["target_field"])))
-    except (KeyError, ValueError):
-        # Contextual questions and unsupported fields retain the existing raw-answer path.
-        return None
-
-    structured = CustomerAnswerStructuringService().structure_answer(target_field, answer_text)
-    if structured.unresolved or structured.structured_value is None:
-        return None
-
-    mappings = {
-        TargetField.TRANSFER_STATUS: (
-            "transfer.actual.status",
-            {"status": structured.structured_value},
-            {"TRANSFERRED": "송금함", "NOT_TRANSFERRED": "송금하지 않음"},
-        ),
-        TargetField.PERSONAL_INFORMATION_EXPOSURE: (
-            "exposure.personal_information",
-            {"status": structured.structured_value},
-            {"EXPOSED": "노출됨", "PARTIALLY_EXPOSED": "일부 노출됨", "NOT_EXPOSED": "노출되지 않음"},
-        ),
-        TargetField.AUTHENTICATION_INFORMATION_EXPOSURE: (
-            "exposure.authentication_information",
-            {"status": structured.structured_value},
-            {"EXPOSED": "노출됨", "NOT_EXPOSED": "노출되지 않음"},
-        ),
-        TargetField.REMOTE_CONTROL_APP: (
-            "device.remote_control_app",
-            {"status": structured.structured_value},
-            {"INSTALLED": "설치됨", "NOT_INSTALLED": "설치되지 않음"},
-        ),
-    }
-    mapping = mappings.get(target_field)
-    if mapping is None:
-        return None
-    semantic_key, value, display_values = mapping
-    return {
-        "client_request_id": proposal_dedupe_key(answer_message_id, semantic_key, value),
-        "semantic_key": semantic_key,
-        "display_label": SEMANTIC_LABELS[semantic_key],
-        "value": value,
-        "display_value": display_values[structured.structured_value],
-        "confidence": structured.confidence,
-        "evidence_refs": [{"type": "QUESTION_ANSWER", "id": answer_message_id}],
-        "visibility": "BANK_INTERNAL",
-    }
-
-
-async def _persist_structured_answer_fact(question: dict, answered: dict, answer_text: str) -> None:
-    """Keep raw-answer persistence authoritative if this additive proposal cannot be stored."""
-    payload = _structured_answer_fact_payload(question, answer_text, answered.get("answer_message_id"))
-    if payload is None:
-        return
-    await case_context_v2_repository().create_fact(
-        answered["case_id"], payload, "customer-answer-structurer", source_kind="CUSTOMER_STATEMENT",
-    )
-
-
 @app.post("/api/cases/{case_id}/customer-questions/{question_id}/answer", response_model=PublicCustomerQuestionResponse)
 async def answer_customer_question(case_id: str, question_id: str, request: PublicAnswerCustomerQuestionRequest, background_tasks: BackgroundTasks) -> PublicCustomerQuestionResponse:
     await require_case(case_id)
@@ -1280,13 +1377,11 @@ async def answer_customer_question(case_id: str, question_id: str, request: Publ
     except ValueError as exc:
         raise HTTPException(status_code=409, detail={"code": "CUSTOMER_ANSWER_CONFLICT", "message": "이미 다른 답변이 저장된 질문입니다. 최신 내용을 확인해 주세요."}) from exc
     try:
-        await _persist_structured_answer_fact(question, answered, answer_text or "")
-    except Exception:
-        # The committed customer answer and legacy Fact remain usable if this additive proposal fails.
-        logger.exception("Could not persist structured customer answer fact for question %s", question_id)
-    try:
         message = next((item for item in await repository.list_messages(case_id) if item.get("message_id") == answered.get("answer_message_id")), None)
         if message:
+            # A customer answer is evidence, not a pre-typed Fact.  The
+            # provider-only Context extractor is the sole path that may turn
+            # it into a Context V2 proposal.
             await enqueue_context_extraction(message, background_tasks)
     except Exception:
         logger.exception("Could not enqueue customer answer context extraction")

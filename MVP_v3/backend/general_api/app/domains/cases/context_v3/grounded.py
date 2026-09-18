@@ -13,6 +13,43 @@ def _text(value: Any) -> str:
     return " ".join(str(value or "").split()).strip()
 
 
+def _object_phrase(noun: str) -> str:
+    """Attach the correct Korean object particle for a concrete label."""
+    noun = _text(noun)
+    if not noun:
+        return noun
+    last = ord(noun[-1])
+    has_batchim = 0xAC00 <= last <= 0xD7A3 and (last - 0xAC00) % 28 != 0
+    return f"{noun}{'을' if has_batchim else '를'}"
+
+
+_ORGANIZATION_LABELS = {
+    "PROSECUTION_SERVICE": "수사기관",
+    "POLICE_SERVICE": "경찰",
+    "FINANCIAL_SUPERVISORY_SERVICE": "금융감독원",
+    "BANK": "은행",
+    "COURT": "법원",
+    "CARD_COMPANY": "카드사",
+}
+
+
+def _organization_label(value: dict[str, Any], atom: dict[str, Any]) -> str:
+    """Resolve either a concrete name or the normalized A-part code.
+
+    Provider responses may use ``name``/``organization`` while initial
+    structured context uses ``organization_code``.  Both represent the same
+    AI-extracted slot and must not collapse to ``특정 기관``.
+    """
+    raw = _text(
+        value.get("organization")
+        or value.get("name")
+        or value.get("claimed_organization")
+        or value.get("organization_code")
+        or atom.get("claimed_organization")
+    )
+    return _ORGANIZATION_LABELS.get(raw.upper(), raw) or "특정 기관"
+
+
 def _amount(value: dict[str, Any], display_value: str) -> str:
     raw = value.get("amount_krw")
     try:
@@ -54,8 +91,16 @@ def _supporting_atom(fact: Any, context: dict[str, Any] | None) -> dict[str, Any
     return {}
 
 
-def _observed_term(atom: dict[str, Any], prefixes: tuple[str, ...]) -> str | None:
-    for term in atom.get("observed_terms", []) or []:
+def _observed_term(
+    atom: dict[str, Any], prefixes: tuple[str, ...], value: dict[str, Any] | None = None,
+) -> str | None:
+    """Return a concrete lexical cue from an Atom or a chat-extracted Fact."""
+    terms = list(atom.get("observed_terms", []) or [])
+    if value:
+        terms.extend(value.get("observed_terms", []) or [])
+    for term in terms:
+        if not isinstance(term, dict):
+            continue
         code = str(term.get("normalized_code") or "")
         surface = _text(term.get("surface_form"))
         if surface and any(code.startswith(prefix) for prefix in prefixes):
@@ -63,8 +108,10 @@ def _observed_term(atom: dict[str, Any], prefixes: tuple[str, ...]) -> str | Non
     return None
 
 
-def _communication_sentence(atom: dict[str, Any], *, requested: str) -> str | None:
-    control = str(atom.get("communication_control") or "").upper()
+def _communication_sentence(
+    atom: dict[str, Any], *, requested: str, value: dict[str, Any] | None = None,
+) -> str | None:
+    control = str(atom.get("communication_control") or (value or {}).get("communication_control") or "").upper()
     control_text = {
         "NO_FAMILY_DISCLOSURE": "가족에게 알리지 말라고",
         "NO_BANK_CONTACT": "은행에 연락하지 말라고",
@@ -122,14 +169,16 @@ def _grounded_fact_text_base(
     ) if atom.get(key) is not None}}
     action_word = "지시한" if str(effective.get("action_state") or "").upper() == "INSTRUCTED" else "요구한"
     if semantic_key == "offender.claimed_organization":
-        organization = _text(value.get("organization")) or {
-            "PROSECUTION_SERVICE": "수사기관", "POLICE_SERVICE": "경찰",
-            "FINANCIAL_SUPERVISORY_SERVICE": "금융감독원", "BANK": "은행",
-            "COURT": "법원", "CARD_COMPANY": "카드사",
-        }.get(str(atom.get("claimed_organization") or ""), "특정 기관")
-        return f"상대방이 {organization}을(를) 사칭한 정황입니다.".replace("을(를)", "을")
+        # Chat extraction uses ``name`` while initial Atoms use a normalized
+        # code. Preserve the concrete surface term whenever it is persisted.
+        organization = _organization_label(value, atom)
+        return f"상대방이 {_object_phrase(organization)} 사칭한 정황입니다."
     if semantic_key == "offender.claimed_person_or_role":
-        return "상대방이 특정 인물·역할을 내세운 정황입니다."
+        role = _text(value.get("role") or value.get("claimed_role") or effective.get("claimed_role"))
+        if role:
+            return f"상대방이 {_object_phrase(role)} 내세운 정황입니다."
+        role = _observed_term(atom, ("ROLE.", "PERSON."), value)
+        return f"상대방이 {_object_phrase(role or '특정 인물·역할')} 내세운 정황입니다."
     if semantic_key == "offender.incident_claim":
         if "범죄" in display or "연루" in display:
             return "상대방이 계좌·명의가 범죄에 연루됐다고 주장한 내용입니다."
@@ -137,10 +186,10 @@ def _grounded_fact_text_base(
     if semantic_key == "exposure.authentication_information":
         secret = _text(effective.get("auth_secret_type"))
         if not secret:
-            secret = _observed_term(atom, ("AUTH.",))
+            secret = _observed_term(atom, ("AUTH.",), value)
         subject = secret or "인증정보"
-        state = str(effective.get("action_state") or "").upper()
-        if state in {"CUSTOMER_REPORTED_COMPLETED", "REPORTED_ACTION", "COMPLETED"}:
+        state = str(effective.get("action_state") or value.get("status") or "").upper()
+        if state in {"CUSTOMER_REPORTED_COMPLETED", "REPORTED_ACTION", "COMPLETED", "EXPOSED", "SUPPLIED", "DISCLOSED"}:
             return f"고객이 {subject}를 제공했다고 진술했습니다."
         if state in {"UNKNOWN", "MISSING"}:
             return f"{subject} 제공 여부는 아직 확인되지 않았습니다."
@@ -148,6 +197,8 @@ def _grounded_fact_text_base(
     if semantic_key == "exposure.personal_information":
         return "상대방이 개인정보 제공을 요구한 정황입니다."
     if semantic_key == "device.remote_control_app":
+        if str(value.get("status") or "").upper() in {"INSTALLED", "EXECUTED", "COMPLETED"}:
+            return "고객이 원격제어 앱 또는 링크를 실행했다고 진술한 정황입니다."
         return "상대방이 원격제어 앱 또는 링크 실행을 요구한 정황입니다."
     if semantic_key == "transfer.requested.amount":
         amount = _amount(value, display)
@@ -165,7 +216,7 @@ def _grounded_fact_text_base(
             return "고객이 송금하지 않았다고 진술한 상태입니다."
         return "송금 여부는 아직 확인되지 않았습니다."
     if semantic_key == "circumstance.demand":
-        communication = _communication_sentence(atom, requested="알리지")
+        communication = _communication_sentence(atom, requested="알리지", value=value)
         if communication:
             return communication
         if effective.get("destination") == "CLAIMED_SAFE_ACCOUNT" or value.get("kind") == "SAFE_ACCOUNT":
@@ -187,15 +238,22 @@ def _grounded_fact_text_base(
             return "상대방이 안전계좌로 자금 이동을 유도한 정황입니다."
         return f"상대방이 {display or '특정 행동'}을(를) {action_word} 정황입니다.".replace("을(를)", "을")
     if semantic_key == "circumstance.tactic":
-        communication = _communication_sentence(atom, requested="알리지")
+        communication = _communication_sentence(atom, requested="알리지", value=value)
         if communication:
             return communication
         if effective.get("urgency") not in {None, "NONE", "UNKNOWN", "UNKNOWN_DEADLINE"} or value.get("kind") in {"URGENCY", "DEADLINE_TODAY", "DEADLINE_IMMEDIATE"}:
-            term = _observed_term(atom, ("URGENCY.",))
+            term = _observed_term(atom, ("URGENCY.",), value)
             if term:
                 return f"상대방이 ‘{term}’ 처리하라고 요구하며 긴급한 행동을 재촉한 정황입니다."
             return "상대방이 즉시 행동하도록 긴급성을 강조한 정황입니다."
         lowered = display.casefold()
+        threat_type = str(value.get("threat_type") or "").upper()
+        if any(term in lowered for term in ("협박", "위협", "체포", "구속", "처벌", "불이익")) or threat_type:
+            if threat_type in {"ARREST", "DETENTION"} or any(term in lowered for term in ("체포", "구속")):
+                return "상대방이 체포·구속을 언급하며 압박한 정황입니다."
+            if threat_type in {"PUNISHMENT", "PENALTY"} or "처벌" in lowered:
+                return "상대방이 처벌을 언급하며 압박한 정황입니다."
+            return "상대방이 협박·위협성 표현으로 압박한 정황입니다."
         if "고립" in lowered or "연락" in lowered or "알리" in lowered or "가족" in lowered or "상의를" in lowered:
             return "외부 연락이나 주변 상의를 제한한 정황입니다."
         if "긴급" in lowered or "압박" in lowered:
