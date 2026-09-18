@@ -40,6 +40,22 @@ class AiServiceTimeoutError(AiServiceError):
     code = "AI_PROVIDER_TIMEOUT"
 
 
+def _reject_non_provider_context_output(output: ContextFactExtractionOutput) -> ContextFactExtractionOutput:
+    """Prevent legacy/rule extractors from ever writing panel facts.
+
+    The panel is an evidence surface, so a successful HTTP response is not
+    sufficient: the response must identify a real provider-backed model.
+    """
+    model_version = (output.model_version or "").strip().casefold()
+    if not model_version or model_version.startswith(("deterministic", "local", "rule", "fixture")):
+        raise AiServiceError(
+            "실제 LLM provider 응답이 아니어서 사건 맥락 사실을 저장하지 않았습니다.",
+            code="AI_PROVIDER_REQUIRED",
+            retryable=False,
+        )
+    return output
+
+
 class HttpDiagnosisAiClient:
     def __init__(self, base_url: str | None = None, timeout_seconds: float | None = None) -> None:
         self.base_url = (base_url or os.getenv("AI_API_BASE_URL", "http://127.0.0.1:8101")).rstrip("/")
@@ -75,7 +91,8 @@ class HttpDiagnosisAiClient:
                 )
                 if not response.is_success:
                     raise AiServiceError("AI 맥락 사실 추출에 실패했습니다.")
-                return ContextFactExtractionOutput.model_validate(response.json())
+                output = ContextFactExtractionOutput.model_validate(response.json())
+                return _reject_non_provider_context_output(output)
         except httpx.TimeoutException as exc:
             raise AiServiceError("AI 맥락 사실 추출 제한 시간을 초과했습니다.") from exc
         except httpx.RequestError as exc:

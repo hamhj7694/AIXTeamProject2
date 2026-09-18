@@ -19,7 +19,7 @@ from .domains.case_support import CaseSnapshotAiAdapter
 from .domains.case_support.copilot_service import CaseCopilotAuthenticationError, CaseCopilotQuotaError, CaseCopilotService
 from .domains.case_support.final_report_service import FinalCaseReportService
 from .domains.case_support.work_card_service import CaseWorkCardService
-from .domains.case_support.context_fact_extraction_service import ContextFactExtractionService
+from .domains.case_support.context_fact_extraction_service import ProviderContextFactExtractionService
 from .domains.diagnosis import DiagnosisService
 from .domains.diagnosis.budget import DiagnosisBudgetExceededError
 from .domains.diagnosis.extractor import AiProviderAuthenticationError, AiProviderQuotaError
@@ -35,7 +35,9 @@ case_snapshot_adapter = CaseSnapshotAiAdapter()
 case_copilot_service = CaseCopilotService()
 case_work_card_service = CaseWorkCardService()
 final_report_service = FinalCaseReportService()
-context_fact_extraction_service = ContextFactExtractionService()
+# Chat -> Context Fact proposals must come from the configured LLM provider.
+# The deterministic fixture extractor is not wired into any production route.
+context_fact_extraction_service = ProviderContextFactExtractionService()
 
 
 @app.on_event("startup")
@@ -62,6 +64,7 @@ async def readiness() -> dict[str, object]:
         "status": "ready" if os.getenv("OPENAI_API_KEY") else "degraded",
         "provider_configured": bool(os.getenv("OPENAI_API_KEY")),
         "provider_live_check": False,
+        "context_fact_extraction": "provider_only",
     }
 
 

@@ -29,9 +29,39 @@ const internalDisplayLabels: Record<string, string> = {
   YES: '예', NO: '아니요', PARTIAL: '일부 해당',
 };
 
+// Provider values are enum-like identifiers, not user-facing copy. Keep the
+// identifiers in storage but translate them at the final presentation edge.
+const providerValueLabels: Record<string, string> = {
+  OTHER: '\uae30\ud0c0', UNKNOWN: '\ud655\uc778 \ud544\uc694', NONE: '\uc5c6\uc74c',
+  POLICE_SERVICE: '\uacbd\ucc30', PROSECUTION_SERVICE: '\uac80\ucc30',
+  FINANCIAL_SUPERVISORY_SERVICE: '\uae08\uc735\uac10\ub3c5\uc6d0',
+  BANK: '\uc740\ud589', CARD_COMPANY: '\uce74\ub4dc\uc0ac', COURT: '\ubc95\uc6d0',
+  REQUESTED: '\uc694\uccad\ub428', INSTRUCTED: '\uc9c0\uc2dc\ub428',
+  TRANSFERRED: '\uc774\uccb4\ud568', NOT_TRANSFERRED: '\uc774\uccb4\ud558\uc9c0 \uc54a\uc74c',
+  EXPOSED: '\ub178\ucd9c \uc758\uc2ec',
+};
+
+const providerCopy = (text: string): string => Object.entries(providerValueLabels)
+  .reduce((current, [token, label]) => current.replace(new RegExp(`\\b${token}\\b`, 'g'), label), text);
+
+export const staffDisplayLabel = (item: ContextPanelItemV3): string => {
+  const keyLabels: Record<string, string> = {
+    'offender.claimed_organization': '\uc0ac\uce6d \uae30\uad00',
+    'offender.claimed_person_or_role': '\uc0ac\uce6d \uc778\ubb3c\u00b7\uc5ed\ud560',
+    'circumstance.tactic': '\uc555\ubc15\u00b7\uc870\uc791 \uc218\ubc95',
+    'circumstance.demand': '\uc0c1\ub300\ubc29 \uc694\uad6c',
+  };
+  return keyLabels[item.semantic_key] ?? providerCopy(item.label);
+};
+
 export const staffDisplayValue = (item: ContextPanelItemV3): string => {
   const typedStatus = typeof item.value?.status === 'string' ? item.value.status : '';
-  return internalDisplayLabels[item.display_value] ?? internalDisplayLabels[typedStatus] ?? item.display_value;
+  const organizationCode = typeof item.value?.organization_code === 'string' ? item.value.organization_code : '';
+  const organization = providerValueLabels[organizationCode];
+  if (organization && item.semantic_key === 'offender.claimed_organization' && (!item.display_value || /OTHER|UNKNOWN/.test(item.display_value))) {
+    return `${organization} \uc0ac\uce6d \uc815\ud669`;
+  }
+  return providerCopy(internalDisplayLabels[item.display_value] ?? internalDisplayLabels[typedStatus] ?? item.display_value);
 };
 
 export const evidenceSummaries = (refs: ContextPanelItemV3['evidence_refs']): string[] => {

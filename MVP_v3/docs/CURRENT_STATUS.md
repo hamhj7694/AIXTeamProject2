@@ -278,3 +278,12 @@ React Frontend :5176
 - Step 5 결과: `STEP_5_COMPLETE` / `READY_FOR_STEP_6`. AI runtime targeted tests와 AI API targeted tests는 통과했으며, 전체 General API 실행은 기존 MySQL schema test의 `case_number_sequences` 누락 1건으로 실패했다(이번 변경과 무관한 기존 환경/마이그레이션 상태).
 - Step 6에서 Diagnosis 구조화 신호의 최소 seed bridge, Message extraction 상태 조회 endpoint, deterministic extractor/provenance/visibility 계약을 추가했다.
 - `docs/32_CONTEXT_POPULATION_EXTRACTION_CONTRACT.md` 기준으로 `STEP_6_COMPLETE`·`PREWORK_COMPLETE_READY_FOR_PARALLEL`을 기록했다. 외부 AI 호출과 DB migration은 수행하지 않았다.
+
+## 2026-09-18 전체 파트 통합 점검
+
+- 통합 상태·체크리스트·투두 문서: [`docs/now_md/전체 파트 점검/CSR_전체_현재상태_통합체크리스트.md`](now_md/전체%20파트%20점검/CSR_전체_현재상태_통합체크리스트.md)
+- 최초 Case·채팅·은행 내부 채팅·고객 질문 답변의 자동 Context Fact 생성은 provider-only 경계를 기준으로 점검한다.
+- deterministic/local/rule/fallback 결과는 자동 Fact 저장 성공으로 간주하지 않는다.
+- 현재 실행 중인 8101 프로세스는 `deterministic-v1`을 반환하는 구버전으로 확인되어, 최신 provider-only 코드 적용 전까지 AI-패널 연결을 `BLOCKED`로 유지한다.
+- 이번 코드 점검 결과: AI Context extraction 17개, Context Panel 12개, Chat/Context vertical slice 5개, customer answer provider-path 2개 테스트 통과; Python compile 및 diff check 통과.
+- 실제 provider smoke, 최초 Case 브라우저 E2E, 두 브라우저 동시 시나리오, MySQL 통합 검증은 미완료다.

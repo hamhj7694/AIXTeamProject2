@@ -79,8 +79,11 @@ class ContextFactProposal(ContextFactExtractionModel):
             if "types" in value and (not isinstance(value["types"], list) or not all(isinstance(item, str) for item in value["types"])):
                 raise ValueError("노출 types는 문자열 배열이어야 합니다.")
         elif self.semantic_key == "offender.claimed_organization":
-            if not isinstance(value.get("name"), str) or not value["name"].strip():
-                raise ValueError("사칭 기관에는 name이 필요합니다.")
+            if not any(
+                isinstance(value.get(key), str) and value[key].strip()
+                for key in ("name", "organization", "organization_code", "claimed_organization")
+            ):
+                raise ValueError("사칭 기관에는 구체명 또는 정규화 기관 코드가 필요합니다.")
         elif self.semantic_key == "offender.claimed_person_or_role":
             if not any(isinstance(value.get(key), str) and value[key].strip() for key in ("role", "role_or_title")):
                 raise ValueError("사칭 인물·역할에는 role_or_title이 필요합니다.")

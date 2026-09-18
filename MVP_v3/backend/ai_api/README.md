@@ -25,3 +25,17 @@ python -m uvicorn ai_api.app.main:app --port 8101 --reload
 목데이터 실행 모드는 지원하지 않는다. LLM은 이벤트와 원문 근거만 추출하며,
 위험 점수와 판정은 승인된 Window Logistic artifact가 담당한다.
 
+## Context V3 사실 추출
+
+`/ai/context/facts/extract`는 `OPENAI_CONTEXT_MODEL`을 통한 실제 provider
+호출만 허용한다. provider 키가 없거나 호출·응답 검증에 실패하면 503으로
+실패하며, 규칙/정규식 기반 결과로 대체하지 않는다. 따라서 General API는
+provider 응답이 확인된 제안만 Context 패널 저장 대상으로 전달한다.
+
+### 패널 반영 경계
+
+- 최초 사건 생성: provider 진단의 structured atoms/signals만 초기 Fact 후보로 투영한다.
+- 일반 채팅·직원 내부 채팅·고객 질문 답변: 메시지를 provider-only Context extractor로 보내고, 그 응답만 Fact 후보로 저장한다.
+- General API의 코드는 검증·중복 제거·근거 연결·안전한 표시만 담당하며, 원문에서 기관·역할·금액 등의 의미를 임의로 만들지 않는다.
+- 담당자 직접 입력과 공식기관 확인 결과는 AI Fact가 아니라 각각 `STAFF_OBSERVATION`·`OFFICIAL_VERIFICATION` 근거로 구분한다.
+

@@ -1,9 +1,16 @@
 from __future__ import annotations
 
+import json
+import os
 import unittest
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from contracts.ai_internal.context_fact_extraction import ContextFactExtractionInput, ContextFactExtractionMessage
-from ai_api.app.domains.case_support.context_fact_extraction_service import ContextFactExtractionService
+from ai_api.app.domains.case_support.context_fact_extraction_service import (
+    ContextFactExtractionService,
+    ProviderContextFactExtractionService,
+)
 
 
 class ContextFactExtractionTests(unittest.IsolatedAsyncioTestCase):
@@ -57,6 +64,19 @@ class ContextFactExtractionTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("REFUND_IN", {item.value["amount_role"] for item in amounts})
         self.assertIn("TRANSFER_OUT", {item.value["amount_role"] for item in amounts})
 
+    async def test_same_amount_mentions_in_one_message_keep_event_lineage(self):
+        result = await self.extract("200만원 보냈어요. 이후 200만원 더 보냈어요.")
+        amounts = [item for item in result.proposals if item.semantic_key == "transfer.actual.amount"]
+        self.assertEqual(len(amounts), 2)
+        self.assertEqual({item.value["amount_krw"] for item in amounts}, {2_000_000})
+        event_ids = {item.value.get("amount_event_id") for item in amounts}
+        self.assertEqual(len(event_ids), 2)
+
+    async def test_threat_terms_are_retained_as_tactic_detail(self):
+        result = await self.extract("경찰이라고 하며 협박하고 지금 당장 보내라고 했어요.")
+        tactic = next(item for item in result.proposals if item.semantic_key == "circumstance.tactic")
+        self.assertEqual(tactic.value.get("threat_type"), "THREAT")
+
     async def test_final_amount_scope_is_preserved(self):
         result = await self.extract("여러 금액을 말했지만 최종적으로 100만원을 요구받았다고 한다")
         proposal = next(item for item in result.proposals if item.semantic_key == "transfer.requested.amount")
@@ -92,6 +112,31 @@ class ContextFactExtractionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(observation.status, "UNMAPPED")
         self.assertIn("DOMAIN.FEE", observation.lexical_codes)
         self.assertEqual(observation.observed_terms[0]["surface_form"], "수수료")
+
+    async def test_provider_service_requires_api_key_and_has_no_fallback(self):
+        request = ContextFactExtractionInput(message=ContextFactExtractionMessage(
+            message_id="msg-provider", case_id="VP-1", actor_type="CUSTOMER", content="사실 확인이 필요합니다.",
+        ))
+        with patch.dict(os.environ, {"OPENAI_API_KEY": ""}, clear=False):
+            with self.assertRaisesRegex(RuntimeError, "OPENAI_API_KEY"):
+                await ProviderContextFactExtractionService().extract(request)
+
+    async def test_provider_service_marks_real_model_version(self):
+        client = MagicMock()
+        client.__aenter__ = AsyncMock(return_value=client)
+        client.__aexit__ = AsyncMock(return_value=None)
+        client.responses.create = AsyncMock(return_value=SimpleNamespace(
+            output_text=json.dumps({"proposals": [], "unmapped_observations": []}),
+        ))
+        request = ContextFactExtractionInput(message=ContextFactExtractionMessage(
+            message_id="msg-provider", case_id="VP-1", actor_type="CUSTOMER", content="사실 확인이 필요합니다.",
+        ))
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key", "OPENAI_CONTEXT_MODEL": "provider-test"}, clear=False), \
+             patch("ai_api.app.domains.case_support.context_fact_extraction_service.AsyncOpenAI", return_value=client):
+            output = await ProviderContextFactExtractionService().extract(request)
+        self.assertEqual(output.model_version, "provider-test")
+        self.assertEqual(output.prompt_version, "context-fact-openai-v1")
+        client.responses.create.assert_awaited_once()
 
 
 if __name__ == "__main__":

@@ -53,6 +53,7 @@ export const visibleSummaryItems = (section: ContextPanelSectionV3, risk: string
   return section.items
     .filter((item) => item.source_kind !== 'DETERMINISTIC_PROJECTION' || item.display_value !== caseMetadata)
     .filter((item) => !summaryCountPattern.test(item.display_value))
+    .filter((item) => !/^확인 필요 · 추가 확인이 필요한 정보 \d+건$/.test(item.display_value))
     // 금액 건수·합계는 피해·노출 Section의 전용 요약에서 표시한다.
     .filter((item) => !/^확인된 사실 · 실제 이체 \d+건 · 합계 /.test(item.display_value));
 };
