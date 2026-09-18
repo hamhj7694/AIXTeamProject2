@@ -3,7 +3,7 @@ import { AlertCircle, ArrowLeftRight, BrainCircuit, CheckCircle2, ChevronRight, 
 import { useNavigate } from 'react-router-dom';
 import { casesApi } from '../api/cases';
 import type { AnalyzeCaseResponse, StoredCase } from '../api/types';
-import { caseState, caseStateLabel, caseStateTone } from '../presentation';
+import { caseState, caseStateTone } from '../presentation';
 import { generateUuid } from '../uuid';
 
 type AnalysisState = 'INPUT' | 'ANALYZING' | 'CREATED' | 'NO_CASE' | 'ERROR';
@@ -134,18 +134,34 @@ const observationStatus = (status: string, code: string) => {
 
 const buildStaffFeatures = (diagnosis: StoredCase['diagnosis']): StaffFeature[] => {
   const features = diagnosis.case_context_features;
+  const events = diagnosis.events || [];
   const result: StaffFeature[] = [];
   const seen = new Set<string>();
   const seenSemanticCodes = new Set<string>();
+  const evidenceForCode = (code: string) => {
+    const normalizedCode = normalizeStaffFeatureCode(code);
+    const matching = events.filter((event) => {
+      const eventCode = event.event_family === 'IMPERSONATION'
+        ? (event.impersonation_group ? `ROLE_${event.impersonation_group}` : event.subtype ? `CLAIM_${event.subtype}` : 'CLAIMED_ORGANIZATION')
+        : event.event_family === 'MONEY_MOVEMENT' || event.event_family === 'ACTION_REQUEST'
+          ? `REQUEST_${event.subtype || event.event_family}`
+          : event.event_family === 'PSY_STRATEGY'
+            ? `TACTIC_${event.subtype || event.event_family}`
+            : event.subtype || event.event_family;
+      return normalizeStaffFeatureCode(eventCode) === normalizedCode;
+    });
+    return matching.map((event) => event.evidence_text?.trim()).filter((text): text is string => Boolean(text)).filter((text, index, all) => all.indexOf(text) === index).slice(0, 2);
+  };
   const add = (id: string, code: string, description?: string, status?: string, dedupeSemantic = true) => {
     const normalizedCode = normalizeStaffFeatureCode(code);
     if (seen.has(id) || (dedupeSemantic && seenSemanticCodes.has(normalizedCode))) return;
     seen.add(id);
     if (dedupeSemantic) seenSemanticCodes.add(normalizedCode);
     const title = staffFeatureLabel(normalizedCode);
+    const evidence = evidenceForCode(normalizedCode);
     result.push({
       id, category: staffFeatureCategory(normalizedCode), title,
-      description: description || `${title}이(가) 확인되었습니다.`,
+      description: description || (evidence.length ? `근거: ${evidence.join(' / ')}` : `${title}이(가) 확인되었습니다.`),
       status: status || staffFeatureStatus(normalizedCode),
       tone: normalizedCode.startsWith('NORMAL_') ? 'info' : 'risk',
     });
@@ -182,10 +198,17 @@ const structuredSignalLabel = (code: string) => ({
   IMPERSONATION_TRANSFER_CONTROL_COMBINATION: '사칭·송금·연락 제한이 함께 나타난 정황',
 }[code] ?? '여러 위험 정황이 함께 나타남');
 
-const AnalysisResult: React.FC<{ result: AnalyzeCaseResponse; caseItem?: StoredCase; onOpenCase: () => void; onRestart: () => void }> = ({ result, caseItem, onOpenCase, onRestart }) => {
+const OriginalTranscript: React.FC<{ text: string }> = ({ text }) => <details className="analysis-original-transcript">
+  <summary>입력한 원문 보기</summary>
+  <pre>{text || '입력한 원문이 없습니다.'}</pre>
+  <p><b>안내:</b> 실제 통화 원문은 법적 사유로 저장할 수 없습니다. 이 서비스는 통신사 AI를 통해 추출된 요소를 활용합니다. (통신기기 제작사·통신사 온디바이스 업체와 협업이 필요합니다.)</p>
+</details>;
+
+const AnalysisResult: React.FC<{ result: AnalyzeCaseResponse; caseItem?: StoredCase; originalText: string; onOpenCase: () => void; onRestart: () => void }> = ({ result, caseItem, originalText, onOpenCase, onRestart }) => {
   if (result.disposition === 'NO_CASE') return <section className="analysis-result no-case">
     <div className="analysis-result-heading"><span><CheckCircle2 size={21}/></span><div><p>분석 완료</p><h2>현재는 보이스피싱 Case 생성 기준에 해당하지 않습니다.</h2></div></div>
     <p className="analysis-brief">{result.initial_brief}</p>
+    <OriginalTranscript text={originalText}/>
     <div className="analysis-result-actions"><button type="button" onClick={onRestart}>다른 통화 분석하기</button></div>
   </section>;
   if (!caseItem) return <section className="analysis-result error"><AlertCircle size={20}/><div><h2>Case는 생성됐지만 분석 결과를 불러오지 못했습니다.</h2><p>사건 목록에서 새 Case를 열어 확인해 주세요.</p></div><button type="button" onClick={onOpenCase}>Case 열기</button></section>;
@@ -197,20 +220,26 @@ const AnalysisResult: React.FC<{ result: AnalyzeCaseResponse; caseItem?: StoredC
   const unresolved = valueList(caseItem.initial_report, 'unresolved_items');
   const nextChecks = valueList(caseItem.initial_report, 'next_checks');
   return <section className="analysis-result created">
-    <div className="analysis-result-heading"><span className={caseStateTone(caseState(caseItem))}><ShieldAlert size={21}/></span><div><p>Shared Case 생성 완료 · {caseItem.case_id}</p><h2>{context.incident_type || '통화 맥락 분석을 완료했습니다.'}</h2><small>{caseItem.initial_brief}</small></div><b className={`analysis-risk ${caseStateTone(caseState(caseItem))}`}>{caseStateLabel(caseState(caseItem))}</b></div>
+    <div className="analysis-result-heading"><span className={caseStateTone(caseState(caseItem))}><ShieldAlert size={21}/></span><div><p>Shared Case 생성 완료 · {caseItem.case_id}</p><h2>{context.incident_type || '통화 맥락 분석을 완료했습니다.'}</h2><small>{caseItem.initial_brief}</small></div><div className="analysis-result-actions"><button type="button" onClick={onRestart}>새 통화 분석하기</button><button type="button" className="primary" onClick={onOpenCase}>생성된 Case 열기<ChevronRight size={16}/></button></div></div>
     <div className="analysis-result-grid">
       <section><header><BrainCircuit size={16}/><div><b>통화에서 확인된 주요 정황</b><span>통화 내용을 바탕으로 직원의 확인이 필요한 내용을 모두 정리했습니다.</span></div></header><div className="analysis-window-list">{structuredSignals.length > 0 && <div className="analysis-composite-summary"><b>종합 정황</b>{structuredSignals.map((signal) => <p key={signal.signal_id}>{structuredSignalLabel(signal.signal_code)}</p>)}</div>}{staffFeatures.length > 0 ? <ul className="analysis-feature-list">{staffFeatures.map((feature) => <li key={feature.id} className={`analysis-feature-item ${feature.tone}`}><div className="analysis-feature-heading"><b>{feature.title}</b><span>{feature.category}</span></div><p>{feature.description}</p><small>{feature.status}</small></li>)}</ul> : <p className="analysis-empty-signal">추출된 정황이 없습니다. 통화 내용을 다시 확인해 주세요.</p>}</div></section>
       <section><header><Sparkles size={16}/><div><b>사건 초기 정리</b><span>통화에서 확인된 내용을 바탕으로 사건 초기 정보를 정리했습니다.</span></div></header><div className="analysis-case-summary"><p>{context.summary || caseItem.initial_brief}</p><div><b>상대방 주장</b><ul>{claims.length ? claims.map((claim) => <li key={claim}>{claim}</li>) : <li>추가 확인이 필요합니다.</li>}</ul></div><div><b>우선 권장 조치</b><ul>{recommended.length ? recommended.map((item) => <li key={item}>{item}</li>) : nextChecks.map((item) => <li key={item}>{item}</li>)}</ul></div>{unresolved.length > 0 && <div><b>아직 확인할 정보</b><ul>{unresolved.map((item) => <li key={item}>{item}</li>)}</ul></div>}</div></section>
     </div>
+    <OriginalTranscript text={originalText}/>
     <p className="analysis-disclaimer">AI가 정리한 핵심 신호와 초기 Case 정보는 대응을 돕기 위한 참고입니다. 실제 금융 조치와 사실 확정은 담당자의 확인이 필요합니다.</p>
-    <div className="analysis-result-actions"><button type="button" onClick={onRestart}>새 통화 분석하기</button><button type="button" className="primary" onClick={onOpenCase}>생성된 Case 열기<ChevronRight size={16}/></button></div>
   </section>;
 };
 
-export const HomePage: React.FC = () => {
+interface HomePageProps {
+  embedded?: boolean;
+  onCloseEmbedded?: () => void;
+}
+
+export const HomePage: React.FC<HomePageProps> = ({ embedded = false, onCloseEmbedded }) => {
   const navigate = useNavigate();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(embedded);
   const [text, setText] = useState('');
+  const [submittedText, setSubmittedText] = useState('');
   const [state, setState] = useState<AnalysisState>('INPUT');
   const [result, setResult] = useState<AnalyzeCaseResponse | null>(null);
   const [caseItem, setCaseItem] = useState<StoredCase | undefined>();
@@ -226,8 +255,8 @@ export const HomePage: React.FC = () => {
     analysisRequestRef.current = null;
     setText(samples[index]); setError(''); setState('INPUT');
   };
-  const reset = () => { analysisRequestRef.current = null; setText(''); setResult(null); setCaseItem(undefined); setError(''); setState('INPUT'); setOpen(true); };
-  const close = () => { setOpen(false); setError(''); };
+  const reset = () => { analysisRequestRef.current = null; setText(''); setSubmittedText(''); setResult(null); setCaseItem(undefined); setError(''); setState('INPUT'); setOpen(true); };
+  const close = () => { if (embedded && onCloseEmbedded) onCloseEmbedded(); else setOpen(embedded); setError(''); };
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const submittedText = text.trim();
@@ -238,6 +267,7 @@ export const HomePage: React.FC = () => {
       : { requestId: generateUuid(), submittedText };
     // state가 반영되기 전 같은 handler가 다시 실행돼도 동일한 논리 요청 ID를 사용한다.
     analysisRequestRef.current = analysisRequest;
+    setSubmittedText(submittedText);
     setState('ANALYZING'); setError(''); setResult(null); setCaseItem(undefined);
     try {
       const response = await casesApi.analyze(submittedText, analysisRequest.requestId);
@@ -255,9 +285,9 @@ export const HomePage: React.FC = () => {
       else { setState('ERROR'); setError(response.error?.message || '통화 내용을 분석하지 못했습니다.'); }
     } catch (reason) { setState('ERROR'); setError(reason instanceof Error ? reason.message : '통화 내용을 분석하지 못했습니다.'); }
   };
-  return <section className={`home-empty ${open ? 'analysis-open' : ''}`}>
+  return <section className={embedded ? 'home-analysis-embed' : `home-empty ${open ? 'analysis-open' : ''}`}>
     {!open ? <><div className="home-mark"><ShieldCheck size={26}/></div><p className="eyebrow">CSR | Case Share Room</p><h1>대응할 사건을 선택하세요.</h1><p>통화 맥락, 고객 대화, 기관 확인과 대응 업무를 하나의 Shared Case에서 이어서 확인할 수 있습니다.</p><div className="home-principles"><span><MessageSquareText size={17}/>대화와 업무 기록을 한 흐름으로</span><span><ArrowLeftRight size={17}/>고객 응답과 Case 맥락을 양방향으로</span></div><button className="start-analysis-button" type="button" onClick={() => setOpen(true)}><FileSearch size={17}/>새 통화 분석하기</button><a className="judge-guide-link" href="/judge/index.html">프로젝트 먼저 살펴보기 →</a></> : <div className="home-analysis-panel">
       <header><div><p className="eyebrow">NEW SHARED CASE</p><h1>새 통화 분석하기</h1><span>ML이 문장 단위로 신호를 추출한 뒤, LLM은 구조화된 핵심 피처만으로 Case 초기 정보를 정리합니다.</span></div><button type="button" onClick={close} aria-label="새 통화 분석 닫기"><X size={19}/></button></header>
-      {state === 'INPUT' || state === 'ANALYZING' || state === 'ERROR' ? <form onSubmit={submit}><label htmlFor="call-transcript">통화 내용 텍스트</label><div className="analysis-sample-row"><span>샘플 입력</span><button type="button" disabled={state === 'ANALYZING'} onClick={() => applySample('PHISHING')}>보이스피싱 사례 샘플</button><button type="button" disabled={state === 'ANALYZING'} onClick={() => applySample('FINANCE')}>정상 금융 상담 샘플</button><button type="button" disabled={state === 'ANALYZING'} onClick={() => applySample('DAILY')}>일상 통화 샘플</button></div><textarea id="call-transcript" value={text} disabled={state === 'ANALYZING'} onChange={(event) => { const nextText = event.target.value; if (analysisRequestRef.current?.submittedText !== nextText.trim()) analysisRequestRef.current = null; setText(nextText); }} placeholder={'통화 내용이나 대화 기록을 붙여 넣으세요.\n문장 또는 줄바꿈 단위로 ML이 위험 신호를 추출하고, LLM은 구조화된 핵심 피처만으로 Case 초기 정보를 정리합니다.'}/><div className="analysis-input-meta"><span>최대 50,000자</span></div><p className="analysis-privacy-note">원문은 분석 요청 중에만 사용되며, Shared Case에는 원문 대신 핵심 위험 피처와 집계 결과만 저장됩니다.</p>{state === 'ANALYZING' && <div className="analysis-progress" role="status" aria-live="polite"><span className="analysis-progress-icon"><Loader2 size={20} className="spin"/></span><div><strong>AI가 통화 내용을 분석하고 있습니다</strong><span>문장별 ML 신호를 추출한 뒤, LLM이 Case 초기 정보를 정리합니다. 잠시만 기다려 주세요.</span></div><div className="analysis-progress-track" aria-hidden="true"><span/></div></div>}{error && <p className="analysis-error"><AlertCircle size={15}/>{error}</p>}<footer><button type="button" onClick={close} disabled={state === 'ANALYZING'}>취소</button><button type="submit" className="primary" disabled={!text.trim() || state === 'ANALYZING'}>{state === 'ANALYZING' ? <><Loader2 size={16} className="spin"/>문장별 ML·피처 기반 LLM 분석 중</> : <><Play size={16}/>통화 분석하고 Case 만들기</>}</button></footer></form> : result && <AnalysisResult result={result} caseItem={caseItem} onOpenCase={() => result.case_id && navigate(`/cases/${encodeURIComponent(result.case_id)}`)} onRestart={reset}/>}</div>}
+      {state === 'INPUT' || state === 'ANALYZING' || state === 'ERROR' ? <form onSubmit={submit}><label htmlFor="call-transcript">통화 내용 텍스트</label><div className="analysis-sample-row"><span>샘플 입력</span><button type="button" disabled={state === 'ANALYZING'} onClick={() => applySample('PHISHING')}>보이스피싱 사례 샘플</button><button type="button" disabled={state === 'ANALYZING'} onClick={() => applySample('FINANCE')}>정상 금융 상담 샘플</button><button type="button" disabled={state === 'ANALYZING'} onClick={() => applySample('DAILY')}>일상 통화 샘플</button></div><textarea id="call-transcript" value={text} disabled={state === 'ANALYZING'} onChange={(event) => { const nextText = event.target.value; if (analysisRequestRef.current?.submittedText !== nextText.trim()) analysisRequestRef.current = null; setText(nextText); }} placeholder={'통화 내용이나 대화 기록을 붙여 넣으세요.\n문장 또는 줄바꿈 단위로 ML이 위험 신호를 추출하고, LLM은 구조화된 핵심 피처만으로 Case 초기 정보를 정리합니다.'}/><div className="analysis-input-meta"><span>최대 50,000자</span></div><p className="analysis-privacy-note">원문은 분석 요청 중에만 사용되며, Shared Case에는 원문 대신 핵심 위험 피처와 집계 결과만 저장됩니다.</p>{state === 'ANALYZING' && <div className="analysis-progress" role="status" aria-live="polite"><span className="analysis-progress-icon"><Loader2 size={20} className="spin"/></span><div><strong>AI가 통화 내용을 분석하고 있습니다</strong><span>문장별 ML 신호를 추출한 뒤, LLM이 Case 초기 정보를 정리합니다. 잠시만 기다려 주세요.</span></div><div className="analysis-progress-track" aria-hidden="true"><span/></div></div>}{error && <p className="analysis-error"><AlertCircle size={15}/>{error}</p>}<footer><button type="button" onClick={close} disabled={state === 'ANALYZING'}>취소</button><button type="submit" className="primary" disabled={!text.trim() || state === 'ANALYZING'}>{state === 'ANALYZING' ? <><Loader2 size={16} className="spin"/>문장별 ML·피처 기반 LLM 분석 중</> : <><Play size={16}/>통화 분석하고 Case 만들기</>}</button></footer></form> : result && <AnalysisResult result={result} caseItem={caseItem} originalText={submittedText} onOpenCase={() => result.case_id && navigate(`/cases/${encodeURIComponent(result.case_id)}`)} onRestart={reset}/>}</div>}
   </section>;
 };
