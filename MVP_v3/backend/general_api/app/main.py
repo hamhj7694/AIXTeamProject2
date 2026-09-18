@@ -39,7 +39,7 @@ from request_trace import install_request_trace
 from contracts.ai_internal.work_card import CaseWorkCardOutput, WorkCardType
 from contracts.user_text import user_text
 from .domains.cases.context_workspace import build_workspace, legacy_gap_details
-from .domains.cases.case_retrieval import SEMANTIC_FIELDS, collect_records, retrieve_context, similar_question, staff_context, workspace_records, merge_support_records
+from .domains.cases.case_retrieval import SEMANTIC_FIELDS, collect_records, retrieve_context, similar_question, staff_context, workspace_records, merge_support_records, bank_source_context
 from contracts.public_api.case_analyze import (
     PublicAnalyzeCaseRequest,
     PublicAnalyzeCaseResponse,
@@ -1782,7 +1782,8 @@ async def invoke_case_copilot(case_id: str, request: PublicAiInvocationRequest) 
         "VIEWER": "열람자",
     }
     unresolved = [item.get("claim", "추가 확인 항목") for item in verifications if item.get("status") != "COMPLETED"]
-    staff = await read_staff_context_records(case_id)
+    resources = await case_context_v2_repository().list_resources(case_id)
+    staff = workspace_records(case_id, resources)
     questions = await repository.list_customer_questions(case_id)
     retrieved = retrieve_context(case_id, request.prompt, collect_records(
         case_id, messages=all_messages, questions=questions, facts=facts, verifications=verifications, staff=staff,
@@ -1806,8 +1807,10 @@ async def invoke_case_copilot(case_id: str, request: PublicAiInvocationRequest) 
             "recent_conversation": [
                 f"{item.get('actor_display_name', item.get('actor_type', '작성자'))}: {item.get('content', '')[:500]}"
                 for item in all_messages[-30:]
-                if item.get("channel") in {"TEAM", "CUSTOMER"}
-                or (request.channel != "TEAM" and item.get("channel") == "AI_INTERNAL" and item.get("private_owner_user_id") == request.requester_user_id)
+                if item.get("message_kind") not in {"AI_RESPONSE", "REPORT_CARD"}
+                and item.get("actor_type") not in {"BANK_AGENT", "CUSTOMER_AGENT"}
+                and (item.get("channel") in {"TEAM", "CUSTOMER"}
+                or (request.channel != "TEAM" and item.get("channel") == "AI_INTERNAL" and item.get("private_owner_user_id") == request.requester_user_id))
             ][-20:],
             "pending_actions": [
                 f"{item.get('action_type')}: {item.get('note') or '상세 내용 없음'} ({item.get('status', 'REQUESTED')})"
@@ -1819,6 +1822,8 @@ async def invoke_case_copilot(case_id: str, request: PublicAiInvocationRequest) 
             ],
             "unresolved_verifications": unresolved[:10],
             "assistant_mode": "BANK_INTERNAL",
+            "source_context": bank_source_context(case_id, resources, facts=facts, questions=questions,
+                verifications=verifications, messages=[item for item in all_messages if item.get("visibility") in {"CUSTOMER", "BANK_INTERNAL"}]).model_dump(mode="json"),
             "customer_progress": progress_ai_context(build_customer_progress(actions)),
             "response_style": request.response_style,
         })

@@ -2,11 +2,74 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from contracts.diagnosis import StrictModel
+from contracts.public_api.case_context_v2 import PublicCaseFactV2
+
+
+class CopilotLegacyFact(StrictModel):
+    fact_id: str
+    case_id: str
+    field: str
+    value: str
+    source: str
+    status: str
+    evidence_message_id: str | None = None
+    source_question_id: str | None = None
+    confirmed_by: str | None = None
+    confirmed_at: datetime | None = None
+    created_at: datetime | None = None
+
+
+class CopilotQuestionAnswer(StrictModel):
+    question_id: str
+    case_id: str
+    canonical_scope: str
+    parent_question_id: str | None = None
+    question_text: str
+    answer_text: str | None = None
+    status: Literal["PENDING", "ASKED", "ANSWERED", "SKIPPED"]
+    answer_message_id: str | None = None
+    created_at: datetime | None = None
+    asked_at: datetime | None = None
+    answered_at: datetime | None = None
+
+
+class CopilotVerification(StrictModel):
+    verification_task_id: str
+    case_id: str
+    target: str
+    claim: str
+    status: str
+    result_summary: str | None = None
+    version: int | None = None
+    evidence_url: str | None = None
+    verified_by: str | None = None
+    rag_source: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class CopilotMessage(StrictModel):
+    message_id: str
+    case_id: str
+    actor_type: str
+    content: str
+    created_at: datetime | None = None
+
+
+class BankCopilotSourceContext(StrictModel):
+    """Bounded original records, not inferred current/correction relationships."""
+    facts: list[PublicCaseFactV2] = Field(default_factory=list, max_length=100)
+    legacy_facts: list[CopilotLegacyFact] = Field(default_factory=list, max_length=100)
+    questions: list[CopilotQuestionAnswer] = Field(default_factory=list, max_length=50)
+    verifications: list[CopilotVerification] = Field(default_factory=list, max_length=20)
+    messages: list[CopilotMessage] = Field(default_factory=list, max_length=20)
+    truncated: bool = False
 
 
 class CustomerServiceQuestion(StrictModel):
@@ -40,6 +103,19 @@ class CaseCopilotInput(StrictModel):
     unresolved_verifications: list[str] = Field(default_factory=list, max_length=10)
     assistant_mode: Literal["BANK_INTERNAL", "CUSTOMER_SUPPORT"] = "BANK_INTERNAL"
     response_style: Literal["CONVERSATIONAL", "BRIEF"] = "CONVERSATIONAL"
+    source_context: BankCopilotSourceContext | None = None
+
+    @model_validator(mode="after")
+    def validate_source_context(self):
+        if self.source_context is not None:
+            if self.assistant_mode != "BANK_INTERNAL":
+                raise ValueError("source_context is bank-only")
+            for collection in (self.source_context.facts, self.source_context.legacy_facts,
+                               self.source_context.questions, self.source_context.verifications,
+                               self.source_context.messages):
+                if any(item.case_id != self.case_id for item in collection):
+                    raise ValueError("source_context Case mismatch")
+        return self
 
 
 class CaseCopilotOutput(StrictModel):

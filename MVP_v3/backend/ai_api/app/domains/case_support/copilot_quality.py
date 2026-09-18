@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Iterable, Literal
 
 from .copilot_accumulation import asks_total, money_values, review_transfers
+from contracts.ai_internal.case_copilot import BankCopilotSourceContext
 
 
 AssistantMode = Literal["CUSTOMER_SUPPORT", "BANK_INTERNAL"]
@@ -100,19 +101,151 @@ class CopilotQualityEvaluator:
         response: str,
         context: Iterable[str] = (),
         grounding_context: Iterable[str] | None = None,
+        source_context: BankCopilotSourceContext | None = None,
     ) -> CopilotQualityEvaluation:
         records = tuple(context)
         evidence = " ".join(records)
         checks = (
             cls._role_check(assistant_mode, response),
             cls._visibility_check(assistant_mode, response),
-            cls._certainty_check(response, tuple(grounding_context) if grounding_context is not None else records),
+            cls._source_certainty_check(response, source_context, tuple(grounding_context) if grounding_context is not None else records)
+            if source_context is not None and assistant_mode == "BANK_INTERNAL"
+            else cls._certainty_check(response, tuple(grounding_context) if grounding_context is not None else records),
             cls._unsafe_instruction_check(response),
             cls._conciseness_check(assistant_mode, response, prompt),
             cls._relevance_check(prompt, response, evidence),
             cls._completeness_check(prompt, response, records),
         )
         return CopilotQualityEvaluation(assistant_mode=assistant_mode, checks=checks)
+
+    @staticmethod
+    def _source_scope(text: str) -> str | None:
+        # 주장 종류를 찾을 뿐 semantic state/current를 새로 판단하지 않는다.
+        for scope, terms in (
+            ("authentication_information_exposure", ("OTP", "otp", "인증번호", "비밀번호")),
+            ("personal_information_exposure", ("개인정보", "주민등록")),
+            ("remote_control_app", ("원격제어", "원격조종")),
+            ("transfer_status", ("송금", "이체", "보냈", "거래", "입금", "transfer_status", "transfer.actual.status")),
+            ("claimed_organization", ("기관", "검찰", "경찰", "금융감독")),
+        ):
+            if any(term in text for term in terms):
+                return scope
+        return None
+
+    @staticmethod
+    def _scope_matches(scope: str | None, field: str) -> bool:
+        aliases = {
+            "transfer_status": {"transfer_status", "transfer.actual.status", "transfer.actual.amount"},
+            "claimed_organization": {"claimed_organization", "offender.claimed_organization"},
+            "personal_information_exposure": {"personal_information_exposure", "exposure.personal_information"},
+            "authentication_information_exposure": {"authentication_information_exposure", "exposure.authentication_information"},
+            "remote_control_app": {"remote_control_app", "device.remote_control_app"},
+        }
+        return scope is not None and field in aliases.get(scope, {scope})
+
+    @classmethod
+    def _source_transfer_value(cls, text: str) -> bool | None:
+        normalized = text.replace("이체", "송금").replace("입금", "송금")
+        normalized = re.sub(r"보내지\s*않|안\s*보냈", "송금하지않", normalized)
+        normalized = re.sub(r"보냈|보낸|보냄", "송금했", normalized)
+        return cls._transfer_value(normalized)
+
+    @classmethod
+    def _source_certainty_check(cls, response: str, context: BankCopilotSourceContext, auxiliary: tuple[str, ...] = ()) -> QualityCheck:
+        """Typed sources authorize their own scope only; references never authorize verification."""
+        import json
+        active = [f for f in context.facts if f.status not in {"REJECTED", "SUPERSEDED"}]
+        excluded_refs = {ref.id for f in context.facts if f.status in {"REJECTED", "SUPERSEDED"} for ref in f.evidence_refs}
+        rows = []
+        for fact in active:
+            text = fact.display_value + " " + json.dumps(fact.value, ensure_ascii=False)
+            if isinstance(fact.value.get("amount_krw"), int):
+                text += f" {fact.value['amount_krw']}원"
+            rows.append((fact.semantic_key, text, fact.source_kind, fact.status,
+                         bool(fact.confirmed_by and fact.confirmed_at)))
+        for fact in context.legacy_facts:
+            if fact.status not in {"REJECTED", "SUPERSEDED"} and fact.evidence_message_id not in excluded_refs:
+                rows.append((fact.field, fact.value, fact.source, fact.status,
+                             bool(fact.confirmed_by and fact.confirmed_at)))
+        for question in context.questions:
+            if question.status == "ANSWERED" and question.answer_text and question.answer_message_id not in excluded_refs:
+                rows.append((question.canonical_scope, question.answer_text, "CUSTOMER_STATEMENT", "PROPOSED", False))
+        for message in context.messages:
+            if message.actor_type == "CUSTOMER" and message.message_id not in excluded_refs:
+                scope = cls._source_scope(message.content)
+                if scope:
+                    rows.append((scope, message.content, "CUSTOMER_STATEMENT", "PROPOSED", False))
+        verified = []
+        for check in context.verifications:
+            if check.status != "COMPLETED" or not check.result_summary:
+                continue
+            # 실제 저장된 VERIFICATION_RESULT 참조만 scope 관계로 사용한다.
+            for fact in active:
+                if any(ref.type == "VERIFICATION_RESULT" and ref.id == check.verification_task_id
+                       and (ref.revision is None or ref.revision == check.version) for ref in fact.evidence_refs):
+                    verified.append((fact.semantic_key, f"{check.target} {check.claim} {check.result_summary}"))
+
+        def matches(scope, sentence, field, text):
+            if scope is not None:
+                if not cls._scope_matches(scope, field):
+                    return False
+            elif not (cls._grounding_terms(sentence) & cls._grounding_terms(text)):
+                return False
+            amounts = set(money_values(sentence))
+            if amounts and not amounts <= set(money_values(text)):
+                return False
+            polarity = cls._source_transfer_value(sentence)
+            actual = cls._source_transfer_value(text)
+            return polarity is None or actual == polarity
+
+        for sentence in re.split(r"[.!?\n;]+|하지만|그러나", response):
+            scope = cls._source_scope(sentence)
+            bank_claim = bool(re.search(r"(?:은행\s*)?거래\s*(?:기록|내역)|은행\s*기록", sentence))
+            official = bool(re.search(r"검증(?:되|됐|했|하였|이\s*완료|\s*완료)|공식.{0,12}확인|\bVERIFIED\b", sentence, re.I))
+            staff_claim = bool(re.search(r"담당자.{0,20}확인", sentence))
+            receipt_claim = bool(re.search(r"영수증|증빙|원본\s*자료", sentence) and re.search(r"있습니다|존재|제출|첨부|확인", sentence))
+            certainty = any(marker in sentence for marker in cls._UNSUPPORTED_CERTAINTY) or bool(
+                re.search(r"확인(?:됩니다|됐|된\s*상태)|확인됨|이체\s*완료|송금\s*완료", sentence)) or bool(
+                scope is not None and re.search(r"확인(?:했습니다|했|하였)", sentence))
+            # 부재/보류 표현은 실제 거래의 부정 Fact와 다르다.
+            absence = bool(re.search(r"(?:확인|검증)(?:되지|할\s*수\s*없)|근거.{0,10}(?:없|부족)|전달되지|미확인|확인.{0,8}필요|(?:거래\s*(?:기록|Evidence)|증빙|영수증).{0,12}(?:없|미전달)", sentence))
+            direct_transfer = scope == "transfer_status" and cls._source_transfer_value(sentence) is not None
+            attributed = bool(re.search(r"고객.{0,80}(?:진술|답변|말했)|고객\s*진술(?:상|\s*기준)|고객.{0,80}보냈다고", sentence))
+            unknown_claim = bool(re.search(r"(?:여부|사실|것).{0,20}(?:확인|검증)(?:되지|할\s*수\s*없).{0,15}$", sentence))
+            if absence and (not direct_transfer or unknown_claim):
+                continue
+            matching = [row for row in rows if matches(scope, sentence, row[0], row[1])]
+            matching_verified = [(field, text) for field, text in verified
+                                 if matches(scope, sentence, field, text)
+                                 and (scope is None or cls._source_scope(text) == scope)]
+            relevant = [row for row in rows if cls._scope_matches(scope, row[0])]
+            polarities = {cls._source_transfer_value(row[1]) for row in relevant}
+            # 문자열은 source 권한을 주지 않는다. 다만 명시적인 반대 값이 있으면 확정 설명을 보류한다.
+            polarities.update(cls._source_transfer_value(text) for text in auxiliary
+                if cls._source_scope(text) == scope and not re.search(r"REJECTED|SUPERSEDED|(?:AI|Copilot)\s*:", text, re.I))
+            conflict = scope == "transfer_status" and True in polarities and False in polarities
+            banks = [row for row in matching if row[2] == "BANK_RECORD" and row[3] == "CONFIRMED" and row[4]]
+            staff = [row for row in matching if row[3] == "CONFIRMED" and row[4]]
+            statements = [row for row in matching if row[2] == "CUSTOMER_STATEMENT"]
+            receipts = [ref for fact in active if scope is None or cls._scope_matches(scope, fact.semantic_key)
+                        for ref in fact.evidence_refs if ref.type in {"ATTACHMENT", "BANK_TRANSACTION"}
+                        and ref.summary and cls._grounding_terms(sentence) & cls._grounding_terms(ref.summary)]
+            unsupported = (
+                (bank_claim and not banks)
+                or (receipt_claim and not receipts)
+                or (official and not matching_verified)
+                or (staff_claim and not staff)
+                or (direct_transfer and not attributed and not staff_claim and not banks and not matching_verified)
+                or (attributed and direct_transfer and not statements)
+                or (certainty and attributed and cls._STATEMENT_CONFIRMATION.fullmatch(sentence.strip()) is None)
+                or (certainty and not attributed and not staff_claim and not banks and not matching_verified
+                    and not any(row[3] == "CONFIRMED" and row[4] and row[2] != "CUSTOMER_STATEMENT" for row in matching))
+                or (conflict and (certainty or direct_transfer) and not attributed and not absence)
+                or any(marker in sentence for marker in cls._UNSUPPORTED_CERTAINTY[:3])
+            )
+            if unsupported:
+                return QualityCheck("unsupported_certainty", False, "해당 주장에 대응하는 source/status/scope 근거가 없거나 충돌합니다.")
+        return QualityCheck("unsupported_certainty", True, "탐지한 주장과 typed source/status/scope를 대조했습니다.")
 
     @classmethod
     def runtime_blocking_failures(cls, evaluation: CopilotQualityEvaluation) -> tuple[QualityCheck, ...]:
