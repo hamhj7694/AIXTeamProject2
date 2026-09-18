@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { AlertCircle, CheckCircle2, Clock3, Loader2, PanelRightClose, PanelRightOpen, RefreshCw, RotateCcw, Trash2, Users } from 'lucide-react';
+import { AlertCircle, Bookmark, CheckCircle2, Clock3, Loader2, PanelRightClose, PanelRightOpen, RefreshCw, RotateCcw, StickyNote, Trash2, Users } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { casesApi, CURRENT_BANK_USER } from '../api/cases';
 import type { CaseBundle, CaseFact, CaseMessage, CaseSupportSnapshot, StoredCase, VerificationTask } from '../api/types';
 import { ActionDialog, QuestionDialog, VerificationDialog } from '../components/CaseActionDialogs';
 import { AdminCaseDialog } from '../components/AdminCaseDialog';
-import { ContextPanelV3 } from '../context-v3/ContextPanelV3';
+import { ContextPanelFoundation } from '../context-v3/ContextPanelFoundation';
 import { HistoryDrawer } from '../context-v3/HistoryDrawer';
 import { MoreMenu } from '../context-v3/components';
 import { CaseContextLayout } from '../components/CaseContextLayout';
@@ -56,16 +56,14 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
   const [caseItem, setCaseItem] = useState<StoredCase | null>(null);
   const [bundle, setBundle] = useState<CaseBundle | null>(null);
   const [support, setSupport] = useState<CaseSupportSnapshot | null>(null);
-  const [contextSummary, setContextSummary] = useState<string | null>(null);
-  const handleContextSummaryChange = useCallback((summary: string | null) => setContextSummary(summary), []);
   const [facts, setFacts] = useState<CaseFact[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [partialWarnings, setPartialWarnings] = useState<string[]>([]);
+  const [composerWarnings, setComposerWarnings] = useState<Partial<Record<ComposerTarget, string>>>({});
   const [busy, setBusy] = useState(false);
   const [aiPendingCount, setAiPendingCount] = useState(0);
-  const [view, setView] = useState<'conversation' | 'timeline'>('conversation');
   const [dialog, setDialog] = useState<DialogState>(null);
   const [bookmarkOpen, setBookmarkOpen] = useState(false);
   const [noteOpen, setNoteOpen] = useState(false);
@@ -75,6 +73,10 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
   const [adminAction, setAdminAction] = useState<AdminAction>(null);
   const [accessRevision, setAccessRevision] = useState(0);
   const [bookmarks, setBookmarks] = useState<BankBookmark[]>([]);
+  const [customerPaneCollapsed, setCustomerPaneCollapsed] = useState(false);
+  const [teamPaneCollapsed, setTeamPaneCollapsed] = useState(false);
+  const [customerPaneRatio, setCustomerPaneRatio] = useState(50);
+  const [splitDragging, setSplitDragging] = useState(false);
   const lastSupportRevisionRef = useRef('');
   const aiQueueRef = useRef<Promise<void>>(Promise.resolve());
   const aiGenerationRef = useRef(0);
@@ -83,12 +85,41 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
   const loadRequestRef = useRef(0);
   const pendingMessagesRef = useRef(new Map<string, CaseMessage>());
   const outboxRef = useRef(new Map<string, BankOutboxItem>());
+  const splitRef = useRef<HTMLDivElement>(null);
+  const handleComposerError = useCallback((target: ComposerTarget, message: string) => {
+    setComposerWarnings((current) => {
+      if (!message) {
+        const next = { ...current };
+        delete next[target];
+        return next;
+      }
+      return { ...current, [target]: message };
+    });
+  }, []);
+  useEffect(() => {
+    if (!splitDragging) return undefined;
+    const handlePointerMove = (event: PointerEvent) => {
+      const node = splitRef.current;
+      if (!node || customerPaneCollapsed || teamPaneCollapsed) return;
+      const bounds = node.getBoundingClientRect();
+      const ratio = ((event.clientX - bounds.left) / bounds.width) * 100;
+      setCustomerPaneRatio(Math.min(75, Math.max(25, ratio)));
+    };
+    const stopDragging = () => setSplitDragging(false);
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', stopDragging);
+    document.body.classList.add('is-resizing-conversations');
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', stopDragging);
+      document.body.classList.remove('is-resizing-conversations');
+    };
+  }, [splitDragging, customerPaneCollapsed, teamPaneCollapsed]);
 
   useEffect(() => {
     if (caseName === undefined) return;
     setCaseItem((current) => current && current.case_id === caseId ? { ...current, case_name: caseName } : current);
   }, [caseId, caseName]);
-  useEffect(() => { setContextSummary(null); }, [caseId]);
 
   const load = useCallback(async (quiet = false, refreshSupport = !quiet) => {
     if (!caseId) return;
@@ -191,7 +222,7 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
     outboxRef.current.clear();
     setAiPendingCount(0); setBusy(false);
     lastSupportRevisionRef.current = '';
-    setCaseItem(null); setBundle(null); setSupport(null); setFacts([]); setDialog(null); setBookmarkOpen(false); setNoteOpen(false); setParticipantOpen(false); setParticipantCount(0); setHistoryOpen(false); setAdminAction(null); setBookmarks(readBankBookmarks(caseId)); setError('');
+    setCaseItem(null); setBundle(null); setSupport(null); setFacts([]); setDialog(null); setBookmarkOpen(false); setNoteOpen(false); setParticipantOpen(false); setParticipantCount(0); setHistoryOpen(false); setAdminAction(null); setBookmarks(readBankBookmarks(caseId)); setError(''); setComposerWarnings({}); setCustomerPaneCollapsed(false); setTeamPaneCollapsed(false); setCustomerPaneRatio(50);
     // Register the existing demo identity before mounting editors that require membership.
     let active = true;
     void (async () => {
@@ -255,7 +286,6 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
       item.message = failed;
       pendingMessagesRef.current.set(failed.client_request_id!, failed);
       showMessage(failed);
-      setError('메시지를 전송하지 못했습니다. 말풍선의 다시 전송을 눌러주세요.');
     } finally { if (isCurrent()) setBusy(false); }
   };
   const send = (content: string, files: File[], target: ComposerTarget, requestAi: boolean): Promise<void> => {
@@ -326,6 +356,20 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
     onMutated();
     navigate('/', { replace: true });
   };
+  const composerWarningMessages = Object.values(composerWarnings).filter(Boolean);
+  const toggleCustomerPane = () => setCustomerPaneCollapsed((current) => {
+    if (!current && teamPaneCollapsed) return current;
+    return !current;
+  });
+  const toggleTeamPane = () => setTeamPaneCollapsed((current) => {
+    if (!current && customerPaneCollapsed) return current;
+    return !current;
+  });
+  const conversationGridStyle = customerPaneCollapsed
+    ? { gridTemplateColumns: '52px 4px minmax(0, 1fr)' }
+    : teamPaneCollapsed
+      ? { gridTemplateColumns: 'minmax(0, 1fr) 4px 52px' }
+      : { gridTemplateColumns: `minmax(0, ${customerPaneRatio}fr) 4px minmax(0, ${100 - customerPaneRatio}fr)` };
 
   if (loading && !caseItem) return <section className="room-state"><Loader2 className="spin" size={24}/><strong>Shared Case를 불러오고 있습니다.</strong><span>대화와 현재 맥락을 함께 준비합니다.</span></section>;
   if (error && !caseItem) return <section className="room-state error"><AlertCircle size={24}/><strong>정보를 불러오지 못했습니다.</strong><span>{error}</span><button onClick={() => void load()}>다시 시도</button></section>;
@@ -333,18 +377,23 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
 
   return <section className="case-room">
     <header className="case-room-header case-command-header">
-      <div className="case-heading"><span className={`risk-dot ${caseStateTone(caseState(caseItem))}`}/><div><div className="case-title-line"><span>{caseItem.case_id}</span><h1>{incidentTitle(caseItem)}</h1></div><div className="case-header-meta"><span className={`case-header-risk ${caseStateTone(caseState(caseItem))}`}>{caseItem.risk} 위험</span><span>{statusLabel(caseItem.status, caseItem.mode)}</span><span>주 담당자 {caseItem.primary_assignee || '미배정'}</span></div></div></div>
-      <div className="room-header-actions"><button className="participant-open" type="button" onClick={() => setParticipantOpen(true)}><Users size={16}/>참여자 <b>{participantCount}</b></button><button type="button" className="header-history-action" onClick={() => setHistoryOpen(true)}><Clock3 size={16}/>최근 사건 기록</button><button type="button" className="app-context-toggle" onClick={() => onContextOpenChange(!contextOpen)} aria-label={contextOpen ? '사건 맥락 접기' : '사건 맥락 열기'} aria-expanded={contextOpen} aria-controls="case-context-content" title={contextOpen ? '사건 맥락 접기' : '사건 맥락 열기'}>{contextOpen ? <PanelRightClose size={16}/> : <PanelRightOpen size={16}/>}</button><button className="icon-button" onClick={() => void load(true, true)} aria-label="Case와 AI 사건 맥락 새로고침"><RefreshCw size={17} className={refreshing ? 'spin' : ''}/></button><MoreMenu label="Case 관리 메뉴">{caseItem.mode === 'CLOSED' ? <button onClick={() => setAdminAction('reopen')}><RotateCcw size={14}/>사건 다시 진행</button> : <button onClick={() => setAdminAction('finalize')}><CheckCircle2 size={14}/>해결 및 종료</button>}<button className="danger" onClick={() => setAdminAction('trash')}><Trash2 size={14}/>휴지통으로 이동</button></MoreMenu></div>
+      <div className="case-heading"><span className={`risk-dot ${caseStateTone(caseState(caseItem))}`}/><div><div className="case-title-line"><span>{caseItem.case_id}</span><h1>{incidentTitle(caseItem)}</h1></div><div className="case-header-meta"><span>{statusLabel(caseItem.status, caseItem.mode)}</span><span>주 담당자 {caseItem.primary_assignee || '미배정'}</span></div></div></div>
+      <div className="room-header-actions"><button className="participant-open" type="button" onClick={() => setParticipantOpen(true)}><Users size={16}/>참여자 <b>{participantCount}</b></button><button type="button" className="header-tool-action header-tool-note" onClick={() => setNoteOpen(true)}><StickyNote size={15}/>개인 메모</button><button type="button" className="header-tool-action header-tool-bookmark" onClick={() => setBookmarkOpen(true)}><Bookmark size={15}/>북마크{bookmarks.length > 0 && <b>{bookmarks.length}</b>}</button><button type="button" className="app-context-toggle" onClick={() => onContextOpenChange(!contextOpen)} aria-label={contextOpen ? '사건 맥락 접기' : '사건 맥락 열기'} aria-expanded={contextOpen} aria-controls="case-context-content" title={contextOpen ? '사건 맥락 접기' : '사건 맥락 열기'}>{contextOpen ? <PanelRightClose size={16}/> : <PanelRightOpen size={16}/>}</button><button className="icon-button" onClick={() => void load(true, true)} aria-label="Case와 AI 사건 맥락 새로고침"><RefreshCw size={17} className={refreshing ? 'spin' : ''}/></button><MoreMenu label="Case 관리 메뉴"><button onClick={() => setHistoryOpen(true)}><Clock3 size={14}/>최근 사건 기록</button>{caseItem.mode === 'CLOSED' ? <button onClick={() => setAdminAction('reopen')}><RotateCcw size={14}/>사건 다시 진행</button> : <button onClick={() => setAdminAction('finalize')}><CheckCircle2 size={14}/>해결 및 종료</button>}<button className="danger" onClick={() => setAdminAction('trash')}><Trash2 size={14}/>휴지통으로 이동</button></MoreMenu></div>
     </header>
     <CaseContextLayout contextOpen={contextOpen}>
       <main className="conversation-column">
-        {partialWarnings.length > 0 && <div className="partial-warning"><AlertCircle size={15}/><span>{partialWarnings.join(' ')}</span></div>}
-        <div className="conversation-toolbar"><div><button className={view === 'conversation' ? 'active' : ''} onClick={() => setView('conversation')}>대화</button><button className={view === 'timeline' ? 'active' : ''} onClick={() => setView('timeline')}>전체 기록</button></div><span>{refreshing ? '업데이트 확인 중' : '변경 시 AI 사건 맥락 자동 반영'}</span></div>
-        <SharedConversation caseItem={caseItem} bundle={bundle} latestSummary={contextSummary} view={view} bookmarkedIds={new Set(bookmarks.map((item) => item.entryId))} onToggleBookmark={toggleBookmark} onEditVerification={(task) => setDialog({ type: 'verification', task })} onRetryMessage={retryMessage} onDismissMessage={dismissMessage}/>
-        {error && <div className="partial-warning danger composer-warning"><AlertCircle size={15}/><span>{error}</span></div>}
-        <ConversationComposer busy={busy} aiBusy={aiPendingCount > 0} onSend={send} onOpenQuestions={() => setDialog({ type: 'questions' })} onOpenVerification={() => setDialog({ type: 'verification' })} onOpenAction={() => setDialog({ type: 'action' })} onInvokeAi={() => void invokeAi()} onOpenNotes={() => setNoteOpen(true)} onOpenBookmarks={() => setBookmarkOpen(true)} bookmarkCount={bookmarks.length}/>
+        {(partialWarnings.length > 0 || Boolean(error) || composerWarningMessages.length > 0) && <div className="conversation-top-warnings">
+          {partialWarnings.map((message) => <div className="partial-warning" key={message}><AlertCircle size={15}/><span>{message}</span></div>)}
+          {error && <div className="partial-warning danger"><AlertCircle size={15}/><span>{error}</span></div>}
+          {composerWarningMessages.map((message) => <div className="partial-warning danger" key={message}><AlertCircle size={15}/><span>{message}</span></div>)}
+        </div>}
+        <div ref={splitRef} className={`conversation-channel-grid ${splitDragging ? 'is-resizing' : ''}`} style={conversationGridStyle}>
+          <SharedConversation bundle={bundle} view="conversation" channel="CUSTOMER" collapsed={customerPaneCollapsed} collapseDisabled={teamPaneCollapsed} onToggleCollapse={toggleCustomerPane} onOpenQuestions={() => setDialog({ type: 'questions' })} composer={<ConversationComposer foundationMode fixedTarget="CUSTOMER" showAi={false} showUtilities={false} showQuestionAction onOpenQuestions={() => setDialog({ type: 'questions' })} showInlineError={false} onErrorChange={(message) => handleComposerError('CUSTOMER', message)} busy={busy} aiBusy={false} onSend={send} onOpenVerification={() => undefined} onOpenAction={() => undefined} onInvokeAi={() => undefined} onOpenNotes={() => undefined} onOpenBookmarks={() => undefined} bookmarkCount={0}/>} bookmarkedIds={new Set(bookmarks.map((item) => item.entryId))} onToggleBookmark={toggleBookmark} onRetryMessage={retryMessage} onDismissMessage={dismissMessage}/>
+          <button type="button" className="conversation-split-handle" onPointerDown={(event) => { if (customerPaneCollapsed || teamPaneCollapsed) return; event.preventDefault(); setSplitDragging(true); }} onDoubleClick={() => { if (!customerPaneCollapsed && !teamPaneCollapsed) setCustomerPaneRatio(50); }} onKeyDown={(event) => { if (event.key === 'Home') { event.preventDefault(); setCustomerPaneRatio(50); return; } if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return; event.preventDefault(); setCustomerPaneRatio((value) => Math.min(75, Math.max(25, value + (event.key === 'ArrowLeft' ? -5 : 5)))); }} aria-label="고객 소통과 은행 내부 소통 채팅창 너비 조절, 더블클릭하면 1대1로 맞춤" title="드래그하여 폭 조절 · 더블클릭하여 1:1 맞춤" aria-valuemin={25} aria-valuemax={75} aria-valuenow={Math.round(customerPaneRatio)} role="separator"><span/></button>
+          <SharedConversation bundle={bundle} view="conversation" channel="TEAM" collapsed={teamPaneCollapsed} collapseDisabled={customerPaneCollapsed} onToggleCollapse={toggleTeamPane} composer={<ConversationComposer foundationMode fixedTarget="TEAM" showAi showUtilities={false} showInlineError={false} onErrorChange={(message) => handleComposerError('TEAM', message)} busy={busy} aiBusy={aiPendingCount > 0} onSend={send} onOpenQuestions={() => undefined} onOpenVerification={() => undefined} onOpenAction={() => undefined} onInvokeAi={() => void invokeAi()} onOpenNotes={() => setNoteOpen(true)} onOpenBookmarks={() => setBookmarkOpen(true)} bookmarkCount={bookmarks.length}/>} bookmarkedIds={new Set(bookmarks.map((item) => item.entryId))} onToggleBookmark={toggleBookmark} onRetryMessage={retryMessage} onDismissMessage={dismissMessage}/>
+        </div>
       </main>
-      <ContextPanelV3 accessRevision={accessRevision} caseItem={caseItem} bundle={bundle} open={contextOpen} onToggle={() => onContextOpenChange(!contextOpen)} onSummaryChange={handleContextSummaryChange} onCreateVerification={() => setDialog({ type: 'verification' })} onEditVerification={(task) => setDialog({ type: 'verification', task })} onProgressSaved={(items) => { loadRequestRef.current += 1; setBundle((current) => current ? { ...current, customer_progress: items } : current); void load(true); }}/>
+      <ContextPanelFoundation open={contextOpen} onToggle={() => onContextOpenChange(!contextOpen)}/>
     </CaseContextLayout>
     {dialog?.type === 'questions' && <QuestionDialog caseId={caseId} initial={support?.recommended_questions ?? []} onDone={refreshAfterMutation} onClose={() => setDialog(null)}/>} 
     {dialog?.type === 'verification' && <VerificationDialog caseId={caseId} task={dialog.task} onDone={refreshAfterMutation} onClose={() => setDialog(null)}/>} 
