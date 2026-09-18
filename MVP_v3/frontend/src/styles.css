@@ -26,6 +26,8 @@ p, h1, h2, h3 { margin: 0; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 .mobile-only, .mobile-list-button, .context-open, .context-close { display: none; }
 .spin { animation: spin 1s linear infinite; }
+.conversation-card-mock-stack { display: grid; gap: 12px; margin: 12px 0 16px 34px; max-width: 760px; }
+@media (max-width: 640px) { .conversation-card-mock-stack { margin-left: 0; } }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .app-shell { height: 100vh; display: flex; flex-direction: column; background: #f4f6f8; }
