@@ -1,6 +1,8 @@
 """결정론적 MVP case-support 서비스를 하나의 동기 흐름으로 연결한다."""
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from contracts.ai_internal.mvp_workflow import (
     BriefUpdateResult,
     CaseBrief,
@@ -16,6 +18,7 @@ from .answer_service import CustomerAnswerStructuringService
 from .brief_service import CaseBriefService
 from .brief_update_service import BriefUpdateService
 from .question_service import QuestionIntelligenceService
+from .question_policy import QuestionEligibility
 
 
 class MvpWorkflowService:
@@ -38,8 +41,9 @@ class MvpWorkflowService:
         self,
         brief: CaseBrief,
         question_context: QuestionRecommendationContext | None = None,
+        *, eligibility: Mapping[str, QuestionEligibility] | None = None,
     ) -> list[QuestionCandidate]:
-        return self._question_service.recommend_questions(brief, question_context)
+        return self._question_service.recommend_questions(brief, question_context, eligibility=eligibility)
 
     def structure_answer(
         self, target_field: TargetField, raw_answer: str,

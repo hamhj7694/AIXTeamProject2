@@ -116,6 +116,9 @@ class ContextualQuestionEndpointTest(unittest.IsolatedAsyncioTestCase):
         try:
             with patch.object(main, "get_case_support_snapshot", AsyncMock(return_value=support)), \
                  patch.object(main, "list_customer_question_candidates", AsyncMock(return_value=baseline)), \
+                 patch.object(main, "_live_question_state", AsyncMock(return_value=main.CaseSnapshotAiAdapter().adapt(
+                     main._case_support_ai_input("CASE-CONTEXT", repository.get.return_value, [], repository.list_customer_questions.return_value, [], [])
+                 ))), \
                  patch.object(main, "read_staff_context_records", AsyncMock(return_value=[])):
                 result = await main.generate_case_work_card(
                     "CASE-CONTEXT",
@@ -181,6 +184,20 @@ class ContextualQuestionEndpointTest(unittest.IsolatedAsyncioTestCase):
 
 
 class CustomQuestionQueueTest(unittest.IsolatedAsyncioTestCase):
+    async def test_answered_field_duplicate_guard_is_preserved(self) -> None:
+        repo = InMemoryCaseRepository()
+        repo._records.append({"case_id": "CASE-HISTORY", "context_revision": 1})
+        basic = candidate("authentication_information_exposure", "OTP를 제공했나요?")
+        await repo.queue_customer_questions("CASE-HISTORY", [basic.model_dump()], "은행 담당자")
+        asked = await repo.dispatch_next_customer_question("CASE-HISTORY")
+        await repo.submit_customer_answer("CASE-HISTORY", asked["question_id"], "기억이 안 나요", "customer", "고객")
+        # 보완 목적 metadata가 없는 현재 계약에서는 field 차단을 임의로 풀지 않는다.
+        another = basic.model_copy(update={"question_id": "another", "question_text": "관련 기록이 있나요?"})
+        created = await repo.queue_customer_questions("CASE-HISTORY", [another.model_dump()], "은행 담당자")
+        self.assertEqual(created, [])
+        self.assertEqual(len(await repo.list_customer_questions("CASE-HISTORY")), 1)
+        self.assertIsNone(await repo.dispatch_next_customer_question("CASE-HISTORY"))
+
     async def test_explicit_submit_and_answer_reuse_existing_queue_for_custom_target(self) -> None:
         repo = InMemoryCaseRepository()
         repo._records.append({"case_id": "CASE-QUEUE", "context_revision": 1})

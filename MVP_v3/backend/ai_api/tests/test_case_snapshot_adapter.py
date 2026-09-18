@@ -8,6 +8,59 @@ from ai_api.app.domains.case_support import CaseSnapshotAiAdapter
 
 
 class CaseSnapshotAiAdapterTest(unittest.TestCase):
+    def test_uncertain_answer_survives_live_state_without_basic_repeat(self) -> None:
+        fixture = Path(__file__).resolve().parents[2] / "contracts" / "ai_internal" / "fixtures" / "diagnosis.high.v1.json"
+        diagnosis = json.loads(fixture.read_text(encoding="utf-8"))["response"]
+        adapter = CaseSnapshotAiAdapter()
+        snapshot = {
+            "case_id": "VP-UNCERTAIN", "diagnosis": diagnosis,
+            "question_context": {"answered_question_fields": ["authentication_information_exposure"]},
+            "questions": [{"question_id": "q-auth", "target_field": "authentication_information_exposure",
+                "question_text": "OTP를 제공했나요?", "status": "ANSWERED", "answer_text": "기억이 안 나요"}],
+        }
+        result = adapter.build_presentation(snapshot)
+        policy = adapter.question_eligibilities(adapter.adapt(snapshot))["authentication_information_exposure"]
+        self.assertEqual(policy.evaluation.state.value, "UNCERTAIN")
+        self.assertFalse(policy.evaluation.is_sufficient)
+        self.assertTrue(policy.allow_follow_up)
+        self.assertIn("authentication_information_exposure", {item.target_field.value for item in result.unresolved_items})
+        self.assertNotIn("authentication_information_exposure", {item.target_field.value for item in result.recommended_questions})
+
+    def test_proposed_only_and_unscoped_completed_verification_do_not_resolve(self) -> None:
+        fixture = Path(__file__).resolve().parents[2] / "contracts" / "ai_internal" / "fixtures" / "diagnosis.high.v1.json"
+        diagnosis = json.loads(fixture.read_text(encoding="utf-8"))["response"]
+        snapshot = {
+            "case_id": "VP-PROPOSED", "diagnosis": diagnosis,
+            "facts": [{"fact_id": "f-transfer", "field": "transfer_status", "value": "송금함", "status": "PROPOSED"}],
+            "verifications": [{"verification_task_id": "v-org", "target": "기관", "claim": "기관 확인",
+                                "status": "COMPLETED", "result_summary": "등록된 기관 확인 결과"}],
+        }
+        adapter = CaseSnapshotAiAdapter()
+        result = adapter.build_presentation(snapshot)
+        policy = adapter.question_eligibilities(adapter.adapt(snapshot))["transfer_status"]
+        self.assertEqual(policy.evaluation.state.value, "UNRESOLVED")
+        self.assertFalse(policy.evaluation.is_sufficient)
+        self.assertIn("transfer_status", {item.target_field.value for item in result.recommended_questions})
+
+    def test_skipped_and_multiple_values_are_not_sufficient(self) -> None:
+        adapter = CaseSnapshotAiAdapter()
+        snapshot = {
+            "case_id": "VP-MULTIPLE",
+            "questions": [{"question_id": "q-auth", "target_field": "authentication_information_exposure",
+                           "question_text": "OTP를 제공했나요?", "status": "SKIPPED"}],
+            "facts": [{"fact_id": "f1", "field": "transfer_status", "value": "송금함", "status": "CONFIRMED"},
+                      {"fact_id": "f2", "field": "transfer_status", "value": "송금하지 않음", "status": "CONFIRMED"}],
+        }
+        for facts in (snapshot["facts"], list(reversed(snapshot["facts"]))):
+            with self.subTest(facts=facts):
+                policies = adapter.question_eligibilities(adapter.adapt({**snapshot, "facts": facts}))
+                skipped = policies["authentication_information_exposure"]
+                self.assertFalse(skipped.evaluation.is_sufficient)
+                self.assertFalse(skipped.allow_basic_question)
+                self.assertFalse(skipped.allow_follow_up)
+                # 관계 정보가 없으므로 conflict를 만들어내거나 마지막 값을 확정하지 않는다.
+                self.assertEqual(policies["transfer_status"].evaluation.state.value, "UNRESOLVED")
+
     def test_builds_brief_and_preserves_diagnosis_warnings(self) -> None:
         fixture = Path(__file__).resolve().parents[2] / "contracts" / "ai_internal" / "fixtures" / "diagnosis.high.v1.json"
         diagnosis = json.loads(fixture.read_text(encoding="utf-8"))["response"]
@@ -101,13 +154,15 @@ class CaseSnapshotAiAdapterTest(unittest.TestCase):
         self.assertNotIn("최신 반영", summary)
         self.assertLessEqual(len(summary), 600)
 
-    def test_question_context_alone_removes_already_handled_items(self) -> None:
+    def test_question_context_without_answer_does_not_prove_sufficiency(self) -> None:
         fixture = Path(__file__).resolve().parents[2] / "contracts" / "ai_internal" / "fixtures" / "diagnosis.high.v1.json"
         diagnosis = json.loads(fixture.read_text(encoding="utf-8"))["response"]
 
         result = CaseSnapshotAiAdapter().build_presentation({
             "case_id": "VP-SNAPSHOT-CONTEXT",
             "diagnosis": diagnosis,
+            "facts": [{"fact_id": "f-transfer", "field": "transfer_status",
+                       "value": "송금하지 않음", "status": "CONFIRMED"}],
             "question_context": {
                 "confirmed_fields": ["transfer_status"],
                 "answered_question_fields": ["personal_information_exposure"],
@@ -116,7 +171,8 @@ class CaseSnapshotAiAdapterTest(unittest.TestCase):
 
         unresolved = {item.target_field.value for item in result.unresolved_items}
         self.assertNotIn("transfer_status", unresolved)
-        self.assertNotIn("personal_information_exposure", unresolved)
+        self.assertIn("personal_information_exposure", unresolved)
+        self.assertNotIn("personal_information_exposure", {item.target_field.value for item in result.recommended_questions})
 
     def test_rebuilds_case_context_from_latest_structured_case_state(self) -> None:
         fixture = Path(__file__).resolve().parents[2] / "contracts" / "ai_internal" / "fixtures" / "diagnosis.high.v1.json"

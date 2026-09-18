@@ -6,6 +6,7 @@ from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from typing import Any, Protocol
 from uuid import uuid4
+from contracts.question_target import decode_follow_up_target, canonical_question_scope, is_follow_up_target, follow_up_registration_allowed
 
 
 _TARGET_FIELD_ALIASES = {
@@ -20,6 +21,8 @@ _TARGET_FIELD_ALIASES = {
 
 
 def normalize_target_field(value: str) -> str:
+    if is_follow_up_target(value):
+        return value
     normalized = value.strip()
     return _TARGET_FIELD_ALIASES.get(normalized.upper(), normalized.lower())
 
@@ -606,6 +609,7 @@ class InMemoryCaseRepository:
                 item for item in self._customer_questions
                 if item["case_id"] == case_id and item["status"] in {"PENDING", "ASKED", "ANSWERED"}
             ]
+            history = [item for item in self._customer_questions if item["case_id"] == case_id]
             active_fields = {
                 normalize_target_field(item["target_field"])
                 for item in handled_questions
@@ -620,9 +624,14 @@ class InMemoryCaseRepository:
             )
             now = datetime.now(timezone.utc).isoformat()
             created: list[dict[str, Any]] = []
+            # In-memory도 malformed batch의 앞부분만 등록하지 않도록 먼저 검증한다.
+            for question in questions:
+                decode_follow_up_target(normalize_target_field(question["target_field"]))
             for question in questions:
                 target_field = normalize_target_field(question["target_field"])
                 normalized_text = " ".join(str(question["question_text"]).split()).casefold()
+                if is_follow_up_target(target_field) and not follow_up_registration_allowed(target_field, question["question_text"], history):
+                    continue
                 if target_field in active_fields or normalized_text in active_texts:
                     continue
                 sequence += 1
@@ -643,6 +652,7 @@ class InMemoryCaseRepository:
                     "created_at": now,
                 }
                 self._customer_questions.append(item)
+                history.append(item)
                 created.append(deepcopy(item))
                 active_fields.add(target_field)
                 active_texts.add(normalized_text)
@@ -727,8 +737,10 @@ class InMemoryCaseRepository:
                        'content': answer_receipt(question['question_text'], answer_text), 'channel': 'AI_INTERNAL',
                        'audience': 'BANK_INTERNAL', 'visibility': 'AI_PRIVATE', 'message_kind': 'SYSTEM_EVENT',
                        'private_owner_user_id': None, 'reply_to_message_id': message_id}
-            field = normalize_target_field(question['target_field'])
-            existing = next((f for f in self._case_facts if f['case_id'] == case_id and normalize_target_field(f['field']) == field and f['status'] == 'PROPOSED'), None)
+            field = canonical_question_scope(normalize_target_field(question['target_field']))
+            follow_up = is_follow_up_target(question['target_field'])
+            existing = next((f for f in self._case_facts if f['case_id'] == case_id and normalize_target_field(f['field']) == field and f['status'] == 'PROPOSED'
+                             and (not follow_up or f.get('source_question_id') == question_id)), None)
             fact = {**(existing or {}), 'fact_id': existing['fact_id'] if existing else f'fact-{uuid4().hex}',
                     'case_id': case_id, 'field': field, 'value': answer_text, 'source': 'AI_EXTRACTED', 'status': 'PROPOSED',
                     'confidence': 0.7, 'evidence_message_id': message_id, 'source_question_id': question_id,
@@ -758,8 +770,10 @@ class InMemoryCaseRepository:
             question = next((row for row in self._customer_questions if row["case_id"] == case_id and row["question_id"] == question_id), None)
             if question is None:
                 raise KeyError(question_id)
-            canonical_field = normalize_target_field(question["target_field"])
-            existing = next((row for row in self._case_facts if row["case_id"] == case_id and normalize_target_field(row["field"]) == canonical_field and row["status"] == "PROPOSED"), None)
+            canonical_field = canonical_question_scope(normalize_target_field(question["target_field"]))
+            follow_up = is_follow_up_target(question["target_field"])
+            existing = next((row for row in self._case_facts if row["case_id"] == case_id and normalize_target_field(row["field"]) == canonical_field and row["status"] == "PROPOSED"
+                             and (not follow_up or row.get("source_question_id") == question_id)), None)
             if existing is not None:
                 existing["field"] = canonical_field
                 existing["value"] = value
