@@ -3,6 +3,72 @@ from __future__ import annotations
 import unittest
 
 from ai_api.app.domains.case_support.question_policy import QuestionSource, normalize_question
+from ai_api.app.domains.case_support.question_policy import question_eligibility, question_eligibility_from_context
+from ai_api.app.domains.case_support.question_state_evaluator import QuestionStateEvaluator
+from contracts.ai_internal.case_snapshot import CaseSnapshotQuestion, CaseSnapshotFact, CaseSnapshotVerification
+from contracts.ai_internal.mvp_workflow import QuestionRecommendationContext
+
+
+class QuestionEligibilityTest(unittest.TestCase):
+    def test_semantic_states_drive_basic_and_follow_up_separately(self) -> None:
+        scope = "authentication_information_exposure"
+        for status, answer, fact_status, expected, sufficient, basic, follow in (
+            (None, None, None, "UNRESOLVED", False, True, True),
+            ("PENDING", None, None, "WAITING", False, False, False),
+            ("ASKED", None, None, "WAITING", False, False, False),
+            ("ANSWERED", "OTP는 알려주지 않았어요", None, "CLEAR_CUSTOMER_STATEMENT", True, False, False),
+            ("ANSWERED", "기억이 안 나요", None, "UNCERTAIN", False, False, True),
+            (None, None, "PROPOSED", "UNRESOLVED", False, True, True),
+            (None, None, "CONFIRMED", "STAFF_CONFIRMED", True, False, False),
+            ("ANSWERED", "기억이 안 나요", "CONFIRMED", "STAFF_CONFIRMED", True, False, False),
+            ("SKIPPED", None, None, "SKIPPED", False, False, False),
+        ):
+            with self.subTest(status=status, fact_status=fact_status, expected=expected):
+                q = CaseSnapshotQuestion(question_id="q", target_field=scope, question_text="OTP를 제공했나요?",
+                                         status=status, answer_text=answer) if status else None
+                fact = CaseSnapshotFact(fact_id="f", field=scope, value="제공하지 않음",
+                                        status=fact_status) if fact_status else None
+                evaluation = QuestionStateEvaluator.evaluate(semantic_scope=scope, question=q, fact=fact)
+                result = question_eligibility(evaluation)
+                self.assertEqual(evaluation.state.value, expected)
+                self.assertEqual(evaluation.is_sufficient, sufficient)
+                self.assertEqual(result.allow_basic_question, basic)
+                self.assertEqual(result.allow_follow_up, follow)
+                self.assertEqual(result.suppression_reason is None, basic)
+
+    def test_verification_scope_and_explicit_conflict_use_evaluator_precedence(self) -> None:
+        verification = CaseSnapshotVerification(verification_task_id="v", target="기관", claim="확인",
+                                                status="COMPLETED", result_summary="등록된 결과")
+        for scope, conflict, state, basic, follow in (
+            ("transfer_status", False, "VERIFIED", False, False),
+            ("claimed_organization", False, "UNRESOLVED", True, True),
+            ("transfer_status", True, "CONFLICT", False, True),
+        ):
+            with self.subTest(scope=scope, conflict=conflict):
+                evaluation = QuestionStateEvaluator.evaluate(semantic_scope="transfer_status",
+                    verification=verification, verification_scope=scope, has_conflict=conflict)
+                result = question_eligibility(evaluation)
+                self.assertEqual(evaluation.state.value, state)
+                self.assertEqual((result.allow_basic_question, result.allow_follow_up), (basic, follow))
+
+    def test_active_lifecycle_still_blocks_immediate_follow_up(self) -> None:
+        evaluation = QuestionStateEvaluator.evaluate(semantic_scope="transfer_status", is_uncertain=True)
+        result = question_eligibility(evaluation, has_active_question=True)
+        self.assertFalse(result.allow_basic_question)
+        self.assertFalse(result.allow_follow_up)
+        self.assertFalse(result.evaluation.is_sufficient)
+
+    def test_field_history_without_raw_evidence_never_promotes_semantic_state(self) -> None:
+        for context in (
+            QuestionRecommendationContext(confirmed_fields=["transfer_status"]),
+            QuestionRecommendationContext(answered_question_fields=["transfer_status"]),
+        ):
+            with self.subTest(context=context):
+                result = question_eligibility_from_context("transfer_status", "q_transfer_status", context)
+                self.assertEqual(result.evaluation.state.value, "UNRESOLVED")
+                self.assertFalse(result.evaluation.is_sufficient)
+                self.assertFalse(result.allow_basic_question)
+                self.assertTrue(result.allow_follow_up)
 
 
 def question(**updates):

@@ -3,12 +3,55 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Literal, Mapping
 
 from pydantic import Field
 
 from contracts.diagnosis import StrictModel
+from contracts.ai_internal.mvp_workflow import QuestionRecommendationContext
+
+from .question_state_evaluator import QuestionSemanticState, QuestionStateEvaluation, QuestionStateEvaluator
+
+
+@dataclass(frozen=True)
+class QuestionEligibility:
+    evaluation: QuestionStateEvaluation
+    allow_basic_question: bool
+    allow_follow_up: bool
+    suppression_reason: str | None
+
+
+def question_eligibility(
+    evaluation: QuestionStateEvaluation, *, has_active_question: bool = False,
+    has_skipped_question: bool = False, has_answered_question: bool = False,
+    has_confirmed_history: bool = False,
+) -> QuestionEligibility:
+    """의미 상태를 추천 정책으로 변환한다. follow-up은 전송 허가가 아니다."""
+    if has_active_question:
+        return QuestionEligibility(evaluation, False, False, "활성 질문의 답변을 기다리고 있습니다.")
+    if has_skipped_question and not evaluation.is_sufficient:
+        return QuestionEligibility(evaluation, False, False, "건너뛴 질문은 즉시 다시 추천하지 않습니다.")
+    basic = evaluation.state == QuestionSemanticState.UNRESOLVED and not (has_answered_question or has_confirmed_history)
+    # 답변 내용이나 current 관계가 없는 이력도 충분성으로 승격하지 않는다.
+    # 기본 질문 반복은 막되, 의미적으로 부족한 상태의 보완 가능성은 유지한다.
+    reason = None if basic else f"동일 기본 질문 억제: {evaluation.state.value}"
+    if has_confirmed_history and not evaluation.is_sufficient:
+        reason = "확인 이력의 원근거 연결이 필요합니다. 기본 질문은 반복하지 않습니다."
+    return QuestionEligibility(evaluation, basic, evaluation.allow_follow_up, reason)
+
+
+def question_eligibility_from_context(
+    scope: str, question_id: str, context: QuestionRecommendationContext,
+) -> QuestionEligibility:
+    """원답변이 없는 기존 호출자도 이력을 충분성으로 승격하지 않고 중복만 억제한다."""
+    return question_eligibility(
+        QuestionStateEvaluator.evaluate(semantic_scope=scope),
+        has_active_question=scope in context.pending_question_fields,
+        has_answered_question=scope in context.answered_question_fields or context.has_answered_question(question_id),
+        has_confirmed_history=scope in context.confirmed_fields,
+    )
 
 
 class QuestionSource(str, Enum):

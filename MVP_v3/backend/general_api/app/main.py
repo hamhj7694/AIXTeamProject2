@@ -30,6 +30,7 @@ from contracts.diagnosis import AnalyzeTextRequest
 from contracts.ai_internal.context_fact_extraction import ContextFactExtractionInput, ContextFactExtractionMessage, ExistingContextFact
 from contracts.ai_internal.mvp_workflow import TargetField
 from ai_api.app.domains.case_support.answer_service import CustomerAnswerStructuringService
+from ai_api.app.domains.case_support.case_snapshot_adapter import CaseSnapshotAiAdapter
 from contracts.public_api.customer_progress import CustomerProgressItem, ProgressStep, UpdateCustomerProgress
 from .domains.cases.customer_progress import PREFIX as PROGRESS_PREFIX, ProgressConflict, progress_items as build_customer_progress, progress_ai_context, actions_for_ai
 from request_trace import install_request_trace
@@ -782,7 +783,7 @@ async def seed_initial_context_facts(case_id: str) -> None:
 
 def build_customer_question_candidates(case: dict, queued: list[dict]) -> list[PublicQuestionCandidateResponse]:
     """Deterministic MVP candidates. AI may replace this source, not the queue contract."""
-    already_handled = {item["target_field"] for item in queued if item.get("status") in {"PENDING", "ASKED", "ANSWERED"}}
+    already_handled = {item["target_field"] for item in queued if item.get("status") in {"PENDING", "ASKED", "SKIPPED"}}
     fields = [
         ("victim_transfer_status", "현재 송금하거나 이체한 금액이 있나요?", "피해 여부와 피해 금액을 먼저 확인해야 합니다.", "안전을 위해 피해 발생 여부를 가장 먼저 확인합니다.", "P0", ["없음", "있음", "잘 모르겠어요"]),
         ("remote_control_app", "휴대폰에 원격 제어 또는 화면 공유 앱을 설치하라는 안내를 받으셨나요?", "추가 피해 가능성을 확인해야 합니다.", "휴대폰 제어 가능성을 확인해 추가 피해를 막기 위한 질문입니다.", "P0", ["설치함", "설치하지 않음", "잘 모르겠어요"]),
@@ -921,11 +922,12 @@ def exclude_handled_question_candidates(
     candidates: list[PublicQuestionCandidateResponse], questions: list[dict]
 ) -> list[PublicQuestionCandidateResponse]:
     handled = [item for item in questions if item.get("status") in {"PENDING", "ASKED", "ANSWERED"}]
-    handled_fields = {normalize_target_field(str(item.get("target_field", ""))) for item in handled}
+    active_fields = {normalize_target_field(str(item.get("target_field", ""))) for item in handled
+                     if item.get("status") in {"PENDING", "ASKED"}}
     handled_texts = {normalize_question_text(str(item.get("question_text", ""))) for item in handled}
     return [
         candidate for candidate in candidates
-        if normalize_target_field(candidate.target_field) not in handled_fields
+        if normalize_target_field(candidate.target_field) not in active_fields
         and normalize_question_text(candidate.question_text) not in handled_texts
         and not any(similar_question(candidate.question_text, str(q.get("question_text", ""))) for q in handled
                     if not q.get("target_field") or normalize_target_field(q["target_field"]) == normalize_target_field(candidate.target_field))
@@ -1090,28 +1092,24 @@ async def list_customer_question_candidates(case_id: str) -> list[PublicQuestion
     case = await repository.get(case_id)
     if case is None:
         raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."})
-    queued, messages = await asyncio.gather(repository.list_customer_questions(case_id), repository.list_messages(case_id))
-    # Some compatibility repositories may not expose message history while upgrading.
-    messages = messages if isinstance(messages, list) else []
+    queued = await repository.list_customer_questions(case_id)
     snapshot = await get_case_support_snapshot(case_id)
     # AI 장애 시에도 기존 deterministic 후보로 고객 확인 흐름을 멈추지 않는다.
     fallback_candidates = build_customer_question_candidates(case, queued)
     candidates = list(snapshot.recommended_questions) if snapshot.available else []
     represented = {normalize_target_field(item.target_field) for item in candidates}
     candidates.extend(item for item in fallback_candidates if normalize_target_field(item.target_field) not in represented)
-    # AI 결과를 그대로 신뢰하지 않는다. 질문 이력 기반 최종 중복 방지는 General API가 담당한다.
+    # 최신 typed 상태를 B의 공통 정책에 연결한다. General에서 충분성을 재판단하지 않는다.
     facts = await repository.list_case_facts(case_id)
     resources = await case_context_v2_repository().list_resources(case_id)
     facts, _ = merge_support_records(resources, facts, [])
-    confirmed = set(build_question_recommendation_context(facts, queued, case)["confirmed_fields"])
-    review_first = {
-        normalize_target_field(SEMANTIC_FIELDS[item.semantic_key])
-        for item in resources.facts
-        if item.status == "PROPOSED" and item.source_kind in {"CUSTOMER_STATEMENT", "STAFF_OBSERVATION"} and item.semantic_key in SEMANTIC_FIELDS
-    }
-    already_stated = question_fields_answered_by_messages(messages)
+    adapter = CaseSnapshotAiAdapter()
+    eligibility = adapter.question_eligibilities(adapter.adapt(
+        _case_support_ai_input(case_id, case, facts, queued, [], [])
+    ))
     return [candidate for candidate in exclude_handled_question_candidates(candidates, queued)
-            if normalize_target_field(candidate.target_field) not in confirmed | review_first | already_stated]
+            if (policy := eligibility.get(normalize_target_field(candidate.target_field))) is None
+            or policy.allow_basic_question]
 
 
 @app.get("/api/cases/{case_id}/customer-questions", response_model=list[PublicCustomerQuestionResponse | PublicCustomerQuestionView])
