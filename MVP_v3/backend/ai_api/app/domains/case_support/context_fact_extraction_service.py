@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from contracts.ai_internal.context_fact_extraction import ContextFactExtractionInput, ContextFactExtractionOutput, ContextFactProposal
+from contracts.ai_internal.context_fact_extraction import ContextFactExtractionInput, ContextFactExtractionOutput, ContextFactProposal, ContextUnmappedObservation
 
 
 _MONEY = re.compile(r"(?P<amount>\d[\d,]*(?:\.\d+)?)\s*(?P<unit>억|천만|백만|만|원)")
@@ -21,9 +21,10 @@ class ContextFactExtractionService:
         text = request.message.content.strip()
         compact = re.sub(r"\s+", "", text)
         proposals: list[ContextFactProposal] = []
+        unmapped: list[ContextUnmappedObservation] = []
         labels = {
             "transfer.actual.status": "실제 이체 여부", "transfer.requested.amount": "요구 금액",
-            "transfer.actual.amount": "실제 이체 금액", "exposure.authentication_information": "인증정보 노출",
+            "transfer.actual.amount": "실제 이체 금액", "transfer.promised_return.amount": "반환 약속 금액", "exposure.authentication_information": "인증정보 노출",
             "exposure.identity_or_card": "신분증·카드정보 노출", "device.remote_control_app": "원격제어 앱",
             "offender.claimed_organization": "사칭 기관", "offender.claimed_person_or_role": "사칭 인물·역할",
             "offender.incident_claim": "상대방 주장", "circumstance.demand": "상대방 요구",
@@ -34,6 +35,24 @@ class ContextFactExtractionService:
             proposals.append(ContextFactProposal(
                 semantic_key=key, display_label=labels[key], value=value, display_value=display,
                 confidence=confidence, evidence_message_id=request.message.message_id,
+            ))
+
+        # Open-world safety net: keep only allowlisted lexical features when a
+        # domain term has no canonical semantic key yet. Never persist a call
+        # transcript or an arbitrary sentence in this extension envelope.
+        unknown_terms = {
+            "수수료": "FEE", "세금": "TAX", "대출": "LOAN", "가상자산": "CRYPTO",
+            "택배": "DELIVERY", "채용": "RECRUITMENT", "구독": "SUBSCRIPTION",
+            "환불": "REFUND", "보상": "COMPENSATION", "대리": "IMPERSONATION_PROXY",
+        }
+
+        def add_unmapped(term: str, code: str) -> None:
+            unmapped.append(ContextUnmappedObservation(
+                observation_id=f"obs-{request.message.message_id}-{code.lower()}",
+                observation_type="UNCLASSIFIED_DOMAIN_TERM",
+                candidate_categories=[code], lexical_codes=[f"DOMAIN.{code}"],
+                observed_terms=[{"surface_form": term, "normalized_code": f"DOMAIN.{code}"}],
+                source_turn_id=1, confidence=.55,
             ))
 
         supplied = any(term in compact for term in ("알려줬", "알려주었", "전달했", "제공했", "보냈어", "보냈습니다"))
@@ -65,14 +84,20 @@ class ContextFactExtractionService:
             # literal word '송금': Korean reports often say "300만원
             # 요구받았다" or "20만원 돌려받았다".
             returned = any(term in after for term in ("돌려받", "반환받", "환급받", "되돌려받", "돌려줬", "돌려주었"))
+            # A sentence such as "3천만원 보내면 5천만원으로 돌려줄게요"
+            # contains two amounts; only the amount immediately before the
+            # promise is the promised return, not the conditional transfer.
+            promised_return = any(term in after for term in ("돌려줄", "돌려드릴", "보상", "환급해줄", "되돌려줄")) and not _MONEY.search(after)
             sent = any(term in after for term in ("보냈", "송금했", "송금하고", "송금했다", "송금함", "이체했", "이체하고", "입금했", "입금하고"))
-            requested = any(term in after for term in ("보내라고", "송금하라", "이체하라", "입금하라", "요구했", "요구받", "요청받", "달라고", "마련하라", "지불하라"))
+            requested = any(term in after for term in ("보내라고", "보내면", "송금하라", "이체하라", "입금하라", "요구했", "요구받", "요청받", "달라고", "마련하라", "지불하라"))
             scope = (
                 "FINAL" if any(marker in text for marker in ("최종", "결과적으로", "마지막으로")) else
                 "CUMULATIVE" if any(marker in text for marker in ("총합", "누적", "합계", "전체")) else
                 "EVENT"
             )
-            if returned:
+            if promised_return:
+                add("transfer.promised_return.amount", {"amount_krw": amount, "currency": "KRW", "direction": "IN", "amount_role": "REFUND_IN", "amount_scope": scope, "promise_status": "PROMISED"}, f"{amount:,}원 반환 약속")
+            elif returned:
                 add("transfer.actual.amount", {"amount_krw": amount, "currency": "KRW", "direction": "IN", "amount_role": "REFUND_IN", "amount_scope": scope}, f"{amount:,}원 반환")
             elif sent:
                 add("transfer.actual.status", {"status": "TRANSFERRED"}, "이체함")
@@ -84,5 +109,16 @@ class ContextFactExtractionService:
             add("offender.incident_claim", {"text": text}, text[:1000], .8)
         if any(term in compact for term in ("지금당장", "전화끊지", "비밀로", "아무에게도말", "시간없")):
             add("circumstance.tactic", {"text": text}, text[:1000], .82)
+        for term, code in unknown_terms.items():
+            known_refund = any(
+                item.semantic_key in {"transfer.actual.amount", "transfer.promised_return.amount"}
+                and item.value.get("amount_role") == "REFUND_IN"
+                for item in proposals
+            )
+            if term in text and not (code in {"REFUND", "COMPENSATION"} and known_refund):
+                add_unmapped(term, code)
         unique = {(item.semantic_key, item.display_value): item for item in proposals}
-        return ContextFactExtractionOutput(proposals=list(unique.values()))
+        unique_unmapped = {item.observation_id: item for item in unmapped}
+        return ContextFactExtractionOutput(
+            proposals=list(unique.values()), unmapped_observations=list(unique_unmapped.values())
+        )

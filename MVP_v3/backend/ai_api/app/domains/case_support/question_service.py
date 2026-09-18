@@ -1,6 +1,8 @@
 """CaseBrief의 미확인 항목을 담당자 검토용 질문 후보로 변환한다."""
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from contracts.ai_internal.mvp_workflow import (
     CaseBrief,
     QuestionCandidate,
@@ -11,6 +13,7 @@ from contracts.ai_internal.mvp_workflow import (
 from contracts.diagnosis import Evidence
 
 from .question_prompt import QUESTION_PROMPT_VERSION
+from .question_policy import QuestionEligibility, question_eligibility_from_context
 
 
 _QUESTION_SPECS: dict[TargetField, tuple[QuestionPriority, str, str, tuple[str, ...]]] = {
@@ -62,21 +65,23 @@ class QuestionIntelligenceService:
         self,
         brief: CaseBrief,
         question_context: QuestionRecommendationContext | None = None,
+        *, eligibility: Mapping[str, QuestionEligibility] | None = None,
     ) -> list[QuestionCandidate]:
         """확인·대기 항목과 이미 답변받은 동일 질문을 제외해 후보를 만든다."""
         candidates: list[QuestionCandidate] = []
         seen_question_ids: set[str] = set()
         context = question_context or QuestionRecommendationContext()
-        excluded_fields = context.excluded_target_fields()
 
         for item in brief.unresolved_items:
-            if item.target_field in excluded_fields:
+            question_id = f"q_{item.target_field.value}"
+            policy = (eligibility[item.target_field.value] if eligibility is not None else
+                      question_eligibility_from_context(item.target_field.value, question_id, context))
+            if not policy.allow_basic_question:
                 continue
             spec = _QUESTION_SPECS.get(item.target_field)
             if spec is None:
                 continue
-            question_id = f"q_{item.target_field.value}"
-            if question_id in seen_question_ids or context.has_answered_question(question_id):
+            if question_id in seen_question_ids:
                 continue
             seen_question_ids.add(question_id)
             priority, question, default_reason, event_families = spec

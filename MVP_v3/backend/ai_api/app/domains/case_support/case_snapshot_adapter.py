@@ -10,13 +10,17 @@ from contracts.ai_internal.case_snapshot import (
     CaseContextProjection,
     CaseSnapshotAiInput,
     CaseSnapshotPresentation,
+    CaseSnapshotQuestion,
 )
 from contracts.ai_internal.mvp_workflow import QuestionRecommendationContext, TargetField, UnresolvedItem
 from contracts.diagnosis import DiagnosisResult
+from contracts.question_target import canonical_question_scope, is_follow_up_target, encode_follow_up_target
 
 from .workflow import MvpWorkflowService
 from .answer_service import CustomerAnswerStructuringService
 from .grounding import validate_case_support_grounding
+from .question_state_evaluator import QuestionStateEvaluator
+from .question_policy import QuestionEligibility, question_eligibility, dynamic_follow_up_allowed
 
 
 class CaseSnapshotAiAdapter:
@@ -58,10 +62,11 @@ class CaseSnapshotAiAdapter:
         if ai_input.case_id is None or ai_input.diagnosis is None:
             return CaseSnapshotPresentation(case_id=ai_input.case_id, warnings=ai_input.warnings)
 
+        eligibility = self.question_eligibilities(ai_input)
         brief = self._workflow.build_brief(ai_input.diagnosis)
-        brief = self._apply_live_case_state(brief, ai_input)
+        brief = self._apply_live_case_state(brief, ai_input, eligibility)
         context = self._build_case_context(brief, ai_input)
-        questions = self._workflow.recommend_questions(brief, ai_input.question_context)
+        questions = self._workflow.recommend_questions(brief, ai_input.question_context, eligibility=eligibility)
         presentation = CaseSnapshotPresentation(
             case_id=ai_input.case_id,
             case_brief=brief,
@@ -74,22 +79,71 @@ class CaseSnapshotAiAdapter:
         return presentation
 
     @staticmethod
-    def _apply_live_case_state(brief, ai_input: CaseSnapshotAiInput):
+    def question_eligibilities(ai_input: CaseSnapshotAiInput) -> dict[str, QuestionEligibility]:
+        """기존 typed 입력만 연결한다. 관계가 없는 복수 기록의 current를 선택하지 않는다."""
+        context = ai_input.question_context
+        scopes = {field.value for field in TargetField}
+        scopes.update(canonical_question_scope(question.target_field) for question in ai_input.questions)
+        scopes.update(fact.field for fact in ai_input.facts)
+        result = {}
+        for scope in sorted(scopes):
+            questions = [question.model_copy(update={"target_field": scope}) for question in ai_input.questions
+                         if canonical_question_scope(question.target_field) == scope]
+            facts = [fact for fact in ai_input.facts if fact.field == scope]
+            # 동일 값·상태의 중복 외에는 한 기록을 대표값으로 임의 선택하지 않는다.
+            fact_signals = {(fact.status, fact.value) for fact in facts}
+            evaluation = QuestionStateEvaluator.evaluate(
+                semantic_scope=scope,
+                question=questions[0] if len(questions) == 1 else None,
+                fact=facts[0] if len(fact_signals) == 1 else None,
+            )
+            result[scope] = question_eligibility(
+                evaluation,
+                has_active_question=scope in context.pending_question_fields or any(
+                    question.status in {"PENDING", "ASKED"} for question in questions
+                ),
+                has_skipped_question=any(question.status == "SKIPPED" for question in questions),
+                has_answered_question=scope in context.answered_question_fields or any(
+                    question.status == "ANSWERED" for question in questions
+                ),
+                # field 이력만으로 STAFF_CONFIRMED를 만들지 않는다.
+                # 호환 입력의 반복 억제와 실제 근거의 충분성은 별개다.
+                has_confirmed_history=not facts and scope in context.confirmed_fields,
+            )
+        return result
+
+    @staticmethod
+    def follow_up_parents(ai_input: CaseSnapshotAiInput) -> dict[str, CaseSnapshotQuestion]:
+        """현재 policy가 허용한 단일 기본 parent만 선정한다. 자식은 다시 parent가 되지 않는다."""
+        policies = CaseSnapshotAiAdapter.question_eligibilities(ai_input)
+        result = {}
+        for parent in ai_input.questions:
+            if is_follow_up_target(parent.target_field) or parent.status != "ANSWERED":
+                continue
+            policy = policies[parent.target_field]
+            if not dynamic_follow_up_allowed(policy):
+                continue
+            if any(is_follow_up_target(q.target_field) and canonical_question_scope(q.target_field) == parent.target_field
+                   for q in ai_input.questions):
+                continue
+            try:
+                target = encode_follow_up_target(parent.target_field, parent.question_id)
+            except ValueError:
+                continue  # 참조 길이 초과는 hash/truncate로 숨기지 않는다.
+            result[target] = parent
+        return result
+
+    @staticmethod
+    def _apply_live_case_state(brief, ai_input: CaseSnapshotAiInput, eligibility: Mapping[str, QuestionEligibility]):
         """Project current Shared Case state onto the diagnosis-derived brief.
 
         Diagnosis is immutable evidence. Questions, answers, facts and work status
         are mutable operational context and therefore have to be applied every
         time a support snapshot is rebuilt.
         """
-        confirmed_fields = {
-            item.field for item in ai_input.facts if item.status == "CONFIRMED"
-        } | {item.value for item in ai_input.question_context.confirmed_fields}
-        answered_fields = {
-            item.target_field for item in ai_input.questions if item.status == "ANSWERED"
-        } | {item.value for item in ai_input.question_context.answered_question_fields}
-        handled_fields = confirmed_fields | answered_fields
+        handled_fields = {scope for scope, policy in eligibility.items() if policy.evaluation.is_sufficient}
         pending_by_field = {
-            item.target_field: item
+            canonical_question_scope(item.target_field): item
             for item in ai_input.questions
             if item.status in {"PENDING", "ASKED"}
         }
@@ -121,6 +175,22 @@ class CaseSnapshotAiAdapter:
                 description=f"고객 답변 대기: {question.question_text}",
                 priority=question.priority,
             ))
+            included_fields.add(field)
+
+        # 초기 진단에서 빠진 scope도 부족한 답변의 보완 필요성이 사라지지 않게 보존한다.
+        for scope, policy in eligibility.items():
+            if scope in included_fields or scope in handled_fields or not policy.allow_follow_up:
+                continue
+            if not any(canonical_question_scope(question.target_field) == scope for question in ai_input.questions):
+                continue
+            try:
+                field = TargetField(scope)
+            except ValueError:
+                continue
+            unresolved.append(UnresolvedItem(
+                target_field=field, description="고객 답변 내용의 추가 확인이 필요합니다.", priority="P1",
+            ))
+            included_fields.add(scope)
 
         next_checks = [
             check for check in brief.next_checks
@@ -378,11 +448,14 @@ class CaseSnapshotAiAdapter:
     @staticmethod
     def _current_field_values(ai_input: CaseSnapshotAiInput) -> dict[str, tuple[str, str]]:
         values: dict[str, tuple[str, str]] = {}
+        follow_scopes = {canonical_question_scope(q.target_field) for q in ai_input.questions if is_follow_up_target(q.target_field)}
         # 낮은 신뢰 상태부터 넣고, 고객 답변과 담당자 확정 사실이 차례로 덮어쓴다.
         for fact in ai_input.facts:
             if fact.status == "PROPOSED" and fact.value.strip():
                 values[fact.field] = (CaseSnapshotAiAdapter._structured_value(fact.field, fact.value), "proposed")
         for question in ai_input.questions:
+            if is_follow_up_target(question.target_field):
+                continue  # 확인 행동의 답변은 부모 답변을 대체하지 않는다.
             if question.status == "ANSWERED" and question.answer_text and question.answer_text.strip():
                 values[question.target_field] = (
                     CaseSnapshotAiAdapter._structured_value(question.target_field, question.answer_text),
@@ -391,6 +464,12 @@ class CaseSnapshotAiAdapter:
         for fact in ai_input.facts:
             if fact.status == "CONFIRMED" and fact.value.strip():
                 values[fact.field] = (CaseSnapshotAiAdapter._structured_value(fact.field, fact.value), "confirmed")
+        for scope in follow_scopes:
+            signals = {(f.status, f.value) for f in ai_input.facts if f.field == scope and f.value.strip()}
+            signals.update(("ANSWERED", q.answer_text) for q in ai_input.questions
+                           if canonical_question_scope(q.target_field) == scope and q.answer_text)
+            if len({value for _, value in signals}) > 1:
+                values.pop(scope, None)  # 관계만으로 current/correction을 추측하지 않는다.
         return values
 
     @staticmethod

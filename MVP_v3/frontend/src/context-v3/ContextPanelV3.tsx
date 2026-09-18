@@ -27,6 +27,7 @@ const factOptions: FactOption[] = [
   { key: 'transfer.actual.status', label: '실제 이체 여부', section: 'EXPOSURE', kind: 'transfer-status' },
   { key: 'transfer.requested.amount', label: '요구 금액', section: 'EXPOSURE', kind: 'amount' },
   { key: 'transfer.actual.amount', label: '실제 이체 금액', section: 'EXPOSURE', kind: 'amount' },
+  { key: 'transfer.promised_return.amount', label: '반환 약속 금액', section: 'EXPOSURE', kind: 'amount' },
   { key: 'exposure.personal_information', label: '개인정보 노출', section: 'EXPOSURE', kind: 'exposure' },
   { key: 'exposure.account_information', label: '계좌정보 노출', section: 'EXPOSURE', kind: 'exposure' },
   { key: 'exposure.authentication_information', label: 'OTP·인증정보 노출', section: 'EXPOSURE', kind: 'exposure' },

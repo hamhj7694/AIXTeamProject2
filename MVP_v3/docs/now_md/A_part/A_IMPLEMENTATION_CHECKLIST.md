@@ -519,3 +519,28 @@ cd MVP_v3/backend
 - [x] 제외된 Fact 전 항목(피해·노출, 사칭·접촉, 사기 정황, 사실·확인)의 복구·완전 삭제 동작 연결
 > 6.5단계와 v3.0→v3.1 측정의 단일 최신 기준은 `A파트 테스트 및 파이프라인 구조 정리/A_6_5_MASTER_CHECKLIST.md`다. 본 문서는 구현 이력으로 보존한다.
 > 링크 정리: 기존 `A_6_5_TEST_AND_PIPELINE_CHECKLIST.md`는 제거되었고, 현재 6.5단계 실행 기준은 `A파트 테스트 및 파이프라인 구조 정리/A_6_5_MASTER_CHECKLIST.md`다.
+# 6.5 최신 비교·평가 상태 (2026-09-17)
+
+## 동일 조건 비교 보정
+
+- [ ] Case-level v3.0 replay를 v3.1과 동일한 30 cases·turns·model·provider·환경·반복 횟수로 실행
+- [ ] 7개 기능별 v3.1 replay를 v3.0 token baseline과 동일 입력·기능 단위로 실행
+- [ ] 두 버전의 기능별 input/output/total tokens, calls, latency P50/P95/MAX를 같은 표에 기록
+- [ ] 동일 canonical Gold로 feature extraction·recontextualization·semantic projection 점수 산출
+- [ ] 직접 비교 조건이 다른 기존 수치는 참고값으로만 표시하고 최종 개선율 계산에서 제외
+
+- [x] v3.1 실제 30-case Raw Replay 완료: 30/30 성공, 210 calls, Raw 응답 210개 저장
+- [x] v3.0 corrected-Gold 기준 Precision / Recall / F1을 공식 보고서에 포함
+- [x] v3.0 기능별 token/call baseline을 공식 보고서에 포함
+- [x] v3.1 token/call/latency P50·P95·MAX를 공식 보고서에 포함
+- [x] 비교 보고서에 영어 지표명과 한글 설명을 함께 기록
+- [ ] Context Feature Precision / Recall / F1 (문맥 피처 정확도·재현율·F1)
+- [ ] Critical Fact Recall / Fact Precision (핵심 사실 재현율·정밀도)
+- [ ] Status / Polarity Accuracy (상태·극성 보존 정확도)
+- [ ] Relation Accuracy (사실 관계 정확도)
+- [ ] Evidence Grounding / Fact Lineage Completeness (근거 연결·사실 계보 완전성)
+- [ ] Correction Resolution Accuracy (정정 반영 정확도)
+- [ ] Section Projection Accuracy (섹션 투영 정확도)
+- [ ] Critical contradiction / hallucination / privacy leak hard gates (치명적 모순·환각·개인정보 유출)
+
+실행·결과 기준 문서는 `A_6_5_MASTER_CHECKLIST.md`와 `run_comparison/official_comparison_report.md`로 통일한다. 점수가 없는 항목은 구현 완료로 표시하지 않고 `[ ]` 상태를 유지한다.

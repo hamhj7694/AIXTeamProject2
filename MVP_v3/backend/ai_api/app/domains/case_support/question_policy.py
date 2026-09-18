@@ -3,17 +3,101 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Literal, Mapping
 
 from pydantic import Field
 
 from contracts.diagnosis import StrictModel
+from contracts.ai_internal.mvp_workflow import QuestionRecommendationContext
+
+from .question_state_evaluator import QuestionSemanticState, QuestionStateEvaluation, QuestionStateEvaluator
+
+
+@dataclass(frozen=True)
+class QuestionEligibility:
+    evaluation: QuestionStateEvaluation
+    allow_basic_question: bool
+    allow_follow_up: bool
+    suppression_reason: str | None
+
+
+def question_eligibility(
+    evaluation: QuestionStateEvaluation, *, has_active_question: bool = False,
+    has_skipped_question: bool = False, has_answered_question: bool = False,
+    has_confirmed_history: bool = False,
+) -> QuestionEligibility:
+    """의미 상태를 추천 정책으로 변환한다. follow-up은 전송 허가가 아니다."""
+    if has_active_question:
+        return QuestionEligibility(evaluation, False, False, "활성 질문의 답변을 기다리고 있습니다.")
+    if has_skipped_question and not evaluation.is_sufficient:
+        return QuestionEligibility(evaluation, False, False, "건너뛴 질문은 즉시 다시 추천하지 않습니다.")
+    basic = evaluation.state == QuestionSemanticState.UNRESOLVED and not (has_answered_question or has_confirmed_history)
+    # 답변 내용이나 current 관계가 없는 이력도 충분성으로 승격하지 않는다.
+    # 기본 질문 반복은 막되, 의미적으로 부족한 상태의 보완 가능성은 유지한다.
+    reason = None if basic else f"동일 기본 질문 억제: {evaluation.state.value}"
+    if has_confirmed_history and not evaluation.is_sufficient:
+        reason = "확인 이력의 원근거 연결이 필요합니다. 기본 질문은 반복하지 않습니다."
+    return QuestionEligibility(evaluation, basic, evaluation.allow_follow_up, reason)
+
+
+def question_eligibility_from_context(
+    scope: str, question_id: str, context: QuestionRecommendationContext,
+) -> QuestionEligibility:
+    """원답변이 없는 기존 호출자도 이력을 충분성으로 승격하지 않고 중복만 억제한다."""
+    return question_eligibility(
+        QuestionStateEvaluator.evaluate(semantic_scope=scope),
+        has_active_question=scope in context.pending_question_fields,
+        has_answered_question=scope in context.answered_question_fields or context.has_answered_question(question_id),
+        has_confirmed_history=scope in context.confirmed_fields,
+    )
+
+
+def dynamic_follow_up_allowed(eligibility: QuestionEligibility) -> bool:
+    """P3-3 production 입력에는 conflict 관계가 없어 UNCERTAIN 보완만 연결한다."""
+    return eligibility.allow_follow_up and eligibility.evaluation.state == QuestionSemanticState.UNCERTAIN
 
 
 class QuestionSource(str, Enum):
     DETERMINISTIC = "DETERMINISTIC"
     LLM = "LLM"
+
+
+# 목적은 서버가 scope별로 제한한다. 새로운 public purpose enum을 만들지 않는다.
+FOLLOW_UP_PURPOSES = {
+    "transfer_status": ("은행 앱·거래내역·거래 알림에서 실제 이체 기록 확인", ("거래내역", "거래알림", "문자알림", "은행앱", "이체내역")),
+    "transfer_purpose": ("당시 대화나 메시지 기록에서 요구한 송금 명목 확인", ("대화기록", "메시지", "문자", "통화기록")),
+    "claimed_organization": ("당시 메시지·통화 기록에서 상대방이 주장한 기관명 확인", ("메시지", "문자", "통화기록", "대화기록")),
+    "incident_claim": ("당시 메시지·대화 기록에서 주장한 사건 내용 확인", ("메시지", "문자", "대화기록", "통화기록")),
+    "personal_information_exposure": ("당시 대화나 전송 기록에서 개인정보 전달 행동 확인; 실제 값 요구 금지", ("메시지", "전송기록", "대화기록")),
+    "authentication_information_exposure": ("인증번호를 읽어주거나 메시지로 보낸 행동의 기억 확인; 실제 값 요구 금지", ("읽어", "메시지", "전송기록")),
+    "remote_control_app": ("기기의 설치 앱 목록·설치 기록에서 해당 앱 존재 확인; 설치 지시 금지", ("앱목록", "설치기록", "설치된앱")),
+}
+
+
+def validate_follow_up_question(raw: Mapping[str, Any], parent: Any) -> NormalizedQuestion:
+    """Eligibility와 별개로 허용한 다음 확인 행동을 담았는지 좁게 검사한다."""
+    normalized = normalize_question(raw, source=QuestionSource.LLM)
+    from contracts.question_target import decode_follow_up_target
+    target = decode_follow_up_target(normalized.target_field)
+    if not target.is_follow_up or target.parent_question_id != parent.question_id or target.canonical_scope != parent.target_field:
+        raise ValueError("follow-up parent/scope mismatch")
+    compact = re.sub(r"\s+", "", normalized.question_text).casefold()
+    previous = re.sub(r"\s+", "", parent.question_text).casefold()
+    markers = FOLLOW_UP_PURPOSES[target.canonical_scope][1]
+    if compact == previous or not any(marker in compact for marker in markers) or not any(
+        marker in compact for marker in ("확인", "기억", "살펴", "조회")
+    ):
+        raise ValueError("follow-up must request an evidence check, not repeat the basic question")
+    # 설명도 고객에게 전달되는 텍스트이므로 동일 안전 기준으로 검증한다.
+    _reject_unsafe_question(normalized.customer_explanation or "", [])
+    customer_text = re.sub(r"\s+", "", " ".join([
+        normalized.question_text, normalized.customer_explanation or "", *normalized.options,
+    ])).casefold()
+    if any(term in customer_text for term in ("설치하세요", "설치해", "다운로드하", "깔아주세요")):
+        raise ValueError("follow-up must not instruct app installation")
+    return normalized
 
 
 class NormalizedQuestion(StrictModel):

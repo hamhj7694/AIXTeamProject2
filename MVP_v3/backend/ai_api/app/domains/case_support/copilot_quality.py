@@ -61,6 +61,12 @@ class CopilotQualityEvaluator:
     _VERIFIED_EVIDENCE = (
         "공개 확인 결과", "공식 확인 결과", "검증 완료",
     )
+    _CONFIRMATION_STATE = re.compile(r"확인된\s*상태(?:입니다)?|확인됨")
+    _STATEMENT_CONFIRMATION = re.compile(
+        r"\s*고객(?:이|은)\s*.+?(?:진술|답변|말)(?:한|했다는)\s*"
+        r"(?:점|사실|내용|기록)(?:이|은|을)?\s*"
+        r"확인(?:되었습니다|됐습니다|됨|된\s*상태(?:입니다)?)\s*"
+    )
     _EVIDENCE_GENERIC_TERMS = {"공개", "공식", "확인", "결과", "검증", "완료", "해당"}
     _CUSTOMER_ROLE_MARKERS = (
         "[상황 판단]", "[확인된 정보]", "[미확인 정보]", "직원 요청", "은행 내부용",
@@ -138,13 +144,24 @@ class CopilotQualityEvaluator:
     @classmethod
     def _certainty_check(cls, response: str, records: tuple[str, ...]) -> QualityCheck:
         # 항목 경계를 유지해야 다른 Fact의 CONFIRMED가 미확인 진술을 승인하지 않는다.
-        for sentence in re.split(r"[.!?\n]+", response):
+        # 금액의 자릿수 구분 쉼표는 유지하고, 별도 주장은 독립적으로 검사한다.
+        for sentence in re.split(r"[.!?\n;]+|(?<!\d),(?!\d)|하지만|그러나", response):
             found = next((m for m in cls._UNSUPPORTED_CERTAINTY if m in sentence.casefold()), None)
-            if found is None:
+            # 한 표현의 부정이 뒤의 다른 확정 표현까지 면제하지 않도록 한다.
+            state_confirmation = next((
+                match for match in cls._CONFIRMATION_STATE.finditer(sentence)
+                if not re.match(r"\s*(?:가|는|이)?\s*(?:아니|아닙)", sentence[match.end():])
+            ), None)
+            if found is None and state_confirmation is None:
+                continue
+            # 진술의 존재 확인을 실제 거래 검증으로 취급하지 않는다.
+            # 문장 전체가 좁은 진술 확인 형태일 때만 예외로 인정한다.
+            if cls._statement_confirmation_supported(sentence, records):
                 continue
             claim = sentence
             for marker in cls._UNSUPPORTED_CERTAINTY:
                 claim = claim.replace(marker, "")
+            claim = cls._CONFIRMATION_STATE.sub("", claim)
             claim_terms = cls._grounding_terms(claim)
             matched = [r for r in records if claim_terms & cls._grounding_terms(r)]
             official_claim = "검증" in sentence or "공식" in sentence
@@ -168,9 +185,35 @@ class CopilotQualityEvaluator:
                 )
                 if conflicting:
                     supported = []
+            # 일부 확정 금액이 더 큰 합계/다른 금액의 확정을 승인하지 않도록 한다.
+            # 이 검사는 합산이나 새 거래 식별을 수행하지 않는다.
+            amounts = set(money_values(sentence))
+            if amounts:
+                supported = [r for r in supported if amounts <= set(money_values(r))]
             if not supported:
                 return QualityCheck("unsupported_certainty", False, "해당 주장에 대응하는 확정 Fact 또는 완료된 검증 근거가 없습니다.")
         return QualityCheck("unsupported_certainty", True, "탐지한 확정 표현에 대응하는 근거를 확인했습니다.")
+
+    @classmethod
+    def _statement_confirmation_supported(cls, sentence: str, records: tuple[str, ...]) -> bool:
+        if cls._STATEMENT_CONFIRMATION.fullmatch(sentence) is None:
+            return False
+        terms = cls._grounding_terms(sentence)
+        amounts = set(money_values(sentence))
+        claim_transfer = cls._transfer_value(sentence)
+        for record in records:
+            if re.search(r"REJECTED|SUPERSEDED|(?:AI|Copilot|상담 AI)\s*:", record, re.I):
+                continue
+            customer_statement = re.search(
+                r"^\s*(?:고객\s*[:：]|고객(?:이|은)\s|질문 답변\s*[:：])|"
+                r"(?:^|/\s*)고객 답변\s*[:：]|\bCUSTOMER_STATEMENT\b", record, re.I,
+            )
+            # 미확정 상태는 고객 출처가 아니며, 같은 송금 단어도 반대 값을 지지하지 않는다.
+            if claim_transfer is not None and cls._transfer_value(record) != claim_transfer:
+                continue
+            if customer_statement and terms & cls._grounding_terms(record) and amounts <= set(money_values(record)):
+                return True
+        return False
 
     @classmethod
     def _grounding_terms(cls, text: str) -> set[str]:

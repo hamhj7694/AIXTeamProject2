@@ -58,7 +58,7 @@
 - [x] fixture hash, dataset profile, v3.0 baseline 산출물 확인
 - [x] v3.0 corrected-Gold evaluator 실행
 - [x] v3.0 token measurement 결과 정리
-- [x] `compare_v30_v31.py` 통합 비교기 작성 및 dry-run
+- [x] `run_official_a_part_comparison.py` 공식 통합 비교기 작성 및 dry-run
 - [ ] v3.1 replay 실행 및 raw structured JSON 보관
 - [ ] canonical / high-fidelity Gold 매핑과 모든 지표 계산
 - [ ] case/category macro, correction, relation, lineage, projection 지표 계산
@@ -157,20 +157,20 @@
 현재 dry-run은 v3.1 artifact가 없으므로 `NOT RUN`을 반환한다.
 
 ```powershell
-python "MVP_v3/docs/now_md/A_part/A파트 테스트 및 파이프라인 구조 정리/compare_v30_v31.py"
+python "MVP_v3/docs/now_md/A_part/A파트 테스트 및 파이프라인 구조 정리/run_official_a_part_comparison.py"
 ```
 
 v3.1 raw output이 준비되면:
 
 ```powershell
-python "MVP_v3/docs/now_md/A_part/A파트 테스트 및 파이프라인 구조 정리/compare_v30_v31.py" `
+python "MVP_v3/docs/now_md/A_part/A파트 테스트 및 파이프라인 구조 정리/run_official_a_part_comparison.py" `
   --v31-output path/to/v3_1_structured_output.json
 ```
 
 생성 위치:
 
-- `run_comparison/comparison_metrics.json`
-- `run_comparison/comparison_report.md`
+- `run_comparison/official_comparison_metrics.json`
+- `run_comparison/official_comparison_report.md`
 
 ## 7. 최종 완료 조건
 
@@ -185,6 +185,17 @@ python "MVP_v3/docs/now_md/A_part/A파트 테스트 및 파이프라인 구조 �
 위 조건을 모두 충족하기 전까지 종합 보고서는 `DRAFT`로 유지한다.
 
 ## 9. 2026-09-17 Codex verification log
+
+## 10. Current handoff (2026-09-17)
+
+- Human review for FACT-01~03 is complete: all three are `APPROVED` in `fixtures/human_review/review_queue.json`.
+- No additional human action is required for the next replay attempt.
+- Codex owns the remaining work: provider connectivity, 30-case v3.1 raw replay, scoring, latency, and hard-gate calculation.
+- The single comparison entry point is `run_official_a_part_comparison.py`; the obsolete `compare_v30_v31.py` and its generated outputs were removed.
+- Current official dry-run is intentionally incomplete: v3.0 `READY`, v3.1 `NOT_RUN`, hard gates `PENDING_RAW_REPLAY`, projection Gold `MISSING_FROM_CHECKOUT`.
+- Do not publish a final v3.0/v3.1 score until the v3.1 raw artifact and versioned projection Gold are present.
+- The replay runner now captures provider response JSON in `raw_provider_outputs` and can emit a separate `v3.1-provider-raw.v1` file with `--raw-output`.
+- The resumed FACT-01 attempt was retried with the documented AI API server running (`/health` returned `ok`), but the upstream provider still returned `APIConnectionError: Connection error` with zero provider calls. The server was stopped after the attempt.
 
 - [x] `replay_benchmark/evaluator.py validate` 재실행: 30 cases / 270 atomic facts / 20 prompts / 10 E2E cases
 - [x] 통합 비교기 dry-run 재실행: v3.0 `READY`, v3.1 `NOT_RUN`, hard gates `NOT_RUN`
@@ -207,7 +218,28 @@ python "MVP_v3/docs/now_md/A_part/A파트 테스트 및 파이프라인 구조 �
 - [x] Review queue recorded in `fixtures/human_review/review_queue.json`
 - [x] Gold policy recorded in `fixtures/official_gold/FACT_CONTEXT_GOLD_README.md`
 - [x] Human review guide corrected so FACT-02/03 are not misrepresented as distinct scenarios
-- [ ] Human sign-off remains pending; AI-assisted review is not `HUMAN_CONFIRMED`
+- [x] Human decisions for FACT-01~03 recorded in `review_queue.json`
+- [ ] v3.1 raw replay safety results remain pending; AI-assisted review is not a substitute for replay evidence
+
+### Canonical reference availability
+
+- [x] Evidence-backed reference found: `fixtures/official_gold/FACT_CONTEXT_CANONICAL_REFERENCE_WITH_EVIDENCE_v1.json`
+- [x] Reference source SHA-256 matches `replay_benchmark/fact_context_cases.json`
+- [ ] v3.0 corrected and v3.1 high-fidelity projection files are present in this checkout
+- [ ] Recreate versioned projections from the canonical reference before full automated scoring
+
+### v3.1 raw replay readiness
+
+- [x] Privacy-safe runner created: `run_v31_live_replay.py`
+- [x] Runner loads the local `MVP_v3/.env` without logging the API key
+- [x] Runner removes source turns/evidence text/free-text summaries before writing output
+- [x] One-case smoke attempted with project `MVP_v3/.venv`
+- [ ] External provider smoke succeeded
+- [ ] 30-case raw structured output generated
+
+Current blocker: the project virtualenv reached the provider stage but returned
+`APIConnectionError: Connection error` before any provider usage was recorded.
+The generated smoke artifact is therefore `ERROR`, not a v3.1 score.
 
 ### 승인 반영
 
@@ -249,3 +281,20 @@ v3.0에서 추가로 다시 실행할 필요가 없는 항목:
 - `A_HIGH_FIDELITY_SEMANTIC_CONTEXT_DESIGN.md`: v3.1 설계·계약 기준
 
 기존 문서의 체크박스와 이 문서의 상태가 다르면, 실행 artifact가 있는지 확인한 뒤 이 마스터 체크리스트를 우선 갱신한다.
+## 11. Latest comparison handoff (2026-09-17)
+
+- [x] v3.1 benchmark_v1.0 30-case live replay completed: 30/30 successful.
+- [x] Raw provider responses saved: 210 responses / 210 LLM calls.
+- [x] Official human-readable report regenerated at `run_comparison/official_comparison_report.md`.
+- [x] Report includes v3.0 corrected-Gold baseline, v3.0 feature token baseline, v3.1 replay cost/latency, and bilingual semantic scorecard.
+- [ ] v3.1 semantic scores: Context Feature P/R/F1 (문맥 피처 정확도·재현율·F1), Critical Fact Recall/Precision (핵심 사실 재현율·정밀도), Status/Polarity (상태·극성), Relation Accuracy (관계 정확도), Evidence Grounding/Lineage (근거·계보), Correction Resolution (정정 반영), Section Projection (섹션 투영).
+- [ ] Safety hard gates: critical contradiction, hallucination, and privacy leak must be evaluated after projection Gold is versioned.
+- [ ] v3.0 latency under the same provider/model/environment remains the only required v3.0 re-measurement for a fair latency comparison.
+- Notion reference was unavailable to the connected integration (page returned 404); the repository's approved comparison contract remains the operative source until access is restored.
+## 동일 조건 비교 보정 (Apples-to-apples)
+
+- [ ] v3.0을 v3.1과 동일한 30-case·turn·model·provider·환경으로 재실행
+- [ ] v3.1을 v3.0 baseline과 동일한 7개 기능 단위로 추가 실행
+- [ ] 기능별 input/output/total tokens·calls·latency를 양 버전 같은 표로 정리
+- [ ] 동일 Gold로 피처 분해·재맥락화·상태/극성·관계·근거·정정·섹션 투영 점수 계산
+- [ ] 조건이 다른 기존 v3.0/v3.1 수치는 참고값으로 분리하고 개선율 계산에서 제외

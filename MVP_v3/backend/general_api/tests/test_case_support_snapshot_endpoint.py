@@ -5,10 +5,14 @@ import json
 import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock
+from datetime import datetime, timezone
 
 from fastapi.testclient import TestClient
 
 import general_api.app.main as general_main
+from ai_api.app.domains.case_support.case_snapshot_adapter import CaseSnapshotAiAdapter
+from contracts.public_api.case_context_v2 import PublicCaseFactV2
+from contracts.public_api.case_workflow import PublicQuestionCandidateResponse
 
 
 class CaseSupportSnapshotEndpointTest(unittest.TestCase):
@@ -17,7 +21,7 @@ class CaseSupportSnapshotEndpointTest(unittest.TestCase):
         self.original_repository = general_main.repository
         self.original_ai_client = general_main.service.ai_client
         self.repository = AsyncMock()
-        for name in ("facts", "gaps", "suggestions", "tasks", "decisions", "requests"):
+        for name in ("facts", "gaps", "suggestions", "tasks", "decisions", "observations", "requests"):
             setattr(self.repository, f"_context_v2_{name}", {})
         fixture = Path(__file__).resolve().parents[2] / "contracts" / "ai_internal" / "fixtures" / "diagnosis.high.v1.json"
         diagnosis = json.loads(fixture.read_text(encoding="utf-8"))["response"]
@@ -29,6 +33,7 @@ class CaseSupportSnapshotEndpointTest(unittest.TestCase):
         }
         self.repository.list_case_facts.return_value = []
         self.repository.list_customer_questions.return_value = []
+        self.repository.list_messages.return_value = []
         self.repository.list_verifications.return_value = []
         self.repository.list_actions.return_value = []
         self.repository.list.return_value = []
@@ -70,6 +75,72 @@ class CaseSupportSnapshotEndpointTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json())
         self.assertEqual(response.json()[0]["question_id"], "candidate-victim_transfer_status")
+
+    def test_uncertain_answer_keeps_unresolved_need_without_repeating_basic(self) -> None:
+        self.repository.list_customer_questions.return_value = [{
+            "question_id": "q-auth", "target_field": "authentication_information_exposure",
+            "question_text": "OTP를 제공했나요?", "status": "ANSWERED", "answer_text": "기억이 안 나요",
+        }]
+        general_main.service.ai_client.build_case_support_snapshot = AsyncMock(side_effect=lambda payload:
+            CaseSnapshotAiAdapter().build_presentation(payload).model_dump(mode="json"))
+        support = self.client.get("/api/cases/CASE-AI-1/ai/case-support")
+        self.assertEqual(support.status_code, 200)
+        self.assertIn("authentication_information_exposure", {item["target_field"] for item in support.json()["unresolved_items"]})
+        response = self.client.get("/api/cases/CASE-AI-1/customer-question-candidates")
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("authentication_information_exposure", {item["target_field"] for item in response.json()})
+        self.repository.queue_customer_questions.assert_not_awaited()
+        self.repository.dispatch_next_customer_question.assert_not_awaited()
+
+    def test_answered_field_alone_is_not_a_final_field_wide_filter(self) -> None:
+        question = {"question_id": "q", "target_field": "transfer_status", "question_text": "송금 여부?",
+                    "status": "ANSWERED", "answer_text": "기억이 안 나요"}
+        candidate = PublicQuestionCandidateResponse(question_id="new", target_field="transfer_status",
+            question_text="당시 거래 기록을 가지고 계신가요?", reason="기록 확인", priority="P1")
+        self.assertEqual(general_main.exclude_handled_question_candidates([candidate], [question]), [candidate])
+        self.assertEqual(general_main.exclude_handled_question_candidates(
+            [candidate.model_copy(update={"question_text": question["question_text"]})], [question]), [])
+
+    def test_proposed_v2_fact_and_chat_keywords_do_not_end_question_need(self) -> None:
+        now = datetime.now(timezone.utc)
+        self.repository._context_v2_facts[("CASE-AI-1", "f-auth")] = PublicCaseFactV2(
+            fact_id="f-auth", case_id="CASE-AI-1", semantic_key="exposure.authentication_information",
+            display_label="인증정보 제공", value={"status": "EXPOSED"}, display_value="인증정보 제공함",
+            source_kind="CUSTOMER_STATEMENT", status="PROPOSED", evidence_refs=[], version=1,
+            created_at=now, updated_at=now,
+        )
+        self.repository.list_messages.return_value = [{"actor_type": "CUSTOMER", "message_kind": "CHAT",
+            "content": "OTP를 제공했는지 기억이 안 나요. 송금했는지도 모르겠어요."}]
+        for unavailable in (False, True):
+            with self.subTest(unavailable=unavailable):
+                if unavailable:
+                    general_main.service.ai_client.build_case_support_snapshot = AsyncMock(
+                        side_effect=general_main.AiServiceError("AI 서버 연결 실패"))
+                response = self.client.get("/api/cases/CASE-AI-1/customer-question-candidates")
+                self.assertEqual(response.status_code, 200)
+                fields = {general_main.normalize_target_field(item["target_field"]) for item in response.json()}
+                self.assertIn("authentication_information_exposure", fields)
+                self.assertIn("transfer_status", fields)
+                self.repository.queue_customer_questions.assert_not_awaited()
+                self.repository.dispatch_next_customer_question.assert_not_awaited()
+
+    def test_pending_asked_skipped_clear_and_confirmed_still_suppress_basic(self) -> None:
+        for status, answer, facts in (
+            ("PENDING", None, []), ("ASKED", None, []), ("SKIPPED", None, []),
+            ("ANSWERED", "OTP는 알려주지 않았어요", []),
+            ("ANSWERED", "기억이 안 나요", [{"fact_id": "f-auth", "field": "authentication_information_exposure",
+                                           "value": "제공하지 않음", "status": "CONFIRMED"}]),
+        ):
+            with self.subTest(status=status, facts=facts):
+                self.repository.list_customer_questions.return_value = [{"question_id": "q-auth",
+                    "target_field": "authentication_information_exposure", "question_text": "OTP를 제공했나요?",
+                    "status": status, "answer_text": answer}]
+                self.repository.list_case_facts.return_value = facts
+                response = self.client.get("/api/cases/CASE-AI-1/customer-question-candidates")
+                self.assertEqual(response.status_code, 200)
+                self.assertNotIn("authentication_information_exposure", {item["target_field"] for item in response.json()})
+                self.repository.queue_customer_questions.assert_not_awaited()
+                self.repository.dispatch_next_customer_question.assert_not_awaited()
 
     def test_ai_candidate_is_filtered_when_target_field_was_already_answered(self) -> None:
         self.repository.list_customer_questions.return_value = [{

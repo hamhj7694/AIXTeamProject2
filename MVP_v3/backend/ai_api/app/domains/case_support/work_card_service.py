@@ -14,7 +14,8 @@ from .copilot_service import (
     CaseCopilotProviderError,
     CaseCopilotQuotaError,
 )
-from .question_policy import QuestionSource, normalize_question
+from .question_policy import QuestionSource, normalize_question, FOLLOW_UP_PURPOSES, validate_follow_up_question
+from .case_snapshot_adapter import CaseSnapshotAiAdapter
 
 WORK_CARD_SCHEMA = {
     "type": "object", "additionalProperties": False,
@@ -190,6 +191,18 @@ def _provider_fallback(card: CaseWorkCardOutput, mode: str, warning: str) -> Cas
 
 class CaseWorkCardService:
     async def generate(self, request: CaseWorkCardInput) -> CaseWorkCardOutput:
+        if request.card_type == "QUESTION_PLAN" and request.question_state is not None:
+            if request.question_state.case_id != request.case_id:
+                raise CaseCopilotProviderError("Question state Case mismatch")
+            parents = CaseSnapshotAiAdapter.follow_up_parents(request.question_state)
+            if parents:
+                cards = []
+                for target, parent in list(parents.items())[:3]:
+                    cards.append(await self._generate_card(request, target=target, parent=parent))
+                return cards[0].model_copy(update={"questions": [q for card in cards for q in card.questions]})
+        return await self._generate_card(request)
+
+    async def _generate_card(self, request: CaseWorkCardInput, *, target: str | None = None, parent=None) -> CaseWorkCardOutput:
         fallback = _build_context_card(request, "RULE_BASED_FALLBACK")
         if not os.getenv("OPENAI_API_KEY"):
             raise CaseCopilotAuthenticationError(
@@ -200,6 +213,12 @@ class CaseWorkCardService:
             response = await client.responses.create(
                 model=os.getenv("OPENAI_CASE_WORK_CARD_MODEL", "gpt-4o-mini"),
                 instructions=(
+                    "한국어 QUESTION_PLAN 검토 초안만 작성하세요. questions는 최대 1개이며 필요 없으면 빈 배열입니다. "
+                    "서버가 선택한 follow_up의 scope, state, parent와 purpose에 한정하여 불확실성을 줄일 다음 확인 행동을 질문하세요. "
+                    "기본 질문을 바꾸어 반복하지 마세요. target_field와 question_id는 서버가 정하므로 임의 placeholder를 사용하세요. "
+                    "송금·결제·앱 설치를 지시하지 마세요. 비밀번호·PIN·OTP 등의 실제 값을 요구하지 마세요. "
+                    "사실을 만들지 마세요. 담당자 검토 전에는 전송하지 않습니다. 짧은 reason과 필요시 options를 제공하세요."
+                ) if target else (
                     "은행 보이스피싱 대응 담당자가 사건 맥락을 10초 안에 이해하고 바로 행동할 수 있는 한국어 업무 카드 payload를 생성하세요. "
                     "모든 사용자 노출 문장은 현대 한국어와 한글 중심으로 작성하고, 한자·중국어·일본어 문자나 번역투 표현을 섞지 마세요. "
                     "문장은 짧고 구체적으로 쓰고, 상황 판단과 근거와 다음 행동을 분리하세요. 입력에 없는 사실은 만들지 말고 미확인으로 표시하세요. "
@@ -215,7 +234,14 @@ class CaseWorkCardService:
                     "context_sources에는 실제 입력에 포함된 통화·신고 맥락, 고객 응답·확인 정보, 은행 Case 상태, 기관 검증 현황만 표시하세요. "
                     "suggested_action_type은 PAYMENT_HOLD_REVIEW, ACCOUNT_REPORT_GUIDANCE, EVIDENCE_PRESERVATION, DEVICE_SECURITY_GUIDANCE, CUSTOMER_CALLBACK, OTHER 중 하나만 사용하세요."
                 ),
-                input=request.model_dump_json(),
+                input=json.dumps({
+                    "case_id": request.case_id, "card_type": "QUESTION_PLAN",
+                    "follow_up": {
+                        "canonical_scope": parent.target_field, "semantic_state": "UNCERTAIN",
+                        "parent_question": parent.question_text, "parent_answer": parent.answer_text,
+                        "purpose": FOLLOW_UP_PURPOSES[parent.target_field][0],
+                    },
+                }, ensure_ascii=False) if target else request.model_dump_json(),
                 max_output_tokens=int(os.getenv("OPENAI_CASE_WORK_CARD_MAX_OUTPUT_TOKENS", "700")),
                 text={"format": {"type": "json_schema", "name": "case_work_card_v1", "schema": WORK_CARD_SCHEMA, "strict": True}},
             )
@@ -242,11 +268,15 @@ class CaseWorkCardService:
         try:
             card = CaseWorkCardOutput.model_validate(_fill_empty_proposal(payload, fallback))
             if request.card_type == "QUESTION_PLAN":
+                if target and len(card.questions) > 1:
+                    raise ValueError("one follow-up per selected parent")
                 normalized_questions = []
                 for question in card.questions[:3]:
-                    normalized = normalize_question(
-                        question.model_dump(mode="python"), source=QuestionSource.LLM,
-                    )
+                    if target:
+                        question = question.model_copy(update={"question_id": target, "target_field": target})
+                        normalized = validate_follow_up_question(question.model_dump(mode="python"), parent)
+                    else:
+                        normalized = normalize_question(question.model_dump(mode="python"), source=QuestionSource.LLM)
                     normalized_questions.append(question.model_copy(update={
                         "question_text": normalized.question_text,
                         "reason": normalized.reason,

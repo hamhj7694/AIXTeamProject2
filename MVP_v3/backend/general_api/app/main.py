@@ -30,6 +30,9 @@ from contracts.diagnosis import AnalyzeTextRequest
 from contracts.ai_internal.context_fact_extraction import ContextFactExtractionInput, ContextFactExtractionMessage, ExistingContextFact
 from contracts.ai_internal.mvp_workflow import TargetField
 from ai_api.app.domains.case_support.answer_service import CustomerAnswerStructuringService
+from ai_api.app.domains.case_support.case_snapshot_adapter import CaseSnapshotAiAdapter
+from ai_api.app.domains.case_support.question_policy import validate_follow_up_question
+from contracts.question_target import canonical_question_scope, is_follow_up_target
 from contracts.public_api.customer_progress import CustomerProgressItem, ProgressStep, UpdateCustomerProgress
 from .domains.cases.customer_progress import PREFIX as PROGRESS_PREFIX, ProgressConflict, progress_items as build_customer_progress, progress_ai_context, actions_for_ai
 from request_trace import install_request_trace
@@ -557,6 +560,12 @@ async def process_message_context_extraction(case_id: str, message_id: str) -> N
                 "evidence_refs": [{"type": "MESSAGE", "id": message_id}], "visibility": "BANK_INTERNAL",
             }, message.get("actor_user_id") or "context-extractor",
                 source_kind="CUSTOMER_STATEMENT" if message["actor_type"] == "CUSTOMER" else "STAFF_OBSERVATION")
+        for observation in getattr(output, "unmapped_observations", []):
+            await store.create_unmapped_observation(
+                case_id,
+                observation.model_dump(mode="json"),
+                message.get("actor_user_id") or "context-extractor",
+            )
         await repository.complete_message_extraction(message_id, output.model_version, output.prompt_version)
     except Exception as exc:
         logger.exception("Context fact extraction failed for message %s", message_id)
@@ -776,7 +785,7 @@ async def seed_initial_context_facts(case_id: str) -> None:
 
 def build_customer_question_candidates(case: dict, queued: list[dict]) -> list[PublicQuestionCandidateResponse]:
     """Deterministic MVP candidates. AI may replace this source, not the queue contract."""
-    already_handled = {item["target_field"] for item in queued if item.get("status") in {"PENDING", "ASKED", "ANSWERED"}}
+    already_handled = {item["target_field"] for item in queued if item.get("status") in {"PENDING", "ASKED", "SKIPPED"}}
     fields = [
         ("victim_transfer_status", "현재 송금하거나 이체한 금액이 있나요?", "피해 여부와 피해 금액을 먼저 확인해야 합니다.", "안전을 위해 피해 발생 여부를 가장 먼저 확인합니다.", "P0", ["없음", "있음", "잘 모르겠어요"]),
         ("remote_control_app", "휴대폰에 원격 제어 또는 화면 공유 앱을 설치하라는 안내를 받으셨나요?", "추가 피해 가능성을 확인해야 합니다.", "휴대폰 제어 가능성을 확인해 추가 피해를 막기 위한 질문입니다.", "P0", ["설치함", "설치하지 않음", "잘 모르겠어요"]),
@@ -872,6 +881,7 @@ def filter_contextual_questions(
     baseline: list[PublicQuestionCandidateResponse],
     persisted: list[dict],
     drafts: list[PublicQuestionCandidateResponse],
+    follow_up_parents: dict | None = None,
 ) -> list:
     """Keep only safe, novel QUESTION_PLAN drafts and assign non-canonical fields."""
     baseline_fields = BASELINE_QUESTION_FIELDS | {normalize_target_field(item.target_field) for item in baseline}
@@ -892,8 +902,30 @@ def filter_contextual_questions(
     for question in generated:
         text = question.question_text.strip()
         reason = question.reason.strip()
-        source_field = normalize_target_field(question.target_field)
+        try:
+            source_field = normalize_target_field(question.target_field)
+        except ValueError:
+            continue
         if not text or not reason or _unsafe_contextual_question(text):
+            continue
+        if is_follow_up_target(source_field):
+            parent = (follow_up_parents or {}).get(source_field)
+            if parent is None or source_field in covered_fields:
+                continue
+            try:
+                normalized = validate_follow_up_question(question.model_dump(mode="python"), parent)
+            except ValueError:
+                continue
+            if any(_same_question(text, item.question_text) for item in [*covered, *accepted]):
+                continue
+            if any(canonical_question_scope(item.target_field) == canonical_question_scope(source_field)
+                   for item in [*drafts, *accepted]):
+                continue
+            accepted.append(question.model_copy(update={
+                **normalized.model_dump(exclude={"source", "allow_multi_select"}), "question_id": source_field,
+            }))
+            if len(accepted) == 3:
+                break
             continue
         if source_field in baseline_fields or source_field in covered_fields:
             continue
@@ -915,11 +947,12 @@ def exclude_handled_question_candidates(
     candidates: list[PublicQuestionCandidateResponse], questions: list[dict]
 ) -> list[PublicQuestionCandidateResponse]:
     handled = [item for item in questions if item.get("status") in {"PENDING", "ASKED", "ANSWERED"}]
-    handled_fields = {normalize_target_field(str(item.get("target_field", ""))) for item in handled}
+    active_fields = {normalize_target_field(str(item.get("target_field", ""))) for item in handled
+                     if item.get("status") in {"PENDING", "ASKED"}}
     handled_texts = {normalize_question_text(str(item.get("question_text", ""))) for item in handled}
     return [
         candidate for candidate in candidates
-        if normalize_target_field(candidate.target_field) not in handled_fields
+        if normalize_target_field(candidate.target_field) not in active_fields
         and normalize_question_text(candidate.question_text) not in handled_texts
         and not any(similar_question(candidate.question_text, str(q.get("question_text", ""))) for q in handled
                     if not q.get("target_field") or normalize_target_field(q["target_field"]) == normalize_target_field(candidate.target_field))
@@ -1084,28 +1117,24 @@ async def list_customer_question_candidates(case_id: str) -> list[PublicQuestion
     case = await repository.get(case_id)
     if case is None:
         raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."})
-    queued, messages = await asyncio.gather(repository.list_customer_questions(case_id), repository.list_messages(case_id))
-    # Some compatibility repositories may not expose message history while upgrading.
-    messages = messages if isinstance(messages, list) else []
+    queued = await repository.list_customer_questions(case_id)
     snapshot = await get_case_support_snapshot(case_id)
     # AI 장애 시에도 기존 deterministic 후보로 고객 확인 흐름을 멈추지 않는다.
     fallback_candidates = build_customer_question_candidates(case, queued)
     candidates = list(snapshot.recommended_questions) if snapshot.available else []
     represented = {normalize_target_field(item.target_field) for item in candidates}
     candidates.extend(item for item in fallback_candidates if normalize_target_field(item.target_field) not in represented)
-    # AI 결과를 그대로 신뢰하지 않는다. 질문 이력 기반 최종 중복 방지는 General API가 담당한다.
+    # 최신 typed 상태를 B의 공통 정책에 연결한다. General에서 충분성을 재판단하지 않는다.
     facts = await repository.list_case_facts(case_id)
     resources = await case_context_v2_repository().list_resources(case_id)
     facts, _ = merge_support_records(resources, facts, [])
-    confirmed = set(build_question_recommendation_context(facts, queued, case)["confirmed_fields"])
-    review_first = {
-        normalize_target_field(SEMANTIC_FIELDS[item.semantic_key])
-        for item in resources.facts
-        if item.status == "PROPOSED" and item.source_kind in {"CUSTOMER_STATEMENT", "STAFF_OBSERVATION"} and item.semantic_key in SEMANTIC_FIELDS
-    }
-    already_stated = question_fields_answered_by_messages(messages)
+    adapter = CaseSnapshotAiAdapter()
+    eligibility = adapter.question_eligibilities(adapter.adapt(
+        _case_support_ai_input(case_id, case, facts, queued, [], [])
+    ))
     return [candidate for candidate in exclude_handled_question_candidates(candidates, queued)
-            if normalize_target_field(candidate.target_field) not in confirmed | review_first | already_stated]
+            if (policy := eligibility.get(normalize_target_field(candidate.target_field))) is None
+            or policy.allow_basic_question]
 
 
 @app.get("/api/cases/{case_id}/customer-questions", response_model=list[PublicCustomerQuestionResponse | PublicCustomerQuestionView])
@@ -1121,11 +1150,24 @@ async def list_customer_questions(case_id: str, view: Literal["bank", "customer"
 async def queue_customer_questions(case_id: str, request: PublicQueueCustomerQuestionsRequest) -> list[PublicCustomerQuestionResponse]:
     await require_case(case_id)
     try:
+        question_payloads = [item.model_dump() for item in request.questions]
+        if any(is_follow_up_target(item.target_field) for item in request.questions):
+            state = await _live_question_state(case_id, await repository.get(case_id))
+            parents = CaseSnapshotAiAdapter.follow_up_parents(state)
+            for index, item in enumerate(request.questions):
+                if is_follow_up_target(item.target_field):
+                    parent = parents.get(item.target_field)
+                    if parent is None:
+                        raise HTTPException(status_code=409, detail={"code": "FOLLOW_UP_NOT_ALLOWED"})
+                    normalized = validate_follow_up_question(item.model_dump(mode="python"), parent)
+                    question_payloads[index] = normalized.model_dump(exclude={"source"})
         items = await repository.queue_customer_questions(
-            case_id, [item.model_dump() for item in request.questions], request.requested_by
+            case_id, question_payloads, request.requested_by
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."}) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail={"code": "INVALID_FOLLOW_UP", "message": str(exc)}) from exc
     await dispatch_next_customer_question_message(case_id)
     return [to_public_customer_question(item) for item in items]
 
@@ -1186,7 +1228,7 @@ def _structured_answer_fact_payload(question: dict, answer_text: str, answer_mes
     if not answer_message_id:
         return None
     try:
-        target_field = TargetField(normalize_target_field(str(question["target_field"])))
+        target_field = TargetField(canonical_question_scope(normalize_target_field(str(question["target_field"]))))
     except (KeyError, ValueError):
         # Contextual questions and unsupported fields retain the existing raw-answer path.
         return None
@@ -1621,11 +1663,24 @@ def build_mvp_copilot_reply(case: dict, verifications: list[dict], prompt: str) 
     )
 
 
+async def _live_question_state(case_id: str, case: dict):
+    facts = await repository.list_case_facts(case_id)
+    resources = await case_context_v2_repository().list_resources(case_id)
+    facts, _ = merge_support_records(resources, facts, [])
+    questions = await repository.list_customer_questions(case_id)
+    return CaseSnapshotAiAdapter().adapt(_case_support_ai_input(case_id, case, facts, questions, [], []))
+
+
 @app.post("/api/cases/{case_id}/ai/work-cards", response_model=CaseWorkCardOutput)
 async def generate_case_work_card(case_id: str, request: PublicWorkCardGenerateRequest) -> CaseWorkCardOutput:
     case = await repository.get(case_id)
     if case is None:
         raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."})
+    try:
+        for draft in request.question_drafts:
+            normalize_target_field(draft.target_field)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail={"code": "INVALID_FOLLOW_UP", "message": str(exc)}) from exc
     facts = await repository.list_case_facts(case_id)
     verifications = await repository.list_verifications(case_id)
     actions = await repository.list_actions(case_id)
@@ -1639,6 +1694,7 @@ async def generate_case_work_card(case_id: str, request: PublicWorkCardGenerateR
         case_id, messages=messages, questions=previous_questions, facts=facts, verifications=verifications, staff=staff,
     ))
     try:
+        live_state = await _live_question_state(case_id, case) if request.card_type == "QUESTION_PLAN" else None
         known_facts = [
             f"{item.get('field')}: {item.get('value')} ({item.get('status')})" for item in facts[:30]
         ]
@@ -1685,11 +1741,15 @@ async def generate_case_work_card(case_id: str, request: PublicWorkCardGenerateR
             "unresolved_items": [f"{item.priority}: {item.description}" for item in support.unresolved_items[:20]],
             "pending_verifications": [f"{item.get('target')}: {item.get('claim')}" for item in verifications if item.get("status") != "COMPLETED"][:20],
             "question_candidates": [item.model_dump(mode="python") for item in candidates[:10]],
+            "question_state": live_state.model_dump(mode="json") if live_state else None,
         })
         card = CaseWorkCardOutput.model_validate(payload)
         if request.card_type == "QUESTION_PLAN":
+            # Provider 대기 중 상태가 바뀌었으면 최신 B policy로 초안을 다시 걸러낸다.
+            live_state = await _live_question_state(case_id, await repository.get(case_id))
             card.questions = filter_contextual_questions(
-                card.questions, candidates, previous_questions, request.question_drafts
+                card.questions, candidates, [q.model_dump() for q in live_state.questions], request.question_drafts,
+                CaseSnapshotAiAdapter.follow_up_parents(live_state),
             )
         return card
     except AiServiceQuotaError as exc:

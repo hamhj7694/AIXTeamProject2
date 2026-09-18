@@ -92,12 +92,14 @@ export const FactVerificationSection: React.FC<SharedProps & OpenStateProps & { 
   const progress = verificationItems.filter((item) => item.status === 'IN_PROGRESS');
   const done = verificationItems.filter((item) => item.status === 'COMPLETED');
   const stopped = verificationItems.filter((item) => !['PENDING', 'IN_PROGRESS', 'COMPLETED'].includes(item.status));
+  const unmapped = section.groups.unmapped_observations ?? [];
   const openCard = (item: ContextPanelItemV3) => <VerificationCard key={item.item_id} item={item} busy={busy} onOpen={() => onOpenVerification(item.item_id)}/>;
   return <SectionShell id="FACT_VERIFICATION" title="사실·확인 현황" count={total(section)} attention={needs.length + pending.length + stopped.length} open={open} onOpenChange={onOpenChange} action={<button type="button" className="context-section-add" onClick={onCreateVerification}><Plus size={13}/>확인 요청</button>}>
     <section className="context-verification-lane"><h4><AlertCircle size={13}/>확인 필요 <b>{needs.length + pending.length}</b></h4>{needs.length > 0 && <div className="context-fact-list">{needs.map((item) => <FactRow key={item.item_id} item={item} busy={busy} onConfirm={() => onReview(item, 'CONFIRM')} onReject={() => onReview(item, 'REJECT')} onCorrect={() => onCorrect(item)} onUnconfirm={() => onReview(item, 'UNCONFIRM')} onInvalidate={() => onReview(item, 'INVALIDATE')}/>)}</div>}{pending.map(openCard)}{needs.length + pending.length === 0 && <p className="context-empty">새로 확인할 항목이 없습니다.</p>}</section>
     <section className="context-verification-lane"><h4><RotateCcw size={13}/>확인 중 <b>{progress.length}</b></h4>{progress.map(openCard)}{progress.length === 0 && <p className="context-empty">진행 중인 기관 확인이 없습니다.</p>}</section>
     <section className="context-verification-lane"><h4><CheckCircle2 size={13}/>확인 완료 <b>{done.length}</b></h4>{done.map(openCard)}{done.length === 0 && <p className="context-empty">완료된 기관 확인이 없습니다.</p>}</section>
     {stopped.length > 0 && <section className="context-verification-lane"><h4><AlertCircle size={13}/>확인 실패·중단 <b>{stopped.length}</b></h4>{stopped.map(openCard)}</section>}
+    {unmapped.length > 0 && <section className="context-verification-lane"><h4><AlertCircle size={13}/>분류 대기 · 기타 관찰 <b>{unmapped.length}</b></h4><div className="context-fact-list">{unmapped.map((item) => <article className="context-domain-card verification-card is-unmapped" key={item.item_id}><header><div><strong>{item.label}</strong><small>{item.source_kind}</small></div><StatusBadge status={item.status}/></header><p>{item.display_value}</p><small>근거 턴: {String(item.value?.source_turn_id ?? '-')}</small></article>)}</div></section>}
     <HistoryHint kind="fact" items={section.groups.archived ?? []} busy={busy} onRestore={(item) => onReview(item, 'RESTORE')} onDelete={onDeleteExcluded}/>
   </SectionShell>;
 };
