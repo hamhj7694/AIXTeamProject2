@@ -21,6 +21,123 @@ def evaluation(mode: str, response: str, *, prompt: str = "송금 피해 여부�
 
 
 class CopilotQualityEvaluatorTest(unittest.TestCase):
+    def test_statement_confirmation_rejects_opposite_transfer_value(self) -> None:
+        for record, response in (
+            ("고객: 송금하지 않았어요.", "고객이 송금했다고 진술한 점이 확인되었습니다."),
+            ("고객: 송금했어요.", "고객이 송금하지 않았다고 진술한 점이 확인되었습니다."),
+        ):
+            with self.subTest(record=record):
+                self.assertIn("unsupported_certainty", evaluation(
+                    "BANK_INTERNAL", response, context=[record],
+                ).failed_criteria)
+
+    def test_statement_confirmation_requires_source_not_proposed_status(self) -> None:
+        response = "고객이 송금했다고 진술한 점이 확인되었습니다."
+        for record in (
+            "송금 여부: 송금함 (PROPOSED)",
+            "송금 여부: 송금함 status=PROPOSED",
+            "송금 여부: 송금함 (확인 전 진술)",
+        ):
+            with self.subTest(record=record):
+                self.assertIn("unsupported_certainty", evaluation(
+                    "BANK_INTERNAL", response, context=[record],
+                ).failed_criteria)
+
+    def test_matching_transfer_statement_preserves_explicit_customer_sources(self) -> None:
+        response = "고객이 1,000만원을 송금했다고 진술한 점이 확인되었습니다."
+        for record in (
+            "고객: 1,000만원을 송금했어요.",
+            "고객이 1,000만원을 송금했어요.",
+            "고객은 1,000만원을 송금했어요.",
+            "질문 답변: 1,000만원을 송금했어요.",
+            "질문: 송금 여부 / 고객 답변: 1,000만원을 송금했어요.",
+            "송금 여부: 1,000만원 송금함 (PROPOSED) source_kind=CUSTOMER_STATEMENT",
+        ):
+            with self.subTest(record=record):
+                self.assertNotIn("unsupported_certainty", evaluation(
+                    "BANK_INTERNAL", response, context=[record],
+                ).failed_criteria)
+
+    def test_negative_confirmation_does_not_hide_later_assertion(self) -> None:
+        for response in (
+            "피해가 확인된 상태는 아닙니다, 송금 사실이 확인됨",
+            "피해가 확인된 상태는 아니며 송금 사실이 확인됨",
+        ):
+            with self.subTest(response=response):
+                self.assertIn("unsupported_certainty", evaluation(
+                    "BANK_INTERNAL", response,
+                ).failed_criteria)
+
+    def test_separate_confirmed_claim_after_negation_keeps_its_support(self) -> None:
+        result = evaluation(
+            "BANK_INTERNAL", "피해가 확인된 상태는 아닙니다, 1,000만원 송금 사실이 확인됨",
+            context=["송금 금액: 1,000만원 (CONFIRMED)"],
+        )
+        self.assertNotIn("unsupported_certainty", result.failed_criteria)
+
+    def test_customer_statements_do_not_confirm_actual_loss(self) -> None:
+        context = ["고객: 300만원 보냈어요.", "고객: 700만원도 보냈어요."]
+        for response in (
+            "총 1,000만원 피해가 확인된 상태입니다.",
+            "총 1,000만원의 사기 피해가 확인된 상태입니다.",
+            "피해가 확인됨",
+            "송금 사실이 확인된 상태",
+            "피해 사실이 확인된 상태입니다.",
+        ):
+            with self.subTest(response=response):
+                result = evaluation("BANK_INTERNAL", response, context=context)
+                self.assertIn("unsupported_certainty", result.failed_criteria)
+
+    def test_customer_statement_wording_does_not_claim_verification(self) -> None:
+        result = evaluation(
+            "BANK_INTERNAL", "고객은 총 1,000만원을 보냈다고 진술했습니다.",
+            context=["고객: 300만원 보냈어요.", "고객: 700만원도 보냈어요."],
+        )
+        self.assertNotIn("unsupported_certainty", result.failed_criteria)
+
+    def test_negative_confirmation_state_is_not_an_assertion(self) -> None:
+        result = evaluation("BANK_INTERNAL", "피해가 확인된 상태는 아닙니다.")
+        self.assertNotIn("unsupported_certainty", result.failed_criteria)
+
+    def test_confirmation_of_statement_is_distinct_from_transaction(self) -> None:
+        result = evaluation(
+            "BANK_INTERNAL", "고객이 1,000만원을 보냈다고 진술한 점이 확인되었습니다.",
+            context=["고객: 1,000만원을 보냈어요."],
+        )
+        self.assertNotIn("unsupported_certainty", result.failed_criteria)
+
+    def test_statement_confirmation_requires_corresponding_customer_record(self) -> None:
+        response = "고객이 1,000만원을 보냈다고 진술한 점이 확인되었습니다."
+        for context in ([], ["고객: 300만원 보냈어요."], ["Copilot: 1,000만원을 송금함"]):
+            with self.subTest(context=context):
+                self.assertIn("unsupported_certainty", evaluation(
+                    "BANK_INTERNAL", response, context=context,
+                ).failed_criteria)
+
+    def test_statement_attribution_does_not_hide_actual_loss_confirmation(self) -> None:
+        for response in (
+            "고객이 1,000만원을 보냈다고 진술한 점이 확인되었습니다. 피해가 확인된 상태입니다.",
+            "고객이 1,000만원을 보냈다고 진술한 점이 확인되었습니다, 피해가 확인됨",
+        ):
+            with self.subTest(response=response):
+                self.assertIn("unsupported_certainty", evaluation(
+                    "BANK_INTERNAL", response, context=["고객: 1,000만원 보냈어요."],
+                ).failed_criteria)
+
+    def test_confirmed_partial_amount_does_not_confirm_larger_total(self) -> None:
+        result = evaluation(
+            "BANK_INTERNAL", "1,000만원 송금 사실이 확인된 상태입니다.",
+            context=["송금 금액: 300만원 (CONFIRMED)", "송금 금액: 700만원 (PROPOSED)"],
+        )
+        self.assertIn("unsupported_certainty", result.failed_criteria)
+
+    def test_new_confirmation_form_preserves_existing_fact_support(self) -> None:
+        result = evaluation(
+            "BANK_INTERNAL", "300만원 송금 사실이 확인된 상태입니다.",
+            context=["송금 금액: 300만원 (CONFIRMED)"],
+        )
+        self.assertNotIn("unsupported_certainty", result.failed_criteria)
+
     def test_safe_customer_response_passes(self) -> None:
         result = evaluation(
             "CUSTOMER_SUPPORT",
