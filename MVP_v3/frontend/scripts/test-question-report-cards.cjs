@@ -27,7 +27,7 @@ assert.match(conversation, /data-question-status/);
 assert.match(conversation, /question\.status === 'PENDING'/);
 assert.match(conversation, /현재 고객에게 표시 중/);
 assert.match(conversation, /고객 노출 전/);
-assert.match(conversation, /<EntryCard entry=\{entry\}/);
+assert.match(conversation, /<EntryCard\s+entry=\{entry\}/);
 assert.match(conversation, /buildConversationEntries\(bundle, view, channel\)/);
 assert.doesNotMatch(conversation, /보고서 내용을 표시할 수 없습니다/);
 assert.match(timeline, /kind: 'FINAL_REPORT'/);
