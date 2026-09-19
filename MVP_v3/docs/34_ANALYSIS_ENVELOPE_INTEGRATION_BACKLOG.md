@@ -3,6 +3,7 @@
 작성일: 2026-09-19
 선행 계약: `33_ANALYSIS_ENVELOPE_FREEZE_CONTRACT.md`
 제품 범위: 실제 통신사·온디바이스·ASAP/FDS 연동이 아닌, 해당 경계를 모사하는 CSR 데모
+통합 기준 브랜치: `integration/dev2-with-ham3-frontend`
 
 ## 1. 범위 결정
 
@@ -40,7 +41,7 @@
 
 ### P0-1. GitHub Required Check 활성화
 
-저장소에는 `.github/workflows/analysis-envelope-guard.yml`이 있다. 원격 GitHub 설정에서 다음 job을 통합 브랜치의 필수 검사로 지정한다.
+저장소에는 `.github/workflows/analysis-envelope-guard.yml`이 있다. 현재 최신 작업을 모으는 `integration/dev2-with-ham3-frontend` 브랜치의 필수 검사로 다음 job을 지정한다.
 
 - `Envelope contract and Case regression`
 - `Frontend typecheck and build`
@@ -48,12 +49,12 @@
 
 추가 설정:
 
-- `integration/dev2-with-ham3-frontend`와 최종 병합 브랜치에 Pull Request 요구
+- `integration/dev2-with-ham3-frontend`에 Pull Request 요구
 - 필수 검사가 통과하기 전 병합 금지
 - force push와 branch deletion 제한
 - 가능하면 1명 이상의 리뷰 승인 요구
 
-워크플로 파일만 추가해도 원격 Branch Protection은 자동 활성화되지 않는다. 저장소 관리자 권한으로 GitHub 설정을 한 번 적용해야 한다.
+워크플로 파일만 추가해도 원격 Branch Protection은 자동 활성화되지 않는다. 저장소 관리자 권한으로 `integration/dev2-with-ham3-frontend`에 GitHub 설정을 한 번 적용해야 한다.
 
 ### P0-2. 데모 E2E 확인
 
@@ -100,8 +101,8 @@
 ## 6. 다음 작업 순서
 
 ```text
-1. 현재 변경을 commit/push하여 GitHub Actions 최초 실행
-2. 원격 Branch Protection에서 3개 check를 필수로 지정
+1. 팀원 작업 브랜치에서 `integration/dev2-with-ham3-frontend`로 PR 생성
+2. 이 브랜치의 Branch Protection에서 3개 check를 필수로 지정
 3. 데모 브라우저 E2E와 원문 비저장 확인
 4. 역할·시간·구체 명칭 fixture 확대
 5. GPT 품질·비용 측정과 문장 개선

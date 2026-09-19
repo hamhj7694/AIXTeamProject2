@@ -17,6 +17,7 @@ CSR(Case Share Room)은 보이스피싱 의심 사건에서 고객, 은행 직�
 - 직원 편집과 확정 사실을 AI 자동 갱신으로 덮어쓰지 않는다.
 - Frontend는 General API만 호출하며 AI API와 DB를 직접 사용하지 않는다.
 - 이번 데모에서는 Vector DB와 embedding 색인을 사용하지 않는다. MySQL 구조화 데이터·Case Snapshot JSON·Case-local TF-IDF 검색을 LLM 입력 기반으로 사용한다.
+- 현재 최신 작업을 모으는 원격 통합 브랜치는 `integration/dev2-with-ham3-frontend`다. 팀원 작업은 이 브랜치를 PR base로 삼고, `dev2`·`main` 병합은 이후 릴리스 판단 시 별도로 진행한다.
 
 ## 현재 실행 구조
 
