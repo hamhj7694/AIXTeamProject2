@@ -7,7 +7,9 @@
 | [`CURRENT_STATUS.md`](CURRENT_STATUS.md) | 현재 구현, 미완료 범위, 우선순위, 최신 검증 |
 | [`04_PRIVACY_SAFE_SIGNAL_FLOW.md`](04_PRIVACY_SAFE_SIGNAL_FLOW.md) | 원문 비저장 분석과 privacy-safe 저장 경계 |
 | [`07_CUSTOMER_PROGRESS_AND_AI.md`](07_CUSTOMER_PROGRESS_AND_AI.md) | 고객 공개 진행 상태, 확인 요청, AI 공개 범위 |
-| [`09_CASE_CONTEXT_DATA_CONTRACT.md`](09_CASE_CONTEXT_DATA_CONTRACT.md) | Fact·Gap·Suggestion·Task·Decision 데이터 계약 |
+| [`09_CASE_CONTEXT_DATA_CONTRACT.md`](09_CASE_CONTEXT_DATA_CONTRACT.md) | Fact·Gap·Suggestion·Task·Decision 및 비벡터 Case-local 검색 계약 |
 | [`10_FINAL_CASE_REPORT_CONTRACT.md`](10_FINAL_CASE_REPORT_CONTRACT.md) | 사건 종결 AI 보고서 계약 |
+| [`33_ANALYSIS_ENVELOPE_FREEZE_CONTRACT.md`](33_ANALYSIS_ENVELOPE_FREEZE_CONTRACT.md) | 원문 비접근형 Analysis Envelope와 새 통화 분석 병합 기준선 |
+| [`34_ANALYSIS_ENVELOPE_INTEGRATION_BACKLOG.md`](34_ANALYSIS_ENVELOPE_INTEGRATION_BACKLOG.md) | 실제 외부 연동을 제외한 Envelope 데모 완성·GitHub 보호 후속 순서 |
 
 구현 전 계획, 회의록, 일회성 감사, 마감 체크리스트, 구현 완료 보고서와 프롬프트 요청서는 현재 상태에 필요한 결론만 흡수한 뒤 유지하지 않는다. 과거 이력이 필요하면 Git history를 사용한다.

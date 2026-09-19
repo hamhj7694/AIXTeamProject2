@@ -2,7 +2,7 @@
 
 상태: **Context Panel V3 저장소·General API·은행 화면 연결 완료 / 전체 legacy backfill과 실제 LLM 종합 projection은 후속**
 작성일: 2026-09-05
-적용 대상: 은행 화면의 사건 맥락, AI 질문·업무 추천, 직원 업무 처리, 향후 LLM/RAG 입력·출력
+적용 대상: 은행 화면의 사건 맥락, AI 질문·업무 추천, 직원 업무 처리, LLM/Case-local 검색 입력·출력
 
 승인 상태: **제품 책임자 승인 완료·단계적 구현 허용 (2026-09-05)**
 
@@ -51,7 +51,7 @@
 8. 모든 수정 명령은 `expected_version`과 행위자 정보를 사용하고 충돌은 HTTP 409로 처리한다.
 9. 생성 명령은 `client_request_id`로 멱등성을 보장한다.
 10. 내부 코드와 사용자 표시 문구를 분리한다. API의 `semantic_key`나 enum 값은 UI에 직접 출력하지 않는다.
-11. 원문 통화 내용은 저장하거나 RAG 색인에 넣지 않는다. 허용된 구조화 피처와 참조 ID만 사용한다.
+11. 원문 통화 내용은 저장하거나 검색 캐시에 넣지 않는다. 허용된 구조화 피처와 참조 ID만 사용한다.
 12. AI 결과는 적용 명령이 아니라 제안 결과다. General API가 정책·권한·중복·revision을 검증한 뒤 저장한다.
 
 ## 4. 핵심 엔터티
@@ -287,7 +287,7 @@ EvidenceRef
 ```
 
 - 근거 원문을 복제하지 않고 기존 저장 레코드의 ID를 참조한다.
-- RAG 검색 결과도 출처 ID와 revision을 통해 추적한다.
+- Case-local 검색 결과도 출처 ID와 revision을 통해 추적한다.
 - 접근 권한이 없는 근거는 고객용 projection에 포함하지 않는다.
 
 ## 5. 상태 전이
@@ -426,23 +426,22 @@ General API는 AI 출력 적용 전 다음을 검사한다.
 5. 사용자가 볼 수 없는 내부 코드와 데이터가 포함됐는지
 6. 필드 길이, 허용 enum, 근거 참조 권한을 만족하는지
 
-## 8. RAG 중복 방지 계약
+## 8. Case-local 검색 중복 방지 계약
 
-RAG는 구조화 검사를 대체하지 않고 두 번째 방어 계층으로만 사용한다.
+이번 데모는 Vector DB와 embedding을 사용하지 않는다. Case-local TF-IDF/동의어 검색은 구조화 검사를 대체하지 않고 두 번째 방어 계층으로만 사용한다.
 
 검사 순서:
 
 1. 같은 `semantic_key`의 확정 사실 확인
 2. 같은 필드의 대기·답변 완료 질문 확인
 3. 같은 `dedupe_key`의 활성·제외 제안 확인
-4. 같은 Case와 허용 공개 범위 안에서 의미 유사도 검색
+4. 같은 Case와 허용 공개 범위 안에서 TF-IDF 어휘 유사도 검색
 5. 검색 결과를 근거로 사용하되 자동 상태 변경은 금지
 
 색인 레코드:
 
 ```text
-CaseKnowledgeIndexRecord
-  index_id: string
+CaseSearchRecord
   case_id: string
   entity_type: FACT | QUESTION | ANSWER | GAP | VERIFICATION | TASK_RESULT
   entity_id: string
@@ -452,11 +451,11 @@ CaseKnowledgeIndexRecord
   visibility: BANK_INTERNAL | CUSTOMER_SHARED
   source_revision: integer
   content_hash: string
-  embedding_model_version: string
-  indexed_at: datetime
 ```
 
-- 삭제·대체·비공개 변경 시 해당 색인을 무효화한다.
+- 검색 레코드는 MySQL 원본과 Case Snapshot에서 요청 시 구성하며 별도 Vector DB에 영구 저장하지 않는다.
+- 프로세스 메모리의 TF-IDF 캐시는 `case_id`·공개 범위·콘텐츠 fingerprint가 달라지면 즉시 다시 구성한다.
+- 삭제·대체·비공개 변경 시 이전 캐시를 검색 결과로 재사용하지 않는다.
 - 유사도가 높아도 상태와 출처를 함께 확인한다.
 - 임계값만으로 질문을 자동 차단하지 않고 구조화 상태를 우선한다.
 
@@ -535,7 +534,7 @@ POST   /api/cases/{case_id}/context-v2/decisions
 4. General API의 새 리소스별 command를 추가하고 계약 테스트를 만든다.
 5. Frontend를 `사실 현황 / AI 제안 / 담당자 업무 / 결정 이력` 구조로 전환한다.
 6. 실제 브라우저·MySQL E2E 후 기존 표시 경로를 제거한다.
-7. 이 계약이 안정된 뒤 실제 LLM 재요약과 RAG를 연결한다.
+7. 이 계약이 안정된 뒤 실제 LLM 재요약과 Case-local TF-IDF 검색을 연결한다.
 
 ## 12. 구현 전 승인 체크리스트
 
@@ -553,8 +552,8 @@ POST   /api/cases/{case_id}/context-v2/decisions
   - semantic key는 점으로 구분한 안정 키를 사용하고, dedupe key는 제안 유형·Gap 키·근거 ID의 정규화 조합으로 만든다. 사용자 문구는 별도 한국어 사전을 사용한다.
 - [x] legacy `STAFF_JUDGMENT` 분류 정책 확정
   - 자동으로 업무나 결정으로 확정하지 않고 `LEGACY_REVIEW_REQUIRED` 상태에서 직원이 분류한다.
-- [x] 개인정보 보존 기간과 RAG 색인 삭제 정책 확정
-  - RAG 색인은 원본 엔터티보다 오래 보관하지 않는다. 공개 범위 변경·대체·삭제 시 즉시 무효화하고, 휴지통 30일 만료 시 함께 영구 삭제한다.
+- [x] 개인정보 보존 기간과 검색 캐시 무효화 정책 확정
+  - Vector DB나 영구 embedding 색인을 만들지 않는다. TF-IDF 캐시는 프로세스 메모리에만 두고 공개 범위 변경·대체·삭제 또는 콘텐츠 fingerprint 변경 시 다시 구성한다.
 - [x] additive DB migration과 rollback 계획 검토
   - 기존 테이블을 변경하지 않고 v2 테이블을 추가한다. 데이터 기록 전에는 테이블 제거 rollback이 가능하고, 기록 후에는 백업·기능 비활성화·검증 후 이관하는 비파괴 rollback만 허용한다.
 - [x] Public API·AI internal API contract test fixture 작성 계획 검토

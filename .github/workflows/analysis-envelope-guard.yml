@@ -1,0 +1,74 @@
+name: Analysis Envelope Guard
+
+on:
+  push:
+    branches:
+      - main
+      - integration/dev2-with-ham3-frontend
+  pull_request:
+    branches:
+      - main
+      - integration/dev2-with-ham3-frontend
+    paths:
+      - "MVP_v3/backend/**"
+      - "MVP_v3/frontend/**"
+      - "MVP_v3/docs/04_PRIVACY_SAFE_SIGNAL_FLOW.md"
+      - "MVP_v3/docs/33_ANALYSIS_ENVELOPE_FREEZE_CONTRACT.md"
+      - "MVP_v3/docs/34_ANALYSIS_ENVELOPE_INTEGRATION_BACKLOG.md"
+      - ".github/workflows/analysis-envelope-guard.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  envelope-contract:
+    name: Envelope contract and Case regression
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: MVP_v3/backend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: MVP_v3/backend/requirements.txt
+      - name: Install backend dependencies
+        run: python -m pip install -r requirements.txt pytest pytest-subtests
+      - name: Verify Analysis Envelope and narrative contracts
+        run: python -m pytest ai_api/tests/test_analysis_envelope.py ai_api/tests/test_feature_narratives.py -q
+      - name: Verify Case creation boundary
+        run: python -m pytest general_api/tests/test_analyze_case.py general_api/tests/test_public_analyze_endpoint.py general_api/tests/test_case_creation_transaction.py general_api/tests/test_case_retrieval.py -q
+
+  frontend-build:
+    name: Frontend typecheck and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: MVP_v3/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: MVP_v3/frontend/package-lock.json
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Typecheck and build
+        run: npm run build
+
+  diff-check:
+    name: Diff integrity
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Reject whitespace errors in the pull request
+        run: git diff --check "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}"

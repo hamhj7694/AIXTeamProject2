@@ -116,7 +116,23 @@ SEMANTIC_ATOM_OUTPUT_PROPERTIES = {
     "amount_value_krw": {"type": ["number", "null"], "minimum": 0},
     "claimed_organization": _nullable_enum(CLAIMED_ORGANIZATION_CODES),
     "claimed_role": _nullable_enum(CLAIMED_ROLE_CODES),
+    "claimed_organization_name": {"type": ["string", "null"], "maxLength": 160},
+    "claimed_branch_name": {"type": ["string", "null"], "maxLength": 160},
+    "claimed_person_name": {"type": ["string", "null"], "maxLength": 100},
+    "claimed_role_name": {"type": ["string", "null"], "maxLength": 160},
+    "claimed_relationship": {"type": ["string", "null"], "maxLength": 100},
     "claimed_purpose": _nullable_enum(["ASSET_PROTECTION", "INVESTIGATION", "VERIFICATION", "FEE_PAYMENT", "REPAYMENT", "UNKNOWN"]),
+    "speaker_role": _nullable_enum(["SUSPECTED_PARTY", "CUSTOMER", "BANK_STAFF", "SYSTEM", "UNKNOWN"]),
+    "actor_role": _nullable_enum(["SUSPECTED_PARTY", "CUSTOMER", "BANK_STAFF", "SYSTEM", "UNKNOWN"]),
+    "target_role": _nullable_enum(["SUSPECTED_PARTY", "CUSTOMER", "BANK_STAFF", "SYSTEM", "UNKNOWN"]),
+    "reported_by_role": _nullable_enum(["SUSPECTED_PARTY", "CUSTOMER", "BANK_STAFF", "SYSTEM", "UNKNOWN"]),
+    "speaker_confidence": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+    "attribution_confidence": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+    "vocative_target": {"type": ["string", "null"], "maxLength": 100},
+    "deadline_at": {"type": ["string", "null"], "maxLength": 64},
+    "relative_deadline_minutes": {"type": ["integer", "null"], "minimum": 0, "maximum": 525600},
+    "mention_order": {"type": ["integer", "null"], "minimum": 1},
+    "occurrence_count": {"type": "integer", "minimum": 1},
 }
 
 EVENT_OUTPUT_SCHEMA = {
@@ -190,4 +206,16 @@ must not change an unperformed action to COMPLETED. A phrase such as "prosecutio
 call or tell family ... immediately transfer all funds to a safe account"
 therefore needs at least five atoms: organization claim, role claim, no-end-call
 control, no-family-disclosure control, and transfer instruction.
+Preserve exact non-sensitive names and labels in their dedicated fields:
+claimed_organization_name, claimed_branch_name, claimed_person_name and
+claimed_role_name. Do not generalize 서울지검, a named bank branch, police
+station, court, prosecutor's office, or a stated person name when it is present.
+Record claimed_relationship and vocative_target separately. In a sentence like
+"엄마, 나 스마트폰 고장 났어", 엄마 is the addressee/vocative_target;
+the speaker remains SUSPECTED_PARTY and the claimed relationship is CHILD.
+Populate speaker_role, actor_role, target_role and reported_by_role explicitly.
+The person who reports a claim is not necessarily its actor. Preserve an exact
+deadline and relative remaining minutes when both are available, plus occurrence
+count and mention order. These normalized entity fields may contain only the
+specific short name/title/relationship, never a whole source sentence.
 """.strip()

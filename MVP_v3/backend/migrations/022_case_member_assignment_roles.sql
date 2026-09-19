@@ -1,0 +1,3 @@
+ALTER TABLE case_members
+    ADD COLUMN assignment_role VARCHAR(32) NOT NULL DEFAULT 'HANDOVER_PENDING' AFTER role,
+    ADD CONSTRAINT chk_case_member_assignment_role CHECK (assignment_role IN ('SUPERVISOR','MONITORING','CONSULTATION','VIEWER','HANDOVER_PENDING'));

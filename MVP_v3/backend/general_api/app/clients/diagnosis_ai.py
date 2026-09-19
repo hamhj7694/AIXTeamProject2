@@ -55,8 +55,15 @@ class HttpDiagnosisAiClient:
     async def analyze(self, request: AnalyzeTextRequest) -> DiagnosisResult:
         try:
             async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
-                response = await client.post(f"{self.base_url}/ai/analyze/text", json=request.model_dump(mode="json"),
-                                             headers={"X-Request-ID": request_id.get()})
+                # Demo-only adapter: inside this request the source text is
+                # converted to an Analysis Envelope before the CSR core runs.
+                # Keeping one request preserves the existing per-analysis call
+                # and token budget. Production integrations call
+                # /ai/analyze/signals directly with an upstream Envelope.
+                response = await client.post(
+                    f"{self.base_url}/ai/analyze/text",
+                    json=request.model_dump(mode="json"), headers={"X-Request-ID": request_id.get()},
+                )
                 if not response.is_success:
                     payload = response.json()
                     detail = payload.get("detail", {})
