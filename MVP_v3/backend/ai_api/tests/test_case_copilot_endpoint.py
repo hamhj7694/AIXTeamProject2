@@ -127,6 +127,50 @@ class CaseCopilotEndpointTest(unittest.TestCase):
         self.assertIn("김태환", response.json()["content"])
         self.assertIn("은행 담당자 (검토자)", response.json()["content"])
 
+    def test_first_person_identity_uses_current_requester_not_case_people(self) -> None:
+        with patch.dict(os.environ, {"OPENAI_API_KEY": ""}, clear=False):
+            response = self.client.post("/ai/case-copilot/replies", json={
+                "case_id": "VP-REQUESTER",
+                "prompt": "은행 담당자의 질문: 내가 누구야?",
+                "requester_user_id": "staff-kim",
+                "requester_display_name": "김담당",
+                "requester_role": "REVIEWER",
+                "case_summary": "고객 이고객이 박사칭의 연락을 신고함",
+                "participants": ["이고객 (고객)", "박사칭 (사칭 상대)"],
+                "recent_conversation": [
+                    "김담당 (REVIEWER): 제 이름은 김담당입니다.",
+                    "이고객 (CUSTOMER): 상대방은 박사칭이라고 했어요.",
+                ],
+                "assistant_mode": "BANK_INTERNAL",
+            })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["model_mode"], "REQUESTER_LOOKUP")
+        self.assertEqual(response.json()["content"], "현재 질문자는 김담당입니다.")
+        self.assertNotIn("이고객", response.json()["content"])
+        self.assertNotIn("박사칭", response.json()["content"])
+        self.assertNotIn("사건", response.json()["content"])
+
+    def test_first_person_identity_does_not_repeat_generic_requester_label(self) -> None:
+        with patch.dict(os.environ, {"OPENAI_API_KEY": ""}, clear=False):
+            response = self.client.post("/ai/case-copilot/replies", json={
+                "case_id": "VP-REQUESTER-GENERIC",
+                "prompt": "은행 담당자의 질문: 내가 누구야?",
+                "requester_user_id": "bank-operator",
+                "requester_display_name": "은행 담당자",
+                "requester_role": "CHAT_OPERATOR",
+                "case_summary": "합성 사건 요약",
+                "participants": ["합성 고객 (고객)", "합성 상대 (사칭 상대)"],
+                "assistant_mode": "BANK_INTERNAL",
+            })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["model_mode"], "REQUESTER_LOOKUP")
+        self.assertEqual(response.json()["content"], "현재 질문자는 은행 담당자입니다.")
+        self.assertNotIn("은행 담당자 은행 담당자", response.json()["content"])
+        self.assertNotIn("합성 고객", response.json()["content"])
+        self.assertNotIn("합성 상대", response.json()["content"])
+
 
 class CustomerSupportCallBudgetTest(unittest.IsolatedAsyncioTestCase):
     async def test_per_minute_limit_stops_before_provider_call(self) -> None:

@@ -144,6 +144,23 @@ class SourceAwareGroundingTest(unittest.TestCase):
             with self.subTest(reply=bad):
                 self.assertIn("unsupported_certainty", self.check(bad, [fact]).failed_criteria)
 
+    def test_negative_confirmation_state_is_not_mistaken_for_certainty(self):
+        fact = source_fact()
+        safe = (
+            "고객은 1,000만원을 송금했다고 진술했습니다. "
+            "하지만 이 내용은 아직 확인된 상태가 아닙니다."
+        )
+        self.assertNotIn("unsupported_certainty", self.check(safe, [fact]).failed_criteria)
+
+        unsafe = (
+            "고객이 1,000만원을 송금했습니다.",
+            "1,000만원을 송금한 것이 확인되었습니다.",
+            "송금 영수증이 제출되어 있습니다.",
+        )
+        for reply in unsafe:
+            with self.subTest(reply=reply):
+                self.assertIn("unsupported_certainty", self.check(reply, [fact]).failed_criteria)
+
     def test_bank_record_allows_only_its_own_value(self):
         reply = "은행 거래기록에서 1,000만원 이체 내역이 확인됩니다."
         self.assertNotIn("unsupported_certainty", self.check(reply, [source_fact("BANK_RECORD", "CONFIRMED")]).failed_criteria)

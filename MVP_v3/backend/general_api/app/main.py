@@ -1810,6 +1810,10 @@ async def invoke_case_copilot(case_id: str, request: PublicAiInvocationRequest) 
     attachments = await repository.list_attachments(case_id)
     all_messages = await repository.list_messages(case_id)
     members = await repository.list_members(case_id)
+    requester_member = next(
+        (item for item in members if item.get("user_id") == request.requester_user_id and item.get("status") == "ACTIVE"),
+        None,
+    )
     primary_assignee = next(
         (item.get("display_name") for item in members if item.get("role") == "CASE_OWNER"),
         None,
@@ -1831,6 +1835,9 @@ async def invoke_case_copilot(case_id: str, request: PublicAiInvocationRequest) 
         ai_reply = await service.ai_client.generate_case_copilot_reply({
             "case_id": case_id,
             "prompt": request.prompt,
+            "requester_user_id": request.requester_user_id,
+            "requester_display_name": request.requester_display_name,
+            "requester_role": requester_member.get("role") if requester_member else "BANK_STAFF",
             "case_summary": case.get("initial_brief", ""),
             "workflow_status": case.get("status", "TRIAGE"),
             "fraud_type": case.get("fraud_type"),
@@ -1844,7 +1851,8 @@ async def invoke_case_copilot(case_id: str, request: PublicAiInvocationRequest) 
             "retrieved_context": retrieved,
             "known_facts": [f"{item.get('field')}: {item.get('value')} ({item.get('status')})" for item in facts[:30]],
             "recent_conversation": [
-                f"{item.get('actor_display_name', item.get('actor_type', '작성자'))}: {item.get('content', '')[:500]}"
+                f"{item.get('actor_display_name', item.get('actor_type', '작성자'))} "
+                f"({item.get('actor_role') or item.get('actor_type', '역할 미상')}): {item.get('content', '')[:500]}"
                 for item in all_messages[-30:]
                 if item.get("message_kind") not in {"AI_RESPONSE", "REPORT_CARD"}
                 and item.get("actor_type") not in {"BANK_AGENT", "CUSTOMER_AGENT"}
