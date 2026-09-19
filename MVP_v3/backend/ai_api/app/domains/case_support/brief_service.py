@@ -56,7 +56,7 @@ class CaseBriefService:
             instructions, input_text = build_case_brief_prompt(diagnosis, fallback)
             client = AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
             response = await client.responses.create(
-                model=os.getenv("OPENAI_CASE_BRIEF_MODEL", "gpt-4o-mini"),
+                model=os.getenv("OPENAI_CASE_BRIEF_MODEL", "gpt-5.6-luna"),
                 instructions=instructions,
                 input=input_text,
                 text={"format": {"type": "json_schema", "name": "case_brief_summary_v1", "schema": CASE_BRIEF_OUTPUT_SCHEMA, "strict": True}},

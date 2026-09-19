@@ -1,19 +1,17 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { AlertCircle, Bookmark, CheckCircle2, Clock3, Loader2, PanelRightClose, PanelRightOpen, RefreshCw, RotateCcw, StickyNote, Trash2, Users } from 'lucide-react';
+import { AlertCircle, Bookmark, CheckCircle2, FileSearch, Loader2, RefreshCw, RotateCcw, StickyNote, Trash2, Users, X } from 'lucide-react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { casesApi, CURRENT_BANK_USER } from '../api/cases';
-import type { CaseBundle, CaseFact, CaseMessage, CaseSupportSnapshot, StoredCase, VerificationTask } from '../api/types';
+import type { AnalyzeCaseResponse, CaseBundle, CaseFact, CaseMessage, CaseSupportSnapshot, StoredCase, VerificationTask } from '../api/types';
 import { ActionDialog, QuestionDialog, VerificationDialog } from '../components/CaseActionDialogs';
 import { AdminCaseDialog } from '../components/AdminCaseDialog';
 import { ContextPanelFoundation } from '../context-v3/ContextPanelFoundation';
-import { HistoryDrawer } from '../context-v3/HistoryDrawer';
 import { MoreMenu } from '../context-v3/components';
 import { CaseContextLayout } from '../components/CaseContextLayout';
 import { ConversationComposer, type ComposerTarget } from '../components/ConversationComposer';
 import { SharedConversation } from '../components/SharedConversation';
 import { BankBookmarks } from '../components/BankBookmarks';
 import { BankPersonalNotes } from '../components/BankPersonalNotes';
-import { ParticipantManager } from '../components/ParticipantManager';
 import { CaseAssignmentDialog } from '../components/CaseAssignmentDialog';
 import { readBankBookmarks, writeBankBookmarks, type BankBookmark } from '../bank/bookmarks';
 import { stripBankAiMention } from '../bank/aiMention';
@@ -26,6 +24,8 @@ import BankTransactionCard from '../components/cards/BankTransactionCard';
 import FdsResultCard from '../components/cards/FdsResultCard';
 import AdditionalLookupCard from '../components/cards/AdditionalLookupCard';
 import { mockAdditionalLookup, mockBankTransaction, mockFdsResult } from '../mocks/cardMocks';
+import { hasInitialAssignmentHandled, hasInitialAssignmentPending, markInitialAssignmentHandled, shouldOpenInitialAssignment } from '../assignmentPromptState';
+import { AnalysisResult } from './HomePage';
 
 type DialogState = { type: 'questions' } | { type: 'verification'; task?: VerificationTask } | { type: 'action' } | null;
 type AdminAction = 'finalize' | 'reopen' | 'trash' | null;
@@ -80,7 +80,7 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
   const [participantOpen, setParticipantOpen] = useState(false);
   const [participantCount, setParticipantCount] = useState(0);
   const [assignmentRequired, setAssignmentRequired] = useState(false);
-  const [historyOpen, setHistoryOpen] = useState(false);
+  const [analysisResultOpen, setAnalysisResultOpen] = useState(false);
   const [adminAction, setAdminAction] = useState<AdminAction>(null);
   const [accessRevision, setAccessRevision] = useState(0);
   const [bookmarks, setBookmarks] = useState<BankBookmark[]>([]);
@@ -139,8 +139,8 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
     const requestId = ++loadRequestRef.current;
     const generation = aiGenerationRef.current;
     if (quiet) setRefreshing(true); else setLoading(true);
-    const [caseResult, bundleResult, factsResult] = await Promise.allSettled([
-      casesApi.get(caseId), casesApi.bundle(caseId), casesApi.facts(caseId),
+    const [caseResult, bundleResult, factsResult, membersResult] = await Promise.allSettled([
+      casesApi.get(caseId), casesApi.bundle(caseId), casesApi.facts(caseId), casesApi.members(caseId),
     ]);
     if (requestId !== loadRequestRef.current || generation !== aiGenerationRef.current) return;
     if (caseResult.status === 'rejected') {
@@ -148,9 +148,16 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
       setLoading(false); setRefreshing(false); return;
     }
     setCaseItem(caseResult.value); if (!quiet) setError('');
-    const assignmentPromptKey = `csr-initial-assignment:${caseId}`;
-    if (!quiet && initialAssignmentRecommendation && !caseResult.value.primary_assignee && !sessionStorage.getItem(assignmentPromptKey)) {
-      sessionStorage.setItem(assignmentPromptKey, 'shown');
+    if (membersResult.status === 'fulfilled') setParticipantCount(membersResult.value.length);
+    const assignmentPending = hasInitialAssignmentPending(caseId);
+    const assignmentHandled = hasInitialAssignmentHandled(caseId);
+    if (caseResult.value.primary_assignee) {
+      // A save may have happened in another tab before this Case finished loading.
+      markInitialAssignmentHandled(caseId);
+      if (!quiet) setAssignmentRequired(false);
+    } else if (!quiet && shouldOpenInitialAssignment({ hasPending: assignmentPending, hasHandled: assignmentHandled, hasPrimaryAssignee: false, routeHint: initialAssignmentRecommendation })) {
+      // Do not mark the prompt as handled here. A failed load or failed save must
+      // leave the one-time prompt available for the next retry.
       setAssignmentRequired(true);
     }
     const warnings: string[] = [];
@@ -247,7 +254,7 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
     outboxRef.current.clear();
     setAiPendingCount(0); setBusy(false);
     lastSupportRevisionRef.current = '';
-    setCaseItem(null); setBundle(null); setSupport(null); setFacts([]); setDialog(null); setBookmarkOpen(false); setNoteOpen(false); setParticipantOpen(false); setParticipantCount(0); setAssignmentRequired(false); setHistoryOpen(false); setAdminAction(null); setBookmarks(readBankBookmarks(caseId)); setError(''); setComposerWarnings({}); setCustomerPaneCollapsed(false); setTeamPaneCollapsed(false); setCustomerPaneRatio(50);
+    setCaseItem(null); setBundle(null); setSupport(null); setFacts([]); setDialog(null); setBookmarkOpen(false); setNoteOpen(false); setParticipantOpen(false); setParticipantCount(0); setAssignmentRequired(false); setAnalysisResultOpen(false); setAdminAction(null); setBookmarks(readBankBookmarks(caseId)); setError(''); setComposerWarnings({}); setCustomerPaneCollapsed(false); setTeamPaneCollapsed(false); setCustomerPaneRatio(50);
     // Register the existing demo identity before mounting editors that require membership.
     let active = true;
     void (async () => {
@@ -255,7 +262,7 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
         const items = await casesApi.members(caseId);
         if (active) setParticipantCount(items.length);
         if (!items.some((item) => item.user_id === CURRENT_BANK_USER.user_id)) {
-          await casesApi.upsertMember(caseId, { ...CURRENT_BANK_USER, role: 'CHAT_OPERATOR', assignment_role: 'HANDOVER_PENDING' });
+          await casesApi.upsertMember(caseId, { user_id: CURRENT_BANK_USER.user_id, display_name: CURRENT_BANK_USER.display_name, assignment_role: 'HANDOVER_PENDING' });
           const updatedItems = await casesApi.members(caseId);
           if (active) setParticipantCount(updatedItems.length);
         }
@@ -409,6 +416,22 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
     : teamPaneCollapsed
       ? { gridTemplateColumns: 'minmax(0, 1fr) 4px 52px' }
       : { gridTemplateColumns: `minmax(0, ${customerPaneRatio}fr) 4px minmax(0, ${100 - customerPaneRatio}fr)` };
+  const analysisResult: AnalyzeCaseResponse = caseItem ? {
+    schema_version: 'analysis.v1',
+    disposition: 'CASE_CREATED',
+    case_id: caseItem.case_id,
+    risk: caseItem.risk,
+    mode: caseItem.mode === 'RECOVERY' ? 'RECOVERY' : 'PREVENT',
+    status: caseItem.status,
+    initial_brief: caseItem.initial_brief,
+    initial_report: caseItem.initial_report ? {
+      report_id: caseItem.initial_report.report_id,
+      case_id: caseItem.initial_report.case_id,
+      report_version: caseItem.initial_report.report_version,
+    } : null,
+  } : {
+    schema_version: 'analysis.v1', disposition: 'CASE_CREATED', case_id: caseId,
+  };
   if (loading && !caseItem) return <section className="room-state"><Loader2 className="spin" size={24}/><strong>Shared Case를 불러오고 있습니다.</strong><span>대화와 현재 맥락을 함께 준비합니다.</span></section>;
   if (error && !caseItem) return <section className="room-state error"><AlertCircle size={24}/><strong>정보를 불러오지 못했습니다.</strong><span>{error}</span><button onClick={() => void load()}>다시 시도</button></section>;
   if (!caseItem || !bundle) return <section className="room-state error"><AlertCircle size={24}/><strong>Case 기록을 열 수 없습니다.</strong><span>General API의 Bundle 응답을 확인해 주세요.</span><button onClick={() => void load()}>다시 시도</button></section>;
@@ -441,7 +464,7 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
   return <section className="case-room">
     <header className="case-room-header case-command-header">
       <div className="case-heading"><span className={`risk-dot ${caseStateTone(caseState(caseItem))}`}/><div><div className="case-title-line"><span>{caseItem.case_id}</span><h1>{incidentTitle(caseItem)}</h1></div><div className="case-header-meta"><span>{statusLabel(caseItem.status, caseItem.mode)}</span><span>주 담당자 {caseItem.primary_assignee || '미배정'}</span></div></div></div>
-      <div className="room-header-actions"><button className="participant-open" type="button" onClick={() => setParticipantOpen(true)}><Users size={16}/>참여자 <b>{participantCount}</b></button><button type="button" className="header-tool-action header-tool-note" onClick={() => setNoteOpen(true)}><StickyNote size={15}/>개인 메모</button><button type="button" className="header-tool-action header-tool-bookmark" onClick={() => setBookmarkOpen(true)}><Bookmark size={15}/>북마크{bookmarks.length > 0 && <b>{bookmarks.length}</b>}</button><button type="button" className="app-context-toggle" onClick={() => onContextOpenChange(!contextOpen)} aria-label={contextOpen ? '사건 맥락 접기' : '사건 맥락 열기'} aria-expanded={contextOpen} aria-controls="case-context-content" title={contextOpen ? '사건 맥락 접기' : '사건 맥락 열기'}>{contextOpen ? <PanelRightClose size={16}/> : <PanelRightOpen size={16}/>}</button><button className="icon-button" onClick={() => void load(true, true)} aria-label="Case와 AI 사건 맥락 새로고침"><RefreshCw size={17} className={refreshing ? 'spin' : ''}/></button><MoreMenu label="Case 관리 메뉴"><button onClick={() => setHistoryOpen(true)}><Clock3 size={14}/>최근 사건 기록</button>{caseItem.mode === 'CLOSED' ? <button onClick={() => setAdminAction('reopen')}><RotateCcw size={14}/>사건 다시 진행</button> : <button onClick={() => setAdminAction('finalize')}><CheckCircle2 size={14}/>해결 및 종료</button>}<button className="danger" onClick={() => setAdminAction('trash')}><Trash2 size={14}/>휴지통으로 이동</button></MoreMenu></div>
+      <div className="room-header-actions"><button className="participant-open" type="button" onClick={() => setParticipantOpen(true)}><Users size={16}/>참여자 <b>{participantCount}</b></button><button type="button" className="header-tool-action header-tool-note" onClick={() => setNoteOpen(true)}><StickyNote size={15}/>개인 메모</button><button type="button" className="header-tool-action header-tool-bookmark" onClick={() => setBookmarkOpen(true)}><Bookmark size={15}/>북마크{bookmarks.length > 0 && <b>{bookmarks.length}</b>}</button><button className="icon-button" onClick={() => void load(true, true)} aria-label="Case와 AI 사건 맥락 새로고침"><RefreshCw size={17} className={refreshing ? 'spin' : ''}/></button><MoreMenu label="Case 관리 메뉴"><button onClick={() => setAnalysisResultOpen(true)}><FileSearch size={14}/>초기 분석 결과 보기</button>{caseItem.mode === 'CLOSED' ? <button onClick={() => setAdminAction('reopen')}><RotateCcw size={14}/>사건 다시 진행</button> : <button onClick={() => setAdminAction('finalize')}><CheckCircle2 size={14}/>해결 및 종료</button>}<button className="danger" onClick={() => setAdminAction('trash')}><Trash2 size={14}/>휴지통으로 이동</button></MoreMenu></div>
     </header>
     <CaseContextLayout contextOpen={contextOpen}>
       <main className="conversation-column">
@@ -463,11 +486,11 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
     {dialog?.type === 'action' && <ActionDialog caseId={caseId} recovery={caseItem.mode === 'RECOVERY'} onDone={refreshAfterMutation} onClose={() => setDialog(null)}/>} 
     <BankBookmarks open={bookmarkOpen} items={bookmarks} onClose={() => setBookmarkOpen(false)}/>
     <BankPersonalNotes caseId={caseId} open={noteOpen} onClose={() => setNoteOpen(false)}/>
-    <ParticipantManager caseId={caseId} open={participantOpen} onClose={() => setParticipantOpen(false)} onChanged={async () => { setAccessRevision((value) => value + 1); const members = await casesApi.members(caseId); setParticipantCount(members.length); await refreshAfterMutation(); }}/>
-    <HistoryDrawer open={historyOpen} events={bundle.recent_events} onClose={() => setHistoryOpen(false)}/>
+    {participantOpen && <CaseAssignmentDialog caseId={caseId} mode="edit" onClose={() => setParticipantOpen(false)} onSaved={async () => { setParticipantOpen(false); setAccessRevision((value) => value + 1); const members = await casesApi.members(caseId); setParticipantCount(members.length); await refreshAfterMutation(); }}/>}
+    {analysisResultOpen && <div className="case-analysis-result-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setAnalysisResultOpen(false); }}><section className="case-analysis-result-dialog" role="dialog" aria-modal="true" aria-labelledby="case-analysis-result-title"><header><div><p className="eyebrow">ANALYSIS RESULT</p><h2 id="case-analysis-result-title">초기 분석 결과</h2><small>Case 생성 당시의 구조화 분석 결과를 다시 확인합니다.</small></div><button type="button" className="icon-button" onClick={() => setAnalysisResultOpen(false)} aria-label="초기 분석 결과 닫기"><X size={18}/></button></header><AnalysisResult result={analysisResult} caseItem={caseItem} sourceText="" onOpenCase={() => setAnalysisResultOpen(false)} onRestart={() => setAnalysisResultOpen(false)} showActions={false}/></section></div>}
     {adminAction === 'finalize' && <AdminCaseDialog title="해결 및 종료 처리" description="사건을 해결 상태로 종결합니다. 관리자 암호를 입력해 주세요." confirmLabel="해결 및 종료" noteLabel="종결 메모 (선택)" notePlaceholder="처리 결과나 인계 사항을 기록하세요." onConfirm={finalizeCase} onClose={() => setAdminAction(null)}/>}
     {adminAction === 'reopen' && <AdminCaseDialog title="사건 다시 진행하기" description="종결 직전의 사건 상태로 복구합니다. 관리자 암호를 입력해 주세요." confirmLabel="진행 상태로 복구" onConfirm={(password) => reopenCase(password)} onClose={() => setAdminAction(null)}/>}
     {adminAction === 'trash' && <AdminCaseDialog title="휴지통으로 보내기" description="사건은 휴지통에서 30일 동안 보관되며 그 안에는 복구할 수 있습니다." confirmLabel="휴지통으로 보내기" onConfirm={(password) => trashCase(password)} onClose={() => setAdminAction(null)}/>}
-    {assignmentRequired && <CaseAssignmentDialog caseId={caseId} initialRecommendation={initialAssignmentRecommendation} onAssigned={async () => { setAssignmentRequired(false); await load(true, false); onMutated(); }} onSkip={() => setAssignmentRequired(false)}/>}
+    {assignmentRequired && <CaseAssignmentDialog caseId={caseId} initialRecommendation={true} onAssigned={async () => { markInitialAssignmentHandled(caseId); setAssignmentRequired(false); await load(true, false); onMutated(); }}/>} 
   </section>;
 };

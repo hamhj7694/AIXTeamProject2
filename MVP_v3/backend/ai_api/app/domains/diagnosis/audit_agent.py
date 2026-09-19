@@ -43,7 +43,7 @@ async def review_semantic_audit(
     try:
         async with AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"], timeout=20, max_retries=0) as client:
             response = await client.responses.create(
-                model=os.getenv("OPENAI_AUDIT_MODEL", os.getenv("OPENAI_CONTEXT_MODEL", "gpt-4o-mini")),
+                model=os.getenv("OPENAI_AUDIT_MODEL", os.getenv("OPENAI_CONTEXT_MODEL", "gpt-5.6-luna")),
                 instructions=instructions,
                 input=request,
                 max_output_tokens=700,

@@ -36,7 +36,7 @@ class CollaborationEndpointTest(unittest.TestCase):
         self.repository.list_customer_questions.return_value = []
         self.repository.upsert_member.return_value = {
             "case_id": "CASE-1", "user_id": "staff-1", "display_name": "Operator",
-            "role": "CHAT_OPERATOR", "status": "ACTIVE",
+            "assignment_role": "CONSULTATION", "status": "ACTIVE",
             "assigned_at": "2026-09-02T01:00:00+00:00", "updated_at": "2026-09-02T01:00:00+00:00",
         }
         self.repository.heartbeat_presence.return_value = {
@@ -60,7 +60,7 @@ class CollaborationEndpointTest(unittest.TestCase):
 
     def test_member_presence_and_explicit_copilot_contract(self) -> None:
         member = self.client.post("/api/cases/CASE-1/members", json={
-            "user_id": "staff-1", "display_name": "Operator", "role": "CHAT_OPERATOR",
+            "user_id": "staff-1", "display_name": "Operator", "assignment_role": "CONSULTATION",
         })
         presence = self.client.post("/api/cases/CASE-1/presence/heartbeat", json={
             "user_id": "staff-1", "display_name": "Operator", "channel": "TEAM",
@@ -70,7 +70,8 @@ class CollaborationEndpointTest(unittest.TestCase):
         })
 
         self.assertEqual([member.status_code, presence.status_code, copilot.status_code], [201, 200, 201])
-        self.assertEqual(member.json()["role"], "CHAT_OPERATOR")
+        self.assertEqual(member.json()["assignment_role"], "CONSULTATION")
+        self.assertNotIn("role", member.json())
         self.assertEqual(presence.json()["channel"], "TEAM")
         self.assertEqual(copilot.json()["channel"], "TEAM")
         self.assertEqual(copilot.json()["model_mode"], "gpt-4o-mini")
@@ -123,6 +124,25 @@ class CollaborationEndpointTest(unittest.TestCase):
         }])
         saved = self.repository.append_message.await_args.args[1]
         self.assertEqual(saved["reply_to_message_id"], "msg-customer-1")
+
+    def test_remove_member_marks_member_removed_and_rejects_current_user(self) -> None:
+        response = self.client.delete("/api/cases/CASE-1/members/staff-reviewer")
+
+        self.assertEqual(response.status_code, 204)
+        self.repository.remove_member.assert_awaited_once_with("CASE-1", "staff-reviewer")
+
+        current_user = self.client.delete("/api/cases/CASE-1/members/mvp-v3-bank-operator")
+
+        self.assertEqual(current_user.status_code, 409)
+        self.assertEqual(current_user.json()["detail"]["code"], "CURRENT_USER_CANNOT_BE_REMOVED")
+
+    def test_remove_member_rejects_owner_until_reassigned(self) -> None:
+        self.repository.remove_member.side_effect = ValueError("CASE_OWNER_CANNOT_BE_REMOVED")
+
+        response = self.client.delete("/api/cases/CASE-1/members/staff-owner")
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["detail"]["code"], "CASE_OWNER_CANNOT_BE_REMOVED")
 
 
 if __name__ == "__main__":

@@ -44,9 +44,9 @@ const CaseBoardIntro: React.FC<WelcomeProps> = ({ onStartAnalysis, onOpenBankSta
   <p className="eyebrow">CSR | Case Share Room</p>
   <h1>보이스피싱을<br />빠르게 대응하세요!</h1>
   <ul>
-    <li>보이스피싱 통화 내용과 상황을 AI가 정리합니다.</li>
-    <li>업무 관계자들을 빠르게 소집해 함께 대응하세요.<small>(은행 FDS 모니터링 담당자·상담자·AI가 함께합니다)</small></li>
-    <li>고객과 소통하며 추가 정보를 모으고,<br />고객에게 확실한 정보를 안내하세요.</li>
+    <li>AI가 보이스피싱 통화의 주요 정황을 정리하고 업무를 지원합니다.</li>
+    <li>업무 관계자를 빠르게 소집해 함께 대응합니다.<small>은행 FDS 모니터링 담당자·상담 담당자·AI 협업</small></li>
+    <li>은행 직원이과 고객과 빠르게 소통하며 필요한 정보를 확인하고 안내합니다.</li>
   </ul>
   <button className="start-analysis-button" type="button" onClick={onStartAnalysis}><FileSearch size={16}/>새 통화 분석하기</button>
   <button className="bank-staff-open-button" type="button" onClick={onOpenBankStaff}>은행 담당자 관리</button>

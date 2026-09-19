@@ -48,6 +48,11 @@ async def extract_case_context_features(text: str) -> CaseContextFeatures:
         "의심 인물이 말한 기관 사칭·사건 주장·요구는 고객의 진술이 아니라 의심 인물의 "
         "주장·요구다. 고객이 명시적으로 행동했거나 부인·응답한 경우에만 CUSTOMER_*를 "
         "사용하며, '고객님' 같은 호칭을 발화자로 오인하지 않는다. ML 위험 판정은 하지 않는다. "
+        "발화자 라벨이 없는 경우에도 전체 턴의 흐름을 보고 역할을 추정한다. 예를 들어 "
+        "'엄마, 휴대폰이 고장 나서 임시 번호로 연락해'처럼 가족 호칭과 기기 고장·임시 번호를 "
+        "함께 말한 턴은 고객의 신고가 아니라 자녀를 사칭하는 보이스피싱 의심 인물의 주장으로 "
+        "분류한다. 송금·인증정보·앱 설치·연락 제한을 요구하는 이어지는 턴도 같은 화자의 "
+        "의심 인물 행동으로 연결하고, 고객의 질문·거부·실제 행동만 CUSTOMER_*로 분류한다. "
         "명시된 의미만 enum 코드로 반환한다. 사칭 주체, 주장 명분, 요구 목적, 요구 행동, "
         "시한, 고객이 실제 한 행동, 정상 상담 맥락을 구분한다. 요청과 실제 실행을 혼동하지 않는다. "
         "부정된 행동은 DENIED이며 진술은 REPORTED, 상대방 주장은 CLAIMED, 요구는 REQUESTED다. "
@@ -58,7 +63,7 @@ async def extract_case_context_features(text: str) -> CaseContextFeatures:
     reservation = budget.reserve(input_text=instructions + input_text, max_output_tokens=tokens)
     async with AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"], timeout=20, max_retries=0) as client:
         response = await client.responses.create(
-            model=os.getenv("OPENAI_CONTEXT_MODEL", "gpt-4o-mini"),
+            model=os.getenv("OPENAI_CONTEXT_MODEL", "gpt-5.6-luna"),
             instructions=instructions, input=input_text, max_output_tokens=tokens,
             text={"format": {"type": "json_schema", "name": "case_context_features_v2",
                              "schema": ContextExtraction.model_json_schema(), "strict": True}},

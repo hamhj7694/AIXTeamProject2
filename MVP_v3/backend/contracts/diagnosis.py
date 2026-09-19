@@ -356,7 +356,7 @@ class AnalysisEnvelope(StrictModel):
     timezone: str = Field(default="Asia/Seoul", max_length=64)
     source_text_included: Literal[False] = False
     extraction_warnings: list[str] = Field(default_factory=list, max_length=100)
-    turn_count: int = Field(ge=1, le=120)
+    turn_count: int = Field(ge=1, le=180)
     turns: list[StructuredTurn] = Field(min_length=1, max_length=120)
     events: list[AnalysisSignalEvent] = Field(default_factory=list, max_length=500)
     semantic_atoms: list[SemanticAtom] = Field(default_factory=list, max_length=1000)

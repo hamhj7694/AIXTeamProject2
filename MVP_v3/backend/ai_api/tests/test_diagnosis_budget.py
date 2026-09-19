@@ -28,8 +28,8 @@ class DiagnosisBudgetTest(unittest.TestCase):
             "OPENAI_MAX_TOTAL_TOKENS_PER_DIAGNOSIS": "invalid",
         }, clear=False):
             budget = DiagnosisLlmBudget.from_environment()
-        self.assertEqual(budget.max_calls, 31)
-        self.assertEqual(budget.max_total_tokens, 16_000)
+        self.assertEqual(budget.max_calls, 256)
+        self.assertEqual(budget.max_total_tokens, 512_000)
 
 
 if __name__ == "__main__":

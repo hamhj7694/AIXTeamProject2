@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { List, ShieldCheck, Wifi } from 'lucide-react';
+import { List, ShieldCheck } from 'lucide-react';
 import { BrowserRouter, Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { casesApi } from './api/cases';
 import type { StoredCase } from './api/types';
@@ -54,9 +54,9 @@ const Workspace: React.FC = () => {
       <Link className={`brand ${analysisBusy ? 'is-disabled' : ''}`} to="/" aria-disabled={analysisBusy || undefined} onClick={(event) => { if (analysisBusy) event.preventDefault(); }}><span><ShieldCheck size={19}/></span><div><b>CSR | Case Share Room</b><small>보이스피싱 양방향 상담·대응 플랫폼</small></div></Link>
       <div className="app-header-actions">
         {selectedCaseId && <div className="active-case-header-actions">
-          <Link className="customer-preview-link" to={`/customer/cases/${encodeURIComponent(selectedCaseId)}`}>고객 화면 열기</Link>
+          <Link className="customer-preview-link" to={`/customer/cases/${encodeURIComponent(selectedCaseId)}`}><strong>고객 화면 체험하기</strong><small> · 고객 화면을 살펴볼 수 있습니다!</small></Link>
         </div>}
-        <div className={`header-status ${error ? 'has-error' : ''}`}><span><Wifi size={13}/>{error ? 'General API 연결 확인 필요' : 'General API 연결'}</span>{location.pathname !== '/' && <Link className="case-board-link" to="/"><List size={14}/>사건 보드</Link>}</div>
+        <div className="header-status">{location.pathname !== '/' && <Link className="case-board-link" to="/"><List size={14}/>사건 보드</Link>}</div>
       </div>
     </header>
     <div className="workspace-body">

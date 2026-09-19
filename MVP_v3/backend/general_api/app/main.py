@@ -135,6 +135,7 @@ from contracts.public_api.bank_staff import (
 
 from .clients.diagnosis_ai import AiServiceAuthenticationError, AiServiceBudgetError, AiServiceError, AiServiceQuotaError, HttpDiagnosisAiClient
 from .domains.cases.repository import CasePersistenceError, CaseVersionConflictError, normalize_target_field
+from .domains.cases.member_roles import case_role_for_member
 from .domains.cases.context_projection_repository import ContextProjectionRepository
 from .domains.cases.case_context_v2_repository import (
     ContextV2ConflictError,
@@ -395,7 +396,7 @@ async def analyze_case(request: PublicAnalyzeCaseRequest) -> PublicAnalyzeCaseRe
 
 async def to_case_read(record: dict) -> PublicCaseReadResponse:
     members = await repository.list_members(record["case_id"])
-    primary = next((item.get("display_name") for item in members if item.get("role") == "CASE_OWNER"), None)
+    primary = next((item.get("display_name") for item in members if case_role_for_member(item) == "CASE_OWNER"), None)
     deleted_at = record.get("deleted_at")
     trash_expires_at = None
     if deleted_at:
@@ -1655,16 +1656,32 @@ async def list_case_events(case_id: str, after: int | None = None) -> list[Publi
 @app.get("/api/cases/{case_id}/members", response_model=list[PublicCaseMemberResponse])
 async def list_case_members(case_id: str) -> list[PublicCaseMemberResponse]:
     await require_case(case_id)
-    return [PublicCaseMemberResponse.model_validate(item) for item in await repository.list_members(case_id)]
+    return [PublicCaseMemberResponse.model_validate({key: value for key, value in item.items() if key != "role"}) for item in await repository.list_members(case_id)]
 
 
 @app.post("/api/cases/{case_id}/members", response_model=PublicCaseMemberResponse, status_code=201)
 async def upsert_case_member(case_id: str, request: PublicCaseMemberUpsertRequest) -> PublicCaseMemberResponse:
     await require_case(case_id)
     try:
-        return PublicCaseMemberResponse.model_validate(await repository.upsert_member(case_id, request.model_dump()))
+        stored = await repository.upsert_member(case_id, request.model_dump())
+        return PublicCaseMemberResponse.model_validate({key: value for key, value in stored.items() if key != "role"})
     except KeyError as exc:
         raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."}) from exc
+
+
+@app.delete("/api/cases/{case_id}/members/{user_id}", status_code=204)
+async def remove_case_member(case_id: str, user_id: str) -> None:
+    if user_id == CURRENT_BANK_USER_ID:
+        raise HTTPException(status_code=409, detail={"code": "CURRENT_USER_CANNOT_BE_REMOVED", "message": "현재 사용자는 케이스 담당자에서 제거할 수 없습니다."})
+    try:
+        await require_case(case_id)
+        await repository.remove_member(case_id, user_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail={"code": "CASE_MEMBER_NOT_FOUND", "message": "케이스 담당자를 찾을 수 없습니다."}) from exc
+    except ValueError as exc:
+        if str(exc) == "CASE_OWNER_CANNOT_BE_REMOVED":
+            raise HTTPException(status_code=409, detail={"code": "CASE_OWNER_CANNOT_BE_REMOVED", "message": "사건 총괄은 새 총괄을 지정한 후 제거할 수 있습니다."}) from exc
+        raise
 
 
 @app.put("/api/cases/{case_id}/assignee", response_model=PublicPrimaryAssigneeResponse)
@@ -1817,7 +1834,7 @@ async def invoke_case_copilot(case_id: str, request: PublicAiInvocationRequest) 
         None,
     )
     primary_assignee = next(
-        (item.get("display_name") for item in members if item.get("role") == "CASE_OWNER"),
+        (item.get("display_name") for item in members if case_role_for_member(item) == "CASE_OWNER"),
         None,
     )
     member_role_labels = {
@@ -1846,7 +1863,7 @@ async def invoke_case_copilot(case_id: str, request: PublicAiInvocationRequest) 
             "transfer_status": case.get("victim_transfer_status"),
             "primary_assignee": primary_assignee,
             "participants": [
-                f"{item.get('display_name', '이름 미상')} ({member_role_labels.get(item.get('role'), item.get('role', '역할 미상'))})"
+                f"{item.get('display_name', '이름 미상')} ({member_role_labels.get(case_role_for_member(item), case_role_for_member(item) or '역할 미상')})"
                 for item in members
             ][:30],
             "staff_context": staff_context(staff),
@@ -2232,14 +2249,14 @@ async def require_context_v2_member(
         raise HTTPException(status_code=401, detail={"code": "ACTOR_REQUIRED", "message": "actor_user_id is required"}) from exc
     members = await repository.list_members(case_id)
     member = next((item for item in members if item.get("user_id") == actor.actor_id and item.get("status", "ACTIVE") == "ACTIVE"), None)
-    if actor.actor_type != "BANK_STAFF" or (member and member.get("role") == "CUSTOMER"):
+    if actor.actor_type != "BANK_STAFF" or (member and case_role_for_member(member) == "CUSTOMER"):
         raise HTTPException(
             status_code=403,
             detail={"code": "CASE_CONTEXT_FORBIDDEN", "message": "이 사건에 대한 작업 권한이 없습니다."},
         )
     if mvp_context_permissions(actor.actor_id):
         return case_context_v2_repository()
-    scoped_actor = actor.for_case(case_id, str(member.get("role"))) if member else actor
+    scoped_actor = actor.for_case(case_id, str(case_role_for_member(member))) if member else actor
     if not scoped_actor.can(access):
         raise HTTPException(
             status_code=403,
@@ -2258,7 +2275,7 @@ async def require_customer_context_member(case_id: str, actor_user_id: str | Non
             item for item in members
             if item.get("user_id") == actor.actor_id
             and item.get("status", "ACTIVE") == "ACTIVE"
-            and item.get("role") == "CUSTOMER"
+            and case_role_for_member(item) == "CUSTOMER"
         ),
         None,
     )
@@ -2312,7 +2329,7 @@ async def read_context_workspace(case_id: str, actor_user_id: str):
         repository.list_customer_questions(case_id), repository.list_members(case_id), store.list_gap_history(case_id),
     )
     result = build_workspace(resources, facts, actions, questions, gap_history)
-    role = next((m.get("role") for m in members if m.get("user_id") == actor_user_id and m.get("status", "ACTIVE") == "ACTIVE"), None)
+    role = next((case_role_for_member(m) for m in members if m.get("user_id") == actor_user_id and m.get("status", "ACTIVE") == "ACTIVE"), None)
     allow_all = mvp_context_permissions(actor_user_id)
     result["permissions_mode"] = "MVP_OPEN" if allow_all else "ROLE_BASED"
     result["can_write"] = allow_all or role in {"CASE_OWNER", "CHAT_OPERATOR", "REVIEWER"}
@@ -2488,10 +2505,10 @@ async def read_context_display(case_id: str, actor_user_id: str):
         return []
     members = await repository.list_members(case_id)
     member = next((item for item in members if item.get('user_id') == actor.actor_id and item.get('status', 'ACTIVE') == 'ACTIVE'), None)
-    if actor.actor_type != 'BANK_STAFF' or (member and member.get('role') == 'CUSTOMER'):
+    if actor.actor_type != 'BANK_STAFF' or (member and case_role_for_member(member) == 'CUSTOMER'):
         return []
     if not mvp_context_permissions(actor.actor_id) and not (
-        member and actor.for_case(case_id, str(member.get('role'))).can('WRITE')
+        member and actor.for_case(case_id, str(case_role_for_member(member))).can('WRITE')
     ):
         return []
     return [item for item in await store.list_items(case_id, include_deleted=True)

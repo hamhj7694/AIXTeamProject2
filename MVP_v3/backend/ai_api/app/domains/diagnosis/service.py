@@ -5,8 +5,8 @@ import hashlib
 from contracts.diagnosis import AnalysisEnvelope, ContextResult, DiagnosisResult, WindowAnalysisResult
 from request_trace import trace_stage
 
-from .extractor import build_case_context_features, signal_context_payload
-from .budget import diagnosis_budget_scope
+from .extractor import build_case_context_features, build_context_from_signal_payload, signal_context_payload
+from .budget import DiagnosisBudgetExceededError, diagnosis_budget_scope
 from .full_context_llm import FullContextDiagnosisHandler
 from .risk_fusion import DiagnosisFusion
 from .window_ai import WindowAiAdapter
@@ -44,9 +44,15 @@ class DiagnosisService:
     async def _build_demo_envelope(self, text: str) -> AnalysisEnvelope:
         with trace_stage("ai.demo_adapter.events_and_ml"):
             window_result: WindowAnalysisResult = await self.window_ai.analyze(text)
-        with trace_stage("ai.demo_adapter.context_features"):
-            context_features = await extract_case_context_features(text)
         event_context_features = build_case_context_features(window_result.events)
+        with trace_stage("ai.demo_adapter.context_features"):
+            try:
+                context_features = await extract_case_context_features(text)
+            except DiagnosisBudgetExceededError:
+                # The event/atom pass is already useful; continue with its
+                # deterministic feature projection if the optional enrichment
+                # call would exceed the remaining request budget.
+                context_features = event_context_features
         context_features = context_features.model_copy(update={
             "amount_values_krw": event_context_features.amount_values_krw,
             "requested_amount_values_krw": event_context_features.requested_amount_values_krw,
@@ -78,10 +84,19 @@ class DiagnosisService:
             "timezone": envelope.timezone,
             "source_text_included": False,
         }
+        additional_warnings: list[str] = []
         with trace_stage("ai.context_summary"):
-            context: ContextResult = await self.full_context_llm.analyze(payload)
+            try:
+                context: ContextResult = await self.full_context_llm.analyze(payload)
+            except DiagnosisBudgetExceededError:
+                # Preserve the successfully extracted signals instead of dropping
+                # the whole result when the final narrative call cannot be reserved.
+                context = build_context_from_signal_payload(payload)
+                additional_warnings.append(
+                    "전체 입력 중 예산 범위까지 분석한 부분 결과입니다. 일부 후반부 정황은 추가 확인이 필요합니다."
+                )
         result = self.fusion.merge(
-            window_result, context, case_id=case_id,
+            window_result, context, case_id=case_id, additional_warnings=additional_warnings,
         )
         # Keep the independent context projection as the first additive
         # operation for backwards compatibility with existing adapters.

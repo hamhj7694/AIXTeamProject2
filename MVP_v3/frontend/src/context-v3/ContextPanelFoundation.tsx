@@ -1,5 +1,5 @@
 import React from 'react';
-import { PanelRightClose } from 'lucide-react';
+import { PanelRightClose, PanelRightOpen } from 'lucide-react';
 
 /**
  * Frontend-first foundation panel.
@@ -17,10 +17,10 @@ export const ContextPanelFoundation: React.FC<{
     <div className="context-header context-v3-sticky-header">
       <div>
         <p className="eyebrow">사건 정보</p>
-        <h2>사건 맥락</h2>
+        <h2>사건 현황</h2>
       </div>
-      <button type="button" className="context-open context-header-toggle" onClick={onToggle} aria-label="사건 맥락 닫기">
-        <PanelRightClose size={17}/>
+      <button type="button" className="context-open context-header-toggle" onClick={onToggle} aria-label={open ? '사건 맥락 닫기' : '사건 맥락 열기'} title={open ? '사건 맥락 닫기' : '사건 맥락 열기'}>
+        {open ? <PanelRightClose size={17}/> : <PanelRightOpen size={17}/>}
       </button>
     </div>
     <div className="context-foundation-blank" aria-label="새 우측 패널 설계 영역" />

@@ -237,7 +237,9 @@ def _speaker_hint(turn: str) -> str:
 
     The production path receives speaker roles in the Analysis Envelope.  The
     demo adapter may receive a labelled transcript, so pass that label to the
-    extraction model as metadata.  An unlabeled turn remains UNKNOWN.
+    extraction model as metadata.  An unlabeled turn is marked UNKNOWN here;
+    the model receives the surrounding conversation and may infer its speaker
+    when the dialogue provides enough evidence.
     """
     match = re.match(r"^\s*(?:\[\s*)?(고객|피해자|소비자|CUSTOMER)\s*(?:\]|:|：)", turn, re.IGNORECASE)
     if match:
@@ -253,6 +255,73 @@ def _speaker_hint(turn: str) -> str:
     if match:
         return "BANK_STAFF"
     return "UNKNOWN"
+
+
+_DEMO_SUSPECTED_CUES = (
+    "보내 줘", "보내줘", "이체해 줘", "이체해줘", "말해 줘", "말해줘",
+    "불러 주세요", "불러주세요", "따라 주세요", "따라주세요", "묻지 말고",
+    "문자로만", "은행에 문의하면", "다른 사람에게", "인증번호", "안전계좌",
+    "인증서", "급하게 결제", "결제해야", "환불 전용 계좌", "보안센터", "카드사", "검찰", "경찰",
+)
+_DEMO_CUSTOMER_CUES = (
+    "확인하고 싶", "확인해 보", "확인해보", "알겠습니다", "말하면 결제",
+    "어떤 결제인지", "아직 보내지", "송금하지 않았", "설명해 주세요",
+)
+
+
+def _infer_unlabeled_demo_role(turn: str, turns: list[str]) -> tuple[str, float] | None:
+    """Infer a low-confidence role for an unlabeled demo turn.
+
+    This is a conservative safety net for the demo adapter only. Explicit
+    speaker metadata and model-provided roles always win; the result is marked
+    as an inference through its lower confidence rather than presented as fact.
+    """
+    if _speaker_hint(turn) != "UNKNOWN":
+        return None
+    compact = re.sub(r"\s+", "", turn)
+    conversation = re.sub(r"\s+", "", " ".join(turns))
+    scam_context = any(cue.replace(" ", "") in conversation for cue in _DEMO_SUSPECTED_CUES)
+    customer_signal = any(cue.replace(" ", "") in compact for cue in _DEMO_CUSTOMER_CUES)
+    question_signal = "?" in turn or turn.rstrip().endswith(("까요", "나요", "습니까"))
+    suspected_signal = any(cue.replace(" ", "") in compact for cue in _DEMO_SUSPECTED_CUES)
+    family_claim_signal = any(token in compact for token in ("엄마", "아빠", "휴대폰이고장", "임시번호"))
+
+    if customer_signal or question_signal:
+        return "CUSTOMER", 0.58
+    if suspected_signal or (scam_context and family_claim_signal):
+        return "SUSPECTED_PARTY", 0.58
+    return None
+
+
+def _apply_demo_speaker_guess(
+    atoms: list[SemanticAtom], role: str, confidence: float,
+) -> list[SemanticAtom]:
+    """Fill only missing role metadata with a clearly low-confidence guess."""
+    updated: list[SemanticAtom] = []
+    for atom in atoms:
+        changes: dict[str, object] = {}
+        if atom.speaker_role in {None, "UNKNOWN"}:
+            changes["speaker_role"] = role
+            changes["speaker_confidence"] = min(atom.speaker_confidence or confidence, confidence)
+            changes["attribution_confidence"] = min(atom.attribution_confidence or confidence, confidence)
+        if role == "SUSPECTED_PARTY":
+            if atom.actor_role in {None, "UNKNOWN"} and (
+                atom.claim_status == "CALLER_CLAIM"
+                or atom.action_state in {"REQUESTED", "INSTRUCTED"}
+                or atom.atom_class in {"IDENTITY_CLAIM", "ORGANIZATION_CLAIM", "ROLE_CLAIM", "ACTION_REQUEST", "ACTION_INSTRUCTION", "PROHIBITION", "SECRECY_REQUEST", "COMMUNICATION_CONTROL", "FINANCIAL_ACTION"}
+            ):
+                changes["actor_role"] = role
+            if atom.target_role in {None, "UNKNOWN"}:
+                changes["target_role"] = "CUSTOMER"
+            if atom.reported_by_role in {None, "UNKNOWN"}:
+                changes["reported_by_role"] = role
+        elif role == "CUSTOMER":
+            if atom.reported_by_role in {None, "UNKNOWN"}:
+                changes["reported_by_role"] = role
+            if atom.action_state in {"REPORTED_ACTION", "COMPLETED", "DENIED"} and atom.actor_role in {None, "UNKNOWN"}:
+                changes["actor_role"] = role
+        updated.append(atom.model_copy(update=changes) if changes else atom)
+    return updated
 
 
 def _validate_event(raw: dict[str, Any], turn_id: int, target: str) -> ExtractedEvent:
@@ -376,6 +445,11 @@ def _local_safety_events(
         if only_turn_ids is not None and turn_id not in only_turn_ids:
             continue
         compact = re.sub(r"\s+", "", target)
+        if (
+            any(token in compact for token in ("엄마", "아빠", "어머니", "아버지"))
+            and any(token in compact for token in ("휴대폰이고장", "스마트폰이고장", "임시번호", "새번호로연락"))
+        ):
+            add(turn_id, target, "IMPERSONATION", "FAMILY", "FAMILY")
         if any(token in compact for token in ("검찰", "지검", "수사관", "검사")):
             add(turn_id, target, "IMPERSONATION", "PROSECUTION", "PUBLIC_AGENCY")
         elif any(token in compact for token in ("경찰", "경찰청", "형사")):
@@ -424,7 +498,7 @@ async def extract_events(text: str) -> EventExtraction:
 
     budget = active_diagnosis_budget()
     budget.validate_input(text=text, turn_count=len(turns))
-    model_name = os.getenv("OPENAI_EVENT_MODEL", "gpt-4o-mini")
+    model_name = os.getenv("OPENAI_EVENT_MODEL", "gpt-5.6-luna")
     if not os.getenv("OPENAI_API_KEY"):
         raise RuntimeError("OPENAI_API_KEY가 설정되지 않아 실제 LLM 분석을 시작할 수 없습니다.")
 
@@ -439,22 +513,43 @@ async def extract_events(text: str) -> EventExtraction:
     failed_turn_ids: set[int] = set()
     max_output_tokens = int(os.getenv("OPENAI_EVENT_MAX_OUTPUT_TOKENS", "1800"))
     for turn_id, target in enumerate(turns, start=1):
+        # Keep attribution context local to the target turn so a long demo
+        # input does not multiply the full transcript into every model call.
+        context_start = max(0, turn_id - 4)
+        context_end = min(len(turns), turn_id + 3)
+        conversation_context = "\n".join(
+            f"[TURN {index}] {turns[index - 1]}"
+            for index in range(context_start + 1, context_end + 1)
+        )
+        speaker_hint = _speaker_hint(target)
+        speaker_marker = "UNLABELED" if speaker_hint == "UNKNOWN" else speaker_hint
         reservation = budget.reserve(
-            input_text=f"{SYSTEM_INSTRUCTION}\n[TARGET][TURN {turn_id}] {target}",
+            input_text=(
+                f"{SYSTEM_INSTRUCTION}\n[CONVERSATION_CONTEXT]\n"
+                f"{conversation_context}\n[TARGET][TURN {turn_id}] {target}"
+            ),
             max_output_tokens=max_output_tokens,
         )
         try:
             response = await client.responses.create(
                 model=model_name,
                 instructions=f"{SYSTEM_INSTRUCTION}\n\n{SEMANTIC_ATOM_INSTRUCTION}",
-                input=f"[TARGET][TURN {turn_id}][SPEAKER_{_speaker_hint(target)}] {target}",
+                input=(
+                    "[CONVERSATION_CONTEXT]\n"
+                    f"{conversation_context}\n\n"
+                    f"[TARGET][TURN {turn_id}][SPEAKER_{speaker_marker}] {target}"
+                ),
                 max_output_tokens=max_output_tokens,
                 text={"format": {"type": "json_schema", "name": "voice_phishing_events_v2_2", "schema": EVENT_OUTPUT_SCHEMA, "strict": True}},
             )
             budget.settle(reservation, response)
             payload = json.loads(response.output_text)
             events.extend(_validate_event(raw, turn_id, target) for raw in payload["events"])
-            semantic_atoms.extend(_validate_llm_atoms(payload.get("semantic_atoms"), turn_id, target))
+            turn_atoms = _validate_llm_atoms(payload.get("semantic_atoms"), turn_id, target)
+            inferred_role = _infer_unlabeled_demo_role(target, turns)
+            if inferred_role:
+                turn_atoms = _apply_demo_speaker_guess(turn_atoms, *inferred_role)
+            semantic_atoms.extend(turn_atoms)
             successful.append(turn_id)
         except Exception as exc:
             failures.append(exc)
@@ -483,7 +578,15 @@ async def extract_events(text: str) -> EventExtraction:
         if fallback_events:
             events.extend(fallback_events)
             warnings.append("일부 문장은 외부 AI 대신 로컬 안전 신호로 보완했습니다.")
-    return EventExtraction(turns, _dedupe_events(events), successful, model_name, warnings, semantic_atoms)
+    # Family/device-broken calls are frequently supplied without speaker
+    # labels. Keep a deterministic, privacy-safe family impersonation cue when
+    # the event model misses the cue, so the downstream narrative has a grounded
+    # suspected-party path instead of falling back to a customer report.
+    family_safety_events = [
+        event for event in _local_safety_events(turns)
+        if event.event_family == "IMPERSONATION" and event.impersonation_group == "FAMILY"
+    ]
+    return EventExtraction(turns, _dedupe_events([*events, *family_safety_events]), successful, model_name, warnings, semantic_atoms)
 
 
 def build_context_from_events(events: list[ExtractedEvent]) -> ContextResult:
@@ -625,6 +728,54 @@ def _normalize_suspected_sentence(code: str, sentence: str, entity_names: list[s
     return text
 
 
+_FEATURE_NARRATIVE_LABELS = {
+    "ROLE_PROSECUTION": "수사기관 사칭", "ROLE_POLICE": "경찰 사칭",
+    "ROLE_BANK": "금융기관 사칭", "ROLE_FAMILY": "가족·지인 사칭",
+    "ROLE_SUPPORT": "지원기관 사칭", "CLAIMED_ORGANIZATION": "기관·소속 사칭",
+    "CLAIM_CRIME_INVOLVEMENT": "계좌·명의 범죄 연루 주장",
+    "CLAIM_ACCOUNT_VERIFICATION": "계좌 확인 필요 주장",
+    "CLAIM_DEVICE_BROKEN": "휴대전화 이상 주장",
+    "CLAIM_UNAUTHORIZED_PAYMENT": "승인되지 않은 결제 주장",
+    "CLAIM_LOAN_APPROVAL": "대출 승인 주장", "REQUEST_TRANSFER": "송금·이체 요구",
+    "REQUEST_INSTALL_APP": "앱 설치 요구", "REQUEST_AUTH_INFO": "인증정보 제공 요구",
+    "REQUEST_PERSONAL_INFO": "개인정보 제공 요구", "REQUEST_KEEP_CALL": "통화 유지 요구",
+    "REQUEST_SECRECY": "외부 연락 제한 요구", "REQUEST_OPEN_URL": "링크·앱 실행 요구",
+    "REQUEST_AMOUNT": "금액 요구", "PURPOSE_SAFE_ACCOUNT": "안전계좌 이체 유도",
+    "PURPOSE_LOAN_REPAYMENT": "대출 상환 요구", "PURPOSE_REPAIR": "기기·계정 수리 명분",
+    "PURPOSE_REFUND": "환급 명분", "DEADLINE_TODAY": "오늘 안 처리 요구",
+    "DEADLINE_IMMEDIATE": "즉시 처리 요구", "TACTIC_FEAR": "불안·공포 조성",
+    "TACTIC_URGENCY": "긴급 처리 압박", "TACTIC_ISOLATION": "주변 연락 차단",
+}
+
+
+def _unknown_attribution_sentence(code: str, entity_names: list[str]) -> str:
+    label = _FEATURE_NARRATIVE_LABELS.get(code, "추가 분석 정황")
+    organization = _entity_display_name(entity_names)
+    prefix = f"{organization} 관련 " if entity_names and code.startswith(("ROLE_", "CLAIM")) else ""
+    return f"{prefix}{label} 정황이 확인되었으나 발화자·행위자 귀속은 확인 필요."
+
+
+def _demo_inferred_suspected_sentence(code: str, entity_names: list[str]) -> str:
+    """Write a clearly qualified attribution for unlabeled demo calls.
+
+    The demo adapter receives the live-call text before it becomes an
+    envelope. When the upstream model leaves a strong scam feature's actor
+    unknown, the surrounding call pattern still supports a low-confidence
+    suspected-party reading. Keep the wording explicitly inferential and never
+    apply this fallback to production envelopes.
+    """
+    normalized = _normalize_feature_narrative_code(code)
+    if normalized == "CLAIM_DEVICE_BROKEN":
+        relationship = next((item for item in entity_names if item in {"CHILD", "FAMILY_MEMBER", "자녀", "아들", "딸"}), None)
+        if relationship:
+            return "보이스피싱 의심 인물로 추정되는 사람이 자녀를 사칭하며 휴대전화가 고장 났다고 주장한 정황"
+        return "보이스피싱 의심 인물로 추정되는 사람이 휴대전화가 고장 났다고 주장한 정황"
+    label = _FEATURE_NARRATIVE_LABELS.get(normalized, "추가 분석 정황")
+    if normalized.startswith(("REQUEST_", "PURPOSE_")):
+        return f"보이스피싱 의심 인물로 추정되는 사람이 고객에게 {label}을(를) 요구한 정황"
+    return f"보이스피싱 의심 인물로 추정되는 사람이 {label}을(를) 말한 정황"
+
+
 def _normalize_claim_line(value: str) -> str:
     text = " ".join(value.split())
     if "고객이" not in text:
@@ -715,24 +866,16 @@ def _validated_feature_narratives(context: ContextResult, payload: dict[str, Any
                 atom for atom in atoms_by_id.values()
                 if int(atom.get("source_turn_id") or 0) in source_turns
             ]
-        default_actor = "CUSTOMER" if code.startswith("CUSTOMER_") else (
-            "SUSPECTED_PARTY" if _is_suspected_feature_code(code) else "UNKNOWN"
-        )
         def authoritative_role(field: str, fallback: str = "UNKNOWN") -> str:
+            allowed_roles = {"SUSPECTED_PARTY", "CUSTOMER", "BANK_STAFF", "SYSTEM", "UNKNOWN"}
             values = [str(atom.get(field) or "").upper() for atom in referenced_atoms]
             values = ["SUSPECTED_PARTY" if value == "CALLER" else value for value in values if value]
+            values = [value for value in values if value in allowed_roles]
             return values[0] if values and all(value == values[0] for value in values) else fallback
-        speaker_role = authoritative_role("speaker_role", authoritative_role("speaker", default_actor))
-        actor_role = authoritative_role("actor_role", default_actor)
-        target_role = authoritative_role("target_role", "CUSTOMER" if default_actor == "SUSPECTED_PARTY" else "UNKNOWN")
+        speaker_role = authoritative_role("speaker_role", authoritative_role("speaker"))
+        actor_role = authoritative_role("actor_role", authoritative_role("actor"))
+        target_role = authoritative_role("target_role", authoritative_role("target"))
         reported_by_role = authoritative_role("reported_by_role", speaker_role)
-        if actor_role == "UNKNOWN" and _is_suspected_feature_code(code):
-            actor_role = "SUSPECTED_PARTY"
-        if target_role == "UNKNOWN" and actor_role == "SUSPECTED_PARTY":
-            target_role = "CUSTOMER"
-        if code.startswith("CUSTOMER_"):
-            actor_role = "CUSTOMER"
-            reported_by_role = "CUSTOMER"
 
         entity_names = list(dict.fromkeys(
             str(value).strip()
@@ -754,9 +897,47 @@ def _validated_feature_narratives(context: ContextResult, payload: dict[str, Any
         relative_deadlines = [int(atom["relative_deadline_minutes"]) for atom in referenced_atoms if atom.get("relative_deadline_minutes") is not None]
         occurrence_count = max([int(atom.get("occurrence_count") or 1) for atom in referenced_atoms] or [1])
         confidences = [float(atom["attribution_confidence"]) for atom in referenced_atoms if atom.get("attribution_confidence") is not None]
+        atom_claim_statuses = {
+            str(atom.get("claim_status") or "UNKNOWN").upper() for atom in referenced_atoms
+        }
+        attribution_conflict = (
+            actor_role == "CUSTOMER"
+            and _is_suspected_feature_code(code)
+            and "CUSTOMER_REPORTED" not in atom_claim_statuses
+        )
+        inferred_suspected_actor = (
+            actor_role == "SUSPECTED_PARTY"
+            and bool(confidences)
+            and min(confidences) < 0.7
+            and "CUSTOMER_REPORTED" not in atom_claim_statuses
+        )
+        demo_source = str((payload.get("envelope_metadata") or {}).get("source") or "").upper()
+        demo_inferred_actor = (
+            actor_role == "UNKNOWN"
+            and demo_source == "DEMO_ADAPTER"
+            and _is_suspected_feature_code(code)
+            and "CUSTOMER_REPORTED" not in atom_claim_statuses
+        )
         sentence = sentence.replace("상대방", "보이스피싱 의심 인물")
-        if actor_role == "SUSPECTED_PARTY" and not code.startswith("CUSTOMER_"):
+        if demo_inferred_actor:
+            actor_role = "SUSPECTED_PARTY"
+            if speaker_role == "UNKNOWN":
+                speaker_role = "SUSPECTED_PARTY"
+            if target_role == "UNKNOWN":
+                target_role = "CUSTOMER"
+            if reported_by_role == "UNKNOWN":
+                reported_by_role = "SUSPECTED_PARTY"
+            sentence = _demo_inferred_suspected_sentence(code, entity_names)
+        elif actor_role == "UNKNOWN" or attribution_conflict:
+            sentence = _unknown_attribution_sentence(code, entity_names)
+        elif actor_role == "SUSPECTED_PARTY" and not code.startswith("CUSTOMER_"):
             sentence = _normalize_suspected_sentence(code, sentence, entity_names)
+            if inferred_suspected_actor and "보이스피싱 의심 인물" in sentence and "추정" not in sentence:
+                sentence = sentence.replace(
+                    "보이스피싱 의심 인물",
+                    "보이스피싱 의심 인물로 추정되는 발화자",
+                    1,
+                )
         if code.startswith("CUSTOMER_") and any(
             token in sentence for token in ("송금했다고", "이체했다고", "설치했다고", "제공했다고")
         ) and "은행 내부 채널" not in sentence:
@@ -779,7 +960,7 @@ def _validated_feature_narratives(context: ContextResult, payload: dict[str, Any
             "deadline_at": deadlines[0] if deadlines else None,
             "relative_deadline_minutes": min(relative_deadlines) if relative_deadlines else None,
             "occurrence_count": occurrence_count,
-            "confidence": min(confidences) if confidences else None,
+            "confidence": min(confidences) if confidences else (0.58 if demo_inferred_actor else None),
         }))
     def suspected_party_lines(items: list[str]) -> list[str]:
         normalized: list[str] = []
@@ -861,7 +1042,7 @@ async def extract_full_context(text: str) -> ContextResult:
         api_key=os.environ["OPENAI_API_KEY"], timeout=_openai_timeout_seconds(),
     )
     response = await client.responses.create(
-        model=os.getenv("OPENAI_CONTEXT_MODEL", os.getenv("OPENAI_EVENT_MODEL", "gpt-4o-mini")),
+        model=os.getenv("OPENAI_CONTEXT_MODEL", os.getenv("OPENAI_EVENT_MODEL", "gpt-5.6-luna")),
         instructions=(
             "전체 금융 통화 맥락을 구조화한다. 확인된 주장과 권고를 구분하고, "
             "보이스피싱 여부나 금융조치를 최종 확정하지 않는다. 입력에 없는 사실을 추가하지 않는다."
@@ -900,7 +1081,7 @@ async def extract_context_from_signal_payload(
         api_key=os.environ["OPENAI_API_KEY"], timeout=_openai_timeout_seconds(),
     )
     response = await client.responses.create(
-        model=os.getenv("OPENAI_CONTEXT_MODEL", os.getenv("OPENAI_EVENT_MODEL", "gpt-4o-mini")),
+        model=os.getenv("OPENAI_CONTEXT_MODEL", os.getenv("OPENAI_EVENT_MODEL", "gpt-5.6-luna")),
         instructions=(
             "You receive only structured anti-fraud signals, never a call transcript. "
             "Treat speaker_role, actor_role, target_role, reported_by_role and their confidence "
@@ -914,6 +1095,11 @@ async def extract_context_from_signal_payload(
             "is a customer report. If a speaker is UNKNOWN, do not invent a customer reporter; "
             "for anti-fraud claim/request codes use the event's suspected-party attribution and "
             "otherwise say '화자 미상 · 확인 필요'. "
+            "For a DEMO_ADAPTER envelope, if a strong scam feature has no explicit actor but "
+            "the surrounding structured signals form a live-call pattern (for example a family "
+            "vocative followed by a broken-phone excuse and money/authentication requests), "
+            "attribute it as '보이스피싱 의심 인물로 추정되는 사람' with low confidence rather "
+            "than rewriting it as a customer report. "
             "do not use the vague label '상대방' and do not call anyone a confirmed criminal. "
             "A vocative such as '엄마' is the addressee, not the speaker. When claimed_relationship "
             "is CHILD, describe that the suspected person impersonated the customer's child. "
