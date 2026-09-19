@@ -17,6 +17,7 @@ import { ParticipantManager } from '../components/ParticipantManager';
 import { CaseAssignmentDialog } from '../components/CaseAssignmentDialog';
 import { readBankBookmarks, writeBankBookmarks, type BankBookmark } from '../bank/bookmarks';
 import { stripBankAiMention } from '../bank/aiMention';
+import { buildConsecutiveAiPrompt, ConsecutiveAiBatcher } from '../bank/consecutiveAiBatch';
 import { generateUuid } from '../uuid';
 import { mergePendingMessages, removeMessage, upsertMessage } from '../api/messageState';
 import { caseState, caseStateTone, incidentTitle, statusLabel } from '../presentation';
@@ -89,6 +90,8 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
   const [splitDragging, setSplitDragging] = useState(false);
   const lastSupportRevisionRef = useRef('');
   const aiQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const aiBatcherRef = useRef<ConsecutiveAiBatcher | null>(null);
+  const enqueueAiReplyRef = useRef<(prompt?: string, responseStyle?: 'CONVERSATIONAL' | 'BRIEF') => Promise<void>>(async () => undefined);
   const aiGenerationRef = useRef(0);
   const activeCaseIdRef = useRef(caseId);
   activeCaseIdRef.current = caseId;
@@ -226,10 +229,17 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
       }
     };
     // 연속 입력은 병렬 호출하지 않고 저장 순서대로 분석해 응답 순서를 지킨다.
-    aiQueueRef.current = aiQueueRef.current.then(run, run);
+    const queued = aiQueueRef.current.then(run, run);
+    aiQueueRef.current = queued;
+    return queued;
   }, [caseId, load]);
+  enqueueAiReplyRef.current = enqueueAiReply;
 
   useEffect(() => {
+    aiBatcherRef.current?.dispose();
+    aiBatcherRef.current = new ConsecutiveAiBatcher(async (messages) => {
+      await enqueueAiReplyRef.current(buildConsecutiveAiPrompt(messages));
+    });
     aiGenerationRef.current += 1;
     aiQueueRef.current = Promise.resolve();
     loadRequestRef.current += 1;
@@ -258,14 +268,14 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
     heartbeat();
     const timer = window.setInterval(() => { void load(true); }, 5000);
     const presenceTimer = window.setInterval(heartbeat, 30000);
-    return () => { active = false; aiGenerationRef.current += 1; loadRequestRef.current += 1; window.clearInterval(timer); window.clearInterval(presenceTimer); };
+    return () => { active = false; aiBatcherRef.current?.dispose(); aiBatcherRef.current = null; aiGenerationRef.current += 1; loadRequestRef.current += 1; window.clearInterval(timer); window.clearInterval(presenceTimer); };
   }, [load]);
 
   const refreshAfterMutation = async () => { await load(true, false); onMutated(); };
   const deliverMessage = async (item: BankOutboxItem) => {
     const generation = aiGenerationRef.current;
     const isCurrent = () => generation === aiGenerationRef.current && activeCaseIdRef.current === item.message.case_id;
-    if (!isCurrent()) return;
+    if (!isCurrent()) return false;
     setBusy(true); setError('');
     const sendingMessage = { ...item.message, delivery_state: 'SENDING' as const, delivery_error: null };
     item.message = sendingMessage;
@@ -278,30 +288,38 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
         item.attachmentIds.push(attachment.attachment_id);
       }
       const message = await casesApi.sendMessage(caseId, item.content, item.target, item.attachmentIds, item.message.client_request_id!);
-      if (!isCurrent()) return;
+      if (!isCurrent()) return false;
       loadRequestRef.current += 1;
       pendingMessagesRef.current.delete(item.message.client_request_id!);
       outboxRef.current.delete(item.message.client_request_id!);
       showMessage(message);
       onMutated();
-      if (item.target === 'TEAM' && item.requestAi && item.content) {
-        const requestText = stripBankAiMention(item.content) || '현재 사건에서 가장 시급하게 확인하거나 조치할 사항을 알려주세요.';
-        const copilotPrompt = `은행 담당자의 질문: ${requestText}\n\n현재 Shared Case 맥락만 바탕으로, 동료에게 답하듯 자연스럽게 업무를 지원해 주세요. 확인되지 않은 사실은 추정하지 말고, 고객에게 자동 전송하거나 지급정지·신고 등 외부 조치를 완료한 것처럼 표현하지 마세요.`;
-        window.requestAnimationFrame(() => { if (isCurrent()) enqueueAiReply(copilotPrompt); });
-      } else {
+      if (!(item.target === 'TEAM' && item.requestAi && item.content)) {
         window.requestAnimationFrame(() => { if (isCurrent()) void load(true, false); });
       }
+      return true;
     } catch (reason) {
       const failed = {
         ...item.message,
         delivery_state: 'FAILED' as const,
         delivery_error: reason instanceof Error ? reason.message : '서버에 전송하지 못했습니다.',
       };
-      if (!isCurrent()) return;
+      if (!isCurrent()) return false;
       item.message = failed;
       pendingMessagesRef.current.set(failed.client_request_id!, failed);
       showMessage(failed);
+      return false;
     } finally { if (isCurrent()) setBusy(false); }
+  };
+  const queueBatchedAi = (item: BankOutboxItem, saved: Promise<boolean>) => {
+    if (item.target !== 'TEAM' || !item.requestAi || !item.content) return;
+    aiBatcherRef.current?.enqueue({
+      caseId: item.message.case_id,
+      requesterUserId: CURRENT_BANK_USER.user_id,
+      messageId: item.message.client_request_id!,
+      content: stripBankAiMention(item.content) || '현재 사건에서 가장 시급하게 확인하거나 조치할 사항을 알려주세요.',
+      saved,
+    });
   };
   const send = (content: string, files: File[], target: ComposerTarget, requestAi: boolean): Promise<void> => {
     const clientRequestId = generateUuid();
@@ -331,13 +349,19 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
     pendingMessagesRef.current.set(clientRequestId, message);
     outboxRef.current.set(clientRequestId, item);
     showMessage(message);
-    void deliverMessage(item);
+    const saved = deliverMessage(item);
+    queueBatchedAi(item, saved);
+    void saved;
     return Promise.resolve();
   };
   const retryMessage = (message: CaseMessage) => {
     if (busy || !message.client_request_id) return;
     const item = outboxRef.current.get(message.client_request_id);
-    if (item) void deliverMessage(item);
+    if (item) {
+      const saved = deliverMessage(item);
+      queueBatchedAi(item, saved);
+      void saved;
+    }
   };
   const dismissMessage = (message: CaseMessage) => {
     if (!message.client_request_id) return;

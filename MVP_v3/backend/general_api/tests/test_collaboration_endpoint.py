@@ -77,6 +77,9 @@ class CollaborationEndpointTest(unittest.TestCase):
         payload = general_main.service.ai_client.generate_case_copilot_reply.await_args.args[0]
         self.assertEqual(payload["primary_assignee"], "김태환")
         self.assertEqual(payload["participants"], ["김태환 (메인 담당자)", "은행 담당자 (검토자)"])
+        self.assertEqual(payload["requester_user_id"], "staff-1")
+        self.assertEqual(payload["requester_display_name"], "Operator")
+        self.assertEqual(payload["requester_role"], "BANK_STAFF")
 
     def test_customer_ai_reply_uses_customer_safe_mode_and_public_channel(self) -> None:
         self.repository.list_messages.return_value = [{

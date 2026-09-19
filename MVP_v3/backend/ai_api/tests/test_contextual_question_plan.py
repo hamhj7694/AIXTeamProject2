@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, patch
 
 from contracts.ai_internal.work_card import CaseWorkCardInput
 from ai_api.app.domains.case_support.work_card_service import CaseWorkCardService, WORK_CARD_SCHEMA
+from ai_api.app.domains.case_support.copilot_service import CaseCopilotProviderError
 
 
 def payload(questions: list[dict]) -> dict:
@@ -69,6 +70,16 @@ class ContextualQuestionPlanTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("실제 비밀번호", instructions)
         self.assertIn("입력에 없는 기관", instructions)
         self.assertNotIn("질문은 question_candidates에 있는 항목만 사용", instructions)
+
+    async def test_contract_validation_logs_only_stage_and_error_type(self) -> None:
+        invalid = {"question_id": "invalid"}
+        with self.assertLogs("ai_api.app.domains.case_support.work_card_service", level="WARNING") as captured:
+            with self.assertRaises(CaseCopilotProviderError):
+                await self._generate([invalid])
+        message = "\n".join(captured.output)
+        self.assertIn("stage=contract_validation", message)
+        self.assertIn("error_type=ValidationError", message)
+        self.assertNotIn("CASE-AI", message)
 
     async def test_empty_contextual_result_is_not_replaced_with_baseline_candidates(self) -> None:
         result, _ = await self._generate([])

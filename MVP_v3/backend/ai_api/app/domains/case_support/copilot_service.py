@@ -66,6 +66,14 @@ def _asks_about_primary_assignee(prompt: str) -> bool:
     ))
 
 
+def _asks_about_requester_identity(prompt: str) -> bool:
+    """Recognize a narrow first-person identity lookup without inferring from Case people."""
+    compact = re.sub(r"[^0-9a-z가-힣]", "", prompt.lower())
+    return any(token in compact for token in (
+        "내가누구", "나는누구", "제가누구", "저는누구",
+    ))
+
+
 def _service_question_guidance(request: CaseCopilotInput) -> CaseCopilotOutput | None:
     """Resolve a narrow UI-help intent from server-owned cards, not from model guesses.
 
@@ -196,6 +204,10 @@ def _context_sections(request: CaseCopilotInput) -> dict[str, list[str]]:
     if request.assistant_mode == "CUSTOMER_SUPPORT":
         return public_sections
     bank_sections = {
+        "현재 요청자 (현재 질문의 나·내·내가는 이 사람을 뜻함)": [
+            f"표시 이름: {request.requester_display_name or '미전달'}",
+            f"역할: {request.requester_role or '미전달'}",
+        ],
         "담당자와 참여자": ([f"메인 담당자: {request.primary_assignee}"] if request.primary_assignee else ["메인 담당자: 미지정"])
         + [f"참여자: {item}" for item in request.participants],
         "사실 후보와 확인 기록 (항목별 상태를 구분)": request.known_facts,
@@ -235,6 +247,16 @@ class CaseCopilotService:
             return CaseCopilotOutput(
                 content="현재 이 Case에는 메인 담당자가 지정되어 있지 않습니다. 참여자 관리에서 메인 담당자를 설정해 주세요.",
                 model_mode="SHARED_CASE_LOOKUP",
+            )
+        if (
+            request.assistant_mode == "BANK_INTERNAL"
+            and request.requester_display_name
+            and _asks_about_requester_identity(request.prompt)
+        ):
+            # 현재 요청자의 1인칭은 Case 속 고객·사칭 상대 이름으로 재해석하지 않는다.
+            return CaseCopilotOutput(
+                content=f"현재 질문자는 {request.requester_display_name}입니다.",
+                model_mode="REQUESTER_LOOKUP",
             )
         if not os.getenv("OPENAI_API_KEY"):
             raise CaseCopilotAuthenticationError(
@@ -313,6 +335,9 @@ class CaseCopilotService:
                 "고객에게 바로 보이는 문장이 아니라 은행 직원의 내부 작업을 돕는 답변입니다. "
                 "확인된 사실과 고객 진술·미확인 항목을 명확히 구분하세요. 실제 완료 기록이 없는 Verification 결과를 만들어내지 마세요. "
                 "권장 사항은 판단 근거와 함께 제시하되 담당자의 최종 판단·승인·업무 실행을 대신했다고 표현하지 마세요. "
+                "[현재 요청 - 최우선]의 질문을 먼저 처리하세요. 그 블록의 '나·내·내가'는 현재 요청자를 뜻하며, "
+                "요청자의 자기소개나 이름을 고객 또는 사칭 상대의 진술로 재분류하지 마세요. "
+                "짧은 직접 질문에는 필요한 답만 먼저 제시하고, 답에 필요하지 않은 사건 요약이나 확인 질문 목록을 자동으로 덧붙이지 마세요. "
             )
             if request.response_style == "BRIEF":
                 instructions += (
@@ -392,6 +417,9 @@ class CaseCopilotService:
                 f"Case ID: {request.case_id}\n상태: {request.workflow_status}\n"
                 f"사기 유형: {request.fraud_type or '확인 중'}\n송금 상태: {request.transfer_status or '확인 중'}\n"
                 f"Case 요약: {request.case_summary or '없음'}\nShared Case 맥락:\n{context}\n\n"
+                "[현재 요청 - 최우선]\n"
+                f"요청자 표시 이름: {request.requester_display_name or '미전달'}\n"
+                f"요청자 역할: {request.requester_role or '미전달'}\n"
                 f"{request_label}:\n{request.prompt.strip()}"
             )
         try:
@@ -443,7 +471,13 @@ class CaseCopilotService:
             ],
             source_context=request.source_context,
         )
-        if CopilotQualityEvaluator.runtime_blocking_failures(quality):
+        blocking_failures = CopilotQualityEvaluator.runtime_blocking_failures(quality)
+        if blocking_failures:
+            # 원문·Case 정보 없이 판정 식별자만 남겨 다음 실패 원인을 안전하게 좁힌다.
+            logger.warning(
+                "CaseCopilot quality blocked: criteria=%s",
+                ",".join(check.criterion for check in blocking_failures),
+            )
             raise CaseCopilotProviderError("AI 응답이 역할·안전 기준을 충족하지 않아 전달하지 않았습니다.")
         return CaseCopilotOutput(content=content, model_mode=model)
 

@@ -208,7 +208,12 @@ class CopilotQualityEvaluator:
                 re.search(r"확인(?:됩니다|됐|된\s*상태)|확인됨|이체\s*완료|송금\s*완료", sentence)) or bool(
                 scope is not None and re.search(r"확인(?:했습니다|했|하였)", sentence))
             # 부재/보류 표현은 실제 거래의 부정 Fact와 다르다.
-            absence = bool(re.search(r"(?:확인|검증)(?:되지|할\s*수\s*없)|근거.{0,10}(?:없|부족)|전달되지|미확인|확인.{0,8}필요|(?:거래\s*(?:기록|Evidence)|증빙|영수증).{0,12}(?:없|미전달)", sentence))
+            absence = bool(re.search(
+                r"(?:확인|검증)(?:되지|할\s*수\s*없)|확인된\s*상태(?:가|는)?\s*(?:아니|아닙)|"
+                r"근거.{0,10}(?:없|부족)|전달되지|미확인|확인.{0,8}필요|"
+                r"(?:거래\s*(?:기록|Evidence)|증빙|영수증).{0,12}(?:없|미전달)",
+                sentence,
+            ))
             direct_transfer = scope == "transfer_status" and cls._source_transfer_value(sentence) is not None
             attributed = bool(re.search(r"고객.{0,80}(?:진술|답변|말했)|고객\s*진술(?:상|\s*기준)|고객.{0,80}보냈다고", sentence))
             unknown_claim = bool(re.search(r"(?:여부|사실|것).{0,20}(?:확인|검증)(?:되지|할\s*수\s*없).{0,15}$", sentence))
