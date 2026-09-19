@@ -20,6 +20,11 @@ import { stripBankAiMention } from '../bank/aiMention';
 import { generateUuid } from '../uuid';
 import { mergePendingMessages, removeMessage, upsertMessage } from '../api/messageState';
 import { caseState, caseStateTone, incidentTitle, statusLabel } from '../presentation';
+import { BankCardKind } from '../components/cards/BankCardMenu';
+import BankTransactionCard from '../components/cards/BankTransactionCard';
+import FdsResultCard from '../components/cards/FdsResultCard';
+import AdditionalLookupCard from '../components/cards/AdditionalLookupCard';
+import { mockAdditionalLookup, mockBankTransaction, mockFdsResult } from '../mocks/cardMocks';
 
 type DialogState = { type: 'questions' } | { type: 'verification'; task?: VerificationTask } | { type: 'action' } | null;
 type AdminAction = 'finalize' | 'reopen' | 'trash' | null;
@@ -60,6 +65,7 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
   const [bundle, setBundle] = useState<CaseBundle | null>(null);
   const [support, setSupport] = useState<CaseSupportSnapshot | null>(null);
   const [facts, setFacts] = useState<CaseFact[]>([]);
+  const [selectedBankCard, setSelectedBankCard] = useState<BankCardKind | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -379,10 +385,34 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
     : teamPaneCollapsed
       ? { gridTemplateColumns: 'minmax(0, 1fr) 4px 52px' }
       : { gridTemplateColumns: `minmax(0, ${customerPaneRatio}fr) 4px minmax(0, ${100 - customerPaneRatio}fr)` };
-
   if (loading && !caseItem) return <section className="room-state"><Loader2 className="spin" size={24}/><strong>Shared Case를 불러오고 있습니다.</strong><span>대화와 현재 맥락을 함께 준비합니다.</span></section>;
   if (error && !caseItem) return <section className="room-state error"><AlertCircle size={24}/><strong>정보를 불러오지 못했습니다.</strong><span>{error}</span><button onClick={() => void load()}>다시 시도</button></section>;
   if (!caseItem || !bundle) return <section className="room-state error"><AlertCircle size={24}/><strong>Case 기록을 열 수 없습니다.</strong><span>General API의 Bundle 응답을 확인해 주세요.</span><button onClick={() => void load()}>다시 시도</button></section>;
+
+  const transferStatus = caseItem.victim_transfer_status === 'YES'
+    ? '이체 완료'
+    : caseItem.victim_transfer_status === 'NO'
+      ? '미이체'
+      : caseItem.victim_transfer_status === 'UNKNOWN'
+        ? '확인 필요'
+        : '정보 없음';
+  const transactionCardData = {
+    ...mockBankTransaction,
+    transferAmount: typeof caseItem.actual_loss_amount_krw === 'number' ? caseItem.actual_loss_amount_krw : null,
+    transactionStatus: transferStatus,
+    updatedAt: caseItem.updated_at || '',
+  };
+  const supportBrief = support?.case_brief;
+  const fdsReasons = support?.case_context?.key_signals?.filter((item) => item.trim()) ?? [];
+  const fdsCardData = {
+    ...mockFdsResult,
+    riskScore: typeof supportBrief?.risk_score === 'number' ? supportBrief.risk_score : mockFdsResult.riskScore,
+    riskLevel: supportBrief?.risk_level || mockFdsResult.riskLevel,
+    updatedAt: caseItem.updated_at || mockFdsResult.updatedAt,
+    ...(fdsReasons.length > 0 ? { reasons: fdsReasons } : {}),
+  };
+  const additionalLookupData = { ...mockAdditionalLookup, updatedAt: caseItem.updated_at || mockAdditionalLookup.updatedAt };
+  const bankCard = selectedBankCard === 'transaction' ? <BankTransactionCard {...transactionCardData} /> : selectedBankCard === 'fds' ? <FdsResultCard {...fdsCardData} /> : selectedBankCard === 'additionalLookup' ? <AdditionalLookupCard {...additionalLookupData} onViewAll={() => undefined} /> : undefined;
 
   return <section className="case-room">
     <header className="case-room-header case-command-header">
@@ -399,7 +429,7 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
         <div ref={splitRef} className={`conversation-channel-grid ${splitDragging ? 'is-resizing' : ''}`} style={conversationGridStyle}>
           <SharedConversation bundle={bundle} view="conversation" channel="CUSTOMER" collapsed={customerPaneCollapsed} collapseDisabled={teamPaneCollapsed} onToggleCollapse={toggleCustomerPane} onOpenQuestions={() => setDialog({ type: 'questions' })} composer={<ConversationComposer foundationMode fixedTarget="CUSTOMER" showAi={false} showUtilities={false} showQuestionAction onOpenQuestions={() => setDialog({ type: 'questions' })} showInlineError={false} onErrorChange={(message) => handleComposerError('CUSTOMER', message)} busy={busy} aiBusy={false} onSend={send} onOpenVerification={() => undefined} onOpenAction={() => undefined} onInvokeAi={() => undefined} onOpenNotes={() => undefined} onOpenBookmarks={() => undefined} bookmarkCount={0}/>} bookmarkedIds={new Set(bookmarks.map((item) => item.entryId))} onToggleBookmark={toggleBookmark} onRetryMessage={retryMessage} onDismissMessage={dismissMessage}/>
           <button type="button" className="conversation-split-handle" onPointerDown={(event) => { if (customerPaneCollapsed || teamPaneCollapsed) return; event.preventDefault(); setSplitDragging(true); }} onDoubleClick={() => { if (!customerPaneCollapsed && !teamPaneCollapsed) setCustomerPaneRatio(50); }} onKeyDown={(event) => { if (event.key === 'Home') { event.preventDefault(); setCustomerPaneRatio(50); return; } if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return; event.preventDefault(); setCustomerPaneRatio((value) => Math.min(75, Math.max(25, value + (event.key === 'ArrowLeft' ? -5 : 5)))); }} aria-label="고객 소통과 은행 내부 소통 채팅창 너비 조절, 더블클릭하면 1대1로 맞춤" title="드래그하여 폭 조절 · 더블클릭하여 1:1 맞춤" aria-valuemin={25} aria-valuemax={75} aria-valuenow={Math.round(customerPaneRatio)} role="separator"><span/></button>
-          <SharedConversation bundle={bundle} view="conversation" channel="TEAM" collapsed={teamPaneCollapsed} collapseDisabled={customerPaneCollapsed} onToggleCollapse={toggleTeamPane} composer={<ConversationComposer foundationMode fixedTarget="TEAM" showAi showUtilities={false} showInlineError={false} onErrorChange={(message) => handleComposerError('TEAM', message)} busy={busy} aiBusy={aiPendingCount > 0} onSend={send} onOpenQuestions={() => undefined} onOpenVerification={() => undefined} onOpenAction={() => undefined} onInvokeAi={() => void invokeAi()} onOpenNotes={() => setNoteOpen(true)} onOpenBookmarks={() => setBookmarkOpen(true)} bookmarkCount={bookmarks.length}/>} bookmarkedIds={new Set(bookmarks.map((item) => item.entryId))} onToggleBookmark={toggleBookmark} onRetryMessage={retryMessage} onDismissMessage={dismissMessage}/>
+          <SharedConversation bundle={bundle} view="conversation" channel="TEAM" inlineCard={bankCard} collapsed={teamPaneCollapsed} collapseDisabled={customerPaneCollapsed} onToggleCollapse={toggleTeamPane} composer={<ConversationComposer foundationMode fixedTarget="TEAM" showAi showUtilities={false} showInlineError={false} selectedBankCard={selectedBankCard} onSelectBankCard={setSelectedBankCard} onErrorChange={(message) => handleComposerError('TEAM', message)} busy={busy} aiBusy={aiPendingCount > 0} onSend={send} onOpenQuestions={() => undefined} onOpenVerification={() => undefined} onOpenAction={() => undefined} onInvokeAi={() => void invokeAi()} onOpenNotes={() => setNoteOpen(true)} onOpenBookmarks={() => setBookmarkOpen(true)} bookmarkCount={bookmarks.length}/>} bookmarkedIds={new Set(bookmarks.map((item) => item.entryId))} onToggleBookmark={toggleBookmark} onRetryMessage={retryMessage} onDismissMessage={dismissMessage}/>
         </div>
       </main>
       <ContextPanelFoundation open={contextOpen} onToggle={() => onContextOpenChange(!contextOpen)}/>

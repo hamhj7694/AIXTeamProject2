@@ -57,6 +57,17 @@ export const formatClock = (value: string) => {
   return Number.isNaN(date.getTime()) ? '시간 미상' : date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Seoul' });
 };
 
+export const formatDateTimeKST = (value?: string | null) => {
+  if (!value) return '정보 없음';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const parts = new Intl.DateTimeFormat('ko-KR', {
+    timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(date).reduce<Record<string, string>>((result, part) => { result[part.type] = part.value; return result; }, {});
+  return `${parts.year}.${parts.month}.${parts.day} ${parts.hour}:${parts.minute}`;
+};
+
 export const relativeTime = (value: string) => {
   const time = new Date(value).getTime();
   if (!Number.isFinite(time)) return '시간 미상';
