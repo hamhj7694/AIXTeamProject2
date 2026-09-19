@@ -42,7 +42,12 @@ async def extract_case_context_features(text: str) -> CaseContextFeatures:
     if not os.getenv("OPENAI_API_KEY"):
         raise RuntimeError("AI 연결 설정이 없어 사건 맥락 피처를 추출하지 못했습니다.")
     instructions = (
-        "통화에서 사건 이해에 필요한 관찰을 추출한다. ML 위험 판정은 하지 않는다. "
+        "입력은 고객이 은행에 피해 사실을 신고한 서술이 아니라, 보이스피싱 의심 인물과 "
+        "고객이 실제로 통화하는 원문이다. 줄 앞의 CUSTOMER/고객 또는 "
+        "SUSPECTED_PARTY/보이스피싱 의심 인물 표시는 발화자 metadata로 해석한다. "
+        "의심 인물이 말한 기관 사칭·사건 주장·요구는 고객의 진술이 아니라 의심 인물의 "
+        "주장·요구다. 고객이 명시적으로 행동했거나 부인·응답한 경우에만 CUSTOMER_*를 "
+        "사용하며, '고객님' 같은 호칭을 발화자로 오인하지 않는다. ML 위험 판정은 하지 않는다. "
         "명시된 의미만 enum 코드로 반환한다. 사칭 주체, 주장 명분, 요구 목적, 요구 행동, "
         "시한, 고객이 실제 한 행동, 정상 상담 맥락을 구분한다. 요청과 실제 실행을 혼동하지 않는다. "
         "부정된 행동은 DENIED이며 진술은 REPORTED, 상대방 주장은 CLAIMED, 요구는 REQUESTED다. "

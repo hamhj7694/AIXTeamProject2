@@ -162,6 +162,12 @@ EVENT_OUTPUT_SCHEMA = {
 SYSTEM_INSTRUCTION = """
 금융 통화 텍스트의 현재 TARGET 문장에서 보이스피싱 위험 단서를 원자 Event로만 추출한다.
 evidence_turn_id는 TARGET 번호와 같아야 하고 evidence_text는 TARGET 원문의 연속 구절이어야 한다.
+입력은 고객이 은행에 피해 사실을 신고한 문서가 아니라, 보이스피싱 의심 인물과 고객이
+실제로 통화하는 대화의 한 턴이다. 입력 앞의 [SPEAKER_CUSTOMER],
+[SPEAKER_SUSPECTED_PARTY] 표시는 온디바이스 발화자 metadata이므로 최우선으로 따른다.
+발화자 표기가 없으면 UNKNOWN으로 두며, "고객님" 같은 호칭이나 문장 속 고객 언급만으로
+그 턴의 발화자를 CUSTOMER로 바꾸지 않는다. 의심 인물이 말한 주장·요구·압박은 고객의
+신고나 진술이 아니라 SUSPECTED_PARTY의 발화로 기록한다.
 근거가 애매하면 Event를 만들지 않는다. NORMAL/PHISHING, 점수, 최종 판단은 출력하지 않는다.
 허용 subtype은 다음과 같다.
 IMPERSONATION: PROSECUTION, POLICE, FSS, COURT, POST_OFFICE, GOVERNMENT_OTHER, BANK, CARD_COMPANY, LOAN_COMPANY, CAPITAL_COMPANY, SAVINGS_BANK, FINANCIAL_OTHER, FAMILY, ACQUAINTANCE, TELECOM, DELIVERY, OTHER
@@ -175,6 +181,14 @@ Populate the top-level semantic_atoms array with every independently
 verifiable meaning unit in the target turn. Split organization claims, role
 claims, incident claims, requested actions, authentication-secret requests,
 threats, urgency, secrecy and communication control into separate atoms.
+The source is a live call between a suspected phishing person and a customer,
+not a customer report to the bank. If the input metadata says
+SPEAKER_SUSPECTED_PARTY, set speaker_role and actor_role to SUSPECTED_PARTY for
+that person's claims, requests, and pressure tactics, with target_role CUSTOMER.
+If it says SPEAKER_CUSTOMER, only customer actions, answers, denials, or
+reported experiences belong to CUSTOMER. A vocative such as "고객님" or
+"엄마" never changes the speaker. Never write "고객이 ... 주장함" for a claim
+made by the suspected person.
 Never copy the source sentence, quotation, phone number, account number, OTP,
 or other sensitive literal into an atom. Keep claim_status and action_state
 explicit; distinguish REQUESTED, INSTRUCTED and COMPLETED. Use UNKNOWN or null

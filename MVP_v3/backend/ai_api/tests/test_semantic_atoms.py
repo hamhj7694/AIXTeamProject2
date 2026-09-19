@@ -40,6 +40,8 @@ def test_semantic_atoms_are_deterministic_and_do_not_copy_source_text() -> None:
     assert first[0].predicate == "TRANSFER_FUNDS"
     assert first[0].action_state == "REQUESTED"
     assert first[0].speech_act == "DIRECTIVE"
+    assert first[0].actor == "CALLER"
+    assert first[0].target == "CUSTOMER"
     assert first[0].financial_pressure == "HIGH"
     assert first[0].amount_scope is None
     assert "민감한 원문" not in first[0].model_dump_json()
