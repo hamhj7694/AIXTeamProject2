@@ -26,22 +26,26 @@ const current = [
   ai('stale-auth', 'AUTH_INFO', '처리된 인증정보 질문'),
   ai('staff-manual', 'staff-manual', '직접 작성 질문'),
   ai('ai-context-abc', 'ai-context-abc', '사용자가 편집한 AI 맥락 질문'),
+  ai('qf1:remote_control_app:parent-1', 'qf1:remote_control_app:parent-1', '설치한 앱의 이름을 알려주실 수 있나요?'),
 ];
 const authoritative = [
   ai('server-transfer', 'transfer_status', '서버 송금 질문'),
   ai('server-personal', 'personal_information_exposure', '개인정보 질문', 'P0'),
 ];
-const reconciled = reconcileQuestionDraft(current, ['old-transfer', 'stale-auth', 'staff-manual', 'ai-context-abc'], authoritative);
-assert.deepEqual(Array.from(reconciled.items, item => item.question_id), ['old-transfer', 'staff-manual', 'ai-context-abc', 'server-personal']);
+const reconciled = reconcileQuestionDraft(current, ['old-transfer', 'stale-auth', 'staff-manual', 'ai-context-abc', 'qf1:remote_control_app:parent-1'], authoritative);
+assert.deepEqual(Array.from(reconciled.items, item => item.question_id), ['old-transfer', 'staff-manual', 'ai-context-abc', 'qf1:remote_control_app:parent-1', 'server-personal']);
 assert.equal(reconciled.items[0].question_text, '사용자가 편집한 송금 질문');
 assert.equal(reconciled.items[2].question_text, '사용자가 편집한 AI 맥락 질문');
-assert.deepEqual(Array.from(reconciled.selected), ['old-transfer', 'staff-manual', 'ai-context-abc', 'server-personal']);
+assert.equal(reconciled.items[3].question_text, '설치한 앱의 이름을 알려주실 수 있나요?');
+assert.deepEqual(Array.from(reconciled.selected), ['old-transfer', 'staff-manual', 'ai-context-abc', 'qf1:remote_control_app:parent-1', 'server-personal']);
 
 const source = fs.readFileSync(entry, 'utf8');
 assert.match(source, /useEffect\(\(\) => \{[\s\S]*questionCandidates\(caseId\)/);
 assert.match(source, /generateWorkCard\(caseId, 'QUESTION_PLAN',[\s\S]*questionCandidates\(caseId\)/);
 assert.match(source, /generateWorkCard\(caseId, 'QUESTION_PLAN', itemsRef\.current\)/);
-assert.match(source, /isPersistentQuestionDraft[\s\S]*ai-context-/);
+assert.match(source, /isPersistentQuestionDraft[\s\S]*isDynamicQuestionDraft/);
+assert.match(source, /isDynamicQuestionDraft[\s\S]*qf1:/);
+assert.match(source, /AI 동적 추천/);
 const recommendationHandler = source.slice(source.indexOf('const recommendQuestions'), source.indexOf('const chosen'));
 assert.doesNotMatch(recommendationHandler, /queueQuestions/);
 assert.match(source, /created\.length === chosen\.length/);

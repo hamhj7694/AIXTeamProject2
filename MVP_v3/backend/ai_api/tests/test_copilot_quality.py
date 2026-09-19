@@ -278,6 +278,9 @@ class CopilotRoleBoundaryTest(unittest.IsolatedAsyncioTestCase):
             case_id="CASE-BANK",
             prompt="현재 사실과 미확인 항목을 구분해 주세요.",
             assistant_mode="BANK_INTERNAL",
+            requester_user_id="staff-kim",
+            requester_display_name="김담당",
+            requester_role="REVIEWER",
             primary_assignee="담당자 홍길동",
             staff_context=["직원 사실: 사칭 번호 조사 중"],
             pending_actions=["담당자 업무: 공식 번호 확인"],
@@ -289,6 +292,12 @@ class CopilotRoleBoundaryTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("확인된 사실과 고객 진술·미확인 항목", args["instructions"])
         self.assertIn("Verification 결과를 만들어내지 마세요", args["instructions"])
         self.assertIn("최종 판단·승인·업무 실행을 대신했다고 표현하지 마세요", args["instructions"])
+        self.assertIn("[현재 요청 - 최우선]", args["input"])
+        self.assertIn("요청자 표시 이름: 김담당", args["input"])
+        self.assertIn("요청자 역할: REVIEWER", args["input"])
+        self.assertIn("'나·내·내가'는 현재 요청자를 뜻하며", args["instructions"])
+        self.assertIn("사건 요약이나 확인 질문 목록을 자동으로 덧붙이지 마세요", args["instructions"])
+        self.assertLess(args["input"].index("Shared Case 맥락"), args["input"].index("[현재 요청 - 최우선]"))
 
     async def test_same_case_has_different_customer_and_bank_provider_bundles(self) -> None:
         base = {
@@ -315,6 +324,27 @@ class CopilotRoleBoundaryTest(unittest.IsolatedAsyncioTestCase):
                 ),
                 output="OTP 인증번호를 입력해 주세요.",
             )
+
+    async def test_runtime_logs_only_blocking_criterion_identifier(self) -> None:
+        request = CaseCopilotInput(
+            case_id="SYNTHETIC-PRIVATE-CASE",
+            prompt="합성 요청 원문",
+            assistant_mode="BANK_INTERNAL",
+        )
+        provider_output = "제가 최종 결정했습니다."
+
+        with self.assertLogs(
+            "ai_api.app.domains.case_support.copilot_service",
+            level="WARNING",
+        ) as captured_logs:
+            with self.assertRaises(CaseCopilotProviderError):
+                await self._provider_call(request, output=provider_output)
+
+        log_output = "\n".join(captured_logs.output)
+        self.assertIn("criteria=role_adherence", log_output)
+        self.assertNotIn(provider_output, log_output)
+        self.assertNotIn(request.prompt, log_output)
+        self.assertNotIn(request.case_id, log_output)
 
 
 if __name__ == "__main__":

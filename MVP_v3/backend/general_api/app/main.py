@@ -1779,7 +1779,9 @@ async def generate_case_work_card(case_id: str, request: PublicWorkCardGenerateR
             ],
             "unresolved_items": [f"{item.priority}: {item.description}" for item in support.unresolved_items[:20]],
             "pending_verifications": [f"{item.get('target')}: {item.get('claim')}" for item in verifications if item.get("status") != "COMPLETED"][:20],
-            "question_candidates": [item.model_dump(mode="python") for item in candidates[:10]],
+            # Public 후보에는 고객 UI 전용 allow_multi_select가 있지만, AI 내부 WorkCardQuestion
+            # 계약에는 없다. 내부 계약에 정의된 필드만 전달해 추천 요청 자체가 422가 되지 않게 한다.
+            "question_candidates": [item.model_dump(mode="python", exclude={"allow_multi_select"}) for item in candidates[:10]],
             "question_state": live_state.model_dump(mode="json") if live_state else None,
         })
         card = CaseWorkCardOutput.model_validate(payload)
@@ -1810,6 +1812,10 @@ async def invoke_case_copilot(case_id: str, request: PublicAiInvocationRequest) 
     attachments = await repository.list_attachments(case_id)
     all_messages = await repository.list_messages(case_id)
     members = await repository.list_members(case_id)
+    requester_member = next(
+        (item for item in members if item.get("user_id") == request.requester_user_id and item.get("status") == "ACTIVE"),
+        None,
+    )
     primary_assignee = next(
         (item.get("display_name") for item in members if item.get("role") == "CASE_OWNER"),
         None,
@@ -1831,6 +1837,9 @@ async def invoke_case_copilot(case_id: str, request: PublicAiInvocationRequest) 
         ai_reply = await service.ai_client.generate_case_copilot_reply({
             "case_id": case_id,
             "prompt": request.prompt,
+            "requester_user_id": request.requester_user_id,
+            "requester_display_name": request.requester_display_name,
+            "requester_role": requester_member.get("role") if requester_member else "BANK_STAFF",
             "case_summary": case.get("initial_brief", ""),
             "workflow_status": case.get("status", "TRIAGE"),
             "fraud_type": case.get("fraud_type"),
@@ -1844,7 +1853,8 @@ async def invoke_case_copilot(case_id: str, request: PublicAiInvocationRequest) 
             "retrieved_context": retrieved,
             "known_facts": [f"{item.get('field')}: {item.get('value')} ({item.get('status')})" for item in facts[:30]],
             "recent_conversation": [
-                f"{item.get('actor_display_name', item.get('actor_type', '작성자'))}: {item.get('content', '')[:500]}"
+                f"{item.get('actor_display_name', item.get('actor_type', '작성자'))} "
+                f"({item.get('actor_role') or item.get('actor_type', '역할 미상')}): {item.get('content', '')[:500]}"
                 for item in all_messages[-30:]
                 if item.get("message_kind") not in {"AI_RESPONSE", "REPORT_CARD"}
                 and item.get("actor_type") not in {"BANK_AGENT", "CUSTOMER_AGENT"}

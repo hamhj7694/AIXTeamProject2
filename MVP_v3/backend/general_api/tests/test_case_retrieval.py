@@ -94,7 +94,10 @@ class RetrievalWiringTest(unittest.TestCase):
         })
         self.assertEqual(bank.status_code, 201, bank.text)
         bank_input = self.ai.await_args.args[0]
-        CaseCopilotInput.model_validate(bank_input)
+        parsed_bank_input = CaseCopilotInput.model_validate(bank_input)
+        self.assertEqual(parsed_bank_input.requester_user_id, 'staff')
+        self.assertEqual(parsed_bank_input.requester_display_name, '담당자')
+        self.assertEqual(parsed_bank_input.requester_role, 'REVIEWER')
         self.assertIn('은행 내부 제한 정보', ' '.join(bank_input['staff_context']))
         self.assertTrue(bank_input['retrieved_context'])
         customer = self.client.post('/api/cases/VP-RAG/ai/customer-replies', json={'prompt': '계좌 내부 검토 진행 상황', 'requester_user_id': 'customer', 'requester_display_name': '고객', 'reply_to_message_id': 'message-customer'})
@@ -188,6 +191,36 @@ class RetrievalWiringTest(unittest.TestCase):
         messages[0]['case_id'] = 'OTHER'
         with self.assertRaises(ValueError):
             bank_source_context('VP-RAG', resources, facts=[], questions=[], verifications=[], messages=messages)
+
+    def test_source_messages_preserve_human_identity_and_conversation_boundary(self):
+        resources = PublicCaseContextResourcesV2(case_id='VP-RAG', context_revision=1)
+        messages = [dict(
+            message_id='staff-introduction', case_id='VP-RAG', actor_type='BANK_STAFF',
+            actor_user_id='staff', actor_display_name='김담당', actor_role='REVIEWER',
+            channel='TEAM', audience='BANK_INTERNAL', visibility='BANK_INTERNAL',
+            content='제 이름은 김담당입니다.',
+        ), dict(
+            message_id='customer-report', case_id='VP-RAG', actor_type='CUSTOMER',
+            actor_user_id='customer', actor_display_name='이고객', actor_role='CUSTOMER',
+            channel='CUSTOMER', audience='CUSTOMER', visibility='CUSTOMER',
+            content='상대방은 박사칭이라고 했어요.',
+        )]
+
+        context = bank_source_context(
+            'VP-RAG', resources, facts=[], questions=[], verifications=[], messages=messages,
+        )
+
+        staff, customer = context.messages
+        self.assertEqual(
+            (staff.actor_type, staff.actor_user_id, staff.actor_display_name, staff.actor_role,
+             staff.channel, staff.audience),
+            ('BANK_STAFF', 'staff', '김담당', 'REVIEWER', 'TEAM', 'BANK_INTERNAL'),
+        )
+        self.assertEqual(
+            (customer.actor_type, customer.actor_display_name, customer.channel, customer.audience),
+            ('CUSTOMER', '이고객', 'CUSTOMER', 'CUSTOMER'),
+        )
+        self.assertNotEqual(staff.actor_display_name, '박사칭')
 
     def test_legacy_fact_provenance_preserved_without_inferred_customer_or_bank_source(self):
         resources = PublicCaseContextResourcesV2(case_id='VP-RAG', context_revision=1)

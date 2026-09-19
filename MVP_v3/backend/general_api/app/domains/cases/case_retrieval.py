@@ -230,7 +230,10 @@ def bank_source_context(case_id: str, resources, *, facts, questions, verificati
     return BankCopilotSourceContext(
         facts=resources.facts[-100:], legacy_facts=legacy, questions=answers, verifications=checks,
         messages=[CopilotMessage(message_id=item["message_id"], case_id=case_id,
-            actor_type=item["actor_type"], content=item.get("content", ""), created_at=item.get("created_at")) for item in human_messages],
+            actor_type=item["actor_type"], actor_user_id=item.get("actor_user_id"),
+            actor_display_name=item.get("actor_display_name"), actor_role=item.get("actor_role"),
+            channel=item.get("channel"), audience=item.get("audience"),
+            content=item.get("content", ""), created_at=item.get("created_at")) for item in human_messages],
         truncated=any(len(items) > limit for items, limit in (
             (resources.facts, 100), (facts, 100), (questions, 50), (verifications, 20), (messages, 20))),
     )
