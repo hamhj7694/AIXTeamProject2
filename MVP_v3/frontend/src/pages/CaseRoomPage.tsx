@@ -13,7 +13,6 @@ import { ConversationComposer, type ComposerTarget } from '../components/Convers
 import { SharedConversation } from '../components/SharedConversation';
 import { BankBookmarks } from '../components/BankBookmarks';
 import { BankPersonalNotes } from '../components/BankPersonalNotes';
-import { ParticipantManager } from '../components/ParticipantManager';
 import { CaseAssignmentDialog } from '../components/CaseAssignmentDialog';
 import { readBankBookmarks, writeBankBookmarks, type BankBookmark } from '../bank/bookmarks';
 import { stripBankAiMention } from '../bank/aiMention';
@@ -409,7 +408,7 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
     {dialog?.type === 'action' && <ActionDialog caseId={caseId} recovery={caseItem.mode === 'RECOVERY'} onDone={refreshAfterMutation} onClose={() => setDialog(null)}/>} 
     <BankBookmarks open={bookmarkOpen} items={bookmarks} onClose={() => setBookmarkOpen(false)}/>
     <BankPersonalNotes caseId={caseId} open={noteOpen} onClose={() => setNoteOpen(false)}/>
-    <ParticipantManager caseId={caseId} open={participantOpen} onClose={() => setParticipantOpen(false)} onChanged={async () => { setAccessRevision((value) => value + 1); const members = await casesApi.members(caseId); setParticipantCount(members.length); await refreshAfterMutation(); }}/>
+    {participantOpen && <CaseAssignmentDialog caseId={caseId} mode="edit" onClose={() => setParticipantOpen(false)} onSaved={async () => { setParticipantOpen(false); setAccessRevision((value) => value + 1); const members = await casesApi.members(caseId); setParticipantCount(members.length); await refreshAfterMutation(); }}/>}
     <HistoryDrawer open={historyOpen} events={bundle.recent_events} onClose={() => setHistoryOpen(false)}/>
     {adminAction === 'finalize' && <AdminCaseDialog title="해결 및 종료 처리" description="사건을 해결 상태로 종결합니다. 관리자 암호를 입력해 주세요." confirmLabel="해결 및 종료" noteLabel="종결 메모 (선택)" notePlaceholder="처리 결과나 인계 사항을 기록하세요." onConfirm={finalizeCase} onClose={() => setAdminAction(null)}/>}
     {adminAction === 'reopen' && <AdminCaseDialog title="사건 다시 진행하기" description="종결 직전의 사건 상태로 복구합니다. 관리자 암호를 입력해 주세요." confirmLabel="진행 상태로 복구" onConfirm={(password) => reopenCase(password)} onClose={() => setAdminAction(null)}/>}

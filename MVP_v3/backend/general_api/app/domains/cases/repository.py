@@ -57,6 +57,7 @@ class CaseRepository(Protocol):
     async def list_events(self, case_id: str, after: int | None = None) -> list[dict[str, Any]]: ...
     async def list_members(self, case_id: str) -> list[dict[str, Any]]: ...
     async def upsert_member(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]: ...
+    async def remove_member(self, case_id: str, user_id: str) -> None: ...
     async def set_primary_assignee(self, case_id: str, display_name: str | None) -> str | None: ...
     async def list_presence(self, case_id: str) -> list[dict[str, Any]]: ...
     async def heartbeat_presence(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]: ...
@@ -393,6 +394,24 @@ class InMemoryCaseRepository:
             })
             self._touch_case(case_id, now, semantic=False)
             return deepcopy(member)
+
+    async def remove_member(self, case_id: str, user_id: str) -> None:
+        async with self._lock:
+            if not any(item["case_id"] == case_id for item in self._records):
+                raise KeyError(case_id)
+            member = next((item for item in self._members if item["case_id"] == case_id and item["user_id"] == user_id and item["status"] == "ACTIVE"), None)
+            if member is None:
+                raise KeyError(user_id)
+            if member.get("role") == "CASE_OWNER":
+                raise ValueError("CASE_OWNER_CANNOT_BE_REMOVED")
+            now = datetime.now(timezone.utc).isoformat()
+            member["status"] = "REMOVED"
+            member["updated_at"] = now
+            self._events.append({
+                "event_id": len(self._events) + 1, "case_id": case_id, "event_type": "CASE_MEMBER_REMOVED",
+                "actor_type": "SYSTEM", "payload": {"user_id": user_id}, "occurred_at": now,
+            })
+            self._touch_case(case_id, now, semantic=False)
 
     async def set_primary_assignee(self, case_id: str, display_name: str | None) -> str | None:
         async with self._lock:

@@ -515,7 +515,7 @@ export interface CaseMember {
   updated_at: string;
 }
 
-export type BankStaffColor = 'GREEN' | 'BLUE' | 'YELLOW' | 'ORANGE' | 'RED' | 'PURPLE' | 'GRAY';
+export type BankStaffColor = 'GREEN' | 'BLUE' | 'YELLOW' | 'ORANGE' | 'RED' | 'PURPLE' | 'GRAY' | 'BLACK';
 export type BankStaffAssignmentRole = 'SUPERVISOR' | 'MONITORING' | 'CONSULTATION' | 'OTHER_VIEWER' | 'HANDOVER_PENDING';
 export interface BankStaff {
   staff_id: string;

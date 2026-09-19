@@ -72,6 +72,7 @@ export const casesApi = {
   upsertMember: (caseId: string, member: Pick<CaseMember, 'user_id' | 'display_name' | 'role' | 'assignment_role'>) => request<CaseMember>(`/api/cases/${encodeURIComponent(caseId)}/members`, {
     method: 'POST', body: JSON.stringify(member),
   }),
+  removeMember: (caseId: string, userId: string) => request<void>(`/api/cases/${encodeURIComponent(caseId)}/members/${encodeURIComponent(userId)}`, { method: 'DELETE' }),
   setPrimaryAssignee: (caseId: string, displayName: string | null) => request<{ case_id: string; display_name: string | null }>(`/api/cases/${encodeURIComponent(caseId)}/assignee`, {
     method: 'PUT', body: JSON.stringify({ display_name: displayName }),
   }),

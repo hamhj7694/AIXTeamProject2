@@ -1667,6 +1667,21 @@ async def upsert_case_member(case_id: str, request: PublicCaseMemberUpsertReques
         raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."}) from exc
 
 
+@app.delete("/api/cases/{case_id}/members/{user_id}", status_code=204)
+async def remove_case_member(case_id: str, user_id: str) -> None:
+    if user_id == CURRENT_BANK_USER_ID:
+        raise HTTPException(status_code=409, detail={"code": "CURRENT_USER_CANNOT_BE_REMOVED", "message": "현재 사용자는 케이스 담당자에서 제거할 수 없습니다."})
+    try:
+        await require_case(case_id)
+        await repository.remove_member(case_id, user_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail={"code": "CASE_MEMBER_NOT_FOUND", "message": "케이스 담당자를 찾을 수 없습니다."}) from exc
+    except ValueError as exc:
+        if str(exc) == "CASE_OWNER_CANNOT_BE_REMOVED":
+            raise HTTPException(status_code=409, detail={"code": "CASE_OWNER_CANNOT_BE_REMOVED", "message": "사건 총괄은 새 총괄을 지정한 후 제거할 수 있습니다."}) from exc
+        raise
+
+
 @app.put("/api/cases/{case_id}/assignee", response_model=PublicPrimaryAssigneeResponse)
 async def set_case_primary_assignee(case_id: str, request: PublicPrimaryAssigneeRequest) -> PublicPrimaryAssigneeResponse:
     try:

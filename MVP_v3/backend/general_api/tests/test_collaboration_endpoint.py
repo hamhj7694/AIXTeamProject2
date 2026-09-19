@@ -121,6 +121,25 @@ class CollaborationEndpointTest(unittest.TestCase):
         saved = self.repository.append_message.await_args.args[1]
         self.assertEqual(saved["reply_to_message_id"], "msg-customer-1")
 
+    def test_remove_member_marks_member_removed_and_rejects_current_user(self) -> None:
+        response = self.client.delete("/api/cases/CASE-1/members/staff-reviewer")
+
+        self.assertEqual(response.status_code, 204)
+        self.repository.remove_member.assert_awaited_once_with("CASE-1", "staff-reviewer")
+
+        current_user = self.client.delete("/api/cases/CASE-1/members/mvp-v3-bank-operator")
+
+        self.assertEqual(current_user.status_code, 409)
+        self.assertEqual(current_user.json()["detail"]["code"], "CURRENT_USER_CANNOT_BE_REMOVED")
+
+    def test_remove_member_rejects_owner_until_reassigned(self) -> None:
+        self.repository.remove_member.side_effect = ValueError("CASE_OWNER_CANNOT_BE_REMOVED")
+
+        response = self.client.delete("/api/cases/CASE-1/members/staff-owner")
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["detail"]["code"], "CASE_OWNER_CANNOT_BE_REMOVED")
+
 
 if __name__ == "__main__":
     unittest.main()

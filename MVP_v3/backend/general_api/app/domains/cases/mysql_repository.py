@@ -607,6 +607,38 @@ class MySqlCaseRepository:
             "updated_at": stored_member["updated_at"].isoformat(),
         }
 
+    async def remove_member(self, case_id: str, user_id: str) -> None:
+        pool = await self._get_pool()
+        now = datetime.now(timezone.utc)
+        async with pool.acquire() as connection:
+            try:
+                async with connection.cursor(aiomysql.DictCursor) as cursor:
+                    await cursor.execute("SELECT case_id FROM cases WHERE case_id=%s FOR UPDATE", (case_id,))
+                    if not await cursor.fetchone():
+                        raise KeyError(case_id)
+                    await cursor.execute(
+                        "SELECT role FROM case_members WHERE case_id=%s AND user_id=%s AND status='ACTIVE' FOR UPDATE",
+                        (case_id, user_id),
+                    )
+                    member = await cursor.fetchone()
+                    if not member:
+                        raise KeyError(user_id)
+                    if member["role"] == "CASE_OWNER":
+                        raise ValueError("CASE_OWNER_CANNOT_BE_REMOVED")
+                    await cursor.execute(
+                        "UPDATE case_members SET status='REMOVED', updated_at=%s WHERE case_id=%s AND user_id=%s AND status='ACTIVE'",
+                        (now, case_id, user_id),
+                    )
+                    await cursor.execute(
+                        "INSERT INTO case_events (case_id,event_type,actor_type,payload_json,occurred_at) VALUES (%s,'CASE_MEMBER_REMOVED','SYSTEM',%s,%s)",
+                        (case_id, json.dumps({"user_id": user_id}, ensure_ascii=False), now),
+                    )
+                    await cursor.execute("UPDATE cases SET updated_at=%s WHERE case_id=%s", (now, case_id))
+                await connection.commit()
+            except Exception:
+                await connection.rollback()
+                raise
+
     async def set_primary_assignee(self, case_id: str, display_name: str | None) -> str | None:
         pool = await self._get_pool()
         normalized = (display_name or "").strip()
