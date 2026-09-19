@@ -389,7 +389,7 @@ class InMemoryCaseRepository:
                 member["updated_at"] = now
             self._events.append({
                 "event_id": len(self._events) + 1, "case_id": case_id, "event_type": "CASE_MEMBER_UPDATED",
-                "actor_type": "SYSTEM", "payload": {"user_id": member["user_id"], "role": member["role"]}, "occurred_at": now,
+                "actor_type": "SYSTEM", "payload": {"user_id": member["user_id"], "role": member["role"], "assignment_role": member.get("assignment_role", "HANDOVER_PENDING")}, "occurred_at": now,
             })
             self._touch_case(case_id, now, semantic=False)
             return deepcopy(member)
@@ -402,15 +402,16 @@ class InMemoryCaseRepository:
             for member in self._members:
                 if member["case_id"] == case_id and member["role"] == "CASE_OWNER":
                     member["role"] = "VIEWER"
+                    member["assignment_role"] = "HANDOVER_PENDING"
                     member["updated_at"] = now
             normalized = (display_name or "").strip()
             if normalized:
                 member = next((item for item in self._members if item["case_id"] == case_id and item["display_name"] == normalized), None)
                 if member is None:
-                    member = {"case_id": case_id, "user_id": f"owner-{uuid4().hex}", "display_name": normalized, "role": "CASE_OWNER", "status": "ACTIVE", "assigned_at": now, "updated_at": now}
+                    member = {"case_id": case_id, "user_id": f"owner-{uuid4().hex}", "display_name": normalized, "role": "CASE_OWNER", "assignment_role": "SUPERVISOR", "status": "ACTIVE", "assigned_at": now, "updated_at": now}
                     self._members.append(member)
                 else:
-                    member.update({"role": "CASE_OWNER", "status": "ACTIVE", "updated_at": now})
+                    member.update({"role": "CASE_OWNER", "assignment_role": "SUPERVISOR", "status": "ACTIVE", "updated_at": now})
             self._events.append({"event_id": len(self._events) + 1, "case_id": case_id, "event_type": "CASE_ASSIGNEE_UPDATED", "actor_type": "SYSTEM", "payload": {"display_name": normalized or None}, "occurred_at": now})
             self._touch_case(case_id, now, semantic=False)
             return normalized or None

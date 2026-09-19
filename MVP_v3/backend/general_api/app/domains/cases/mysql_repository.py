@@ -74,7 +74,7 @@ class MySqlCaseRepository:
     async def list_bank_staff(self) -> list[dict[str, Any]]:
         pool = await self._get_pool()
         async with pool.acquire() as connection, connection.cursor(aiomysql.DictCursor) as cursor:
-            await cursor.execute("SELECT staff_id, display_name, role_label, position_title, status_text, status_color_key, linked_user_id, created_at, updated_at FROM bank_staff_directory WHERE deleted_at IS NULL ORDER BY display_name, staff_id")
+            await cursor.execute("SELECT staff_id, display_name, assignment_role, role_label, position_title, status_text, status_color_key, assignment_eligible, linked_user_id, created_at, updated_at FROM bank_staff_directory WHERE deleted_at IS NULL ORDER BY display_name, staff_id")
             rows = await cursor.fetchall()
         return [{**row, "created_at": _utc_iso(row["created_at"]), "updated_at": _utc_iso(row["updated_at"])} for row in rows]
 
@@ -83,13 +83,13 @@ class MySqlCaseRepository:
         staff_id = record.get("staff_id") or f"staff-{uuid.uuid4().hex}"
         now = datetime.now(timezone.utc).replace(tzinfo=None)
         async with pool.acquire() as connection, connection.cursor(aiomysql.DictCursor) as cursor:
-            await cursor.execute("INSERT INTO bank_staff_directory (staff_id, display_name, role_label, position_title, status_text, status_color_key, linked_user_id, created_at, updated_at) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)", (staff_id, record["display_name"], record["role_label"], record.get("position_title"), record.get("status_text", "근무 중"), record.get("status_color_key", "GREEN"), record.get("linked_user_id"), now, now))
+            await cursor.execute("INSERT INTO bank_staff_directory (staff_id, display_name, assignment_role, role_label, position_title, status_text, status_color_key, assignment_eligible, linked_user_id, created_at, updated_at) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)", (staff_id, record["display_name"], record.get("assignment_role", "CONSULTATION"), record["role_label"], record.get("position_title"), record.get("status_text", "근무 중"), record.get("status_color_key", "GREEN"), record.get("assignment_eligible", True), record.get("linked_user_id"), now, now))
             await connection.commit()
         rows = await self.list_bank_staff()
         return next(row for row in rows if row["staff_id"] == staff_id)
 
     async def update_bank_staff(self, staff_id: str, changes: dict[str, Any]) -> dict[str, Any] | None:
-        allowed = ("display_name", "role_label", "position_title", "status_text", "status_color_key", "linked_user_id")
+        allowed = ("display_name", "assignment_role", "role_label", "position_title", "status_text", "status_color_key", "assignment_eligible", "linked_user_id")
         fields = [(key, changes[key]) for key in allowed if key in changes]
         if not fields:
             rows = await self.list_bank_staff()
@@ -565,7 +565,7 @@ class MySqlCaseRepository:
         pool = await self._get_pool()
         async with pool.acquire() as connection, connection.cursor(aiomysql.DictCursor) as cursor:
             await cursor.execute(
-                "SELECT case_id, user_id, display_name, role, status, assigned_at, updated_at FROM case_members WHERE case_id=%s AND status='ACTIVE' ORDER BY assigned_at, user_id",
+                "SELECT case_id, user_id, display_name, role, assignment_role, status, assigned_at, updated_at FROM case_members WHERE case_id=%s AND status='ACTIVE' ORDER BY assigned_at, user_id",
                 (case_id,),
             )
             return [{**row, "assigned_at": row["assigned_at"].isoformat(), "updated_at": row["updated_at"].isoformat()} for row in await cursor.fetchall()]
@@ -581,17 +581,17 @@ class MySqlCaseRepository:
                     if not await cursor.fetchone():
                         raise KeyError(case_id)
                     await cursor.execute(
-                        """INSERT INTO case_members (case_id, user_id, display_name, role, status, assigned_at, updated_at)
-                           VALUES (%s,%s,%s,%s,'ACTIVE',%s,%s)
-                           ON DUPLICATE KEY UPDATE display_name=VALUES(display_name), role=VALUES(role), status='ACTIVE', updated_at=VALUES(updated_at)""",
-                        (case_id, record["user_id"], record["display_name"], record["role"], now, now),
+                        """INSERT INTO case_members (case_id, user_id, display_name, role, assignment_role, status, assigned_at, updated_at)
+                           VALUES (%s,%s,%s,%s,%s,'ACTIVE',%s,%s)
+                           ON DUPLICATE KEY UPDATE display_name=VALUES(display_name), role=VALUES(role), assignment_role=VALUES(assignment_role), status='ACTIVE', updated_at=VALUES(updated_at)""",
+                        (case_id, record["user_id"], record["display_name"], record["role"], record.get("assignment_role", "HANDOVER_PENDING"), now, now),
                     )
                     await cursor.execute(
                         "INSERT INTO case_events (case_id, event_type, actor_type, payload_json, occurred_at) VALUES (%s,'CASE_MEMBER_UPDATED','SYSTEM',%s,%s)",
                         (case_id, json.dumps({"user_id": record["user_id"], "role": record["role"]}), now),
                     )
                     await cursor.execute(
-                        "SELECT case_id, user_id, display_name, role, status, assigned_at, updated_at FROM case_members WHERE case_id=%s AND user_id=%s",
+                        "SELECT case_id, user_id, display_name, role, assignment_role, status, assigned_at, updated_at FROM case_members WHERE case_id=%s AND user_id=%s",
                         (case_id, record["user_id"]),
                     )
                     stored_member = await cursor.fetchone()
@@ -617,16 +617,16 @@ class MySqlCaseRepository:
                     await cursor.execute("SELECT case_id FROM cases WHERE case_id=%s FOR UPDATE", (case_id,))
                     if not await cursor.fetchone():
                         raise KeyError(case_id)
-                    await cursor.execute("UPDATE case_members SET role='VIEWER', updated_at=%s WHERE case_id=%s AND role='CASE_OWNER'", (now, case_id))
+                    await cursor.execute("UPDATE case_members SET role='VIEWER', assignment_role='HANDOVER_PENDING', updated_at=%s WHERE case_id=%s AND role='CASE_OWNER'", (now, case_id))
                     if normalized:
                         await cursor.execute("SELECT user_id FROM case_members WHERE case_id=%s AND display_name=%s LIMIT 1", (case_id, normalized))
                         existing = await cursor.fetchone()
                         if existing:
-                            await cursor.execute("UPDATE case_members SET role='CASE_OWNER', status='ACTIVE', updated_at=%s WHERE case_id=%s AND user_id=%s", (now, case_id, existing[0]))
+                            await cursor.execute("UPDATE case_members SET role='CASE_OWNER', assignment_role='SUPERVISOR', status='ACTIVE', updated_at=%s WHERE case_id=%s AND user_id=%s", (now, case_id, existing[0]))
                         else:
                             user_id = f"owner-{uuid.uuid4().hex}"
                             await cursor.execute(
-                                "INSERT INTO case_members (case_id,user_id,display_name,role,status,assigned_at,updated_at) VALUES (%s,%s,%s,'CASE_OWNER','ACTIVE',%s,%s)",
+                                "INSERT INTO case_members (case_id,user_id,display_name,role,assignment_role,status,assigned_at,updated_at) VALUES (%s,%s,%s,'CASE_OWNER','SUPERVISOR','ACTIVE',%s,%s)",
                                 (case_id, user_id, normalized, now, now),
                             )
                     await cursor.execute(
