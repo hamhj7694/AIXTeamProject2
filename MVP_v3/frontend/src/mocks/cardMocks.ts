@@ -3,8 +3,8 @@ export const mockBankTransaction = {
   transferDateTime: '2026.09.10 16:11:24',
   transactionStatus: '이체 완료',
   updatedAt: '16:13',
-  withdrawalAccount: { bankName: '국민은행', accountNumber: '123-456-7890', holder: '이○○' },
-  receivingAccount: { bankName: 'OO은행', accountNumber: '987-654-3210', holder: '홍○○' },
+  withdrawalAccount: { bankName: '국민은행', accountNumber: '123-456-7890', holder: '김민수' },
+  receivingAccount: { bankName: '우리은행', accountNumber: '987-654-3210', holder: '박지훈' },
   transactionMethod: '모바일뱅킹',
 };
 

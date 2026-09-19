@@ -1,6 +1,7 @@
 import React, { FormEvent, useRef, useState } from 'react';
 import { Bookmark, Bot, Building2, MessageCircleQuestion, Paperclip, Send, ShieldCheck, Sparkles, StickyNote, X } from 'lucide-react';
 import { hasBankAiMention } from '../bank/aiMention';
+import { BankCardMenu, type BankCardKind } from './cards/BankCardMenu';
 
 export type ComposerTarget = 'CUSTOMER' | 'TEAM';
 const MAX_FILES = 10;
@@ -31,9 +32,11 @@ interface Props {
   onErrorChange?: (message: string) => void;
   /** Keep false when the parent owns the employee-facing warning area. */
   showInlineError?: boolean;
+  onSelectBankCard?: (kind: BankCardKind) => void;
+  selectedBankCard?: BankCardKind | null;
 }
 
-export const ConversationComposer: React.FC<Props> = ({ busy, aiBusy, onSend, onOpenQuestions, onOpenVerification, onOpenAction, onInvokeAi, onOpenNotes, onOpenBookmarks, bookmarkCount, foundationMode = false, fixedTarget, showAi = true, showUtilities = true, showQuestionAction = false, onErrorChange, showInlineError = true }) => {
+export const ConversationComposer: React.FC<Props> = ({ busy, aiBusy, onSend, onOpenQuestions, onOpenVerification, onOpenAction, onInvokeAi, onOpenNotes, onOpenBookmarks, bookmarkCount, foundationMode = false, fixedTarget, showAi = true, showUtilities = true, showQuestionAction = false, onErrorChange, showInlineError = true, onSelectBankCard, selectedBankCard = null }) => {
   const target = fixedTarget ?? 'TEAM';
   const [draft, setDraft] = useState('');
   const [files, setFiles] = useState<File[]>([]);
@@ -83,6 +86,7 @@ export const ConversationComposer: React.FC<Props> = ({ busy, aiBusy, onSend, on
         <button className="personal-note-open" type="button" onClick={onOpenNotes}><StickyNote size={15}/>개인 메모</button>
         <button className="bookmark-list-open" type="button" onClick={onOpenBookmarks}><Bookmark size={15}/>북마크{bookmarkCount > 0 && <b>{bookmarkCount}</b>}</button>
       </>}
+      {target === 'TEAM' && onSelectBankCard && <><span className="context-actions-spacer"/><BankCardMenu value={selectedBankCard} onChange={onSelectBankCard}/></>}
     </div>
     <form onSubmit={(event: FormEvent) => { event.preventDefault(); void submit(); }}>
       {files.length > 0 && <div className="queued-files">{files.map((file, index) => <span key={`${file.name}-${file.lastModified}-${index}`}><Paperclip size={13}/>{file.name}<button type="button" onClick={() => setFiles((items) => items.filter((_, itemIndex) => itemIndex !== index))} aria-label={`${file.name} 첨부 제거`}><X size={12}/></button></span>)}</div>}
