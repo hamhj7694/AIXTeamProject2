@@ -35,11 +35,104 @@ export interface DiagnosisWindow {
 export interface SemanticAtom {
   atom_id: string;
   atom_class: string;
+  speaker?: string;
+  subject?: string | null;
   predicate: string;
+  actor?: string | null;
+  target?: string | null;
+  object?: string | null;
+  destination?: string | null;
   action_state?: string | null;
   modality?: string | null;
+  polarity?: string;
   claim_status: string;
+  lexical_cues?: string[];
+  speech_form_codes?: string[];
+  speech_act?: string | null;
+  directive_strength?: string | null;
+  obligation?: string | null;
+  urgency?: string | null;
+  authority_pressure?: string | null;
+  fear_pressure?: string | null;
+  secrecy_pressure?: string | null;
+  isolation_pressure?: string | null;
+  financial_pressure?: string | null;
+  repetition_pressure?: string | null;
+  threat_type?: string | null;
+  communication_control?: string | null;
+  auth_secret_type?: string | null;
+  amount_scope?: string | null;
+  amount_value_krw?: number | null;
+  amount_role?: string | null;
+  amount_direction?: string | null;
+  amount_event_id?: string | null;
+  claimed_organization?: string | null;
+  claimed_organization_name?: string | null;
+  claimed_branch_name?: string | null;
+  claimed_person_name?: string | null;
+  claimed_role?: string | null;
+  claimed_role_name?: string | null;
+  claimed_relationship?: string | null;
+  claimed_purpose?: string | null;
+  speaker_role?: AnalysisActorRole | null;
+  actor_role?: AnalysisActorRole | null;
+  target_role?: AnalysisActorRole | null;
+  reported_by_role?: AnalysisActorRole | null;
+  speaker_confidence?: number | null;
+  attribution_confidence?: number | null;
+  vocative_target?: string | null;
+  deadline_at?: string | null;
+  relative_deadline_minutes?: number | null;
+  mention_order?: number | null;
+  occurrence_count?: number;
+  observed_terms?: Array<{
+    surface_form?: string;
+    normalized_code?: string;
+    semantic_value?: string | null;
+    term_type?: string;
+    confidence?: number;
+  }>;
   source_turn_id: number;
+}
+
+export interface UnmappedObservation {
+  observation_id: string;
+  observation_type: string;
+  candidate_categories: string[];
+  lexical_codes: string[];
+  observed_terms: Array<{
+    surface_form?: string;
+    normalized_code?: string;
+    semantic_value?: string | null;
+    term_type?: string;
+    confidence?: number;
+  }>;
+  speech_act?: string | null;
+  action_state?: string | null;
+  polarity?: string;
+  modality?: string | null;
+  amount_role?: string | null;
+  amount_value_krw?: number | null;
+  source_turn_id: number;
+  source_event_id?: string | null;
+  confidence: number;
+  status: string;
+}
+
+export type AnalysisActorRole = 'SUSPECTED_PARTY' | 'CUSTOMER' | 'BANK_STAFF' | 'SYSTEM' | 'UNKNOWN';
+
+export interface SemanticMention {
+  mention_id: string;
+  normalized_code: string;
+  normalized_value: string;
+  mention_type: string;
+  source_turn_id: number;
+  sequence_index: number;
+  speaker_role: AnalysisActorRole;
+  occurrence_count: number;
+  first_turn_id: number;
+  last_turn_id: number;
+  confidence: number;
 }
 
 export interface SemanticRelation {
@@ -57,6 +150,24 @@ export interface ContextSignal {
   confidence: number;
   claim_status: string;
   atom_ids: string[];
+}
+
+export interface FeatureNarrative {
+  code: string;
+  sentence: string;
+  status: 'CLAIMED' | 'REQUESTED' | 'REPORTED' | 'DENIED';
+  source_turns: number[];
+  atom_ids: string[];
+  speaker_role?: AnalysisActorRole;
+  actor_role?: AnalysisActorRole;
+  target_role?: AnalysisActorRole;
+  reported_by_role?: AnalysisActorRole;
+  detail_items?: string[];
+  entity_names?: string[];
+  deadline_at?: string | null;
+  relative_deadline_minutes?: number | null;
+  occurrence_count?: number;
+  confidence?: number | null;
 }
 
 export interface StructuredContextProjection {
@@ -116,14 +227,20 @@ export interface StoredCase {
       summary?: string;
       incident_type?: string;
       claims?: string[];
+      demands?: string[];
+      manipulation_tactics?: string[];
+      customer_statements?: string[];
       recommended_next_steps?: string[];
       confidence?: number;
+      feature_narratives?: FeatureNarrative[];
     };
     events?: DiagnosisEvent[];
     evidence?: DiagnosisEvidence[];
     windows?: DiagnosisWindow[];
     features?: Record<string, number>;
     semantic_atoms?: SemanticAtom[];
+    semantic_mentions?: SemanticMention[];
+    unmapped_observations?: UnmappedObservation[];
     semantic_relations?: SemanticRelation[];
     context_signals?: ContextSignal[];
     conversation_episodes?: Array<{ episode_id: string; start_turn: number; end_turn: number; atom_ids: string[]; episode_type: string }>;
@@ -384,6 +501,7 @@ export interface PersonalNote {
 }
 
 export type CaseMemberRole = 'CASE_OWNER' | 'CHAT_OPERATOR' | 'REVIEWER' | 'VIEWER';
+export type CaseAssignmentRole = 'SUPERVISOR' | 'MONITORING' | 'CONSULTATION' | 'VIEWER' | 'HANDOVER_PENDING';
 export type PresenceState = 'VIEWING' | 'TYPING' | 'AWAY' | 'OFFLINE';
 
 export interface CaseMember {
@@ -391,19 +509,23 @@ export interface CaseMember {
   user_id: string;
   display_name: string;
   role: CaseMemberRole;
+  assignment_role: CaseAssignmentRole;
   status: 'ACTIVE' | 'REMOVED';
   assigned_at: string;
   updated_at: string;
 }
 
 export type BankStaffColor = 'GREEN' | 'BLUE' | 'YELLOW' | 'ORANGE' | 'RED' | 'PURPLE' | 'GRAY';
+export type BankStaffAssignmentRole = 'SUPERVISOR' | 'MONITORING' | 'CONSULTATION' | 'OTHER_VIEWER' | 'HANDOVER_PENDING';
 export interface BankStaff {
   staff_id: string;
   display_name: string;
+  assignment_role: BankStaffAssignmentRole;
   role_label: string;
   position_title?: string | null;
   status_text: string;
   status_color_key: BankStaffColor;
+  assignment_eligible: boolean;
   linked_user_id?: string | null;
   is_self: boolean;
   created_at: string;

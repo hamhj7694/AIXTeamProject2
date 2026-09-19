@@ -9,9 +9,16 @@ import { generateUuid } from '../uuid';
 
 export const CURRENT_BANK_USER = {
   user_id: 'mvp-v3-bank-operator',
-  display_name: '은행 담당자',
+  display_name: '기능 체험자',
   role: 'CHAT_OPERATOR',
 } as const;
+
+export const CURRENT_BANK_USER_STATUS = '기능 체험용 고정' as const;
+export const CURRENT_BANK_USER_ROLE_LABEL = '기능 체험자' as const;
+
+export const displayBankUserName = (userId: string, fallback: string) => (
+  userId === CURRENT_BANK_USER.user_id ? CURRENT_BANK_USER.display_name : fallback
+);
 
 export const CURRENT_CUSTOMER_USER = {
   user_id: 'mvp-v3-customer',
@@ -62,7 +69,7 @@ export const casesApi = {
   }),
   deletePersonalNote: (caseId: string, noteId: string) => request<void>(`/api/cases/${encodeURIComponent(caseId)}/personal-notes/${encodeURIComponent(noteId)}?author_id=${encodeURIComponent(CURRENT_BANK_USER.user_id)}`, { method: 'DELETE' }),
   members: (caseId: string) => request<CaseMember[]>(`/api/cases/${encodeURIComponent(caseId)}/members`),
-  upsertMember: (caseId: string, member: Pick<CaseMember, 'user_id' | 'display_name' | 'role'>) => request<CaseMember>(`/api/cases/${encodeURIComponent(caseId)}/members`, {
+  upsertMember: (caseId: string, member: Pick<CaseMember, 'user_id' | 'display_name' | 'role' | 'assignment_role'>) => request<CaseMember>(`/api/cases/${encodeURIComponent(caseId)}/members`, {
     method: 'POST', body: JSON.stringify(member),
   }),
   setPrimaryAssignee: (caseId: string, displayName: string | null) => request<{ case_id: string; display_name: string | null }>(`/api/cases/${encodeURIComponent(caseId)}/assignee`, {

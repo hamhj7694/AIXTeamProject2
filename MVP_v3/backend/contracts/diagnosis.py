@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 SCHEMA_VERSION = "diagnosis.v1"
@@ -56,6 +56,41 @@ class ObservedLexicalCue(StrictModel):
         "THREAT", "URGENCY", "OBLIGATION", "QUANTITY", "SECRECY",
     ]
     semantic_value: str | None = Field(default=None, max_length=60)
+    confidence: float = Field(ge=0, le=1)
+
+
+AnalysisActorRole = Literal["SUSPECTED_PARTY", "CUSTOMER", "BANK_STAFF", "SYSTEM", "UNKNOWN"]
+
+
+class StructuredTurn(StrictModel):
+    """A privacy-safe turn description produced outside the CSR boundary."""
+
+    turn_id: int = Field(ge=1)
+    sequence_index: int = Field(ge=1)
+    speaker_role: AnalysisActorRole = "UNKNOWN"
+    speaker_confidence: float = Field(ge=0, le=1)
+    speech_act: str | None = Field(default=None, max_length=60)
+    normalized_summary: str = Field(min_length=1, max_length=320)
+    occurred_at: str | None = Field(default=None, max_length=64)
+
+
+class SemanticMention(StrictModel):
+    """A normalized entity/phrase occurrence; never a transcript quotation."""
+
+    mention_id: str = Field(min_length=1, max_length=100)
+    normalized_code: str = Field(min_length=1, max_length=100)
+    normalized_value: str = Field(min_length=1, max_length=160)
+    mention_type: Literal[
+        "INSTITUTION", "ORGANIZATION", "PERSON_NAME", "ROLE", "RELATIONSHIP",
+        "VOCATIVE", "ACTION", "PURPOSE", "AMOUNT", "DEADLINE", "LOCATION",
+        "DEVICE", "CONTACT", "OTHER",
+    ]
+    source_turn_id: int = Field(ge=1)
+    sequence_index: int = Field(ge=1)
+    speaker_role: AnalysisActorRole = "UNKNOWN"
+    occurrence_count: int = Field(default=1, ge=1)
+    first_turn_id: int = Field(ge=1)
+    last_turn_id: int = Field(ge=1)
     confidence: float = Field(ge=0, le=1)
 
 
@@ -120,8 +155,24 @@ class SemanticAtom(StrictModel):
     amount_direction: Literal["OUT", "IN", "REQUEST"] | None = None
     amount_event_id: str | None = Field(default=None, max_length=100)
     claimed_organization: str | None = Field(default=None, max_length=100)
+    claimed_organization_name: str | None = Field(default=None, max_length=160)
+    claimed_branch_name: str | None = Field(default=None, max_length=160)
+    claimed_person_name: str | None = Field(default=None, max_length=100)
     claimed_role: str | None = Field(default=None, max_length=100)
+    claimed_role_name: str | None = Field(default=None, max_length=160)
+    claimed_relationship: str | None = Field(default=None, max_length=100)
     claimed_purpose: str | None = Field(default=None, max_length=100)
+    speaker_role: AnalysisActorRole | None = None
+    actor_role: AnalysisActorRole | None = None
+    target_role: AnalysisActorRole | None = None
+    reported_by_role: AnalysisActorRole | None = None
+    speaker_confidence: float | None = Field(default=None, ge=0, le=1)
+    attribution_confidence: float | None = Field(default=None, ge=0, le=1)
+    vocative_target: str | None = Field(default=None, max_length=100)
+    deadline_at: str | None = Field(default=None, max_length=64)
+    relative_deadline_minutes: int | None = Field(default=None, ge=0, le=525_600)
+    mention_order: int | None = Field(default=None, ge=1)
+    occurrence_count: int = Field(default=1, ge=1)
     source_event_id: str | None = Field(default=None, max_length=80)
     source_turn_id: int = Field(ge=1)
     semantic_fingerprint: str = Field(min_length=1, max_length=128)
@@ -224,13 +275,35 @@ class WindowResult(StrictModel):
     label: Literal["NORMAL", "PHISHING"]
 
 
+class ContextNarrative(StrictModel):
+    """Grounded, staff-facing sentence for one structured case signal."""
+
+    code: str = Field(min_length=1, max_length=80)
+    sentence: str = Field(min_length=1, max_length=320)
+    status: Literal["CLAIMED", "REQUESTED", "REPORTED", "DENIED"]
+    source_turns: list[int] = Field(default_factory=list, max_length=12)
+    atom_ids: list[str] = Field(default_factory=list, max_length=20)
+    speaker_role: AnalysisActorRole = "UNKNOWN"
+    actor_role: AnalysisActorRole = "UNKNOWN"
+    target_role: AnalysisActorRole = "UNKNOWN"
+    reported_by_role: AnalysisActorRole = "UNKNOWN"
+    detail_items: list[str] = Field(default_factory=list, max_length=20)
+    entity_names: list[str] = Field(default_factory=list, max_length=20)
+    deadline_at: str | None = Field(default=None, max_length=64)
+    relative_deadline_minutes: int | None = Field(default=None, ge=0, le=525_600)
+    occurrence_count: int = Field(default=1, ge=1)
+    confidence: float | None = Field(default=None, ge=0, le=1)
+
+
 class ContextResult(StrictModel):
     summary: str
     incident_type: str
     claims: list[str] = Field(default_factory=list)
     demands: list[str] = Field(default_factory=list)
     manipulation_tactics: list[str] = Field(default_factory=list)
+    customer_statements: list[str] = Field(default_factory=list)
     recommended_next_steps: list[str] = Field(default_factory=list)
+    feature_narratives: list[ContextNarrative] = Field(default_factory=list, max_length=40)
     confidence: float = Field(ge=0, le=1)
 
 
@@ -250,6 +323,67 @@ class CaseContextFeatures(StrictModel):
     schema_version: str = "case_context_features.v1"
     observations: list[dict[str, Any]] = Field(default_factory=list)
     extraction_method: Literal["EVENT_DERIVED", "LLM_INDEPENDENT"] = "EVENT_DERIVED"
+
+
+class AnalysisSignalEvent(StrictModel):
+    """Normalized on-device event. `normalized_label` must not contain a source sentence."""
+
+    event_id: str = Field(min_length=1, max_length=100)
+    event_family: Literal[
+        "IMPERSONATION", "PSY_STRATEGY", "ACTION_REQUEST", "MONEY_MOVEMENT", "AMOUNT"
+    ]
+    subtype: str | None = Field(default=None, max_length=80)
+    impersonation_group: str | None = Field(default=None, max_length=80)
+    source_turn_id: int = Field(ge=1)
+    normalized_label: str = Field(min_length=1, max_length=160)
+    speaker_role: AnalysisActorRole = "UNKNOWN"
+    actor_role: AnalysisActorRole = "UNKNOWN"
+    target_role: AnalysisActorRole = "UNKNOWN"
+    reported_by_role: AnalysisActorRole = "UNKNOWN"
+    amount_krw: float | None = Field(default=None, ge=0)
+    is_requested: bool | None = None
+    occurrence_count: int = Field(default=1, ge=1)
+    confidence: float = Field(ge=0, le=1)
+
+
+class AnalysisEnvelope(StrictModel):
+    """The CSR production boundary: detailed structure without call text."""
+
+    schema_version: Literal["analysis-envelope.v1"] = "analysis-envelope.v1"
+    source: Literal["ON_DEVICE", "TELECOM", "ASAP", "FDS", "DEMO_ADAPTER"]
+    source_reference: str | None = Field(default=None, max_length=128)
+    reference_time: str | None = Field(default=None, max_length=64)
+    timezone: str = Field(default="Asia/Seoul", max_length=64)
+    source_text_included: Literal[False] = False
+    extraction_warnings: list[str] = Field(default_factory=list, max_length=100)
+    turn_count: int = Field(ge=1, le=120)
+    turns: list[StructuredTurn] = Field(min_length=1, max_length=120)
+    events: list[AnalysisSignalEvent] = Field(default_factory=list, max_length=500)
+    semantic_atoms: list[SemanticAtom] = Field(default_factory=list, max_length=1000)
+    semantic_mentions: list[SemanticMention] = Field(default_factory=list, max_length=2000)
+    semantic_relations: list[SemanticRelation] = Field(default_factory=list, max_length=2000)
+    context_features: CaseContextFeatures = Field(default_factory=CaseContextFeatures)
+
+    @model_validator(mode="after")
+    def validate_references(self) -> "AnalysisEnvelope":
+        turn_ids = {turn.turn_id for turn in self.turns}
+        if len(turn_ids) != len(self.turns) or any(turn > self.turn_count for turn in turn_ids):
+            raise ValueError("Envelope turn identifiers must be unique and within turn_count.")
+        atom_ids = {atom.atom_id for atom in self.semantic_atoms}
+        if len(atom_ids) != len(self.semantic_atoms):
+            raise ValueError("Envelope atom identifiers must be unique.")
+        if any(event.source_turn_id not in turn_ids for event in self.events):
+            raise ValueError("Envelope event references an unknown turn.")
+        if any(atom.source_turn_id not in turn_ids for atom in self.semantic_atoms):
+            raise ValueError("Envelope atom references an unknown turn.")
+        if any(mention.source_turn_id not in turn_ids for mention in self.semantic_mentions):
+            raise ValueError("Envelope mention references an unknown turn.")
+        if any(
+            relation.source_atom_id not in atom_ids or relation.target_atom_id not in atom_ids
+            for relation in self.semantic_relations
+        ):
+            raise ValueError("Envelope relation references an unknown atom.")
+        return self
 
 
 class WindowAnalysisResult(StrictModel):
@@ -274,6 +408,7 @@ class DiagnosisResult(StrictModel):
     features: dict[str, float]
     case_context_features: CaseContextFeatures = Field(default_factory=CaseContextFeatures)
     semantic_atoms: list[SemanticAtom] = Field(default_factory=list)
+    semantic_mentions: list[SemanticMention] = Field(default_factory=list)
     unmapped_observations: list[UnmappedObservation] = Field(default_factory=list)
     semantic_relations: list[SemanticRelation] = Field(default_factory=list)
     context_signals: list[ContextSignal] = Field(default_factory=list)

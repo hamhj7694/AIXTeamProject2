@@ -11,7 +11,7 @@ from contracts.ai_internal.case_copilot import CaseCopilotInput, CaseCopilotOutp
 from contracts.ai_internal.final_report import FinalCaseReportInput, FinalCaseReportOutput
 from contracts.ai_internal.work_card import CaseWorkCardInput, CaseWorkCardOutput
 from contracts.ai_internal.context_fact_extraction import ContextFactExtractionInput, ContextFactExtractionOutput
-from contracts.diagnosis import AnalyzeTextRequest, DiagnosisResult
+from contracts.diagnosis import AnalysisEnvelope, AnalyzeTextRequest, DiagnosisResult
 from contracts.public_api.ai_runtime import runtime_error
 from request_trace import install_request_trace
 
@@ -68,17 +68,70 @@ async def readiness() -> dict[str, object]:
             "max_input_chars": int(os.getenv("DIAGNOSIS_MAX_INPUT_CHARS", "6000")),
             "max_turns": int(os.getenv("DIAGNOSIS_MAX_TURNS", "30")),
             "event_output_tokens": int(os.getenv("OPENAI_EVENT_MAX_OUTPUT_TOKENS", "1800")),
-            "context_output_tokens": int(os.getenv("OPENAI_CONTEXT_MAX_OUTPUT_TOKENS", "500")),
+            "context_output_tokens": int(os.getenv("OPENAI_CONTEXT_MAX_OUTPUT_TOKENS", "2400")),
         },
     }
 
 
 @app.post("/ai/analyze/text", response_model=DiagnosisResult)
 async def analyze_text(request: AnalyzeTextRequest) -> DiagnosisResult:
+    """Backward-compatible demo route. Production integration uses /ai/analyze/signals."""
     try:
         return await service.analyze(request.text.strip())
     except ValueError as exc:
         raise HTTPException(status_code=400, detail={"code": "INVALID_INPUT", "message": str(exc)}) from exc
+    except DiagnosisBudgetExceededError as exc:
+        raise HTTPException(status_code=429, detail={"code": "AI_BUDGET_LIMIT_REACHED", "message": str(exc)}) from exc
+    except (AiProviderQuotaError, RateLimitError) as exc:
+        raise HTTPException(status_code=429, detail={"code": "OPENAI_QUOTA_EXHAUSTED", "message": str(exc)}) from exc
+    except (AiProviderAuthenticationError, AuthenticationError) as exc:
+        raise HTTPException(status_code=401, detail={"code": "OPENAI_AUTHENTICATION_FAILED", "message": str(exc)}) from exc
+    except APIConnectionError as exc:
+        raise HTTPException(status_code=503, detail=runtime_error(
+            "AI_PROVIDER_UNAVAILABLE",
+            "AI 서버에서 외부 AI 서비스에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+            retryable=True, legacy_code="AI_PROVIDER_CONNECTION_FAILED",
+        )) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=runtime_error(
+            "AI_SERVICE_UNAVAILABLE", "AI 분석을 완료하지 못했습니다. 다시 시도해 주세요.",
+            retryable=True, legacy_code="AI_ANALYSIS_FAILED",
+        )) from exc
+
+
+@app.post("/ai/demo/parse-transcript", response_model=AnalysisEnvelope)
+async def parse_demo_transcript(request: AnalyzeTextRequest) -> AnalysisEnvelope:
+    """Development simulator for the external/on-device structured analyzer."""
+    try:
+        return await service.build_demo_envelope(request.text.strip())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail={"code": "INVALID_INPUT", "message": str(exc)}) from exc
+    except DiagnosisBudgetExceededError as exc:
+        raise HTTPException(status_code=429, detail={"code": "AI_BUDGET_LIMIT_REACHED", "message": str(exc)}) from exc
+    except (AiProviderQuotaError, RateLimitError) as exc:
+        raise HTTPException(status_code=429, detail={"code": "OPENAI_QUOTA_EXHAUSTED", "message": str(exc)}) from exc
+    except (AiProviderAuthenticationError, AuthenticationError) as exc:
+        raise HTTPException(status_code=401, detail={"code": "OPENAI_AUTHENTICATION_FAILED", "message": str(exc)}) from exc
+    except APIConnectionError as exc:
+        raise HTTPException(status_code=503, detail=runtime_error(
+            "AI_PROVIDER_UNAVAILABLE",
+            "데모 분석기가 외부 AI 서비스에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+            retryable=True, legacy_code="AI_PROVIDER_CONNECTION_FAILED",
+        )) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=runtime_error(
+            "AI_SERVICE_UNAVAILABLE", "데모 분석 결과를 구조화하지 못했습니다. 다시 시도해 주세요.",
+            retryable=True, legacy_code="AI_ANALYSIS_FAILED",
+        )) from exc
+
+
+@app.post("/ai/analyze/signals", response_model=DiagnosisResult)
+async def analyze_signals(request: AnalysisEnvelope) -> DiagnosisResult:
+    """CSR production boundary. Raw transcript fields are rejected by the contract."""
+    try:
+        return await service.analyze_envelope(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail={"code": "INVALID_ENVELOPE", "message": str(exc)}) from exc
     except DiagnosisBudgetExceededError as exc:
         raise HTTPException(status_code=429, detail={"code": "AI_BUDGET_LIMIT_REACHED", "message": str(exc)}) from exc
     except (AiProviderQuotaError, RateLimitError) as exc:

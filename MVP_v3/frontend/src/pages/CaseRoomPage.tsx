@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertCircle, Bookmark, CheckCircle2, Clock3, Loader2, PanelRightClose, PanelRightOpen, RefreshCw, RotateCcw, StickyNote, Trash2, Users } from 'lucide-react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { casesApi, CURRENT_BANK_USER } from '../api/cases';
 import type { CaseBundle, CaseFact, CaseMessage, CaseSupportSnapshot, StoredCase, VerificationTask } from '../api/types';
 import { ActionDialog, QuestionDialog, VerificationDialog } from '../components/CaseActionDialogs';
@@ -14,6 +14,7 @@ import { SharedConversation } from '../components/SharedConversation';
 import { BankBookmarks } from '../components/BankBookmarks';
 import { BankPersonalNotes } from '../components/BankPersonalNotes';
 import { ParticipantManager } from '../components/ParticipantManager';
+import { CaseAssignmentDialog } from '../components/CaseAssignmentDialog';
 import { readBankBookmarks, writeBankBookmarks, type BankBookmark } from '../bank/bookmarks';
 import { stripBankAiMention } from '../bank/aiMention';
 import { buildConsecutiveAiPrompt, ConsecutiveAiBatcher } from '../bank/consecutiveAiBatch';
@@ -53,7 +54,9 @@ type CaseRoomPageProps = {
 
 export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated, contextOpen, onContextOpenChange }) => {
   const { caseId = '' } = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
+  const initialAssignmentRecommendation = Boolean((location.state as { initialAssignmentRecommendation?: boolean } | null)?.initialAssignmentRecommendation);
   const [caseItem, setCaseItem] = useState<StoredCase | null>(null);
   const [bundle, setBundle] = useState<CaseBundle | null>(null);
   const [support, setSupport] = useState<CaseSupportSnapshot | null>(null);
@@ -70,6 +73,7 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
   const [noteOpen, setNoteOpen] = useState(false);
   const [participantOpen, setParticipantOpen] = useState(false);
   const [participantCount, setParticipantCount] = useState(0);
+  const [assignmentRequired, setAssignmentRequired] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [adminAction, setAdminAction] = useState<AdminAction>(null);
   const [accessRevision, setAccessRevision] = useState(0);
@@ -138,6 +142,11 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
       setLoading(false); setRefreshing(false); return;
     }
     setCaseItem(caseResult.value); if (!quiet) setError('');
+    const assignmentPromptKey = `csr-initial-assignment:${caseId}`;
+    if (!quiet && initialAssignmentRecommendation && !caseResult.value.primary_assignee && !sessionStorage.getItem(assignmentPromptKey)) {
+      sessionStorage.setItem(assignmentPromptKey, 'shown');
+      setAssignmentRequired(true);
+    }
     const warnings: string[] = [];
     const nextBundle = bundleResult.status === 'fulfilled' ? {
       ...bundleResult.value,
@@ -164,7 +173,7 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
       }
     }
     setPartialWarnings(warnings); setLoading(false); setRefreshing(false);
-  }, [caseId]);
+  }, [caseId, initialAssignmentRecommendation]);
 
   const showMessage = (message: CaseMessage) => {
     setBundle((current) => current && current.case.case_id === message.case_id ? {
@@ -232,7 +241,7 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
     outboxRef.current.clear();
     setAiPendingCount(0); setBusy(false);
     lastSupportRevisionRef.current = '';
-    setCaseItem(null); setBundle(null); setSupport(null); setFacts([]); setDialog(null); setBookmarkOpen(false); setNoteOpen(false); setParticipantOpen(false); setParticipantCount(0); setHistoryOpen(false); setAdminAction(null); setBookmarks(readBankBookmarks(caseId)); setError(''); setComposerWarnings({}); setCustomerPaneCollapsed(false); setTeamPaneCollapsed(false); setCustomerPaneRatio(50);
+    setCaseItem(null); setBundle(null); setSupport(null); setFacts([]); setDialog(null); setBookmarkOpen(false); setNoteOpen(false); setParticipantOpen(false); setParticipantCount(0); setAssignmentRequired(false); setHistoryOpen(false); setAdminAction(null); setBookmarks(readBankBookmarks(caseId)); setError(''); setComposerWarnings({}); setCustomerPaneCollapsed(false); setTeamPaneCollapsed(false); setCustomerPaneRatio(50);
     // Register the existing demo identity before mounting editors that require membership.
     let active = true;
     void (async () => {
@@ -240,7 +249,7 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
         const items = await casesApi.members(caseId);
         if (active) setParticipantCount(items.length);
         if (!items.some((item) => item.user_id === CURRENT_BANK_USER.user_id)) {
-          await casesApi.upsertMember(caseId, { ...CURRENT_BANK_USER, role: 'CHAT_OPERATOR' });
+          await casesApi.upsertMember(caseId, { ...CURRENT_BANK_USER, role: 'CHAT_OPERATOR', assignment_role: 'HANDOVER_PENDING' });
           const updatedItems = await casesApi.members(caseId);
           if (active) setParticipantCount(updatedItems.length);
         }
@@ -429,5 +438,6 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
     {adminAction === 'finalize' && <AdminCaseDialog title="해결 및 종료 처리" description="사건을 해결 상태로 종결합니다. 관리자 암호를 입력해 주세요." confirmLabel="해결 및 종료" noteLabel="종결 메모 (선택)" notePlaceholder="처리 결과나 인계 사항을 기록하세요." onConfirm={finalizeCase} onClose={() => setAdminAction(null)}/>}
     {adminAction === 'reopen' && <AdminCaseDialog title="사건 다시 진행하기" description="종결 직전의 사건 상태로 복구합니다. 관리자 암호를 입력해 주세요." confirmLabel="진행 상태로 복구" onConfirm={(password) => reopenCase(password)} onClose={() => setAdminAction(null)}/>}
     {adminAction === 'trash' && <AdminCaseDialog title="휴지통으로 보내기" description="사건은 휴지통에서 30일 동안 보관되며 그 안에는 복구할 수 있습니다." confirmLabel="휴지통으로 보내기" onConfirm={(password) => trashCase(password)} onClose={() => setAdminAction(null)}/>}
+    {assignmentRequired && <CaseAssignmentDialog caseId={caseId} initialRecommendation={initialAssignmentRecommendation} onAssigned={async () => { setAssignmentRequired(false); await load(true, false); onMutated(); }} onSkip={() => setAssignmentRequired(false)}/>}
   </section>;
 };

@@ -1,8 +1,8 @@
 import React, { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Loader2, RefreshCw, UserPlus, Users, Wifi, WifiOff, X } from 'lucide-react';
-import { casesApi, CURRENT_BANK_USER, CURRENT_CUSTOMER_USER } from '../api/cases';
+import { casesApi, CURRENT_BANK_USER, CURRENT_CUSTOMER_USER, displayBankUserName } from '../api/cases';
 import { loadRuntimePermissionsMode, type PermissionsMode } from '../api/contextWorkspace';
-import type { CaseMember, CaseMemberRole, CasePresence } from '../api/types';
+import type { CaseAssignmentRole, CaseMember, CaseMemberRole, CasePresence } from '../api/types';
 import { generateUuid } from '../uuid';
 
 interface Props {
@@ -13,6 +13,7 @@ interface Props {
 }
 
 const roleLabel = (role: CaseMemberRole) => ({ CASE_OWNER: '메인 담당자', CHAT_OPERATOR: '상담 담당자', REVIEWER: '검토자', VIEWER: '열람자' }[role]);
+const assignmentRoleLabel = (role: CaseAssignmentRole) => ({ SUPERVISOR: '사건 총괄', MONITORING: '모니터링', CONSULTATION: '상담·대응', VIEWER: '기타 열람자', HANDOVER_PENDING: '인수인계 대기자' }[role]);
 const presenceLabel = (presence?: CasePresence['presence']) => ({ VIEWING: '온라인', TYPING: '입력 중', AWAY: '자리 비움', OFFLINE: '오프라인' }[presence ?? 'OFFLINE']);
 
 export const ParticipantManager: React.FC<Props> = ({ caseId, open, onClose, onChanged }) => {
@@ -34,7 +35,8 @@ export const ParticipantManager: React.FC<Props> = ({ caseId, open, onClose, onC
     try {
       const [memberList, presenceList, mode] = await Promise.all([casesApi.members(caseId), casesApi.presence(caseId), loadRuntimePermissionsMode()]);
       setMembers(memberList); setPresence(presenceList); setPermissionsMode(mode);
-      setAssignee(memberList.find((item) => item.role === 'CASE_OWNER')?.display_name ?? '');
+      const owner = memberList.find((item) => item.role === 'CASE_OWNER');
+      setAssignee(owner ? displayBankUserName(owner.user_id, owner.display_name) : '');
       setInitialized(true);
     } catch (reason) { setError(reason instanceof Error ? reason.message : '참여자 정보를 불러오지 못했습니다.'); }
     finally { setLoading(false); }
@@ -67,11 +69,19 @@ export const ParticipantManager: React.FC<Props> = ({ caseId, open, onClose, onC
     if (busy) return;
     setBusy(true); setError('');
     try {
-      if (role === 'CASE_OWNER') await casesApi.setPrimaryAssignee(caseId, member.display_name);
-      else await casesApi.upsertMember(caseId, { user_id: member.user_id, display_name: member.display_name, role });
+      const displayName = displayBankUserName(member.user_id, member.display_name);
+      if (role === 'CASE_OWNER') await casesApi.setPrimaryAssignee(caseId, displayName);
+      else await casesApi.upsertMember(caseId, { user_id: member.user_id, display_name: displayName, role, assignment_role: member.assignment_role });
       await load(); await onChanged();
     }
     catch (reason) { setError(reason instanceof Error ? reason.message : '참여자 역할을 변경하지 못했습니다.'); }
+    finally { setBusy(false); }
+  };
+  const updateAssignmentRole = async (member: CaseMember, assignment_role: CaseAssignmentRole) => {
+    if (busy) return;
+    setBusy(true); setError('');
+    try { await casesApi.upsertMember(caseId, { user_id: member.user_id, display_name: displayBankUserName(member.user_id, member.display_name), role: member.role, assignment_role }); await load(); await onChanged(); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : '케이스 배정 역할을 변경하지 못했습니다.'); }
     finally { setBusy(false); }
   };
   const addMember = async (event: FormEvent) => {
@@ -79,7 +89,7 @@ export const ParticipantManager: React.FC<Props> = ({ caseId, open, onClose, onC
     if (!newName.trim() || busy) return;
     setBusy(true); setError('');
     try {
-      await casesApi.upsertMember(caseId, { user_id: `staff-${generateUuid()}`, display_name: newName.trim(), role: newRole });
+      await casesApi.upsertMember(caseId, { user_id: `staff-${generateUuid()}`, display_name: newName.trim(), role: newRole, assignment_role: newRole === 'REVIEWER' ? 'MONITORING' : newRole === 'CHAT_OPERATOR' ? 'CONSULTATION' : 'VIEWER' });
       setNewName(''); setNewRole('VIEWER'); await load(); await onChanged();
     } catch (reason) { setError(reason instanceof Error ? reason.message : '참여자를 추가하지 못했습니다.'); }
     finally { setBusy(false); }
@@ -91,13 +101,14 @@ export const ParticipantManager: React.FC<Props> = ({ caseId, open, onClose, onC
       <header><Users size={19}/><div><h2 id="participant-title">참여자 관리</h2><p>현재 관계자와 접속 상태, 메인 담당자를 관리합니다.</p></div><button type="button" onClick={() => void load()} aria-label="참여자 정보 새로고침"><RefreshCw size={16} className={loading ? 'spin' : ''}/></button><button ref={closeRef} type="button" onClick={onClose} aria-label="참여자 관리 닫기"><X size={18}/></button></header>
       {error && <p className="participant-error">{error}</p>}
       <div className="participant-scroll">
-        {permissionsMode === 'MVP_OPEN' ? <section className="permission-notice permission-notice-neutral"><h3>MVP 테스트 모드</h3><p>모든 사용자가 사건 내용을 편집하고 사실·제안·업무를 검토할 수 있습니다.</p></section> : <section className="assignee-setting participant-role-setting"><h3>현재 사용자 역할</h3><p>사실 확정·AI 제안 채택·업무 완료에는 검토 권한이 필요합니다.</p>{members.filter((member) => member.user_id === CURRENT_BANK_USER.user_id).map((member) => <div key={member.user_id}><strong>{member.display_name} · {roleLabel(member.role)}</strong>{!['CASE_OWNER', 'REVIEWER'].includes(member.role) && <button className="secondary-action" type="button" disabled={loading || busy} onClick={() => void updateRole(member, 'REVIEWER')}>내 역할을 검토자로 설정</button>}</div>)}</section>}
+        {permissionsMode === 'MVP_OPEN' ? <section className="permission-notice permission-notice-neutral"><h3>MVP 테스트 모드</h3><p>모든 사용자가 사건 내용을 편집하고 사실·제안·업무를 검토할 수 있습니다.</p></section> : <section className="assignee-setting participant-role-setting"><h3>현재 사용자 역할</h3><p>사실 확정·AI 제안 채택·업무 완료에는 검토 권한이 필요합니다.</p>{members.filter((member) => member.user_id === CURRENT_BANK_USER.user_id).map((member) => <div key={member.user_id}><strong>{displayBankUserName(member.user_id, member.display_name)} · {roleLabel(member.role)}</strong>{!['CASE_OWNER', 'REVIEWER'].includes(member.role) && <button className="secondary-action" type="button" disabled={loading || busy} onClick={() => void updateRole(member, 'REVIEWER')}>내 역할을 검토자로 설정</button>}</div>)}</section>}
         <section className="customer-presence-card"><div className={customerPresence && customerPresence.presence !== 'OFFLINE' ? 'online' : 'offline'}>{customerPresence && customerPresence.presence !== 'OFFLINE' ? <Wifi size={17}/> : <WifiOff size={17}/>}</div><span><small>고객 연결 상태</small><strong>{presenceLabel(customerPresence?.presence)}</strong><p>{customerPresence ? `마지막 확인 ${new Date(customerPresence.last_seen_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}` : '현재 고객 접속 신호가 없습니다.'}</p></span></section>
-        <section className="assignee-setting"><h3>메인 담당자 설정</h3><p>사건 대응을 총괄할 담당자를 한 명 지정합니다.</p><div><select value={assignee} onChange={(event) => setAssignee(event.target.value)} disabled={loading || busy}><option value="">미배정</option>{members.map((member) => <option key={member.user_id} value={member.display_name}>{member.display_name}</option>)}</select><button type="button" onClick={() => void saveAssignee()} disabled={loading || busy}><Check size={14}/>설정</button></div></section>
+        <section className="assignee-setting"><h3>메인 담당자 설정</h3><p>사건 대응을 총괄할 담당자를 한 명 지정합니다.</p><div><select value={assignee} onChange={(event) => setAssignee(event.target.value)} disabled={loading || busy}><option value="">미배정</option>{members.map((member) => { const displayName = displayBankUserName(member.user_id, member.display_name); return <option key={member.user_id} value={displayName}>{displayName}</option>; })}</select><button type="button" onClick={() => void saveAssignee()} disabled={loading || busy}><Check size={14}/>설정</button></div></section>
         <section className="participant-list"><div><h3>현재 관계자</h3><span>{members.length}명</span></div>{loading && !initialized ? <p className="participant-state"><Loader2 className="spin" size={17}/>불러오는 중</p> : members.length === 0 ? <p className="participant-state">등록된 관계자가 없습니다.</p> : members.map((member) => {
           const memberPresence = presenceByUser.get(member.user_id);
           const online = Boolean(memberPresence && memberPresence.presence !== 'OFFLINE');
-          return <article key={member.user_id}><div className={online ? 'online' : 'offline'}>{member.display_name.slice(0, 1)}</div><span><strong>{member.display_name}{member.user_id === CURRENT_BANK_USER.user_id && <em>나</em>}</strong><small>{presenceLabel(memberPresence?.presence)}</small></span><select value={member.role} disabled={busy || member.role === 'CASE_OWNER'} onChange={(event) => void updateRole(member, event.target.value as CaseMemberRole)}><option value="CASE_OWNER">메인 담당자</option><option value="CHAT_OPERATOR">상담 담당자</option><option value="REVIEWER">검토자</option><option value="VIEWER">열람자</option></select></article>;
+          const displayName = displayBankUserName(member.user_id, member.display_name);
+          return <article key={member.user_id}><div className={online ? 'online' : 'offline'}>{displayName.slice(0, 1)}</div><span><strong>{displayName}{member.user_id === CURRENT_BANK_USER.user_id && <em>나</em>}</strong><small>{presenceLabel(memberPresence?.presence)}</small></span><select value={member.role} disabled={busy || member.role === 'CASE_OWNER'} onChange={(event) => void updateRole(member, event.target.value as CaseMemberRole)}><option value="CASE_OWNER">권한: 메인 담당자</option><option value="CHAT_OPERATOR">권한: 상담 담당자</option><option value="REVIEWER">권한: 검토자</option><option value="VIEWER">권한: 열람자</option></select><select value={member.assignment_role} disabled={busy} onChange={(event) => void updateAssignmentRole(member, event.target.value as CaseAssignmentRole)} aria-label={`${displayName} 배정 역할`}><option value="SUPERVISOR">배정: 사건 총괄</option><option value="MONITORING">배정: 모니터링</option><option value="CONSULTATION">배정: 상담·대응</option><option value="VIEWER">배정: 기타 열람자</option><option value="HANDOVER_PENDING">배정: 인수인계 대기자</option></select></article>;
         })}</section>
         <form className="participant-add" onSubmit={addMember}><h3><UserPlus size={15}/>관계자 추가</h3><div><input value={newName} maxLength={80} onChange={(event) => setNewName(event.target.value)} placeholder="이름 또는 표시 이름"/><select value={newRole} onChange={(event) => setNewRole(event.target.value as CaseMemberRole)}><option value="CHAT_OPERATOR">상담 담당자</option><option value="REVIEWER">검토자</option><option value="VIEWER">열람자</option></select><button type="submit" disabled={busy || !newName.trim()}>추가</button></div></form>
       </div>

@@ -11,12 +11,15 @@
 - 마이그레이션: `backend/migrations/020_bank_staff_directory.sql`
 - 삭제는 `deleted_at`을 기록하는 soft delete입니다.
 - 상태 색상은 GREEN, BLUE, YELLOW, ORANGE, RED, PURPLE, GRAY 토큰만 허용합니다.
+- 전사 담당자 화면에서는 Case별 역할을 배정하지 않습니다. Case별 배정 역할은 `case_members.assignment_role`에 저장합니다.
+- `assignment_eligible`로 향후 Case 자동 배정 대상 여부를 명시합니다.
 
-프론트는 서버 응답을 받은 뒤 목록을 갱신하며, 로딩·오류·빈 상태와 삭제 확인을 표시합니다. AI API와 기존 사건 참여자 계약은 변경하지 않았습니다.
+프론트는 목록을 기본으로 열고 `담당자 추가` 또는 `수정`을 눌렀을 때만 입력 화면으로 전환합니다. 서버 응답을 받은 뒤 목록을 갱신하며, 로딩·오류·빈 상태와 삭제 확인을 표시합니다. AI API는 변경하지 않고, 사건 참여자 계약에는 케이스별 `assignment_role`만 추가합니다.
 
 ## 검증
 
-- `MVP_v3/frontend`: `npm.cmd run typecheck` 통과
+- `MVP_v3/frontend`: `npm.cmd run typecheck`, `npm.cmd run build` 통과
 - `MVP_v3`: `python -m compileall -q backend/general_api backend/contracts` 통과
+- General API에서 목록·등록·수정·소프트 삭제를 실제로 확인했습니다.
 
-운영 DB 반영은 배포 환경에서 migration runner로 020번을 적용해야 합니다.
+운영 DB 반영은 배포 환경에서 migration runner로 020번과 022번을 순서대로 적용해야 합니다. 기존 DB에 오래된 migration 충돌이 있으면 `--only 022_case_member_assignment_roles.sql`처럼 케이스 역할 migration을 검토 후 적용합니다.
