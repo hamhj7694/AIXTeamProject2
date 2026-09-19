@@ -232,6 +232,29 @@ def parse_turns(text: str) -> list[str]:
     return turns
 
 
+def _speaker_hint(turn: str) -> str:
+    """Read an optional demo speaker prefix without treating honorifics as speakers.
+
+    The production path receives speaker roles in the Analysis Envelope.  The
+    demo adapter may receive a labelled transcript, so pass that label to the
+    extraction model as metadata.  An unlabeled turn remains UNKNOWN.
+    """
+    match = re.match(r"^\s*(?:\[\s*)?(고객|피해자|소비자|CUSTOMER)\s*(?:\]|:|：)", turn, re.IGNORECASE)
+    if match:
+        return "CUSTOMER"
+    match = re.match(
+        r"^\s*(?:\[\s*)?(보이스피싱\s*의심\s*인물|의심\s*인물|상대방|발신자|사칭자|CALLER|SUSPECTED_PARTY)\s*(?:\]|:|：)",
+        turn,
+        re.IGNORECASE,
+    )
+    if match:
+        return "SUSPECTED_PARTY"
+    match = re.match(r"^\s*(?:\[\s*)?(은행\s*담당자|은행직원|BANK_STAFF)\s*(?:\]|:|：)", turn, re.IGNORECASE)
+    if match:
+        return "BANK_STAFF"
+    return "UNKNOWN"
+
+
 def _validate_event(raw: dict[str, Any], turn_id: int, target: str) -> ExtractedEvent:
     if int(raw["evidence_turn_id"]) != turn_id:
         raise ValueError("evidence_turn_id가 TARGET Turn과 다릅니다.")
@@ -424,7 +447,7 @@ async def extract_events(text: str) -> EventExtraction:
             response = await client.responses.create(
                 model=model_name,
                 instructions=f"{SYSTEM_INSTRUCTION}\n\n{SEMANTIC_ATOM_INSTRUCTION}",
-                input=f"[TARGET][TURN {turn_id}][SPEAKER_UNKNOWN] {target}",
+                input=f"[TARGET][TURN {turn_id}][SPEAKER_{_speaker_hint(target)}] {target}",
                 max_output_tokens=max_output_tokens,
                 text={"format": {"type": "json_schema", "name": "voice_phishing_events_v2_2", "schema": EVENT_OUTPUT_SCHEMA, "strict": True}},
             )
@@ -537,6 +560,99 @@ def _normalize_feature_narrative_code(value: str) -> str:
     return normalized
 
 
+_SUSPECTED_FEATURE_PREFIXES = (
+    "ROLE_", "CLAIM_", "CLAIMED_", "REQUEST_", "PURPOSE_", "TACTIC_", "DEADLINE_",
+)
+
+
+def _is_suspected_feature_code(code: str) -> bool:
+    return code.startswith(_SUSPECTED_FEATURE_PREFIXES)
+
+
+def _entity_display_name(values: list[str]) -> str:
+    labels = {
+        "CARD_COMPANY": "카드사",
+        "BANK": "은행",
+        "PROSECUTION_SERVICE": "검찰·수사기관",
+        "POLICE_SERVICE": "경찰기관",
+        "FINANCIAL_SUPERVISORY_SERVICE": "금융감독원",
+        "COURT": "법원",
+    }
+    for value in values:
+        normalized = value.strip()
+        if not normalized:
+            continue
+        if normalized in labels:
+            return labels[normalized]
+        if normalized not in {"UNKNOWN", "CUSTOMER", "CALLER"}:
+            return normalized
+    return "금융기관"
+
+
+def _normalize_suspected_sentence(code: str, sentence: str, entity_names: list[str]) -> str:
+    """Prevent legacy/customer-report wording for live-call signals.
+
+    The context model receives role metadata, but older envelopes and partially
+    populated narratives may omit atom_ids.  Keep a deterministic, grounded
+    display guard so a suspected party's utterance cannot be rendered as a
+    customer complaint.
+    """
+    text = " ".join(sentence.split())
+    if not text or not _is_suspected_feature_code(code):
+        return text
+    customer_wording = text.startswith("고객이 ") or "고객이 " in text[:28] or "요청받" in text
+    if not customer_wording:
+        return text
+    institution = _entity_display_name(entity_names)
+    if code == "CLAIM_UNAUTHORIZED_PAYMENT":
+        return f"보이스피싱 의심 인물이 {institution} 관계자를 사칭하며 승인되지 않은 결제가 발생했다고 주장함."
+    if code == "CLAIM_CRIME_INVOLVEMENT":
+        return "보이스피싱 의심 인물이 고객 계좌·명의가 범죄에 연루됐다고 주장함."
+    if code == "CLAIM_ACCOUNT_VERIFICATION":
+        return f"보이스피싱 의심 인물이 {institution} 명의로 고객 계좌 확인이 필요하다고 주장함."
+    if code == "REQUEST_AUTH_INFO":
+        return "보이스피싱 의심 인물이 고객에게 인증정보 제공을 요구함."
+    if code == "REQUEST_INSTALL_APP":
+        return "보이스피싱 의심 인물이 고객에게 특정 앱 설치를 요구함."
+    if code in {"REQUEST_TRANSFER", "PURPOSE_SAFE_ACCOUNT", "PURPOSE_REFUND"}:
+        return "보이스피싱 의심 인물이 고객에게 자금 이체 또는 송금을 요구함."
+    if code == "REQUEST_KEEP_CALL":
+        return "보이스피싱 의심 인물이 고객에게 통화를 계속 유지하라고 요구함."
+    if code == "REQUEST_SECRECY" or code == "TACTIC_ISOLATION":
+        return "보이스피싱 의심 인물이 고객에게 외부 연락이나 사실 공유를 제한함."
+    if text.startswith("고객이 "):
+        return f"보이스피싱 의심 인물이 {text.removeprefix('고객이 ')}"
+    return text
+
+
+def _normalize_claim_line(value: str) -> str:
+    text = " ".join(value.split())
+    if "고객이" not in text:
+        return text
+    if "카드사" in text and ("불법 결제" in text or "승인되지 않은 결제" in text):
+        return "보이스피싱 의심 인물이 카드사 관계자를 사칭하며 승인되지 않은 결제가 발생했다고 주장함."
+    if "인증번호" in text or "인증정보" in text:
+        return "보이스피싱 의심 인물이 고객에게 인증정보 제공을 요구함."
+    if "계좌" in text and "범죄" in text:
+        return "보이스피싱 의심 인물이 고객 계좌·명의가 범죄에 연루됐다고 주장함."
+    if "계좌" in text and "확인" in text:
+        return "보이스피싱 의심 인물이 고객 계좌 확인이 필요하다고 주장함."
+    return text.replace("고객이 ", "보이스피싱 의심 인물이 ", 1)
+
+
+def _normalize_summary_text(value: str) -> str:
+    text = " ".join(value.split()).replace("상대방", "보이스피싱 의심 인물")
+    match = re.match(r"^고객이 (.+?)라 자칭하는 자(?:에 의해|에게) (.+)$", text)
+    if match:
+        institution, remainder = match.groups()
+        return f"보이스피싱 의심 인물이 {institution} 관계자를 사칭하며 {remainder}"
+    if "고객이" in text and "자칭" in text:
+        return text.replace("고객이 ", "보이스피싱 의심 인물이 ", 1)
+    if text.startswith("고객은 ") and ("요구받" in text or "주장" in text):
+        return f"보이스피싱 의심 인물이 고객에게 {text.removeprefix('고객은 ').replace('요구받았습니다', '요구함').replace('요구받았다', '요구함')}"
+    return text
+
+
 def _validated_feature_narratives(context: ContextResult, payload: dict[str, Any]) -> ContextResult:
     """Keep only grounded, known narrative references from the LLM response."""
     valid_turns: set[int] = set()
@@ -591,15 +707,26 @@ def _validated_feature_narratives(context: ContextResult, payload: dict[str, Any
         if not source_turns and not atom_ids and observed_codes and code not in observed_codes:
             continue
         referenced_atoms = [atoms_by_id[atom_id] for atom_id in atom_ids]
+        if not referenced_atoms and source_turns:
+            # Some model responses provide valid turn evidence but omit
+            # atom_ids.  Recover role metadata from the same-turn atoms before
+            # falling back to the feature code.
+            referenced_atoms = [
+                atom for atom in atoms_by_id.values()
+                if int(atom.get("source_turn_id") or 0) in source_turns
+            ]
+        default_actor = "CUSTOMER" if code.startswith("CUSTOMER_") else (
+            "SUSPECTED_PARTY" if _is_suspected_feature_code(code) else "UNKNOWN"
+        )
         def authoritative_role(field: str, fallback: str = "UNKNOWN") -> str:
             values = [str(atom.get(field) or "").upper() for atom in referenced_atoms]
             values = ["SUSPECTED_PARTY" if value == "CALLER" else value for value in values if value]
             return values[0] if values and all(value == values[0] for value in values) else fallback
-        speaker_role = authoritative_role("speaker_role", authoritative_role("speaker"))
-        actor_role = authoritative_role("actor_role")
-        target_role = authoritative_role("target_role")
+        speaker_role = authoritative_role("speaker_role", authoritative_role("speaker", default_actor))
+        actor_role = authoritative_role("actor_role", default_actor)
+        target_role = authoritative_role("target_role", "CUSTOMER" if default_actor == "SUSPECTED_PARTY" else "UNKNOWN")
         reported_by_role = authoritative_role("reported_by_role", speaker_role)
-        if actor_role == "UNKNOWN" and code.startswith(("ROLE_", "CLAIM_", "CLAIMED_", "REQUEST_", "PURPOSE_", "TACTIC_", "DEADLINE_")):
+        if actor_role == "UNKNOWN" and _is_suspected_feature_code(code):
             actor_role = "SUSPECTED_PARTY"
         if target_role == "UNKNOWN" and actor_role == "SUSPECTED_PARTY":
             target_role = "CUSTOMER"
@@ -611,6 +738,7 @@ def _validated_feature_narratives(context: ContextResult, payload: dict[str, Any
             str(value).strip()
             for atom in referenced_atoms
             for value in (
+                atom.get("claimed_organization"),
                 atom.get("claimed_organization_name"), atom.get("claimed_branch_name"),
                 atom.get("claimed_person_name"), atom.get("claimed_role_name"), atom.get("claimed_role"),
                 atom.get("claimed_relationship"), atom.get("vocative_target"),
@@ -627,8 +755,8 @@ def _validated_feature_narratives(context: ContextResult, payload: dict[str, Any
         occurrence_count = max([int(atom.get("occurrence_count") or 1) for atom in referenced_atoms] or [1])
         confidences = [float(atom["attribution_confidence"]) for atom in referenced_atoms if atom.get("attribution_confidence") is not None]
         sentence = sentence.replace("상대방", "보이스피싱 의심 인물")
-        if actor_role == "SUSPECTED_PARTY" and sentence.startswith("고객이 ") and not code.startswith("CUSTOMER_"):
-            sentence = "보이스피싱 의심 인물이 " + sentence.removeprefix("고객이 ")
+        if actor_role == "SUSPECTED_PARTY" and not code.startswith("CUSTOMER_"):
+            sentence = _normalize_suspected_sentence(code, sentence, entity_names)
         if code.startswith("CUSTOMER_") and any(
             token in sentence for token in ("송금했다고", "이체했다고", "설치했다고", "제공했다고")
         ) and "은행 내부 채널" not in sentence:
@@ -656,9 +784,7 @@ def _validated_feature_narratives(context: ContextResult, payload: dict[str, Any
     def suspected_party_lines(items: list[str]) -> list[str]:
         normalized: list[str] = []
         for item in items:
-            line = " ".join(item.split()).replace("상대방", "보이스피싱 의심 인물")
-            if line.startswith("고객이 "):
-                line = "보이스피싱 의심 인물이 " + line.removeprefix("고객이 ")
+            line = _normalize_claim_line(item.replace("상대방", "보이스피싱 의심 인물"))
             if line and line not in normalized:
                 normalized.append(line)
         return normalized
@@ -675,7 +801,7 @@ def _validated_feature_narratives(context: ContextResult, payload: dict[str, Any
             customer_statements.append(line)
 
     return context.model_copy(update={
-        "summary": context.summary.replace("상대방", "보이스피싱 의심 인물"),
+        "summary": _normalize_summary_text(context.summary),
         "claims": suspected_party_lines(context.claims),
         "demands": suspected_party_lines(context.demands),
         "manipulation_tactics": suspected_party_lines(context.manipulation_tactics),
@@ -780,6 +906,14 @@ async def extract_context_from_signal_payload(
             "Treat speaker_role, actor_role, target_role, reported_by_role and their confidence "
             "as authoritative metadata. Never change a CUSTOMER reporter into the actor of a "
             "claim or request. SUSPECTED_PARTY must be rendered as '보이스피싱 의심 인물'; "
+            "The underlying source is a live call between the suspected phishing person and the "
+            "customer, not a customer complaint or incident report to the bank. A claim, request, "
+            "or pressure signal attributed to SUSPECTED_PARTY must be written as that person's "
+            "speech or action toward the customer. Do not write '고객이 ... 주장함' unless the "
+            "structured metadata explicitly says speaker_role/actor_role=CUSTOMER and the atom "
+            "is a customer report. If a speaker is UNKNOWN, do not invent a customer reporter; "
+            "for anti-fraud claim/request codes use the event's suspected-party attribution and "
+            "otherwise say '화자 미상 · 확인 필요'. "
             "do not use the vague label '상대방' and do not call anyone a confirmed criminal. "
             "A vocative such as '엄마' is the addressee, not the speaker. When claimed_relationship "
             "is CHILD, describe that the suspected person impersonated the customer's child. "

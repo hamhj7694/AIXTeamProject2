@@ -14,7 +14,7 @@ const CALL_SAMPLES: Record<SampleType, string[]> = {
   PHISHING: [
     ['서울지검 수사관입니다. 고객님 명의 계좌가 범죄에 연루됐습니다.', '현재 자금 추적을 위해 계좌 검증이 필요합니다.', '오늘 안에 안내드리는 안전계좌로 자금을 이체하셔야 합니다.', '수사 중이므로 가족이나 은행 직원에게는 알리지 마세요.', '통화를 끊지 말고 지금 바로 이체 절차를 진행해 주세요.'].join('\n'),
     ['금융감독원 조사팀입니다. 고객님 계좌에서 불법 거래가 발견됐습니다.', '본인 확인을 위해 주민등록번호와 계좌번호를 말씀해 주세요.', '곧 문자로 보내는 링크에서 보안 앱을 설치하셔야 합니다.', '조사가 끝날 때까지 누구에게도 이 내용을 말하면 안 됩니다.', '지금 처리하지 않으면 계좌가 즉시 정지됩니다.'].join('\n'),
-    ['카드사 보안센터인데 해외에서 고액 결제가 승인됐습니다.', '취소하려면 문자로 전송된 인증번호를 지금 불러 주세요.', '환불 전용 계좌로 보증금을 보내면 결제가 바로 취소됩니다.', '은행에 문의하면 처리가 지연되니 저희 안내만 따라 주세요.', '통화를 유지한 채 모바일뱅킹을 실행해 주세요.'].join('\n'),
+    ['보이스피싱 의심 인물: 카드사 보안센터인데 해외에서 고액 결제가 승인됐습니다.', '고객: 어떤 결제인지 확인하고 싶습니다.', '보이스피싱 의심 인물: 취소하려면 문자로 전송된 인증번호를 지금 불러 주세요.', '고객: 인증번호를 말하면 결제가 취소되나요?', '보이스피싱 의심 인물: 환불 전용 계좌로 보증금을 보내면 결제가 바로 취소됩니다.', '보이스피싱 의심 인물: 은행에 문의하면 처리가 지연되니 저희 안내만 따라 주세요.', '고객: 알겠습니다. 확인해 보겠습니다.'].join('\n'),
     ['엄마, 휴대폰이 고장 나서 임시 번호로 연락해.', '급하게 결제해야 하는데 내 인증서가 작동하지 않아.', '내가 보내는 계좌로 먼저 300만 원만 이체해 줘.', '지금 회의 중이라 전화는 받을 수 없으니 문자로만 답해 줘.', '오늘 안에 꼭 필요하니까 다른 사람에게 묻지 말고 보내 줘.'].join('\n'),
     ['저금리 대환대출 승인 담당자입니다.', '기존 대출을 먼저 상환해야 신규 대출금이 지급됩니다.', '상환금은 지금 알려드리는 개인 명의 계좌로 보내시면 됩니다.', '신용점수 보호를 위해 원격제어 앱을 설치해 주세요.', '오늘 입금하지 않으면 승인 건이 자동 취소됩니다.'].join('\n'),
   ],
@@ -125,6 +125,53 @@ const normalizeStaffFeatureCode = (code: string) => {
   if (normalized === 'OPEN_URL') return 'REQUEST_OPEN_URL';
   if (normalized === 'INSTALL_APP') return 'REQUEST_INSTALL_APP';
   return normalized;
+};
+
+const isSuspectedFeatureCode = (code: string) => [
+  'ROLE_', 'CLAIM_', 'CLAIMED_', 'REQUEST_', 'PURPOSE_', 'TACTIC_', 'DEADLINE_',
+].some((prefix) => code.startsWith(prefix));
+
+const normalizeStaffNarrativeSentence = (code: string, sentence: string, entityNames: string[]) => {
+  const text = sentence.replace(/상대방/g, '보이스피싱 의심 인물').replace(/\s+/g, ' ').trim();
+  if (!isSuspectedFeatureCode(code) || (!text.startsWith('고객이 ') && !text.includes('요청받'))) return text;
+  const organization = entityNames.find((item) => item === 'CARD_COMPANY') ? '카드사'
+    : entityNames.find((item) => item && !['UNKNOWN', 'CUSTOMER', 'CALLER'].includes(item)) || '금융기관';
+  if (code === 'CLAIM_UNAUTHORIZED_PAYMENT') return `보이스피싱 의심 인물이 ${organization} 관계자를 사칭하며 승인되지 않은 결제가 발생했다고 주장함.`;
+  if (code === 'CLAIM_CRIME_INVOLVEMENT') return '보이스피싱 의심 인물이 고객 계좌·명의가 범죄에 연루됐다고 주장함.';
+  if (code === 'CLAIM_ACCOUNT_VERIFICATION') return `보이스피싱 의심 인물이 ${organization} 명의로 고객 계좌 확인이 필요하다고 주장함.`;
+  if (code === 'REQUEST_AUTH_INFO') return '보이스피싱 의심 인물이 고객에게 인증정보 제공을 요구함.';
+  if (code === 'REQUEST_INSTALL_APP') return '보이스피싱 의심 인물이 고객에게 특정 앱 설치를 요구함.';
+  if (['REQUEST_TRANSFER', 'PURPOSE_SAFE_ACCOUNT', 'PURPOSE_REFUND'].includes(code)) return '보이스피싱 의심 인물이 고객에게 자금 이체 또는 송금을 요구함.';
+  if (code === 'REQUEST_KEEP_CALL') return '보이스피싱 의심 인물이 고객에게 통화를 계속 유지하라고 요구함.';
+  if (code === 'REQUEST_SECRECY' || code === 'TACTIC_ISOLATION') return '보이스피싱 의심 인물이 고객에게 외부 연락이나 사실 공유를 제한함.';
+  return text.startsWith('고객이 ') ? `보이스피싱 의심 인물이 ${text.slice(4)}` : text;
+};
+
+const normalizeStaffClaimLine = (value: string) => {
+  const text = value.replace(/상대방/g, '보이스피싱 의심 인물').replace(/\s+/g, ' ').trim();
+  if (!text.includes('고객이')) return text;
+  if (text.includes('카드사') && (text.includes('불법 결제') || text.includes('승인되지 않은 결제'))) return '보이스피싱 의심 인물이 카드사 관계자를 사칭하며 승인되지 않은 결제가 발생했다고 주장함.';
+  if (text.includes('인증번호') || text.includes('인증정보')) return '보이스피싱 의심 인물이 고객에게 인증정보 제공을 요구함.';
+  if (text.includes('계좌') && text.includes('범죄')) return '보이스피싱 의심 인물이 고객 계좌·명의가 범죄에 연루됐다고 주장함.';
+  if (text.includes('계좌') && text.includes('확인')) return '보이스피싱 의심 인물이 고객 계좌 확인이 필요하다고 주장함.';
+  return text.replace('고객이 ', '보이스피싱 의심 인물이 ');
+};
+
+const normalizeStaffSummary = (value: string) => {
+  const text = value.replace(/상대방/g, '보이스피싱 의심 인물').replace(/\s+/g, ' ').trim();
+  const match = text.match(/^고객이 (.+?)라 자칭하는 자(?:에 의해|에게) (.+)$/);
+  if (match) return `보이스피싱 의심 인물이 ${match[1]} 관계자를 사칭하며 ${match[2]}`;
+  if (text.startsWith('고객은 ') && (text.includes('요구받') || text.includes('주장'))) return `보이스피싱 의심 인물이 고객에게 ${text.slice(4).replace('요구받았습니다', '요구함').replace('요구받았다', '요구함')}`;
+  return text.includes('고객이') && text.includes('자칭') ? text.replace('고객이 ', '보이스피싱 의심 인물이 ') : text;
+};
+
+const normalizeStaffCustomerStatement = (value: string) => {
+  const text = value.replace(/상대방/g, '보이스피싱 의심 인물').replace(/\s+/g, ' ').trim();
+  if (text.includes('주장을 전달')) return '';
+  if (/(송금|이체|설치|제공)했다고/.test(text) && !text.includes('은행 내부 채널')) {
+    return `${text.replace(/[.。]\s*$/, '')}. 실제 거래·행동 완료 여부는 은행 내부 채널에서 별도 확인 필요`;
+  }
+  return text;
 };
 
 const staffFeatureLabel = (code: string) => staffFeatureLabels[normalizeStaffFeatureCode(code)] ?? '추가로 확인된 통화 정황';
@@ -250,11 +297,12 @@ const buildStaffFeatures = (diagnosis: StoredCase['diagnosis']): StaffFeature[] 
     narratedCodes.add(normalizedCode);
     narrative.atom_ids.forEach((atomId) => narratedAtomIds.add(atomId));
     const reference = narrative.source_turns.length ? narrative.source_turns.join('-') : narrative.atom_ids.join('-');
-    const actor = analysisRoleLabel(narrative.actor_role);
-    let sentence = narrative.sentence.split('상대방').join('보이스피싱 의심 인물');
-    if (actor === '보이스피싱 의심 인물' && sentence.startsWith('고객이 ') && !normalizedCode.startsWith('CUSTOMER_')) {
-      sentence = `보이스피싱 의심 인물이 ${sentence.slice(4)}`;
-    }
+    const actorRole = narrative.actor_role === 'UNKNOWN' && isSuspectedFeatureCode(normalizedCode)
+      ? 'SUSPECTED_PARTY' : narrative.actor_role;
+    const actor = analysisRoleLabel(actorRole);
+    const sentence = actorRole === 'SUSPECTED_PARTY' && !normalizedCode.startsWith('CUSTOMER_')
+      ? normalizeStaffNarrativeSentence(normalizedCode, narrative.sentence, narrative.entity_names || [])
+      : narrative.sentence.split('상대방').join('보이스피싱 의심 인물');
     const metadata = unique([
       `행위자: ${actor}`,
       narrative.target_role && narrative.target_role !== 'UNKNOWN' ? `대상: ${analysisRoleLabel(narrative.target_role)}` : null,
@@ -488,17 +536,17 @@ const AnalysisResult: React.FC<{ result: AnalyzeCaseResponse; caseItem?: StoredC
   const context = caseItem.diagnosis.context ?? {};
   const structuredSignals = caseItem.diagnosis.context_signals ?? [];
   const staffFeatures = buildStaffFeatures(caseItem.diagnosis);
-  const claims = context.claims ?? [];
-  const demands = context.demands ?? [];
-  const customerStatements = context.customer_statements ?? [];
+  const claims = (context.claims ?? []).map(normalizeStaffClaimLine);
+  const demands = (context.demands ?? []).map(normalizeStaffClaimLine);
+  const customerStatements = (context.customer_statements ?? []).map(normalizeStaffCustomerStatement).filter(Boolean);
   const recommended = context.recommended_next_steps ?? [];
   const unresolved = valueList(caseItem.initial_report, 'unresolved_items');
   const nextChecks = valueList(caseItem.initial_report, 'next_checks');
   return <section className="analysis-result created">
-    <div className="analysis-result-heading"><span className={caseStateTone(caseState(caseItem))}><ShieldAlert size={21}/></span><div><p>Shared Case 생성 완료 · {caseItem.case_id}</p><h2>{staffFacingCopy(context.incident_type || '통화 맥락 분석을 완료했습니다.')}</h2><small>{staffFacingCopy(caseItem.initial_brief)}</small></div><div className="analysis-result-actions"><button type="button" onClick={onRestart}>새 통화 분석하기</button><button type="button" className="primary" onClick={onOpenCase}>생성된 Case 열기<ChevronRight size={16}/></button></div></div>
+    <div className="analysis-result-heading"><span className={caseStateTone(caseState(caseItem))}><ShieldAlert size={21}/></span><div><p>Shared Case 생성 완료 · {caseItem.case_id}</p><h2>{staffFacingCopy(context.incident_type || '통화 맥락 분석을 완료했습니다.')}</h2><small>{normalizeStaffSummary(caseItem.initial_brief)}</small></div><div className="analysis-result-actions"><button type="button" onClick={onRestart}>새 통화 분석하기</button><button type="button" className="primary" onClick={onOpenCase}>생성된 Case 열기<ChevronRight size={16}/></button></div></div>
     <div className="analysis-result-grid">
       <section><header><BrainCircuit size={16}/><div><b>구조화 Envelope에서 확인된 주요 정황</b><span>기관명·인물·관계·시간·행위자·근거 정보를 생략하지 않고 표시합니다.</span></div></header><div className="analysis-window-list">{structuredSignals.length > 0 && <div className="analysis-composite-summary"><b>종합 정황</b>{structuredSignals.map((signal) => <p key={signal.signal_id}>{structuredSignalLabel(signal.signal_code)}</p>)}</div>}{staffFeatures.length > 0 ? <ul className="analysis-feature-list">{staffFeatures.map((feature) => <li key={feature.id} className={`analysis-feature-item ${feature.tone}`}><div className="analysis-feature-heading"><b>{feature.title}</b><span>{feature.category}</span></div><p>{feature.description}</p>{feature.metadata.length > 0 && <div className="analysis-feature-metadata">{feature.metadata.map((item) => <span key={item}>{item}</span>)}</div>}{feature.details.length > 0 && <ul className="analysis-feature-details">{feature.details.map((item) => <li key={item}>{item}</li>)}</ul>}<small>{feature.status}</small></li>)}</ul> : <p className="analysis-empty-signal">구조화된 정황이 없습니다. 데모 분석 Envelope를 확인해 주세요.</p>}<StructuredEnvelopeDetails diagnosis={caseItem.diagnosis}/></div></section>
-      <section><header><Sparkles size={16}/><div><b>사건 초기 정리</b><span>검증된 구조화 정보를 바탕으로 역할과 사실 상태를 구분해 정리했습니다.</span></div></header><div className="analysis-case-summary"><p>{staffFacingCopy(context.summary || caseItem.initial_brief)}</p><div><b>보이스피싱 의심 인물의 주장</b><ul>{claims.length ? claims.map((claim) => <li key={claim}>{staffFacingCopy(claim)}</li>) : <li>확인된 주장이 없습니다.</li>}</ul></div>{demands.length > 0 && <div><b>보이스피싱 의심 인물의 요구</b><ul>{demands.map((item) => <li key={item}>{staffFacingCopy(item)}</li>)}</ul></div>}{customerStatements.length > 0 && <div><b>고객의 진술·행동</b><ul>{customerStatements.map((item) => <li key={item}>{staffFacingCopy(item)}</li>)}</ul></div>}<div><b>우선 권장 조치</b><ul>{recommended.length ? recommended.map((item) => <li key={item}>{staffFacingCopy(item)}</li>) : nextChecks.map((item) => <li key={item}>{staffFacingCopy(item)}</li>)}</ul></div>{unresolved.length > 0 && <div><b>아직 확인할 정보</b><ul>{unresolved.map((item) => <li key={item}>{staffFacingCopy(item)}</li>)}</ul></div>}</div></section>
+      <section><header><Sparkles size={16}/><div><b>사건 초기 정리</b><span>검증된 구조화 정보를 바탕으로 역할과 사실 상태를 구분해 정리했습니다.</span></div></header><div className="analysis-case-summary"><p>{normalizeStaffSummary(context.summary || caseItem.initial_brief)}</p><div><b>보이스피싱 의심 인물의 주장</b><ul>{claims.length ? claims.map((claim) => <li key={claim}>{staffFacingCopy(claim)}</li>) : <li>확인된 주장이 없습니다.</li>}</ul></div>{demands.length > 0 && <div><b>보이스피싱 의심 인물의 요구</b><ul>{demands.map((item) => <li key={item}>{staffFacingCopy(item)}</li>)}</ul></div>}{customerStatements.length > 0 && <div><b>고객의 진술·행동</b><ul>{customerStatements.map((item) => <li key={item}>{staffFacingCopy(item)}</li>)}</ul></div>}<div><b>우선 권장 조치</b><ul>{recommended.length ? recommended.map((item) => <li key={item}>{staffFacingCopy(item)}</li>) : nextChecks.map((item) => <li key={item}>{staffFacingCopy(item)}</li>)}</ul></div>{unresolved.length > 0 && <div><b>아직 확인할 정보</b><ul>{unresolved.map((item) => <li key={item}>{staffFacingCopy(item)}</li>)}</ul></div>}</div></section>
     </div>
     <p className="analysis-disclaimer">CSR은 통화 원문을 보관하거나 표시하지 않습니다. 구조화 Envelope에 포함된 정보만 업무용 문장으로 정리했으며, 실제 금융 조치와 사실 확정은 담당자의 확인이 필요합니다.</p>
   </section>;
@@ -566,6 +614,6 @@ export const HomePage: React.FC<HomePageProps> = ({ embedded = false, onCloseEmb
   return <section className={embedded ? `home-analysis-embed${resultOpen ? ' analysis-result-open' : ''}` : `home-empty ${open ? 'analysis-open' : ''}`}>
     {!open ? <><div className="home-mark"><ShieldCheck size={26}/></div><p className="eyebrow">CSR | Case Share Room</p><h1>대응할 사건을 선택하세요.</h1><p>통화 맥락, 고객 대화, 기관 확인과 대응 업무를 하나의 Shared Case에서 이어서 확인할 수 있습니다.</p><div className="home-principles"><span><MessageSquareText size={17}/>대화와 업무 기록을 한 흐름으로</span><span><ArrowLeftRight size={17}/>고객 응답과 Case 맥락을 양방향으로</span></div><button className="start-analysis-button" type="button" onClick={() => setOpen(true)}><FileSearch size={17}/>새 통화 분석하기</button><a className="judge-guide-link" href="/judge/index.html">프로젝트 먼저 살펴보기 →</a></> : <div className={`home-analysis-panel${resultOpen ? ' has-analysis-result' : ''}`}>
       <header><div><p className="eyebrow">NEW SHARED CASE · DEMO ADAPTER</p><h1>새 통화 분석하기</h1><span>데모 분석기가 원문을 구조화 Envelope로 변환한 뒤, CSR은 그 Envelope만 검증해 Case를 생성합니다.</span></div><button type="button" onClick={close} aria-label="새 통화 분석 닫기"><X size={19}/></button></header>
-      {state === 'INPUT' || state === 'ANALYZING' || state === 'ERROR' ? <form onSubmit={submit}><label htmlFor="call-transcript">온디바이스 분석 데모 입력</label><div className="analysis-sample-row"><span>샘플 입력</span><button type="button" disabled={state === 'ANALYZING'} onClick={() => applySample('PHISHING')}>보이스피싱 사례 샘플</button><button type="button" disabled={state === 'ANALYZING'} onClick={() => applySample('FINANCE')}>정상 금융 상담 샘플</button><button type="button" disabled={state === 'ANALYZING'} onClick={() => applySample('DAILY')}>일상 통화 샘플</button></div><textarea id="call-transcript" value={text} disabled={state === 'ANALYZING'} onChange={(event) => { const nextText = event.target.value; if (analysisRequestRef.current?.submittedText !== nextText.trim()) analysisRequestRef.current = null; setText(nextText); }} placeholder={'데모용 통화 내용을 붙여 넣으세요.\n실제 운영 CSR의 시작점은 통신사·온디바이스 계층이 전달하는 구조화 Analysis Envelope입니다.'}/><div className="analysis-input-meta"><span>데모 입력 최대 50,000자</span></div><p className="analysis-privacy-note">이 입력은 외부 온디바이스 분석 계층을 모사하기 위한 데모입니다. CSR Case에는 원문이 전달·저장되지 않고 구조화된 역할·관계·명칭·시간·행동·신뢰도만 저장됩니다.</p>{state === 'ANALYZING' && <div className="analysis-progress" role="status" aria-live="polite"><span className="analysis-progress-icon"><Loader2 size={20} className="spin"/></span><div><strong>데모 입력을 구조화 Envelope로 변환하고 있습니다</strong><span>CSR은 변환된 역할·관계·정황을 검증한 뒤 업무용 Case 문장을 생성합니다.</span></div><div className="analysis-progress-track" aria-hidden="true"><span/></div></div>}{error && <p className="analysis-error"><AlertCircle size={15}/>{error}</p>}<footer><button type="button" onClick={close} disabled={state === 'ANALYZING'}>취소</button><button type="submit" className="primary" disabled={!text.trim() || state === 'ANALYZING'}>{state === 'ANALYZING' ? <><Loader2 size={16} className="spin"/>Envelope 변환·Case 생성 중</> : <><Play size={16}/>데모 분석하고 Case 만들기</>}</button></footer></form> : result && <AnalysisResult result={result} caseItem={caseItem} onOpenCase={() => result.case_id && navigate(`/cases/${encodeURIComponent(result.case_id)}`, { state: { initialAssignmentRecommendation: true } })} onRestart={reset}/>}</div>}
+      {state === 'INPUT' || state === 'ANALYZING' || state === 'ERROR' ? <form onSubmit={submit}><label htmlFor="call-transcript">온디바이스 분석 데모 입력</label><div className="analysis-sample-row"><span>샘플 입력</span><button type="button" disabled={state === 'ANALYZING'} onClick={() => applySample('PHISHING')}>보이스피싱 사례 샘플</button><button type="button" disabled={state === 'ANALYZING'} onClick={() => applySample('FINANCE')}>정상 금융 상담 샘플</button><button type="button" disabled={state === 'ANALYZING'} onClick={() => applySample('DAILY')}>일상 통화 샘플</button></div><textarea id="call-transcript" value={text} disabled={state === 'ANALYZING'} onChange={(event) => { const nextText = event.target.value; if (analysisRequestRef.current?.submittedText !== nextText.trim()) analysisRequestRef.current = null; setText(nextText); }} placeholder={'데모용 통화 내용을 붙여 넣으세요. 가능하면 각 줄을 “보이스피싱 의심 인물: …” 또는 “고객: …” 형식으로 입력하세요.\n실제 운영 CSR의 시작점은 통신사·온디바이스 계층이 전달하는 구조화 Analysis Envelope입니다.'}/><div className="analysis-input-meta"><span>데모 입력 최대 50,000자</span></div><p className="analysis-privacy-note">이 입력은 외부 온디바이스 분석 계층을 모사하기 위한 데모입니다. CSR Case에는 원문이 전달·저장되지 않고 구조화된 역할·관계·명칭·시간·행동·신뢰도만 저장됩니다.</p>{state === 'ANALYZING' && <div className="analysis-progress" role="status" aria-live="polite"><span className="analysis-progress-icon"><Loader2 size={20} className="spin"/></span><div><strong>데모 입력을 구조화 Envelope로 변환하고 있습니다</strong><span>CSR은 변환된 역할·관계·정황을 검증한 뒤 업무용 Case 문장을 생성합니다.</span></div><div className="analysis-progress-track" aria-hidden="true"><span/></div></div>}{error && <p className="analysis-error"><AlertCircle size={15}/>{error}</p>}<footer><button type="button" onClick={close} disabled={state === 'ANALYZING'}>취소</button><button type="submit" className="primary" disabled={!text.trim() || state === 'ANALYZING'}>{state === 'ANALYZING' ? <><Loader2 size={16} className="spin"/>Envelope 변환·Case 생성 중</> : <><Play size={16}/>데모 분석하고 Case 만들기</>}</button></footer></form> : result && <AnalysisResult result={result} caseItem={caseItem} onOpenCase={() => result.case_id && navigate(`/cases/${encodeURIComponent(result.case_id)}`, { state: { initialAssignmentRecommendation: true } })} onRestart={reset}/>}</div>}
   </section>;
 };

@@ -67,11 +67,21 @@ def build_semantic_atoms(events: list[ExtractedEvent]) -> list[SemanticAtom]:
         payload = dict(
             atom_id=f"ATM-{event.detected_at_turn:04d}-{index:04d}",
             atom_class=_atom_class(event),
+            # Event extraction is the demo adapter's anti-fraud signal stream:
+            # an impersonation, pressure tactic, requested action, or money
+            # movement is spoken by the suspected party unless an upstream
+            # structured atom explicitly says otherwise.  The old fallback
+            # used CUSTOMER for money events, which made a request such as
+            # "send the money" read as if the customer had initiated it.
             speaker="CALLER",
             subject=subject,
             predicate=predicate,
-            actor="CUSTOMER" if event.event_family == "MONEY_MOVEMENT" else None,
-            target="CUSTOMER" if event.event_family in {"IMPERSONATION", "ACTION_REQUEST"} else None,
+            actor="CALLER" if event.event_family in {
+                "IMPERSONATION", "PSY_STRATEGY", "ACTION_REQUEST", "MONEY_MOVEMENT",
+            } else None,
+            target="CUSTOMER" if event.event_family in {
+                "IMPERSONATION", "PSY_STRATEGY", "ACTION_REQUEST", "MONEY_MOVEMENT",
+            } else None,
             destination="CLAIMED_SAFE_ACCOUNT" if event.event_family == "MONEY_MOVEMENT" else None,
             action_state="REQUESTED" if requested else None,
             modality="DIRECTIVE" if requested else "ASSERTION",

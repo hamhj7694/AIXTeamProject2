@@ -40,9 +40,9 @@ jobs:
       - name: Install backend dependencies
         run: python -m pip install -r requirements.txt pytest pytest-subtests
       - name: Verify Analysis Envelope and narrative contracts
-        run: python -m pytest ai_api/tests/test_analysis_envelope.py ai_api/tests/test_feature_narratives.py -q
+        run: python -m pytest --import-mode=importlib ai_api/tests/test_analysis_envelope.py ai_api/tests/test_feature_narratives.py -q
       - name: Verify Case creation boundary
-        run: python -m pytest general_api/tests/test_analyze_case.py general_api/tests/test_public_analyze_endpoint.py general_api/tests/test_case_creation_transaction.py general_api/tests/test_case_retrieval.py -q
+        run: python -m pytest --import-mode=importlib general_api/tests/test_analyze_case.py general_api/tests/test_public_analyze_endpoint.py general_api/tests/test_case_creation_transaction.py general_api/tests/test_case_retrieval.py -q
 
   frontend-build:
     name: Frontend typecheck and build

@@ -1,5 +1,11 @@
 from contracts.diagnosis import ContextNarrative, ContextResult
-from ai_api.app.domains.diagnosis.extractor import _validated_feature_narratives
+from ai_api.app.domains.diagnosis.extractor import _speaker_hint, _validated_feature_narratives
+
+
+def test_demo_speaker_prefix_is_metadata_not_customer_report_wording() -> None:
+    assert _speaker_hint("보이스피싱 의심 인물: 카드사 보안센터입니다.") == "SUSPECTED_PARTY"
+    assert _speaker_hint("고객: 어떤 결제인지 확인하고 싶습니다.") == "CUSTOMER"
+    assert _speaker_hint("고객님 계좌가 범죄에 연루됐습니다.") == "UNKNOWN"
 
 
 def test_feature_narratives_keep_grounded_references_and_drop_unknown_items() -> None:
@@ -74,3 +80,41 @@ def test_customer_completed_action_requires_internal_verification_copy() -> None
 
     assert "은행 내부 채널에서 별도 확인 필요" in result.customer_statements[0]
     assert "은행 내부 채널에서 별도 확인 필요" in result.feature_narratives[0].sentence
+
+
+def test_live_call_claim_is_not_rendered_as_customer_report_when_atom_ids_are_missing() -> None:
+    context = ContextResult(
+        summary="고객이 카드사라 자칭하는 자에 의해 불법 결제가 발생했다고 주장함.",
+        incident_type="카드사 사칭 의심",
+        claims=["고객이 카드사라 자칭하는 자에게 불법 결제가 발생했다고 주장함."],
+        confidence=0.9,
+        feature_narratives=[ContextNarrative(
+            code="CLAIM_UNAUTHORIZED_PAYMENT",
+            sentence="고객이 카드사라 자칭하는 자에게 불법 결제가 발생했다고 주장함.",
+            status="CLAIMED",
+            source_turns=[1],
+            atom_ids=[],
+        )],
+    )
+    payload = {
+        "signals": [{"turn": 1}],
+        "case_context_features": {
+            "observations": [{"code": "CLAIM_UNAUTHORIZED_PAYMENT", "turn": 1, "status": "CLAIMED"}],
+        },
+        "semantic_atoms": [{
+            "atom_id": "claim-1", "source_turn_id": 1,
+            "speaker_role": "SUSPECTED_PARTY", "actor_role": "SUSPECTED_PARTY",
+            "target_role": "CUSTOMER", "reported_by_role": "SUSPECTED_PARTY",
+            "claimed_organization": "CARD_COMPANY",
+            "observed_terms": [{"semantic_value": "CARD_COMPANY", "surface_form": "카드사"}],
+        }],
+    }
+
+    result = _validated_feature_narratives(context, payload)
+
+    narrative = result.feature_narratives[0]
+    assert narrative.actor_role == "SUSPECTED_PARTY"
+    assert narrative.target_role == "CUSTOMER"
+    assert narrative.sentence == "보이스피싱 의심 인물이 카드사 관계자를 사칭하며 승인되지 않은 결제가 발생했다고 주장함."
+    assert result.summary == "보이스피싱 의심 인물이 카드사 관계자를 사칭하며 불법 결제가 발생했다고 주장함."
+    assert result.claims == ["보이스피싱 의심 인물이 카드사 관계자를 사칭하며 승인되지 않은 결제가 발생했다고 주장함."]
