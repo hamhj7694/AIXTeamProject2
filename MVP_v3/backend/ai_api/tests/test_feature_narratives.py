@@ -43,7 +43,8 @@ def test_feature_narratives_keep_grounded_references_and_drop_unknown_items() ->
     assert len(result.feature_narratives) == 1
     assert result.feature_narratives[0].source_turns == [2]
     assert result.feature_narratives[0].atom_ids == ["atom-1"]
-    assert result.feature_narratives[0].sentence.startswith("보이스피싱 의심 인물이")
+    assert result.feature_narratives[0].actor_role == "UNKNOWN"
+    assert "발화자·행위자 귀속은 확인 필요" in result.feature_narratives[0].sentence
 
 
 def test_context_result_without_narratives_remains_backward_compatible() -> None:
@@ -118,3 +119,71 @@ def test_live_call_claim_is_not_rendered_as_customer_report_when_atom_ids_are_mi
     assert narrative.sentence == "보이스피싱 의심 인물이 카드사 관계자를 사칭하며 승인되지 않은 결제가 발생했다고 주장함."
     assert result.summary == "보이스피싱 의심 인물이 카드사 관계자를 사칭하며 불법 결제가 발생했다고 주장함."
     assert result.claims == ["보이스피싱 의심 인물이 카드사 관계자를 사칭하며 승인되지 않은 결제가 발생했다고 주장함."]
+
+
+def test_suspected_request_with_customer_actor_is_kept_but_marked_for_attribution_review() -> None:
+    context = ContextResult(
+        summary="송금 요구 정황",
+        incident_type="송금 요구 의심",
+        confidence=0.8,
+        feature_narratives=[ContextNarrative(
+            code="REQUEST_TRANSFER",
+            sentence="고객이 안전계좌로 송금을 요구함.",
+            status="REQUESTED",
+            source_turns=[3],
+            atom_ids=["transfer-1"],
+        )],
+    )
+    payload = {
+        "signals": [{"turn": 3}],
+        "case_context_features": {
+            "observations": [{"code": "REQUEST_TRANSFER", "turn": 3, "status": "REQUESTED"}],
+        },
+        "semantic_atoms": [{
+            "atom_id": "transfer-1", "source_turn_id": 3,
+            "speaker_role": "UNKNOWN", "actor_role": "CUSTOMER",
+            "target_role": "UNKNOWN", "reported_by_role": "UNKNOWN",
+            "claim_status": "UNVERIFIED",
+        }],
+    }
+
+    result = _validated_feature_narratives(context, payload)
+
+    narrative = result.feature_narratives[0]
+    assert narrative.actor_role == "CUSTOMER"
+    assert "발화자·행위자 귀속은 확인 필요" in narrative.sentence
+
+
+def test_demo_unknown_family_device_claim_gets_qualified_suspected_party_copy() -> None:
+    context = ContextResult(
+        summary="가족 사칭 정황",
+        incident_type="가족 사칭 의심",
+        confidence=0.8,
+        feature_narratives=[ContextNarrative(
+            code="CLAIM_DEVICE_BROKEN",
+            sentence="휴대전화 이상을 이유로 한 주장과 관련된 정황이 확인되었으나 발화자·행위자 귀속은 확인 필요.",
+            status="CLAIMED",
+            source_turns=[1],
+            atom_ids=["family-claim"],
+        )],
+    )
+    payload = {
+        "envelope_metadata": {"source": "DEMO_ADAPTER"},
+        "signals": [{"turn": 1}],
+        "case_context_features": {
+            "observations": [{"code": "CLAIM_DEVICE_BROKEN", "turn": 1, "status": "CLAIMED"}],
+        },
+        "semantic_atoms": [{
+            "atom_id": "family-claim", "source_turn_id": 1,
+            "speaker_role": "UNKNOWN", "actor_role": "UNKNOWN",
+            "target_role": "UNKNOWN", "reported_by_role": "UNKNOWN",
+            "claimed_relationship": "CHILD",
+        }],
+    }
+
+    result = _validated_feature_narratives(context, payload)
+
+    narrative = result.feature_narratives[0]
+    assert narrative.actor_role == "SUSPECTED_PARTY"
+    assert narrative.confidence == 0.58
+    assert narrative.sentence == "보이스피싱 의심 인물로 추정되는 사람이 자녀를 사칭하며 휴대전화가 고장 났다고 주장한 정황"

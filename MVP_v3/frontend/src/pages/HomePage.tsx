@@ -3,8 +3,16 @@ import { AlertCircle, ArrowLeftRight, BrainCircuit, CheckCircle2, ChevronRight, 
 import { useNavigate } from 'react-router-dom';
 import { casesApi } from '../api/cases';
 import type { AnalyzeCaseResponse, StoredCase } from '../api/types';
+import {
+  analysisCodeLabel as structuredCodeLabel,
+  analysisConcreteLabel,
+  attributionWarning,
+  observedTermLabel,
+  replaceAnalysisTokens,
+} from '../analysisPresentation';
 import { caseState, caseStateTone } from '../presentation';
 import { generateUuid } from '../uuid';
+import { markInitialAssignmentPending } from '../assignmentPromptState';
 
 type AnalysisState = 'INPUT' | 'ANALYZING' | 'CREATED' | 'NO_CASE' | 'ERROR';
 type SampleType = 'PHISHING' | 'FINANCE' | 'DAILY';
@@ -14,7 +22,7 @@ const CALL_SAMPLES: Record<SampleType, string[]> = {
   PHISHING: [
     ['서울지검 수사관입니다. 고객님 명의 계좌가 범죄에 연루됐습니다.', '현재 자금 추적을 위해 계좌 검증이 필요합니다.', '오늘 안에 안내드리는 안전계좌로 자금을 이체하셔야 합니다.', '수사 중이므로 가족이나 은행 직원에게는 알리지 마세요.', '통화를 끊지 말고 지금 바로 이체 절차를 진행해 주세요.'].join('\n'),
     ['금융감독원 조사팀입니다. 고객님 계좌에서 불법 거래가 발견됐습니다.', '본인 확인을 위해 주민등록번호와 계좌번호를 말씀해 주세요.', '곧 문자로 보내는 링크에서 보안 앱을 설치하셔야 합니다.', '조사가 끝날 때까지 누구에게도 이 내용을 말하면 안 됩니다.', '지금 처리하지 않으면 계좌가 즉시 정지됩니다.'].join('\n'),
-    ['보이스피싱 의심 인물: 카드사 보안센터인데 해외에서 고액 결제가 승인됐습니다.', '고객: 어떤 결제인지 확인하고 싶습니다.', '보이스피싱 의심 인물: 취소하려면 문자로 전송된 인증번호를 지금 불러 주세요.', '고객: 인증번호를 말하면 결제가 취소되나요?', '보이스피싱 의심 인물: 환불 전용 계좌로 보증금을 보내면 결제가 바로 취소됩니다.', '보이스피싱 의심 인물: 은행에 문의하면 처리가 지연되니 저희 안내만 따라 주세요.', '고객: 알겠습니다. 확인해 보겠습니다.'].join('\n'),
+    ['카드사 보안센터인데 해외에서 고액 결제가 승인됐습니다.', '어떤 결제인지 확인하고 싶습니다.', '취소하려면 문자로 전송된 인증번호를 지금 불러 주세요.', '인증번호를 말하면 결제가 취소되나요?', '환불 전용 계좌로 보증금을 보내면 결제가 바로 취소됩니다.', '은행에 문의하면 처리가 지연되니 저희 안내만 따라 주세요.', '알겠습니다. 확인해 보겠습니다.'].join('\n'),
     ['엄마, 휴대폰이 고장 나서 임시 번호로 연락해.', '급하게 결제해야 하는데 내 인증서가 작동하지 않아.', '내가 보내는 계좌로 먼저 300만 원만 이체해 줘.', '지금 회의 중이라 전화는 받을 수 없으니 문자로만 답해 줘.', '오늘 안에 꼭 필요하니까 다른 사람에게 묻지 말고 보내 줘.'].join('\n'),
     ['저금리 대환대출 승인 담당자입니다.', '기존 대출을 먼저 상환해야 신규 대출금이 지급됩니다.', '상환금은 지금 알려드리는 개인 명의 계좌로 보내시면 됩니다.', '신용점수 보호를 위해 원격제어 앱을 설치해 주세요.', '오늘 입금하지 않으면 승인 건이 자동 취소됩니다.'].join('\n'),
   ],
@@ -63,31 +71,27 @@ type StructuredDetailGroup = {
   items: StructuredDetailItem[];
 };
 
-const analysisRoleLabel = (role?: string | null) => ({
-  SUSPECTED_PARTY: '보이스피싱 의심 인물', CUSTOMER: '고객', BANK_STAFF: '은행 담당자',
-  SYSTEM: '분석 시스템', UNKNOWN: '화자 미상', CALLER: '보이스피싱 의심 인물',
-}[role || 'UNKNOWN'] || role || '화자 미상');
-
-const structuredCodeLabel = (code?: string | null) => {
-  if (!code) return '정보 없음';
-  const labels: Record<string, string> = {
-    SUPPORTS: '뒷받침 관계', JUSTIFIES: '명분 관계', REQUIRES: '선행 요구 관계',
-    CAUSES: '원인·결과 관계', CONDITIONAL_ON: '조건 관계', CONTRADICTS: '상충 관계',
-    IDENTITY_CLAIM: '신분 주장 구간', PRESSURE: '압박 구간', ACTION: '행동 요구 구간',
-    MIXED: '복합 정황 구간', OTHER: '기타 정황 구간',
-    CLAIMED: '주장됨', REQUESTED: '요구됨', INSTRUCTED: '지시됨', PLANNED: '계획됨',
-    ATTEMPTED: '시도됨', REPORTED_ACTION: '행동 진술', VERIFIED: '확인됨',
-    COMPLETED: '완료 진술', FAILED: '실패', CANCELLED: '취소', DENIED: '부인됨',
-    UNKNOWN: '확인 필요', UNVERIFIED: '미확인', CALLER_CLAIM: '의심 인물 주장',
-    CUSTOMER_REPORTED: '고객 진술', STAFF_REPORTED: '담당자 기록',
-    POSITIVE: '긍정형', NEGATIVE: '부정형', UNMAPPED: '분류 검토 필요',
-  };
-  return labels[code] ?? code.split('_').join(' ').toLowerCase();
-};
-
 const confidenceLabel = (value?: number | null) => value === null || value === undefined
   ? null
   : `신뢰도 ${Math.round(value * 100)}%`;
+
+const simplifyAttributionSentence = (value: string, code?: string, entityNames: string[] = []) => {
+  const text = value.replace(/\s+/g, ' ').trim();
+  if (text.includes('발화자·행위자 귀속은 확인 필요')) {
+    const normalizedCode = normalizeStaffFeatureCode(code || '');
+    if (normalizedCode === 'CLAIM_DEVICE_BROKEN') {
+      const hasChildRelationship = entityNames.some((item) => ['CHILD', 'FAMILY_MEMBER', '자녀', '아들', '딸'].includes(item));
+      return hasChildRelationship
+        ? '보이스피싱 의심 인물로 추정되는 사람이 자녀를 사칭하며 휴대전화가 고장 났다고 주장한 정황'
+        : '보이스피싱 의심 인물로 추정되는 사람이 휴대전화가 고장 났다고 주장한 정황';
+    }
+    if (isSuspectedFeatureCode(normalizedCode)) {
+      return `보이스피싱 의심 인물로 추정되는 발화자가 ${staffFeatureLabel(normalizedCode)}을(를) 말하거나 요구한 정황`;
+    }
+    return '정황은 확인되었으나 행위자 귀속이 명확하지 않습니다.';
+  }
+  return text;
+};
 
 const staffFeatureLabels: Record<string, string> = {
   ROLE_PROSECUTION: '수사기관을 사칭한 정황', ROLE_POLICE: '경찰을 사칭한 정황',
@@ -134,9 +138,9 @@ const isSuspectedFeatureCode = (code: string) => [
 const normalizeStaffNarrativeSentence = (code: string, sentence: string, entityNames: string[]) => {
   const text = sentence.replace(/상대방/g, '보이스피싱 의심 인물').replace(/\s+/g, ' ').trim();
   if (!isSuspectedFeatureCode(code) || (!text.startsWith('고객이 ') && !text.includes('요청받'))) return text;
-  const organization = entityNames.find((item) => item === 'CARD_COMPANY') ? '카드사'
-    : entityNames.find((item) => item && !['UNKNOWN', 'CUSTOMER', 'CALLER'].includes(item)) || '금융기관';
-  if (code === 'CLAIM_UNAUTHORIZED_PAYMENT') return `보이스피싱 의심 인물이 ${organization} 관계자를 사칭하며 승인되지 않은 결제가 발생했다고 주장함.`;
+  const organizationValue = entityNames.find((item) => item && !['UNKNOWN', 'CUSTOMER', 'CALLER'].includes(item));
+  const organization = analysisConcreteLabel(organizationValue, '금융기관');
+  if (code === 'CLAIM_UNAUTHORIZED_PAYMENT') return `보이스피싱 의심 인물이 ${organization} 직원을 사칭해 승인되지 않은 결제가 발생했다고 주장한 것으로 추정됨.`;
   if (code === 'CLAIM_CRIME_INVOLVEMENT') return '보이스피싱 의심 인물이 고객 계좌·명의가 범죄에 연루됐다고 주장함.';
   if (code === 'CLAIM_ACCOUNT_VERIFICATION') return `보이스피싱 의심 인물이 ${organization} 명의로 고객 계좌 확인이 필요하다고 주장함.`;
   if (code === 'REQUEST_AUTH_INFO') return '보이스피싱 의심 인물이 고객에게 인증정보 제공을 요구함.';
@@ -178,20 +182,23 @@ const staffFeatureLabel = (code: string) => staffFeatureLabels[normalizeStaffFea
 
 const staffFeatureCategory = (code: string) => {
   const normalized = normalizeStaffFeatureCode(code);
-  if (normalized.startsWith('ROLE_') || normalized.startsWith('CLAIM_') || normalized.startsWith('CLAIMED_')) return '보이스피싱 의심 인물의 주장';
-  if (normalized.startsWith('REQUEST_') || normalized.startsWith('PURPOSE_')) return '보이스피싱 의심 인물의 요구';
-  if (normalized.startsWith('TACTIC_') || normalized.startsWith('DEADLINE_')) return '보이스피싱 의심 인물의 압박·통제';
-  if (normalized.startsWith('CUSTOMER_')) return '고객의 진술·행동';
-  if (normalized.startsWith('NORMAL_')) return '통화 맥락';
-  return '추가 확인 정황';
+  if (normalized.startsWith('ROLE_') || normalized.startsWith('CLAIM_') || normalized.startsWith('CLAIMED_')) return '주장';
+  if (normalized.startsWith('REQUEST_') || normalized.startsWith('PURPOSE_')) return '요구';
+  if (normalized.startsWith('TACTIC_') || normalized.startsWith('DEADLINE_')) return '압박·통제';
+  if (normalized.startsWith('CUSTOMER_')) return '고객 진술';
+  if (normalized.startsWith('NORMAL_')) return '참고';
+  return '분석 정황';
 };
+
+const featureCategoryLabel = (feature: StaffFeature) => feature.title.endsWith(feature.category) ? '' : feature.category;
 
 const staffFeatureStatus = (code: string) => {
   const normalized = normalizeStaffFeatureCode(code);
   if (normalized.startsWith('CUSTOMER_')) return '고객 진술 · 확인 필요';
   if (normalized.startsWith('NORMAL_')) return '참고';
-  if (normalized.startsWith('CLAIM_') || normalized.startsWith('CLAIMED_') || normalized.startsWith('ROLE_')) return '보이스피싱 의심 인물의 주장 · 확인 필요';
-  if (normalized.startsWith('REQUEST_') || normalized.startsWith('PURPOSE_')) return '보이스피싱 의심 인물의 요구 · 확인 필요';
+  if (normalized.startsWith('CLAIM_') || normalized.startsWith('CLAIMED_') || normalized.startsWith('ROLE_')) return '주장 · 확인 필요';
+  if (normalized.startsWith('REQUEST_') || normalized.startsWith('PURPOSE_')) return '요구 · 확인 필요';
+  if (normalized.startsWith('TACTIC_') || normalized.startsWith('DEADLINE_')) return '압박·통제 · 확인 필요';
   return '분석 정황 · 직원 확인 필요';
 };
 
@@ -214,15 +221,28 @@ const atomFeatureCode = (atom: NonNullable<StoredCase['diagnosis']['semantic_ato
 
 const observationStatus = (status: string, code: string) => {
   if (status === 'REPORTED') return '고객 진술 · 확인 필요';
-  if (status === 'REQUESTED') return '보이스피싱 의심 인물의 요구 · 확인 필요';
+  if (status === 'REQUESTED') return '요구 · 확인 필요';
   if (status === 'CLAIMED') return staffFeatureStatus(code);
   return staffFeatureStatus(code);
 };
 
+const featureStatusKind = (status: string) => {
+  if (status.includes('역할 귀속') || status.includes('화자 미상') || status.includes('추가 확인')) return 'unknown';
+  if (status.includes('고객 진술')) return 'customer';
+  if (status.includes('요구')) return 'request';
+  if (status.includes('주장')) return 'claim';
+  return 'info';
+};
+
+const featureStatusLabel = (status: string) => status
+  .replace(/\s*·\s*확인 필요/g, '')
+  .replace(/^추가 확인 필요$/, '')
+  .trim();
+
 const staffFeatureFallback = (code: string, title: string) => {
   const normalized = normalizeStaffFeatureCode(code);
   if (normalized.startsWith('ROLE_') || normalized === 'CLAIMED_ORGANIZATION' || normalized.startsWith('CLAIM_')) {
-    return `보이스피싱 의심 인물이 ${title.replace('한 정황', '').replace('이라는 주장', '')}한 정황이 확인됨`;
+    return `${title}과 관련된 정황이 확인되었으며 실제 신분·사실 여부는 확인 필요`;
   }
   if (normalized.startsWith('REQUEST_') || normalized.startsWith('PURPOSE_') || normalized.startsWith('DEADLINE_')) {
     return `보이스피싱 의심 인물이 ${title}와 관련된 행동을 요구하거나 유도함`;
@@ -248,15 +268,6 @@ const buildStaffFeatures = (diagnosis: StoredCase['diagnosis']): StaffFeature[] 
     const rest = minutes % 60;
     return `기한까지 약 ${hours ? `${hours}시간` : ''}${hours && rest ? ' ' : ''}${rest ? `${rest}분` : ''} 남음`;
   };
-  const mentionDetails = (turns: number[]) => (diagnosis.semantic_mentions || [])
-    .filter((mention) => turns.includes(mention.source_turn_id))
-    .sort((left, right) => left.sequence_index - right.sequence_index)
-    .map((mention) => {
-      const span = mention.first_turn_id === mention.last_turn_id
-        ? `${mention.first_turn_id}번 턴`
-        : `${mention.first_turn_id}~${mention.last_turn_id}번 턴`;
-      return `${mention.mention_type}: ${mention.normalized_value} · 등장 순서 ${mention.sequence_index} · ${span} · ${mention.occurrence_count}회 · 신뢰도 ${Math.round(mention.confidence * 100)}%`;
-    });
   const evidenceForCode = (code: string) => {
     const normalizedCode = normalizeStaffFeatureCode(code);
     const matching = events.filter((event) => {
@@ -282,12 +293,13 @@ const buildStaffFeatures = (diagnosis: StoredCase['diagnosis']): StaffFeature[] 
     if (dedupeSemantic) seenSemanticCodes.add(normalizedCode);
     const title = staffFeatureLabel(normalizedCode);
     const evidence = evidenceForCode(normalizedCode);
+    const renderedDescription = description || (evidence.length ? `분석 근거: ${evidence.join(' · ')}` : staffFeatureFallback(normalizedCode, title));
     result.push({
       id, category: staffFeatureCategory(normalizedCode), title,
-      description: description || (evidence.length ? `구조화 근거: ${evidence.join(' · ')}` : staffFeatureFallback(normalizedCode, title)),
+      description: replaceAnalysisTokens(renderedDescription),
       status: status || staffFeatureStatus(normalizedCode),
       tone: normalizedCode.startsWith('NORMAL_') ? 'info' : 'risk',
-      metadata: unique(metadata), details: unique(details),
+      metadata: unique(metadata.filter((item) => !item.startsWith('근거 턴:'))), details: unique(details),
     });
   };
   const addCodes = (codes: string[] | undefined) => (codes || []).forEach((code) => add(code, code));
@@ -297,32 +309,39 @@ const buildStaffFeatures = (diagnosis: StoredCase['diagnosis']): StaffFeature[] 
     narratedCodes.add(normalizedCode);
     narrative.atom_ids.forEach((atomId) => narratedAtomIds.add(atomId));
     const reference = narrative.source_turns.length ? narrative.source_turns.join('-') : narrative.atom_ids.join('-');
-    const actorRole = narrative.actor_role === 'UNKNOWN' && isSuspectedFeatureCode(normalizedCode)
-      ? 'SUSPECTED_PARTY' : narrative.actor_role;
-    const actor = analysisRoleLabel(actorRole);
-    const sentence = actorRole === 'SUSPECTED_PARTY' && !normalizedCode.startsWith('CUSTOMER_')
+    const actorRole = narrative.actor_role || 'UNKNOWN';
+    const narrativeRoleWarning = attributionWarning(
+      normalizedCode,
+      actorRole,
+      narrative.status === 'REPORTED' ? 'CUSTOMER_REPORTED' : narrative.status,
+    );
+    const sentence = replaceAnalysisTokens(actorRole === 'UNKNOWN' || narrativeRoleWarning
+      ? simplifyAttributionSentence(narrative.sentence, normalizedCode, narrative.entity_names || [])
+      : actorRole === 'SUSPECTED_PARTY' && !normalizedCode.startsWith('CUSTOMER_')
       ? normalizeStaffNarrativeSentence(normalizedCode, narrative.sentence, narrative.entity_names || [])
-      : narrative.sentence.split('상대방').join('보이스피싱 의심 인물');
+      : narrative.sentence.split('상대방').join('보이스피싱 의심 인물'));
     const metadata = unique([
-      `행위자: ${actor}`,
-      narrative.target_role && narrative.target_role !== 'UNKNOWN' ? `대상: ${analysisRoleLabel(narrative.target_role)}` : null,
-      narrative.reported_by_role && narrative.reported_by_role !== narrative.actor_role ? `보고자: ${analysisRoleLabel(narrative.reported_by_role)}` : null,
-      narrative.source_turns.length ? `근거 턴: ${narrative.source_turns.join(', ')}` : null,
       narrative.deadline_at ? `요구 기한: ${narrative.deadline_at}` : null,
       formatRemaining(narrative.relative_deadline_minutes),
       (narrative.occurrence_count || 1) > 1 ? `반복 ${narrative.occurrence_count}회` : null,
-      narrative.confidence !== null && narrative.confidence !== undefined ? `귀속 신뢰도 ${Math.round(narrative.confidence * 100)}%` : null,
     ]);
     const details = [
-      ...(narrative.entity_names || []).map((item) => `구체 명칭·신분: ${item}`),
-      ...(narrative.detail_items || []).map((item) => `구조화 세부정보: ${item}`),
-      ...mentionDetails(narrative.source_turns),
+      ...(narrative.entity_names || []).map((item) => `구체 명칭·신분: ${analysisConcreteLabel(item)}`),
+      ...(narrative.detail_items || []).map((item) => `확인된 세부 내용: ${analysisConcreteLabel(item)}`),
     ];
-    add(`narrative-${normalizedCode}-${reference || 'none'}-${index}`, normalizedCode, sentence, observationStatus(narrative.status, normalizedCode), false, metadata, details);
+    add(
+      `narrative-${normalizedCode}-${reference || 'none'}-${index}`,
+      normalizedCode,
+      sentence,
+      narrativeRoleWarning || (actorRole === 'UNKNOWN' ? '추가 확인 필요' : observationStatus(narrative.status, normalizedCode)),
+      false,
+      metadata,
+      details,
+    );
   });
 
   (features?.observations || []).filter((observation) => observation.status !== 'DENIED').forEach((observation, index) => {
-    add(`observation-${observation.turn}-${observation.code}-${index}`, observation.code, undefined, observationStatus(observation.status, observation.code), true, [`근거 턴: ${observation.turn}`]);
+    add(`observation-${observation.turn}-${observation.code}-${index}`, observation.code, undefined, observationStatus(observation.status, observation.code), true);
   });
   addCodes(features?.claimed_actor_types);
   addCodes(features?.claim_codes);
@@ -340,28 +359,29 @@ const buildStaffFeatures = (diagnosis: StoredCase['diagnosis']): StaffFeature[] 
     const code = atomFeatureCode(atom);
     if (!code || narratedAtomIds.has(atom.atom_id)) return;
     const concreteEntities = unique([atom.claimed_organization_name, atom.claimed_branch_name, atom.claimed_person_name, atom.claimed_role_name, atom.claimed_role, atom.claimed_relationship, atom.vocative_target]);
-    const termDetails = unique((atom.observed_terms || []).map((term) => term.semantic_value || term.surface_form));
+    const termDetails = unique((atom.observed_terms || []).map(observedTermLabel));
+    const actorRole = atom.actor_role || atom.actor;
+    const roleWarning = attributionWarning(atom.predicate, actorRole, atom.claim_status);
+    const attributionUnknown = !actorRole || actorRole === 'UNKNOWN';
     const metadata = unique([
-      `행위자: ${analysisRoleLabel(atom.actor_role || atom.actor)}`,
-      atom.target_role || atom.target ? `대상: ${analysisRoleLabel(atom.target_role || atom.target)}` : null,
-      atom.reported_by_role && atom.reported_by_role !== atom.actor_role ? `보고자: ${analysisRoleLabel(atom.reported_by_role)}` : null,
-      `근거 턴: ${atom.source_turn_id}`,
       atom.deadline_at ? `요구 기한: ${atom.deadline_at}` : null,
       formatRemaining(atom.relative_deadline_minutes),
       (atom.occurrence_count || 1) > 1 ? `반복 ${atom.occurrence_count}회` : null,
-      atom.attribution_confidence !== null && atom.attribution_confidence !== undefined ? `귀속 신뢰도 ${Math.round(atom.attribution_confidence * 100)}%` : null,
     ]);
     const details = unique([
-      ...concreteEntities.map((item) => `구체 명칭·신분·관계: ${item}`),
-      ...termDetails.map((item) => `구조화 세부정보: ${item}`),
+      ...concreteEntities.map((item) => `구체 명칭·신분·관계: ${analysisConcreteLabel(item)}`),
+      ...termDetails.map((item) => `확인된 세부 내용: ${item}`),
       atom.amount_value_krw ? `금액: ${formatWon(atom.amount_value_krw)}` : null,
-      atom.claimed_purpose ? `주장된 목적: ${atom.claimed_purpose}` : null,
-      ...mentionDetails([atom.source_turn_id]),
+      atom.claimed_purpose ? `주장된 목적: ${structuredCodeLabel(atom.claimed_purpose)}` : null,
     ]);
-    const description = concreteEntities.length && code.startsWith('ROLE_')
-      ? `보이스피싱 의심 인물이 ‘${concreteEntities.join(' · ')}’ 명칭·신분을 사용해 사칭한 정황이 확인됨`
-      : staffFeatureFallback(code, staffFeatureLabel(code));
-    add(`atom-${atom.atom_id || index}`, code, description, undefined, false, metadata, details);
+    const description = roleWarning
+      ? '정황은 확인되었으나 추가 확인이 필요합니다.'
+      : attributionUnknown
+        ? '정황은 확인되었으나 추가 확인이 필요합니다.'
+        : concreteEntities.length && code.startsWith('ROLE_')
+          ? `보이스피싱 의심 인물이 ‘${concreteEntities.map((item) => analysisConcreteLabel(item)).join(' · ')}’ 명칭·신분을 사용해 사칭한 정황이 확인됨`
+          : staffFeatureFallback(code, staffFeatureLabel(code));
+    add(`atom-${atom.atom_id || index}`, code, description, roleWarning || (attributionUnknown ? '추가 확인 필요' : undefined), false, metadata, details);
   });
 
   const eventFallbacks = (diagnosis.evidence || []).map((event) => event.text).filter(Boolean);
@@ -382,8 +402,8 @@ const buildStructuredDetailGroups = (diagnosis: StoredCase['diagnosis']): Struct
       atom.claimed_organization_name, atom.claimed_organization, atom.claimed_branch_name, atom.claimed_person_name,
       atom.claimed_role_name, atom.claimed_role, atom.claimed_relationship, atom.vocative_target,
       atom.object, atom.destination,
-      ...(atom.observed_terms ?? []).map((term) => term.semantic_value || term.surface_form),
-    ]);
+      ...(atom.observed_terms ?? []).map(observedTermLabel),
+    ]).map((value) => analysisConcreteLabel(value));
     const pressures = compact([
       atom.urgency && `긴급성 ${structuredCodeLabel(atom.urgency)}`,
       atom.authority_pressure && `권위 압박 ${structuredCodeLabel(atom.authority_pressure)}`,
@@ -398,10 +418,6 @@ const buildStructuredDetailGroups = (diagnosis: StoredCase['diagnosis']): Struct
       title: structuredCodeLabel(atom.predicate),
       summary: concrete.length ? concrete.join(' · ') : `${structuredCodeLabel(atom.atom_class)} 의미 단위`,
       metadata: compact([
-        `화자: ${analysisRoleLabel(atom.speaker_role || atom.speaker)}`,
-        `행위자: ${analysisRoleLabel(atom.actor_role || atom.actor)}`,
-        atom.target_role || atom.target ? `대상: ${analysisRoleLabel(atom.target_role || atom.target)}` : null,
-        atom.reported_by_role ? `보고자: ${analysisRoleLabel(atom.reported_by_role)}` : null,
         `근거 턴: ${atom.source_turn_id}`,
         atom.speech_act ? `발화 기능: ${structuredCodeLabel(atom.speech_act)}` : null,
         atom.modality ? `양태: ${structuredCodeLabel(atom.modality)}` : null,
@@ -423,7 +439,6 @@ const buildStructuredDetailGroups = (diagnosis: StoredCase['diagnosis']): Struct
         atom.relative_deadline_minutes !== null && atom.relative_deadline_minutes !== undefined
           ? `기한까지 약 ${atom.relative_deadline_minutes}분` : null,
         (atom.occurrence_count || 1) > 1 ? `반복 ${atom.occurrence_count}회` : null,
-        confidenceLabel(atom.attribution_confidence),
         ...pressures,
       ]),
     };
@@ -445,22 +460,22 @@ const buildStructuredDetailGroups = (diagnosis: StoredCase['diagnosis']): Struct
     title: structuredCodeLabel(group.action_predicate),
     summary: group.atom_ids.map(atomLabel).join(' · '),
     metadata: compact([
-      group.action_states.length ? `행동 상태: ${group.action_states.map(structuredCodeLabel).join(' · ')}` : null,
-      group.target_codes.length ? `대상: ${group.target_codes.map(analysisRoleLabel).join(' · ')}` : null,
+      group.action_states.length ? `행동 상태: ${group.action_states.map((value) => structuredCodeLabel(value)).join(' · ')}` : null,
+      group.target_codes.length ? `대상: ${group.target_codes.map((code) => analysisConcreteLabel(code)).join(' · ')}` : null,
     ]),
   }));
   const entityItems: StructuredDetailItem[] = (diagnosis.entity_registry ?? []).map((entity) => ({
     key: entity.entity_id,
-    title: entity.entity_code,
+    title: analysisConcreteLabel(entity.entity_code, '식별 대상 · 확인 필요'),
     summary: entity.mention_roles.length
-      ? `문맥 역할: ${entity.mention_roles.map(structuredCodeLabel).join(' · ')}`
-      : '구조화 Envelope에서 식별된 명칭·대상',
+      ? `문맥 역할: ${entity.mention_roles.map((value) => structuredCodeLabel(value)).join(' · ')}`
+      : 'AI 분석에서 식별된 명칭·대상',
     metadata: [`등장 턴: ${entity.source_turn_ids.join(', ')}`, `연결 정황 ${entity.atom_ids.length}건`],
   }));
   const mentionItems: StructuredDetailItem[] = (diagnosis.semantic_mentions ?? []).map((mention) => ({
     key: mention.mention_id,
-    title: mention.normalized_value,
-    summary: `${structuredCodeLabel(mention.mention_type)} · ${analysisRoleLabel(mention.speaker_role)}의 문맥`,
+    title: analysisConcreteLabel(mention.normalized_value, '세부 명칭 확인 필요'),
+    summary: `${structuredCodeLabel(mention.mention_type)} 문맥`,
     metadata: [
       `등장 순서 ${mention.sequence_index}`,
       mention.first_turn_id === mention.last_turn_id
@@ -471,13 +486,13 @@ const buildStructuredDetailGroups = (diagnosis: StoredCase['diagnosis']): Struct
     ],
   }));
   const unmappedItems: StructuredDetailItem[] = (diagnosis.unmapped_observations ?? []).map((observation) => {
-    const terms = compact(observation.observed_terms.map((term) => term.semantic_value || term.surface_form));
+    const terms = compact(observation.observed_terms.map(observedTermLabel));
     return {
       key: observation.observation_id,
       title: '분류 검토가 필요한 추가 정황',
       summary: terms.length
         ? terms.join(' · ')
-        : observation.candidate_categories.map(structuredCodeLabel).join(' · ') || '정규 분류에 아직 연결되지 않은 정보',
+        : observation.candidate_categories.map((value) => structuredCodeLabel(value)).join(' · ') || '정규 분류에 아직 연결되지 않은 정보',
       metadata: compact([
         `유형: ${structuredCodeLabel(observation.observation_type)}`,
         `근거 턴: ${observation.source_turn_id}`,
@@ -505,14 +520,14 @@ const StructuredEnvelopeDetails: React.FC<{ diagnosis: StoredCase['diagnosis'] }
   const total = groups.reduce((sum, group) => sum + group.items.length, 0);
   if (!total) return null;
   return <details className="analysis-structured-details">
-    <summary><span>추가 구조화 정보</span><small>{total}건 · 펼쳐서 전체 확인</small></summary>
+    <summary><span>세부 분석 정보</span><small>{total}건 · 펼쳐서 전체 확인</small></summary>
     <div className="analysis-structured-groups">
       {groups.map((group) => <section key={group.key} className="analysis-structured-group">
         <h4>{group.title}<span>{group.items.length}</span></h4>
         <ul>{group.items.map((item) => <li key={item.key}>
           <b>{item.title}</b>
           <p>{item.summary}</p>
-          {item.metadata.length > 0 && <div>{item.metadata.map((entry, index) => <span key={`${item.key}-${index}`}>{entry}</span>)}</div>}
+          {item.metadata.length > 0 && <div>{item.metadata.map((entry, index) => <span key={`${item.key}-${index}`} data-warning={entry.includes('확인 필요') || undefined}>{entry}</span>)}</div>}
         </li>)}</ul>
       </section>)}
     </div>
@@ -523,13 +538,13 @@ const structuredSignalLabel = (code: string) => ({
   IMPERSONATION_TRANSFER_CONTROL_COMBINATION: '사칭·송금·연락 제한이 함께 나타난 정황',
 }[code] ?? '여러 위험 정황이 함께 나타남');
 
-const staffFacingCopy = (value: string) => value.split('상대방').join('보이스피싱 의심 인물');
+const staffFacingCopy = (value: string) => replaceAnalysisTokens(value.split('상대방').join('보이스피싱 의심 인물'));
 
-const AnalysisResult: React.FC<{ result: AnalyzeCaseResponse; caseItem?: StoredCase; onOpenCase: () => void; onRestart: () => void }> = ({ result, caseItem, onOpenCase, onRestart }) => {
+export const AnalysisResult: React.FC<{ result: AnalyzeCaseResponse; caseItem?: StoredCase; sourceText: string; onOpenCase: () => void; onRestart: () => void; showActions?: boolean }> = ({ result, caseItem, sourceText, onOpenCase, onRestart, showActions = true }) => {
   if (result.disposition === 'NO_CASE') return <section className="analysis-result no-case">
     <div className="analysis-result-heading"><span><CheckCircle2 size={21}/></span><div><p>분석 완료</p><h2>현재는 보이스피싱 Case 생성 기준에 해당하지 않습니다.</h2></div></div>
     <p className="analysis-brief">{staffFacingCopy(result.initial_brief || '')}</p>
-    <p className="analysis-disclaimer">CSR에는 통화 원문이 전달되지 않으며, 온디바이스 분석을 모사한 구조화 Envelope 결과만 사용했습니다.</p>
+    <p className="analysis-disclaimer">CSR에는 통화 원문이 전달되지 않으며, AI가 분석한 정보만 사용했습니다.</p>
     <div className="analysis-result-actions"><button type="button" onClick={onRestart}>다른 통화 분석하기</button></div>
   </section>;
   if (!caseItem) return <section className="analysis-result error"><AlertCircle size={20}/><div><h2>Case는 생성됐지만 분석 결과를 불러오지 못했습니다.</h2><p>사건 목록에서 새 Case를 열어 확인해 주세요.</p></div><button type="button" onClick={onOpenCase}>Case 열기</button></section>;
@@ -543,12 +558,17 @@ const AnalysisResult: React.FC<{ result: AnalyzeCaseResponse; caseItem?: StoredC
   const unresolved = valueList(caseItem.initial_report, 'unresolved_items');
   const nextChecks = valueList(caseItem.initial_report, 'next_checks');
   return <section className="analysis-result created">
-    <div className="analysis-result-heading"><span className={caseStateTone(caseState(caseItem))}><ShieldAlert size={21}/></span><div><p>Shared Case 생성 완료 · {caseItem.case_id}</p><h2>{staffFacingCopy(context.incident_type || '통화 맥락 분석을 완료했습니다.')}</h2><small>{normalizeStaffSummary(caseItem.initial_brief)}</small></div><div className="analysis-result-actions"><button type="button" onClick={onRestart}>새 통화 분석하기</button><button type="button" className="primary" onClick={onOpenCase}>생성된 Case 열기<ChevronRight size={16}/></button></div></div>
+    <div className="analysis-result-heading"><span className={caseStateTone(caseState(caseItem))}><ShieldAlert size={21}/></span><div><p>Shared Case 생성 완료 · {caseItem.case_id}</p><h2>{staffFacingCopy(context.incident_type || '통화 맥락 분석을 완료했습니다.')}</h2><small>{staffFacingCopy(normalizeStaffSummary(caseItem.initial_brief))}</small></div>{showActions && <div className="analysis-result-actions"><button type="button" onClick={onRestart}>새 통화 분석하기</button><button type="button" className="primary" onClick={onOpenCase}>생성된 Case 열기<ChevronRight size={16}/></button></div>}</div>
     <div className="analysis-result-grid">
-      <section><header><BrainCircuit size={16}/><div><b>구조화 Envelope에서 확인된 주요 정황</b><span>기관명·인물·관계·시간·행위자·근거 정보를 생략하지 않고 표시합니다.</span></div></header><div className="analysis-window-list">{structuredSignals.length > 0 && <div className="analysis-composite-summary"><b>종합 정황</b>{structuredSignals.map((signal) => <p key={signal.signal_id}>{structuredSignalLabel(signal.signal_code)}</p>)}</div>}{staffFeatures.length > 0 ? <ul className="analysis-feature-list">{staffFeatures.map((feature) => <li key={feature.id} className={`analysis-feature-item ${feature.tone}`}><div className="analysis-feature-heading"><b>{feature.title}</b><span>{feature.category}</span></div><p>{feature.description}</p>{feature.metadata.length > 0 && <div className="analysis-feature-metadata">{feature.metadata.map((item) => <span key={item}>{item}</span>)}</div>}{feature.details.length > 0 && <ul className="analysis-feature-details">{feature.details.map((item) => <li key={item}>{item}</li>)}</ul>}<small>{feature.status}</small></li>)}</ul> : <p className="analysis-empty-signal">구조화된 정황이 없습니다. 데모 분석 Envelope를 확인해 주세요.</p>}<StructuredEnvelopeDetails diagnosis={caseItem.diagnosis}/></div></section>
-      <section><header><Sparkles size={16}/><div><b>사건 초기 정리</b><span>검증된 구조화 정보를 바탕으로 역할과 사실 상태를 구분해 정리했습니다.</span></div></header><div className="analysis-case-summary"><p>{normalizeStaffSummary(context.summary || caseItem.initial_brief)}</p><div><b>보이스피싱 의심 인물의 주장</b><ul>{claims.length ? claims.map((claim) => <li key={claim}>{staffFacingCopy(claim)}</li>) : <li>확인된 주장이 없습니다.</li>}</ul></div>{demands.length > 0 && <div><b>보이스피싱 의심 인물의 요구</b><ul>{demands.map((item) => <li key={item}>{staffFacingCopy(item)}</li>)}</ul></div>}{customerStatements.length > 0 && <div><b>고객의 진술·행동</b><ul>{customerStatements.map((item) => <li key={item}>{staffFacingCopy(item)}</li>)}</ul></div>}<div><b>우선 권장 조치</b><ul>{recommended.length ? recommended.map((item) => <li key={item}>{staffFacingCopy(item)}</li>) : nextChecks.map((item) => <li key={item}>{staffFacingCopy(item)}</li>)}</ul></div>{unresolved.length > 0 && <div><b>아직 확인할 정보</b><ul>{unresolved.map((item) => <li key={item}>{staffFacingCopy(item)}</li>)}</ul></div>}</div></section>
+      <section><header><BrainCircuit size={16}/><div><b>통화에서 확인된 주요 정황</b><span>AI가 확인한 주장·요구·압박 수법을 기관명·인물·관계·시간 정보와 함께 표시합니다.</span></div></header><div className="analysis-window-list">{structuredSignals.length > 0 && <div className="analysis-composite-summary"><b>종합 정황</b>{structuredSignals.map((signal) => <p key={signal.signal_id}>{structuredSignalLabel(signal.signal_code)}</p>)}</div>}{staffFeatures.length > 0 ? <ul className="analysis-feature-list">{staffFeatures.map((feature) => <li key={feature.id} className={`analysis-feature-item ${feature.tone}`}><div className="analysis-feature-heading"><b>{feature.title}</b>{featureCategoryLabel(feature) && <span>{featureCategoryLabel(feature)}</span>}</div><p>{feature.description}</p>{feature.metadata.length > 0 && <div className="analysis-feature-metadata">{feature.metadata.map((item) => <span key={item} data-warning={item.includes('확인 필요') || undefined}>{item}</span>)}</div>}{feature.details.length > 0 && <ul className="analysis-feature-details">{feature.details.map((item) => <li key={item}>{item}</li>)}</ul>}{featureStatusLabel(feature.status) && <small data-kind={featureStatusKind(feature.status)}>{featureStatusLabel(feature.status)}</small>}</li>)}</ul> : <p className="analysis-empty-signal">확인된 주요 정황이 없습니다. 분석 결과를 다시 확인해 주세요.</p>}<StructuredEnvelopeDetails diagnosis={caseItem.diagnosis}/></div></section>
+      <section><header><Sparkles size={16}/><div><b>사건 초기 정리</b><span>검증된 분석 정보를 바탕으로 역할과 사실 상태를 구분해 정리했습니다.</span></div></header><div className="analysis-case-summary"><p>{staffFacingCopy(normalizeStaffSummary(context.summary || caseItem.initial_brief))}</p><div><b>보이스피싱 의심 인물의 주장</b><ul>{claims.length ? claims.map((claim) => <li key={claim}>{staffFacingCopy(claim)}</li>) : <li>확인된 주장이 없습니다.</li>}</ul></div>{demands.length > 0 && <div><b>보이스피싱 의심 인물의 요구</b><ul>{demands.map((item) => <li key={item}>{staffFacingCopy(item)}</li>)}</ul></div>}{customerStatements.length > 0 && <div><b>고객의 진술·행동</b><ul>{customerStatements.map((item) => <li key={item}>{staffFacingCopy(item)}</li>)}</ul></div>}<div><b>우선 권장 조치</b><ul>{recommended.length ? recommended.map((item) => <li key={item}>{staffFacingCopy(item)}</li>) : nextChecks.map((item) => <li key={item}>{staffFacingCopy(item)}</li>)}</ul></div>{unresolved.length > 0 && <div><b>아직 확인할 정보</b><ul>{unresolved.map((item) => <li key={item}>{staffFacingCopy(item)}</li>)}</ul></div>}</div></section>
     </div>
-    <p className="analysis-disclaimer">CSR은 통화 원문을 보관하거나 표시하지 않습니다. 구조화 Envelope에 포함된 정보만 업무용 문장으로 정리했으며, 실제 금융 조치와 사실 확정은 담당자의 확인이 필요합니다.</p>
+    {sourceText.trim() && <details className="analysis-original-transcript">
+      <summary>데모 입력 원문 확인</summary>
+      <pre>{sourceText.trim()}</pre>
+      <p><b>데모 전용 표시</b> · 이 원문은 화면에서만 확인하며 Case API·저장 데이터에는 전달하거나 보관하지 않습니다.</p>
+    </details>}
+    <p className="analysis-disclaimer">CSR은 통화 원문을 보관하거나 표시하지 않습니다. AI가 추출한 분석 정보만 업무용 문장으로 정리했으며, 실제 금융 조치와 사실 확정은 담당자의 확인이 필요합니다.</p>
   </section>;
 };
 
@@ -562,6 +582,7 @@ export const HomePage: React.FC<HomePageProps> = ({ embedded = false, onCloseEmb
   const navigate = useNavigate();
   const [open, setOpen] = useState(embedded);
   const [text, setText] = useState('');
+  const [sourceText, setSourceText] = useState('');
   const [state, setState] = useState<AnalysisState>('INPUT');
   const [result, setResult] = useState<AnalyzeCaseResponse | null>(null);
   const [caseItem, setCaseItem] = useState<StoredCase | undefined>();
@@ -581,7 +602,7 @@ export const HomePage: React.FC<HomePageProps> = ({ embedded = false, onCloseEmb
     analysisRequestRef.current = null;
     setText(samples[index]); setError(''); setState('INPUT');
   };
-  const reset = () => { analysisRequestRef.current = null; setText(''); setResult(null); setCaseItem(undefined); setError(''); setState('INPUT'); setOpen(true); };
+  const reset = () => { analysisRequestRef.current = null; setText(''); setSourceText(''); setResult(null); setCaseItem(undefined); setError(''); setState('INPUT'); setOpen(true); };
   const close = () => { if (embedded && onCloseEmbedded) onCloseEmbedded(); else setOpen(embedded); setError(''); };
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -598,9 +619,13 @@ export const HomePage: React.FC<HomePageProps> = ({ embedded = false, onCloseEmb
       const response = await casesApi.analyze(submittedText, analysisRequest.requestId);
       analysisRequestRef.current = null;
       // The source transcript is intentionally transient in this screen too.
+      setSourceText(submittedText);
       setText('');
       setResult(response);
       if (response.disposition === 'CASE_CREATED' && response.case_id) {
+        // Keep the one-time assignment prompt pending until the user saves or skips it.
+        // This also covers opening the newly-created Case later from the case board.
+        markInitialAssignmentPending(response.case_id);
         // Creation has succeeded. A failed follow-up read must not invite another analysis.
         setState('CREATED');
         try { setCaseItem(await casesApi.get(response.case_id)); }
@@ -613,7 +638,7 @@ export const HomePage: React.FC<HomePageProps> = ({ embedded = false, onCloseEmb
   const resultOpen = state === 'CREATED' && Boolean(caseItem);
   return <section className={embedded ? `home-analysis-embed${resultOpen ? ' analysis-result-open' : ''}` : `home-empty ${open ? 'analysis-open' : ''}`}>
     {!open ? <><div className="home-mark"><ShieldCheck size={26}/></div><p className="eyebrow">CSR | Case Share Room</p><h1>대응할 사건을 선택하세요.</h1><p>통화 맥락, 고객 대화, 기관 확인과 대응 업무를 하나의 Shared Case에서 이어서 확인할 수 있습니다.</p><div className="home-principles"><span><MessageSquareText size={17}/>대화와 업무 기록을 한 흐름으로</span><span><ArrowLeftRight size={17}/>고객 응답과 Case 맥락을 양방향으로</span></div><button className="start-analysis-button" type="button" onClick={() => setOpen(true)}><FileSearch size={17}/>새 통화 분석하기</button><a className="judge-guide-link" href="/judge/index.html">프로젝트 먼저 살펴보기 →</a></> : <div className={`home-analysis-panel${resultOpen ? ' has-analysis-result' : ''}`}>
-      <header><div><p className="eyebrow">NEW SHARED CASE · DEMO ADAPTER</p><h1>새 통화 분석하기</h1><span>데모 분석기가 원문을 구조화 Envelope로 변환한 뒤, CSR은 그 Envelope만 검증해 Case를 생성합니다.</span></div><button type="button" onClick={close} aria-label="새 통화 분석 닫기"><X size={19}/></button></header>
-      {state === 'INPUT' || state === 'ANALYZING' || state === 'ERROR' ? <form onSubmit={submit}><label htmlFor="call-transcript">온디바이스 분석 데모 입력</label><div className="analysis-sample-row"><span>샘플 입력</span><button type="button" disabled={state === 'ANALYZING'} onClick={() => applySample('PHISHING')}>보이스피싱 사례 샘플</button><button type="button" disabled={state === 'ANALYZING'} onClick={() => applySample('FINANCE')}>정상 금융 상담 샘플</button><button type="button" disabled={state === 'ANALYZING'} onClick={() => applySample('DAILY')}>일상 통화 샘플</button></div><textarea id="call-transcript" value={text} disabled={state === 'ANALYZING'} onChange={(event) => { const nextText = event.target.value; if (analysisRequestRef.current?.submittedText !== nextText.trim()) analysisRequestRef.current = null; setText(nextText); }} placeholder={'데모용 통화 내용을 붙여 넣으세요. 가능하면 각 줄을 “보이스피싱 의심 인물: …” 또는 “고객: …” 형식으로 입력하세요.\n실제 운영 CSR의 시작점은 통신사·온디바이스 계층이 전달하는 구조화 Analysis Envelope입니다.'}/><div className="analysis-input-meta"><span>데모 입력 최대 50,000자</span></div><p className="analysis-privacy-note">이 입력은 외부 온디바이스 분석 계층을 모사하기 위한 데모입니다. CSR Case에는 원문이 전달·저장되지 않고 구조화된 역할·관계·명칭·시간·행동·신뢰도만 저장됩니다.</p>{state === 'ANALYZING' && <div className="analysis-progress" role="status" aria-live="polite"><span className="analysis-progress-icon"><Loader2 size={20} className="spin"/></span><div><strong>데모 입력을 구조화 Envelope로 변환하고 있습니다</strong><span>CSR은 변환된 역할·관계·정황을 검증한 뒤 업무용 Case 문장을 생성합니다.</span></div><div className="analysis-progress-track" aria-hidden="true"><span/></div></div>}{error && <p className="analysis-error"><AlertCircle size={15}/>{error}</p>}<footer><button type="button" onClick={close} disabled={state === 'ANALYZING'}>취소</button><button type="submit" className="primary" disabled={!text.trim() || state === 'ANALYZING'}>{state === 'ANALYZING' ? <><Loader2 size={16} className="spin"/>Envelope 변환·Case 생성 중</> : <><Play size={16}/>데모 분석하고 Case 만들기</>}</button></footer></form> : result && <AnalysisResult result={result} caseItem={caseItem} onOpenCase={() => result.case_id && navigate(`/cases/${encodeURIComponent(result.case_id)}`, { state: { initialAssignmentRecommendation: true } })} onRestart={reset}/>}</div>}
+      <header><div><p className="eyebrow">NEW SHARED CASE · DEMO ADAPTER</p><h1>새 통화 분석하기</h1><span>AI가 통화 내용을 분석한 뒤, 확인된 정보만 CSR Case로 정리합니다.</span></div><button type="button" onClick={close} aria-label="새 통화 분석 닫기"><X size={19}/></button></header>
+      {state === 'INPUT' || state === 'ANALYZING' || state === 'ERROR' ? <form onSubmit={submit}><label htmlFor="call-transcript">온디바이스 분석 데모 입력</label><div className="analysis-sample-row"><span>샘플 입력</span><button type="button" disabled={state === 'ANALYZING'} onClick={() => applySample('PHISHING')}>보이스피싱 사례 샘플</button><button type="button" disabled={state === 'ANALYZING'} onClick={() => applySample('FINANCE')}>정상 금융 상담 샘플</button><button type="button" disabled={state === 'ANALYZING'} onClick={() => applySample('DAILY')}>일상 통화 샘플</button></div><textarea id="call-transcript" value={text} disabled={state === 'ANALYZING'} onChange={(event) => { const nextText = event.target.value; if (analysisRequestRef.current?.submittedText !== nextText.trim()) analysisRequestRef.current = null; setText(nextText); }} placeholder={'데모용 통화 원문을 화자 라벨 없이 붙여 넣으세요. AI가 대화 흐름과 표현을 바탕으로 발화자를 구분합니다.\n실제 운영에서는 AI가 분석한 정보만 CSR Case 생성에 사용합니다.'}/><div className="analysis-input-meta"><span>데모 입력 최대 50,000자</span></div><p className="analysis-privacy-note">이 입력은 외부 AI 분석 계층을 모사하기 위한 데모입니다. CSR Case에는 원문이 전달·저장되지 않고 AI가 추출한 역할·관계·명칭·시간·행동·신뢰도만 저장됩니다.</p>{state === 'ANALYZING' && <div className="analysis-progress" role="status" aria-live="polite"><span className="analysis-progress-icon"><Loader2 size={20} className="spin"/></span><div><strong>AI가 통화 내용을 분석하고 있습니다</strong><span>AI가 대화 흐름에서 화자·행위자·대상자를 구분한 뒤, CSR은 확인된 정보와 정황을 검토합니다.</span></div><div className="analysis-progress-track" aria-hidden="true"><span/></div></div>}{error && <p className="analysis-error"><AlertCircle size={15}/>{error}</p>}<footer><button type="button" onClick={close} disabled={state === 'ANALYZING'}>취소</button><button type="submit" className="primary" disabled={!text.trim() || state === 'ANALYZING'}>{state === 'ANALYZING' ? <><Loader2 size={16} className="spin"/>AI 분석·Case 생성 중</> : <><Play size={16}/>데모 분석하고 Case 만들기</>}</button></footer></form> : result && <AnalysisResult result={result} caseItem={caseItem} sourceText={sourceText} onOpenCase={() => result.case_id && navigate(`/cases/${encodeURIComponent(result.case_id)}`, { state: { initialAssignmentRecommendation: true } })} onRestart={reset}/>}</div>}
   </section>;
 };

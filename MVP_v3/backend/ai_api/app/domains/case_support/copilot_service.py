@@ -270,7 +270,7 @@ class CaseCopilotService:
             os.getenv("OPENAI_CUSTOMER_SUPPORT_MODEL")
             if request.assistant_mode == "CUSTOMER_SUPPORT"
             else os.getenv("OPENAI_BANK_COPILOT_MODEL")
-        ) or os.getenv("OPENAI_CASE_COPILOT_MODEL", "gpt-4o-mini")
+        ) or os.getenv("OPENAI_CASE_COPILOT_MODEL", "gpt-5.6-luna")
         client = AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"], timeout=float(os.getenv("OPENAI_TIMEOUT_SECONDS", "20")), max_retries=0)
         if request.assistant_mode == "CUSTOMER_SUPPORT":
             instructions = (

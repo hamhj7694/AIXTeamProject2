@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Protocol
 from uuid import uuid4
 from contracts.question_target import decode_follow_up_target, canonical_question_scope, is_follow_up_target, follow_up_registration_allowed
+from general_api.app.domains.cases.member_roles import case_role_for_member
 
 
 _TARGET_FIELD_ALIASES = {
@@ -379,6 +380,7 @@ class InMemoryCaseRepository:
         async with self._lock:
             if not any(item["case_id"] == case_id for item in self._records):
                 raise KeyError(case_id)
+            record = {**record, "role": case_role_for_member(record) or "VIEWER"}
             now = datetime.now(timezone.utc).isoformat()
             member = next((item for item in self._members if item["case_id"] == case_id and item["user_id"] == record["user_id"]), None)
             if member is None:
@@ -390,7 +392,7 @@ class InMemoryCaseRepository:
                 member["updated_at"] = now
             self._events.append({
                 "event_id": len(self._events) + 1, "case_id": case_id, "event_type": "CASE_MEMBER_UPDATED",
-                "actor_type": "SYSTEM", "payload": {"user_id": member["user_id"], "role": member["role"], "assignment_role": member.get("assignment_role", "HANDOVER_PENDING")}, "occurred_at": now,
+                "actor_type": "SYSTEM", "payload": {"user_id": member["user_id"], "assignment_role": member.get("assignment_role", "HANDOVER_PENDING")}, "occurred_at": now,
             })
             self._touch_case(case_id, now, semantic=False)
             return deepcopy(member)
@@ -419,8 +421,7 @@ class InMemoryCaseRepository:
                 raise KeyError(case_id)
             now = datetime.now(timezone.utc).isoformat()
             for member in self._members:
-                if member["case_id"] == case_id and member["role"] == "CASE_OWNER":
-                    member["role"] = "VIEWER"
+                if member["case_id"] == case_id and case_role_for_member(member) == "CASE_OWNER":
                     member["assignment_role"] = "HANDOVER_PENDING"
                     member["updated_at"] = now
             normalized = (display_name or "").strip()

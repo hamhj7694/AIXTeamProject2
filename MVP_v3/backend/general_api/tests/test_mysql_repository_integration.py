@@ -524,7 +524,7 @@ class MySqlCaseRepositoryIntegrationTest(unittest.IsolatedAsyncioTestCase):
         await self.repository.create(await self._record(case_id=case_id, client_request_id=f"a5-{uuid4().hex}"))
 
         member = await self.repository.upsert_member(case_id, {
-            "user_id": "bank-operator", "display_name": "은행 담당자", "role": "CHAT_OPERATOR",
+            "user_id": "bank-operator", "display_name": "은행 담당자", "assignment_role": "CONSULTATION",
         })
         members = await self.repository.list_members(case_id)
 

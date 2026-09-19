@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 
 from contracts.diagnosis import ContextSignal, ExtractedEvent, SemanticAtom, SemanticRelation
 
@@ -64,6 +65,18 @@ def build_semantic_atoms(events: list[ExtractedEvent]) -> list[SemanticAtom]:
         is_isolation = event.event_family == "PSY_STRATEGY" and event.subtype == "ISOLATION"
         is_auth = event.event_family == "ACTION_REQUEST" and event.subtype == "AUTH_INFO"
         is_contact_control = event.event_family == "ACTION_REQUEST" and event.subtype == "CONTACT_RESTRICTION"
+        compact_evidence = re.sub(r"\s+", "", event.evidence_text or "")
+        claimed_relationship = None
+        vocative_target = None
+        if event.impersonation_group == "FAMILY":
+            if any(token in compact_evidence for token in ("엄마", "어머니")):
+                claimed_relationship = "CHILD"
+                vocative_target = "엄마" if "엄마" in compact_evidence else "어머니"
+            elif any(token in compact_evidence for token in ("아빠", "아버지")):
+                claimed_relationship = "CHILD"
+                vocative_target = "아빠" if "아빠" in compact_evidence else "아버지"
+            else:
+                claimed_relationship = "FAMILY_MEMBER"
         payload = dict(
             atom_id=f"ATM-{event.detected_at_turn:04d}-{index:04d}",
             atom_class=_atom_class(event),
@@ -111,6 +124,8 @@ def build_semantic_atoms(events: list[ExtractedEvent]) -> list[SemanticAtom]:
             ),
             amount_event_id=f"AMT-{event.detected_at_turn:04d}-{index:04d}" if event.amount_krw is not None else None,
             claimed_organization=_claimed_organization(event),
+            claimed_relationship=claimed_relationship,
+            vocative_target=vocative_target,
             source_event_id=f"EVT-{event.detected_at_turn:04d}-{index:04d}",
             source_turn_id=event.detected_at_turn,
             semantic_fingerprint=_fingerprint(
@@ -129,11 +144,14 @@ def _event_is_covered(event: ExtractedEvent, atoms: list[SemanticAtom]) -> bool:
     turn_atoms = [atom for atom in atoms if atom.source_turn_id == event.detected_at_turn]
     if event.event_family == "IMPERSONATION":
         organization = _claimed_organization(event)
-        return any(
+        covered = any(
             atom.predicate == "CLAIMS_ORGANIZATION"
             and atom.claimed_organization in {organization, "UNKNOWN"}
             for atom in turn_atoms
         )
+        if event.impersonation_group == "FAMILY":
+            return covered and any(atom.claimed_relationship for atom in turn_atoms)
+        return covered
     if event.event_family == "MONEY_MOVEMENT":
         return any(atom.predicate == _predicate(event) for atom in turn_atoms)
     if event.event_family == "ACTION_REQUEST":

@@ -36,7 +36,7 @@ class CollaborationEndpointTest(unittest.TestCase):
         self.repository.list_customer_questions.return_value = []
         self.repository.upsert_member.return_value = {
             "case_id": "CASE-1", "user_id": "staff-1", "display_name": "Operator",
-            "role": "CHAT_OPERATOR", "status": "ACTIVE",
+            "assignment_role": "CONSULTATION", "status": "ACTIVE",
             "assigned_at": "2026-09-02T01:00:00+00:00", "updated_at": "2026-09-02T01:00:00+00:00",
         }
         self.repository.heartbeat_presence.return_value = {
@@ -60,7 +60,7 @@ class CollaborationEndpointTest(unittest.TestCase):
 
     def test_member_presence_and_explicit_copilot_contract(self) -> None:
         member = self.client.post("/api/cases/CASE-1/members", json={
-            "user_id": "staff-1", "display_name": "Operator", "role": "CHAT_OPERATOR",
+            "user_id": "staff-1", "display_name": "Operator", "assignment_role": "CONSULTATION",
         })
         presence = self.client.post("/api/cases/CASE-1/presence/heartbeat", json={
             "user_id": "staff-1", "display_name": "Operator", "channel": "TEAM",
@@ -70,7 +70,8 @@ class CollaborationEndpointTest(unittest.TestCase):
         })
 
         self.assertEqual([member.status_code, presence.status_code, copilot.status_code], [201, 200, 201])
-        self.assertEqual(member.json()["role"], "CHAT_OPERATOR")
+        self.assertEqual(member.json()["assignment_role"], "CONSULTATION")
+        self.assertNotIn("role", member.json())
         self.assertEqual(presence.json()["channel"], "TEAM")
         self.assertEqual(copilot.json()["channel"], "TEAM")
         self.assertEqual(copilot.json()["model_mode"], "gpt-4o-mini")

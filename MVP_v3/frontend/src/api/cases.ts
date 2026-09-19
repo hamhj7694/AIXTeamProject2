@@ -13,7 +13,7 @@ export const CURRENT_BANK_USER = {
   role: 'CHAT_OPERATOR',
 } as const;
 
-export const CURRENT_BANK_USER_STATUS = '기능 체험용 고정' as const;
+export const CURRENT_BANK_USER_STATUS = '기능 체험용' as const;
 export const CURRENT_BANK_USER_ROLE_LABEL = '기능 체험자' as const;
 
 export const displayBankUserName = (userId: string, fallback: string) => (
@@ -69,7 +69,7 @@ export const casesApi = {
   }),
   deletePersonalNote: (caseId: string, noteId: string) => request<void>(`/api/cases/${encodeURIComponent(caseId)}/personal-notes/${encodeURIComponent(noteId)}?author_id=${encodeURIComponent(CURRENT_BANK_USER.user_id)}`, { method: 'DELETE' }),
   members: (caseId: string) => request<CaseMember[]>(`/api/cases/${encodeURIComponent(caseId)}/members`),
-  upsertMember: (caseId: string, member: Pick<CaseMember, 'user_id' | 'display_name' | 'role' | 'assignment_role'>) => request<CaseMember>(`/api/cases/${encodeURIComponent(caseId)}/members`, {
+  upsertMember: (caseId: string, member: Pick<CaseMember, 'user_id' | 'display_name' | 'assignment_role'>) => request<CaseMember>(`/api/cases/${encodeURIComponent(caseId)}/members`, {
     method: 'POST', body: JSON.stringify(member),
   }),
   removeMember: (caseId: string, userId: string) => request<void>(`/api/cases/${encodeURIComponent(caseId)}/members/${encodeURIComponent(userId)}`, { method: 'DELETE' }),

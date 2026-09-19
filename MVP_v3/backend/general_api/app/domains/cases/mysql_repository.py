@@ -12,6 +12,7 @@ from pymysql.err import IntegrityError
 from request_trace import trace_stage
 
 from .repository import CaseCreationConflictError, CaseVersionConflictError, normalize_target_field, answer_receipt
+from .member_roles import case_role_for_member
 from contracts.question_target import canonical_question_scope, is_follow_up_target, follow_up_registration_allowed
 
 
@@ -573,6 +574,7 @@ class MySqlCaseRepository:
     async def upsert_member(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]:
         pool = await self._get_pool()
         now = datetime.now(timezone.utc)
+        record = {**record, "role": case_role_for_member(record) or "VIEWER"}
         stored_member: dict[str, Any] | None = None
         async with pool.acquire() as connection:
             try:

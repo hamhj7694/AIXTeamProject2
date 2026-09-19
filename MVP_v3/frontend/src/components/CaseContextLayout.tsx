@@ -2,7 +2,7 @@ import React, { useLayoutEffect, useRef, useState } from 'react';
 
 const STORAGE_KEY = 'csr.bank.context-width.v1';
 const DEFAULT_WIDTH = 400;
-const MIN_WIDTH = 320;
+const MIN_WIDTH = 220;
 const CHAT_MIN_WIDTH = 480;
 const HANDLE_WIDTH = 8;
 
@@ -35,7 +35,7 @@ export const CaseContextLayout: React.FC<{ children: React.ReactNode; contextOpe
   return <div ref={container} className={`case-room-grid ${contextOpen ? '' : 'is-context-closed'}`} style={{ '--context-width': `${width}px` } as React.CSSProperties}>
     {parts[0]}
     <div className="context-resize-handle" role="separator" tabIndex={0}
-      aria-label="사건 맥락 너비 조절" aria-orientation="vertical"
+      aria-label={contextOpen ? '사건 맥락 패널 닫기 또는 너비 조절' : '사건 맥락 패널 열기'} aria-orientation="vertical"
       aria-valuemin={MIN_WIDTH} aria-valuemax={maximum} aria-valuenow={width}
       aria-valuetext={`${width}픽셀`} title="드래그 또는 좌우 방향키로 조절 · 두 번 클릭하면 기본 너비"
       onDoubleClick={() => updateWidth(DEFAULT_WIDTH)}

@@ -2,8 +2,9 @@ from unittest.mock import patch
 
 from pydantic import ValidationError
 
-from contracts.diagnosis import AnalysisEnvelope, SemanticAtom, StructuredTurn
-from ai_api.app.domains.diagnosis.envelope import enrich_atom_roles, window_result_from_envelope
+from contracts.diagnosis import AnalysisEnvelope, ExtractedEvent, SemanticAtom, StructuredTurn
+from ai_api.app.domains.diagnosis.envelope import _event_attribution, enrich_atom_roles, window_result_from_envelope
+from ai_api.app.domains.diagnosis.extractor import _infer_unlabeled_demo_role
 
 
 def _atom(**updates: object) -> SemanticAtom:
@@ -52,6 +53,42 @@ def test_suspected_party_is_actor_and_vocative_is_not_speaker() -> None:
     assert atom.target_role == "CUSTOMER"
     assert atom.vocative_target == "엄마"
     assert atom.claimed_relationship == "CHILD"
+
+
+def test_event_attribution_comes_from_atom_roles_instead_of_event_family() -> None:
+    event = ExtractedEvent(
+        event_family="MONEY_MOVEMENT",
+        subtype="TRANSFER",
+        evidence_turn_id=1,
+        detected_at_turn=1,
+        evidence_text="안전계좌로 보내세요",
+    )
+    atom = _atom(
+        speaker="CUSTOMER",
+        speaker_role="CUSTOMER",
+        actor_role="SUSPECTED_PARTY",
+        target_role="CUSTOMER",
+        reported_by_role="CUSTOMER",
+        predicate="TRANSFER_FUNDS",
+    )
+
+    assert _event_attribution(event, [enrich_atom_roles(atom)]) == (
+        "CUSTOMER", "SUSPECTED_PARTY", "CUSTOMER", "CUSTOMER",
+    )
+
+
+def test_unlabeled_demo_turns_can_be_marked_as_low_confidence_suspected_party() -> None:
+    turns = [
+        "엄마, 휴대폰이 고장 나서 임시 번호로 연락해.",
+        "급하게 결제해야 하는데 내 인증서가 작동하지 않아.",
+        "내가 보내는 계좌로 먼저 300만 원만 이체해 줘.",
+        "지금 회의 중이라 전화는 받을 수 없으니 문자로만 답해 줘.",
+        "오늘 안에 꼭 필요하니까 다른 사람에게 묻지 말고 보내 줘.",
+    ]
+
+    assert _infer_unlabeled_demo_role(turns[0], turns) == ("SUSPECTED_PARTY", 0.58)
+    assert _infer_unlabeled_demo_role(turns[1], turns) == ("SUSPECTED_PARTY", 0.58)
+    assert _infer_unlabeled_demo_role(turns[2], turns) == ("SUSPECTED_PARTY", 0.58)
 
 
 def test_csr_window_contains_only_normalized_envelope_summary() -> None:

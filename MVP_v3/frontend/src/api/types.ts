@@ -500,7 +500,6 @@ export interface PersonalNote {
   updated_at: string;
 }
 
-export type CaseMemberRole = 'CASE_OWNER' | 'CHAT_OPERATOR' | 'REVIEWER' | 'VIEWER';
 export type CaseAssignmentRole = 'SUPERVISOR' | 'MONITORING' | 'CONSULTATION' | 'VIEWER' | 'HANDOVER_PENDING';
 export type PresenceState = 'VIEWING' | 'TYPING' | 'AWAY' | 'OFFLINE';
 
@@ -508,7 +507,6 @@ export interface CaseMember {
   case_id: string;
   user_id: string;
   display_name: string;
-  role: CaseMemberRole;
   assignment_role: CaseAssignmentRole;
   status: 'ACTIVE' | 'REMOVED';
   assigned_at: string;

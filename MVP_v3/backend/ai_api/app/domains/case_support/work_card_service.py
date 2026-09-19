@@ -211,7 +211,7 @@ class CaseWorkCardService:
         client = AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"], timeout=float(os.getenv("OPENAI_TIMEOUT_SECONDS", "20")))
         try:
             response = await client.responses.create(
-                model=os.getenv("OPENAI_CASE_WORK_CARD_MODEL", "gpt-4o-mini"),
+                model=os.getenv("OPENAI_CASE_WORK_CARD_MODEL", "gpt-5.6-luna"),
                 instructions=(
                     "한국어 QUESTION_PLAN 검토 초안만 작성하세요. questions는 최대 1개이며 필요 없으면 빈 배열입니다. "
                     "서버가 선택한 follow_up의 scope, state, parent와 purpose에 한정하여 불확실성을 줄일 다음 확인 행동을 질문하세요. "
@@ -264,7 +264,7 @@ class CaseWorkCardService:
                 "AI 서버 응답 형식이 올바르지 않아 카드를 생성하지 않았습니다."
             )
         payload["card_type"] = request.card_type
-        payload["model_mode"] = os.getenv("OPENAI_CASE_WORK_CARD_MODEL", "gpt-4o-mini")
+        payload["model_mode"] = os.getenv("OPENAI_CASE_WORK_CARD_MODEL", "gpt-5.6-luna")
         try:
             card = CaseWorkCardOutput.model_validate(_fill_empty_proposal(payload, fallback))
             if request.card_type == "QUESTION_PLAN":

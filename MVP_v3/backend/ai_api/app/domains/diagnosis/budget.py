@@ -33,10 +33,10 @@ class DiagnosisLlmBudget:
     @classmethod
     def from_environment(cls) -> "DiagnosisLlmBudget":
         return cls(
-            max_calls=_positive_env_int("OPENAI_MAX_CALLS_PER_DIAGNOSIS", 31),
-            max_total_tokens=_positive_env_int("OPENAI_MAX_TOTAL_TOKENS_PER_DIAGNOSIS", 16000),
-            max_turns=_positive_env_int("DIAGNOSIS_MAX_TURNS", 30),
-            max_input_chars=_positive_env_int("DIAGNOSIS_MAX_INPUT_CHARS", 6000),
+            max_calls=_positive_env_int("OPENAI_MAX_CALLS_PER_DIAGNOSIS", 256),
+            max_total_tokens=_positive_env_int("OPENAI_MAX_TOTAL_TOKENS_PER_DIAGNOSIS", 512000),
+            max_turns=_positive_env_int("DIAGNOSIS_MAX_TURNS", 180),
+            max_input_chars=_positive_env_int("DIAGNOSIS_MAX_INPUT_CHARS", 100000),
         )
 
     def validate_input(self, *, text: str, turn_count: int) -> None:

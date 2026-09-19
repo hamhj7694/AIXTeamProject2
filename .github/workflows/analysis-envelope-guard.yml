@@ -59,8 +59,10 @@ jobs:
           cache-dependency-path: MVP_v3/frontend/package-lock.json
       - name: Install frontend dependencies
         run: npm ci
-      - name: Typecheck and build
-        run: npm run build
+      - name: Test, typecheck and build
+        run: |
+          npm run test
+          npm run build
 
   diff-check:
     name: Diff integrity

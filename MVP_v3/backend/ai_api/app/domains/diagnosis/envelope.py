@@ -136,6 +136,45 @@ def _mentions_from_atoms(atoms: list[SemanticAtom]) -> list[SemanticMention]:
     return mentions
 
 
+_EVENT_ATOM_PREDICATES: dict[str, set[str]] = {
+    "IMPERSONATION": {"CLAIMS_ORGANIZATION", "CLAIMS_ROLE", "CLAIMS_IDENTITY", "CLAIMS_ACCOUNT_INVOLVEMENT", "CLAIMS_CRIME_INVOLVEMENT"},
+    "PSY_STRATEGY": {"MAINTAIN_CALL", "END_CALL", "KEEP_SECRET", "AVOID_REPORTING", "AVOID_EXTERNAL_CONTACT", "THREATEN_ARREST", "THREATEN_ASSET_FREEZE", "JUSTIFY_ASSET_PROTECTION", "PROMISE_RETURN"},
+    "ACTION_REQUEST": {"DISCLOSE_OTP", "DISCLOSE_PASSWORD", "PROVIDE_CARD_INFO", "INSTALL_APP", "OPEN_URL", "SHARE_SCREEN"},
+    "MONEY_MOVEMENT": {"TRANSFER_FUNDS", "WITHDRAW_CASH"},
+}
+
+
+def _event_attribution(event: ExtractedEvent, atoms: list[SemanticAtom]) -> tuple[AnalysisActorRole, AnalysisActorRole, AnalysisActorRole, AnalysisActorRole]:
+    """Project attribution from the same-turn semantic atoms without guessing.
+
+    Events are a coarse risk projection and do not carry speaker metadata of
+    their own. Their roles must therefore come from the authoritative atoms;
+    if the turn contains conflicting or missing roles, keep the event neutral.
+    """
+    candidates = [atom for atom in atoms if atom.source_turn_id == event.detected_at_turn]
+    predicates = _EVENT_ATOM_PREDICATES.get(event.event_family)
+    if predicates:
+        matched = [atom for atom in candidates if atom.predicate in predicates]
+        if matched:
+            candidates = matched
+
+    def consistent(field: str) -> AnalysisActorRole:
+        values = {
+            getattr(atom, field) or "UNKNOWN"
+            for atom in candidates
+            if getattr(atom, field) in {"SUSPECTED_PARTY", "CUSTOMER", "BANK_STAFF", "SYSTEM", "UNKNOWN"}
+        }
+        values.discard("UNKNOWN")
+        return next(iter(values)) if len(values) == 1 else "UNKNOWN"  # type: ignore[return-value]
+
+    return (
+        consistent("speaker_role"),
+        consistent("actor_role"),
+        consistent("target_role"),
+        consistent("reported_by_role"),
+    )
+
+
 def envelope_from_extraction(
     window_result: WindowAnalysisResult,
     context_features: CaseContextFeatures,
@@ -148,15 +187,16 @@ def envelope_from_extraction(
     for index, event in enumerate(window_result.events, start=1):
         label = normalized_event_label(event)
         events_by_turn[event.detected_at_turn].append(label)
-        suspected_action = event.event_family in {"IMPERSONATION", "PSY_STRATEGY", "ACTION_REQUEST", "MONEY_MOVEMENT"}
+        speaker_role, actor_role, target_role, reported_by_role = _event_attribution(event, atoms)
         events.append(AnalysisSignalEvent(
             event_id=f"EVT-{event.detected_at_turn:04d}-{index:04d}",
             event_family=event.event_family, subtype=event.subtype,
             impersonation_group=event.impersonation_group,
             source_turn_id=event.detected_at_turn, normalized_label=label,
-            speaker_role="SUSPECTED_PARTY" if suspected_action else "UNKNOWN",
-            actor_role="SUSPECTED_PARTY" if suspected_action else "UNKNOWN",
-            target_role="CUSTOMER" if suspected_action else "UNKNOWN",
+            speaker_role=speaker_role,
+            actor_role=actor_role,
+            target_role=target_role,
+            reported_by_role=reported_by_role,
             amount_krw=event.amount_krw, is_requested=event.is_requested,
             confidence=0.85,
         ))

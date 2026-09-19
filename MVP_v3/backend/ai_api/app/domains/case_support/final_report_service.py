@@ -41,7 +41,7 @@ class FinalCaseReportService:
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise CaseCopilotAuthenticationError("OPENAI_API_KEY가 설정되지 않아 최종 결과 보고서를 만들 수 없습니다.")
-        model = os.getenv("OPENAI_FINAL_REPORT_MODEL", os.getenv("OPENAI_CASE_WORK_CARD_MODEL", "gpt-4o-mini"))
+        model = os.getenv("OPENAI_FINAL_REPORT_MODEL", os.getenv("OPENAI_CASE_WORK_CARD_MODEL", "gpt-5.6-luna"))
         client = AsyncOpenAI(api_key=api_key, timeout=float(os.getenv("OPENAI_TIMEOUT_SECONDS", "20")))
         try:
             response = await client.responses.create(

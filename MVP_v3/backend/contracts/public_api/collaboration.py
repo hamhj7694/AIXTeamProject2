@@ -9,7 +9,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 MessageChannel = Literal["TEAM", "CUSTOMER", "AI_INTERNAL"]
 MessageAudience = Literal["BANK_INTERNAL", "CUSTOMER"]
-CaseMemberRole = Literal["CASE_OWNER", "CHAT_OPERATOR", "REVIEWER", "VIEWER"]
 CaseAssignmentRole = Literal["SUPERVISOR", "MONITORING", "CONSULTATION", "VIEWER", "HANDOVER_PENDING"]
 PresenceState = Literal["VIEWING", "TYPING", "AWAY", "OFFLINE"]
 
@@ -21,7 +20,6 @@ class PublicCollaborationModel(BaseModel):
 class PublicCaseMemberUpsertRequest(PublicCollaborationModel):
     user_id: str = Field(min_length=1, max_length=64)
     display_name: str = Field(min_length=1, max_length=80)
-    role: CaseMemberRole
     assignment_role: CaseAssignmentRole = "HANDOVER_PENDING"
 
 
@@ -38,7 +36,6 @@ class PublicCaseMemberResponse(PublicCollaborationModel):
     case_id: str
     user_id: str
     display_name: str
-    role: CaseMemberRole
     assignment_role: CaseAssignmentRole = "HANDOVER_PENDING"
     status: Literal["ACTIVE", "REMOVED"]
     assigned_at: str
