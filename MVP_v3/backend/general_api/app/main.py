@@ -1779,7 +1779,9 @@ async def generate_case_work_card(case_id: str, request: PublicWorkCardGenerateR
             ],
             "unresolved_items": [f"{item.priority}: {item.description}" for item in support.unresolved_items[:20]],
             "pending_verifications": [f"{item.get('target')}: {item.get('claim')}" for item in verifications if item.get("status") != "COMPLETED"][:20],
-            "question_candidates": [item.model_dump(mode="python") for item in candidates[:10]],
+            # Public 후보에는 고객 UI 전용 allow_multi_select가 있지만, AI 내부 WorkCardQuestion
+            # 계약에는 없다. 내부 계약에 정의된 필드만 전달해 추천 요청 자체가 422가 되지 않게 한다.
+            "question_candidates": [item.model_dump(mode="python", exclude={"allow_multi_select"}) for item in candidates[:10]],
             "question_state": live_state.model_dump(mode="json") if live_state else None,
         })
         card = CaseWorkCardOutput.model_validate(payload)

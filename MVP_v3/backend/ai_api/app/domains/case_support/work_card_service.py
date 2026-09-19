@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 
@@ -16,6 +17,9 @@ from .copilot_service import (
 )
 from .question_policy import QuestionSource, normalize_question, FOLLOW_UP_PURPOSES, validate_follow_up_question
 from .case_snapshot_adapter import CaseSnapshotAiAdapter
+
+
+logger = logging.getLogger(__name__)
 
 WORK_CARD_SCHEMA = {
     "type": "object", "additionalProperties": False,
@@ -254,20 +258,28 @@ class CaseWorkCardService:
                 "OpenAI 인증에 실패해 실제 AI 서버에 연결할 수 없습니다."
             ) from exc
         except Exception as exc:
+            logger.warning("work_card_failed stage=provider_call error_type=%s", type(exc).__name__)
             raise CaseCopilotProviderError(
                 "실제 AI 서버에 연결하지 못해 AI 카드를 생성하지 않았습니다. 잠시 후 다시 시도해 주세요."
             ) from exc
         try:
             payload = json.loads(response.output_text)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError) as exc:
+            logger.warning("work_card_failed stage=response_parsing error_type=%s", type(exc).__name__)
             raise CaseCopilotProviderError(
                 "AI 서버 응답 형식이 올바르지 않아 카드를 생성하지 않았습니다."
-            )
+            ) from exc
         payload["card_type"] = request.card_type
         payload["model_mode"] = os.getenv("OPENAI_CASE_WORK_CARD_MODEL", "gpt-4o-mini")
         try:
             card = CaseWorkCardOutput.model_validate(_fill_empty_proposal(payload, fallback))
-            if request.card_type == "QUESTION_PLAN":
+        except (TypeError, ValueError) as exc:
+            logger.warning("work_card_failed stage=contract_validation error_type=%s", type(exc).__name__)
+            raise CaseCopilotProviderError(
+                "AI 서버 응답을 검증하지 못해 카드를 생성하지 않았습니다."
+            ) from exc
+        if request.card_type == "QUESTION_PLAN":
+            try:
                 if target and len(card.questions) > 1:
                     raise ValueError("one follow-up per selected parent")
                 normalized_questions = []
@@ -287,8 +299,9 @@ class CaseWorkCardService:
                         "allow_free_text": normalized.allow_free_text,
                     }))
                 card = card.model_copy(update={"questions": normalized_questions})
-            return card
-        except (TypeError, ValueError):
-            raise CaseCopilotProviderError(
-                "AI 서버 응답을 검증하지 못해 카드를 생성하지 않았습니다."
-            )
+            except (TypeError, ValueError) as exc:
+                logger.warning("work_card_failed stage=question_validation error_type=%s", type(exc).__name__)
+                raise CaseCopilotProviderError(
+                    "AI 서버 응답을 검증하지 못해 카드를 생성하지 않았습니다."
+                ) from exc
+        return card

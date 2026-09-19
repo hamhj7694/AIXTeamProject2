@@ -8,17 +8,17 @@ Plan은 구조·문제·의존 관계·완료 기준을 관리하고, 이 Checkl
 
 ## 현재 진행 상태
 
-**현재 전략은 “핵심 Workflow 완성 우선”이다. 작업 1·2는 DONE이며, 작업 2는 CSR 업무성 질문 Browser smoke test로 기능적 사용 가능성을 확인했다.** 세부 AI 품질 문제는 보류 — 기능 안정화 이후 고도화 Backlog로 관리하며, 작업 3~5는 아직 시작하지 않았다.
+**현재 전략은 “핵심 Workflow 완성 우선”이다. 작업 1·2는 DONE이며, 작업 2는 CSR 업무성 질문 Browser smoke test로 기능적 사용 가능성을 확인했다. 작업 3은 REST/MySQL 저장 baseline과 담당자 ROOM 가시성 구현을 마쳤고 Browser 검증을 진행 중이다. 작업 4는 동적 질문 추천의 500 복구, qf1 보호와 연속 담당자 메시지 AI 요청 묶음 처리를 구현했으며 실제 Browser follow-up E2E가 남아 있다. 작업 5는 Context/provenance의 REST·MySQL·회귀 검증을 시작했으며 최신 Context 기반 Live AI와 Browser E2E가 남아 있다.** 세부 AI 품질 문제는 보류 — 기능 안정화 이후 고도화 Backlog로 관리한다.
 
 | 실제 작업 묶음 | 관련 Plan | 현재 상태 |
 |---|---|---|
 | 1. Runtime 확인 + Bank AI 실패 원인 진단 | S0 + S1 원인 진단 / V1·V2·V9 | DONE |
 | 2. Bank AI 최소 수정 + 검증 | S1 수정·복구 | DONE |
-| 3. 질문/답변 저장 흐름 검증 + 담당자 ROOM 가시성 | S2 + S3 | TODO |
-| 4. qf1 수정 + Dynamic Follow-up 흐름 검증 | S4 + S5 follow-up 이후 의미 상태 | TODO |
-| 5. Context / 출처 검증 + 전체 Browser E2E | S5 의미·출처 전달 + S6 | TODO |
+| 3. 질문/답변 저장 흐름 검증 + 담당자 ROOM 가시성 | S2 + S3 | IN_PROGRESS |
+| 4. qf1 수정 + Dynamic Follow-up 흐름 검증 | S4 + S5 follow-up 이후 의미 상태 | IN_PROGRESS |
+| 5. Context / 출처 검증 + 전체 Browser E2E | S5 의미·출처 전달 + S6 | IN_PROGRESS |
 
-문서 작성 시 브랜치는 `feat/b-ai-integration-workflow`, HEAD는 `ed83080fcd5760ba7895d20b950bf47d5b51cc1a`다. 이는 Git 기준 확인이며 실행 중 서버와의 일치 확인은 작업 1에서 수행한다. 시작 시 기존 Plan 파일은 미추적 상태였으며 이번 작업에서 수정하지 않는다.
+작업 3-A 시작 시 브랜치는 `feat/b-ai-integration-workflow`, HEAD는 `a3ba694e3fc877cc8be954849db4d3c611d91adc`다. 이는 Git 기준 확인이며 실행 중 서버와의 일치 확인은 작업 1에서 수행한다. Plan은 이번 작업에서 수정하지 않는다.
 
 ### 진행 우선순위
 
@@ -162,7 +162,7 @@ Plan의 READ-ONLY 분석 참고 사항: qf1 reconciliation 버그(B1), 담당자
 
 ### 3. 질문/답변 저장 흐름 검증 + 담당자 ROOM 가시성
 
-**상태:** TODO
+**상태:** IN_PROGRESS
 
 **관련 Plan:** S2 + S3; G1, V5·V6, Plan 4.3·4.4절.
 
@@ -172,24 +172,39 @@ Plan의 READ-ONLY 분석 참고 사항: qf1 reconciliation 버그(B1), 담당자
 
 **확인/작업 항목:**
 
-- [ ] 여러 질문 등록 후 기존 ASKED가 없는 경우 ASKED 1개와 나머지 PENDING, 순번·중복 보호를 REST/MySQL에서 확인한다.
-- [ ] 고객 답변 저장, ANSWERED 전이, 다음 질문 dispatch, 질문별 답변·payload·근거 read-back을 확인한다.
-- [ ] Fact 후보·Context revision/projection과 추가 처리 실패 시 raw answer 보존, 재시도·충돌 처리를 확인한다.
+- [x] 여러 질문 등록 후 기존 ASKED가 없는 경우 ASKED 1개와 나머지 PENDING, 순번·중복 보호를 REST/MySQL에서 확인한다.
+- [x] 고객 답변 저장, ANSWERED 전이, 다음 질문 dispatch, 질문별 답변·payload·근거 read-back을 확인한다.
+- [x] Fact 후보·Context revision/projection과 추가 처리 실패 시 raw answer 보존, 재시도·충돌 처리를 확인한다.
 - [ ] baseline이 예상과 다르면 차이와 추가 확인 사항을 기록한다. 확인 가능한 동안 IN_PROGRESS, 진행 불가능하면 BLOCKED로 두고 가시성 구현을 진행하지 않는다.
-- [ ] baseline 정상 확인 후 기존 데이터로 등록 수·질문 원문·PENDING/ASKED/ANSWERED·현재 질문·답변·시각을 표시한다. UI 형태를 이 문서에서 미리 정하지 않는다.
-- [ ] 실제 렌더 경로·중복 방지 targeted test, Frontend typecheck/build, 은행·고객 Browser 동시 확인을 수행한다.
+- [x] baseline 정상 확인 후 기존 데이터로 등록 수·질문 원문·PENDING/ASKED/ANSWERED·현재 질문·답변·시각을 표시한다. UI 형태를 이 문서에서 미리 정하지 않는다.
+- [x] 기본·`ai-context-`·`qf1:`·담당자 직접 작성/수정 질문을 등록 이후 동일한 은행 ROOM 질문 카드 경로로 표시하고 생성 방식에 따른 UI 분기를 두지 않는다.
+- [x] 실제 렌더 경로·중복 방지 targeted test와 Frontend typecheck/build를 수행한다.
+- [ ] 은행·고객 Browser 동시 확인을 수행한다.
 
 **완료 조건:** REST/MySQL baseline 증거와 실제 렌더 검증이 모두 있어야 한다. 담당자는 Queue 상태와 질문별 답변을 구분할 수 있고, 고객의 순차 노출이 유지되어야 한다. baseline 불일치를 Frontend 표시로 숨기지 않는다.
 
-**결과:** 미작성
+**결과 (작업 3-A, REST/MySQL baseline):**
 
-**Blocker:** 없음
+- 2026-09-19 KST, 안전한 합성 Case `VP-4`에서 수행했다. 기존 VP-3와 기존 업무 Case는 수정하지 않았다. General API health는 `database=mysql`, AI API health는 `ok`였다.
+- 질문 3건을 등록한 직후 REST와 MySQL `customer_questions`에서 `1:ASKED | 2:PENDING | 3:PENDING`을 확인했다. 순번은 1~3으로 보존됐다.
+- 첫 질문은 구조화된 option payload로 답변했다. 결과는 `ANSWERED`, `answer_payload_json`·`answer_message_id`·`answer_question_version`이 저장됐고, 동일 payload 재시도는 같은 `answer_message_id`를 반환했다. 다른 option으로 다시 답변하면 HTTP 409 `CUSTOMER_ANSWER_CONFLICT`였으며 추가 답변은 저장되지 않았다. 이후 Queue는 `1:ANSWERED | 2:ASKED | 3:PENDING`으로 전이됐다.
+- 두 번째 질문도 구조화된 option payload로 답변했다. Queue는 `1:ANSWERED | 2:ANSWERED | 3:ASKED`가 됐다. REST bank/customer 재조회와 `/bundle?view=bank`의 질문 collection, MySQL 재조회가 모두 이 상태를 보였다.
+- MySQL read-back: ANSWERED 2건 모두 `answer_payload_json`, `answer_message_id`, `answer_question_version`을 보유했다. `case_facts`에는 PROPOSED 2건과 evidence link 2건이 있었고, `case_context_facts_v2`에는 CUSTOMER_STATEMENT 1건, `case_context_projections` 1건, `message_context_extractions` COMPLETED 2건이 있었다. `cases.context_revision`도 존재했다. raw answer는 `answer_text`로 보존됐다.
+- 첫 조회에서 `answer_payload`와 V2의 존재하지 않는 열을 가정한 진단 SQL은 각각 MySQL 1054로 실패했다. 실제 스키마의 열명은 `answer_payload_json`이며 V2 fact에는 `source_question_id` 열이 없다. 이는 애플리케이션 저장 실패가 아니라 진단 쿼리의 잘못된 열명으로 판정했고, 올바른 열명으로 재조회해 위 결과를 확인했다.
+- 기존 MySQL integration unittest는 migration setup 단계에서 2개 class error가 발생해 이 작업의 PASS 증거로 사용하지 않았다. 이 Case의 실제 Runtime REST/MySQL baseline은 정상이며, 해당 test-fixture/migration 환경 문제는 후속 검증에서 별도로 재현·정리한다.
+- 작업 3-B 최소 구현: `SharedConversation`의 실제 담당자 ROOM 렌더 경로가 기존 `QUESTION`/`ANSWER` timeline entry를 제거하고 `MESSAGE`만 렌더하는 단절을 복구했다. 담당자 ROOM의 고객 소통 패널은 질문 순번·원문과 `PENDING`(고객 노출 전)·`ASKED`(현재 고객에게 표시 중)·`ANSWERED`(답변 수신)를 구분한다. ANSWERED는 질문 카드와 별도 고객 답변 카드로 `answer_text`와 `answered_at`을 연결해 표시하며, 고객 진술이 확정 사실이 아님을 유지한다.
+- `asked_at`이 없는 PENDING은 기존 timeline에 없으므로 bank view에만 Queue entry로 추가했다. 고객 ROOM은 별도 `CustomerConversation` 경로를 그대로 사용해 ASKED 1건만 순차 노출하는 기존 동작을 변경하지 않았다. question/answer의 일반 message는 기존 timeline 중복 제거 후 카드로 단 한 번만 렌더된다.
+- 질문 생성 방식 통합 검증: 등록된 질문은 `bundle.questions`만으로 카드를 만들기 때문에 기본·`ai-context-`·`qf1:`·`staff-` 여부를 표시 단계에서 구분하지 않는다. 데이터 fixture에서 네 종류의 ASKED/ANSWERED/PENDING 카드를 모두 생성하고, qf1 답변 카드 연결, 고객 질문/답변 원본 MESSAGE 제거, TEAM 메시지 분리를 확인했다. 질문 등록 성공 직후에는 `QuestionDialog onDone → refreshAfterMutation → bundle?view=bank`로 재조회한다.
+- 검증: `node scripts/test-question-report-cards.cjs` 24 checks, `npm.cmd run typecheck`, `npm.cmd run build`를 통과했다. 처음 sandbox build는 Vite/esbuild 경로 접근 제한으로 실패했으며, 동일 build를 승인된 환경에서 재실행해 성공했다.
+- Codex Browser surface는 사용할 수 없어 실제 담당자·고객 ROOM 동시 렌더와 새로고침은 **NOT VERIFIED**다. 이 결과를 Browser PASS로 대체하지 않는다.
 
-**다음 작업:** 작업 4.
+**Blocker:** 없음. 작업 3-A baseline에서 기능 불일치는 확인되지 않았다.
+
+**다음 작업:** 작업 3/4 Browser 검증 — 담당자 ROOM의 PENDING/ASKED/ANSWERED·답변·답변 시각, 고객 ROOM의 ASKED 단일 순차 노출, AI 동적 추천의 검토·선택 후 등록 및 새로고침 후 유지 확인.
 
 ### 4. qf1 수정 + Dynamic Follow-up 흐름 검증
 
-**상태:** TODO
+**상태:** IN_PROGRESS
 
 **관련 Plan:** S4 + S5의 follow-up 이후 의미 상태 검증; B1, V3·V4·V7, Plan 4.5절.
 
@@ -199,7 +214,7 @@ Plan의 READ-ONLY 분석 참고 사항: qf1 reconciliation 버그(B1), 담당자
 
 **확인/작업 항목:**
 
-- [ ] 확인된 reconciliation 버그를 최소 수정하고 생성 직후·재조회·모달 재열기에서 qf1 초안과 선택 상태를 보존한다.
+- [x] 확인된 reconciliation 버그를 최소 수정하고 생성 직후·후보 재조회에서 qf1 초안과 선택 상태를 보존한다.
 - [ ] 담당자 편집·선택 과정에서 target/parent를 유지하고, 추천만으로 고객에게 전송하지 않는지 확인한다.
 - [ ] stale parent·잘못된 parent·동일 scope active 질문·중복 follow-up의 서버 거부를 targeted test와 REST로 확인한다.
 - [ ] Live AI 추천 → 담당자 등록 → 고객 Queue 노출 → 답변 흐름을 Browser에서 검증한다.
@@ -208,15 +223,31 @@ Plan의 READ-ONLY 분석 참고 사항: qf1 reconciliation 버그(B1), 담당자
 
 **완료 조건:** reconciliation targeted test뿐 아니라 REST·MySQL·Live AI·Browser의 전체 follow-up 흐름과 이후 의미 상태 재평가 증거가 있어야 한다. **화면에서 qf1이 사라지지 않는 것만으로 DONE 처리하지 않는다.**
 
-**결과:** 미작성
+**결과:**
 
-**Blocker:** 없음
+- 2026-09-19 KST, 담당자 ROOM의 `AI에게 질문 추천 받기`가 General `POST /api/cases/{case_id}/ai/work-cards`에서 HTTP 500이 되던 경로를 진단했다. Public 후보의 `allow_multi_select`가 strict 내부 `WorkCardQuestion` 계약에는 없어서 AI API가 422를 반환했고, General client가 list 형식의 FastAPI `detail`에 dictionary `.get()`을 호출해 500으로 변환했다.
+- General은 내부 WorkCard 계약 필드만 AI에 전달하도록 `allow_multi_select`를 제외했고, client는 list 형식의 validation detail도 `AiServiceError`로 처리하도록 보완했다. 기존 Public API, 질문 대기열, DB schema와 자동 발송 동작은 변경하지 않았다.
+- 현재 8100 Runtime에서 안전한 합성 Case `VP-4`의 `QUESTION_PLAN` 요청을 다시 실행했다. HTTP 200, `gpt-4o-mini`, 질문 1건 반환을 확인했다. 추천 생성 요청만 수행했으며 고객 질문 등록·발송은 발생시키지 않았다. 응답 원문과 Case 원문은 기록하지 않았다.
+- 같은 Runtime의 추가 호출 4회 중 2회는 HTTP 200(질문 1건), 2회는 AI 응답 검증 단계의 HTTP 503이었다. 500 계약 오류의 재발은 없었고, 이 503은 criterion identifier가 응답에 제공되지 않아 원인을 확정할 수 없다. 반복 경계의 원인을 확인하지 않은 상태에서 evaluator/provider 동작은 수정하지 않는다.
+- 503 안정화 진단: 기존 AI work-card 경로는 provider 호출 뒤 `response parsing`·`WorkCard contract validation`·`QUESTION_PLAN question policy validation`을 같은 `AI_WORK_CARD_FAILED` 503으로 합쳐 실패 단계를 알 수 없었다. `work_card_service`에 provider 원문·prompt·Case ID·답변·Evidence를 기록하지 않는 `stage`와 exception type 전용 WARNING을 추가했다. 가능한 stage는 `provider_call`, `response_parsing`, `contract_validation`, `question_validation`이다.
+- 현재 checkout을 18100(General)·18101(AI)의 격리 Runtime으로 실행하고 안전 합성 Case `VP-4`의 동일 QUESTION_PLAN을 5회 반복했다. 모든 호출은 General HTTP 200 → AI HTTP 200 → `gpt-4o-mini` 질문 1건으로 통과했고, AI log에 failure stage는 없었다. 마지막 추가 호출도 HTTP 200이었고 customer question Queue 수는 `3 → 3`으로 변하지 않았다.
+- **최초 503 원인은 이번 재현에서는 확정되지 않았다.** 이전 Runtime의 안전 stage log가 없고, 현재 checkout에서는 5회 반복 실패가 재현되지 않았다. 따라서 안전 정책·evaluator·prompt·retry 계약을 추측으로 수정하지 않았다. 새 stage log가 있는 Runtime에서 재발하면 최초 실패 단계를 기준으로만 후속 최소 수정을 판단한다.
+- 요청 입력은 기존 `question_state`와 `known_facts`에 최신 질문 상태·답변·직원 미발송 초안을 포함한다. 서버의 contextual filter는 ANSWERED/PENDING/ASKED 질문과 active target/text를 중복 제거하고, 허용된 uncertain parent에서만 `qf1:` 후속 초안을 허용한다. 기본 후보는 AI 장애 시 수동 검토용 fallback으로 유지한다.
+- Frontend reconciliation은 `ai-context-`와 `qf1:` 초안을 authoritative 후보 재조회 뒤에도 보존하도록 수정했다. 동적으로 받은 초안에는 `AI 동적 추천` 표식을 표시한다. 추천 handler에는 `queueQuestions` 호출이 없고, 선택한 초안은 담당자가 `선택한 질문 ... 전달`을 눌렀을 때만 등록된다.
+- 검증: `node scripts/test-question-dialog-stabilization.cjs`(qf1 보존·선택 상태, 최신 후보 재조회, 추천 단계 자동 등록 없음), `node scripts/test-question-report-cards.cjs`(24 checks; 기본/동적/qf1/직접 질문 카드 통합과 중복 제거 포함), `npm.cmd run typecheck`, `npm.cmd run build`가 통과했다. `test_contextual_question_plan.py`에는 internal payload에서 `allow_multi_select` 배제를 확인하는 회귀 assertion을 추가했다.
+- 2026-09-19 재검증에서 sandbox 밖의 기존 `.venv` Python 3.11.9를 사용해 contextual/dynamic QUESTION_PLAN, question policy/state, General qf1·answer lifecycle·structured Fact 관련 **75 tests가 통과**했다. Context snapshot/display/population/question recommendation 관련 unittest도 **26 tests가 통과**했다. 별도의 pytest 기반 grounding 모듈 2개는 환경에 `pytest`가 없어 import 단계에서 미실행이며 PASS로 세지 않는다.
+- qf1 parent/target과 서버 보호는 targeted regression에서 `qf1:<canonical-scope>:<parent-question-id>` 보존, stale/없는/다른 Case parent 거부, 동일 scope active/동일 follow-up 중복 방지, malformed batch rollback, parent Fact 비변경과 child PROPOSED Fact 추가를 통과했다. 실제 MySQL `VP-4`에는 아직 qf1 child가 등록되지 않아 parent/child **실데이터 E2E는 NOT VERIFIED**다.
+- 연속 담당자 메시지의 최초 1건당 AI 호출 지점은 `CaseRoomPage.deliverMessage` 뒤의 직접 `enqueueAiReply`였다. 각 MESSAGE 저장 Promise를 `ConsecutiveAiBatcher`에 연결하고 1.2초 debounce, Case/requester별 pending group, 단일 drain을 적용했다. TEAM 텍스트 전송은 MESSAGE 저장 중에도 이어서 할 수 있지만 수동 AI 작업 버튼의 기존 busy 보호는 유지한다. 저장 성공한 원본만 작성 순서대로 `[현재 요청 - 연속 메시지]`에 포함하고, AI 실행 중 추가 입력은 현재 응답 뒤 다음 묶음으로 직렬 처리한다. 저장 실패 후 재시도도 새 저장 Promise로 다시 연결하며, 새로고침 시 메모리 queue를 폐기해 과거 DB 메시지를 자동 재호출하지 않는다.
+- `node scripts/test-consecutive-ai-batching.cjs`에서 Scenario A~E를 통과했다. 연속 3건은 저장 완료 후 AI invocation 1회, 입력 순서 유지, 실행 후 새 입력은 별도 요청, in-flight 추가 2건은 병렬 없이 다음 1회, 다른 Case/requester 분리, 재접속 시 과거 메시지 재호출 없음, 저장 실패 메시지 제외를 확인했다. 실제 AI_RESPONSE 수와 DB MESSAGE 수의 Browser/Runtime 확인은 **NOT VERIFIED**다.
+- Codex Browser surface를 사용할 수 없어 실제 모달 클릭, 고객 ROOM 순차 노출, 모달 재열기·새로고침 Browser E2E는 **NOT VERIFIED**다.
 
-**다음 작업:** 작업 5.
+**Blocker:** 현재 checkout의 5회 Runtime 반복은 안정적으로 통과했다. 다만 과거 503의 최초 stage는 당시 안전 로그 부재로 미확정이며, Browser E2E도 아직 미검증이다.
+
+**다음 작업:** Browser에서 안전한 Case로 (1) 원격 제어 앱 설치 또는 송금 완료 parent 질문을 답변하고, (2) 담당자 ROOM에서 `AI에게 질문 추천 받기`를 누르고, (3) parent 재질문 없이 `qf1:` 후속 질문이 `AI 동적 추천`으로 보이는지 확인하고, (4) 편집·선택 후에만 등록되는지, (5) 고객 ROOM에는 ASKED 한 건만 순차 노출되는지, (6) 새로고침/모달 재열기 뒤에도 초안·질문/답변이 유지되는지 확인한다. 이후 target parent·중복·semantic state의 REST/MySQL 검증을 진행한다.
 
 ### 5. Context / 출처 검증 + 전체 Browser E2E
 
-**상태:** TODO
+**상태:** IN_PROGRESS
 
 **관련 Plan:** S5의 의미·출처 전달 검증 + S6; G2, V6·V7·V8, Plan 4.6·8·9절.
 
@@ -238,16 +269,40 @@ Plan의 READ-ONLY 분석 참고 사항: qf1 reconciliation 버그(B1), 담당자
 
 ```text
 Case Context → Bank AI → 질문 추천 → 담당자 검토/수정
-→ 고객 질문 등록 → 고객 질문 노출 → 고객 답변 → Context 갱신
-→ qf1 / 다음 질문 → 갱신된 Context 기반 다음 Bank AI
+→ 고객 질문 등록 → 은행 ROOM 고객 소통 질문 카드(PENDING/ASKED)
+→ 고객 ROOM ASKED 1건 노출 → 고객 답변
+→ 은행 ROOM 동일 질문 ANSWERED + 답변/답변 시각
+→ 다음 질문 ASKED → Context 갱신
+→ qf1도 동일 카드 흐름 → 갱신된 Context 기반 다음 Bank AI
+→ 새로고침 후 질문·상태·답변·답변 시각 유지
 ```
 
-**결과:** 미작성
+**결과:**
 
-**Blocker:** 없음
+- Runtime은 Frontend `5176`, General `8100`, AI `8101`, MySQL `3306`에서 실행 중이며 health는 General `status=ok, database=mysql`, AI `status=ok`다. Frontend와 두 API process는 현재 `MVP_v3` 경로의 Vite/uvicorn module을 사용한다.
+- 안전 합성 Case `VP-4`의 REST bank bundle과 MySQL을 읽기 전용 트랜잭션으로 대조했다. 질문은 `1:ANSWERED`, `2:ANSWERED`, `3:ASKED`이며 ANSWERED 2건 모두 raw answer, `answer_message_id`, `answered_at`을 보유한다. parent/child qf1 row는 아직 없다.
+- MySQL `cases.context_revision=43`, `case_context_projections.generation_status=CURRENT`, `last_success_revision=43`, schema `case-support.v3`로 source/projection revision이 일치했다. `message_context_extractions`는 `COMPLETED` 8건이다.
+- legacy `case_facts`의 고객 답변 연결 2건은 `PROPOSED`와 `source_question_id`·evidence message를 유지한다. typed Context에는 `device.remote_control_app / CUSTOMER_STATEMENT / PROPOSED`와 evidence 1건이 있으며 `CONFIRMED`·`VERIFIED`로 자동 승격되지 않았다. 초기 진단 기반 항목은 `AI_EXTRACTION / PROPOSED`로 구분된다. BANK_RECORD·STAFF 확인·OFFICIAL_VERIFICATION 및 current/superseded 실제 행 비교는 이 Case 데이터에 없어 **NOT VERIFIED**다.
+- 코드와 targeted regression은 다음 Bank AI/QUESTION_PLAN이 호출 시 DB의 최신 질문·답변·Fact·Context를 다시 읽고, CUSTOMER_STATEMENT를 검증 사실로 바꾸지 않는 경계를 확인했다. 다만 이번 턴의 `VP-4` Live QUESTION_PLAN POST는 자동 승인 검토가 Case 맥락의 외부 provider 전송과 부수효과 가능성을 이유로 거절해 실행하지 않았다. 기존 현재-checkout 격리 Runtime의 QUESTION_PLAN 5회 연속 200 기록은 유지하지만, 이번 Context revision 43을 사용한 다음 Bank AI Live 응답은 **NOT VERIFIED**다.
+- Frontend 검증은 질문 카드 24 checks, 기본/동적/qf1/직접 질문 통합 카드와 중복 제거, dialog qf1 reconcile/자동 등록 금지, 연속 메시지 batching A~E, `npm.cmd run typecheck`, production build가 통과했다. Codex Browser surface는 없어 전체 Browser E2E·새로고침·재접속은 **NOT VERIFIED**다.
 
-**다음 작업:** 모든 완료 조건과 증거를 정리해 Integration 완료 보고. 새 범위를 자동으로 추가하지 않는다.
+**Blocker:** Browser surface 부재로 작업 3~5의 실제 화면 완료 조건을 확인할 수 없다. 작업 5의 최신 Context 기반 Live AI 재호출은 자동 승인 검토가 외부 provider 전송 위험을 이유로 거절했다. 기능 오류로 확인된 새 blocker는 없다.
+
+**다음 작업:** 한 안전 Case에서 아래 최종 Browser 시나리오를 수행하고, 생성된 parent/child·AI_RESPONSE를 REST/MySQL로 재조회해 작업 3~5 DONE gate를 판정한다. 새 범위를 자동으로 추가하지 않는다.
+
+**최종 Browser 시나리오:**
+
+1. 담당자가 AI 동적 추천 질문을 선택·필요 시 수정하고 실제 고객에게 전달한다.
+2. 은행 ROOM 고객 소통 영역에 질문 카드가 생성되고 순번·원문·ASKED 상태가 보이는지 확인한다.
+3. 고객 ROOM에는 현재 ASKED 질문 한 건만 보이고 PENDING은 미리 노출되지 않는지 확인한다.
+4. 고객이 답변하면 은행 ROOM의 같은 질문이 ANSWERED로 바뀌고 고객 답변·답변 시각이 연결되는지 확인한다.
+5. 일반 채팅 MESSAGE와 질문/답변 카드가 중복 표시되지 않는지 확인한다.
+6. 다음 PENDING 질문이 ASKED로 전환되는지 확인한다.
+7. qf1 follow-up을 추천·검토·등록하고 같은 질문 카드 흐름으로 표시되는지 확인한다.
+8. qf1 고객 답변 뒤 Context revision/provenance와 다음 Bank AI 입력이 갱신되는지 확인한다.
+9. 담당자 ROOM과 고객 ROOM을 새로고침해 질문·상태·답변·답변 시각이 동일하게 복원되는지 확인한다.
+10. 기본 질문과 담당자 직접 작성/수정 질문도 동일 카드·Queue lifecycle을 사용하는지 확인한다.
 
 ## 이번 문서 작성의 범위
 
-Checklist 작성 이후 작업 1을 완료했다. 작업 2에서는 `unsupported_certainty` 오탐 수정, requester 구조 전달·현재 질문 우선 처리, `REQUESTER_LOOKUP` 중복 수정과 criterion-only 안전 로그를 구현하고 자동 회귀 및 synthetic AI REST·Live provider를 통과했다. 사용자 VP-3 Browser smoke에서 업무성 질문 4건의 성공·AI_RESPONSE 표시·새로고침 후 유지를 확인해 작업 2는 DONE이다. **작업 2 완료 — commit checkpoint 도달.** 세부 AI 품질은 고도화 Backlog로 보류하며, 작업 3~5는 TODO다.
+Checklist 작성 이후 작업 1·2를 완료했다. 작업 2에서는 `unsupported_certainty` 오탐 수정, requester 구조 전달·현재 질문 우선 처리, `REQUESTER_LOOKUP` 중복 수정과 criterion-only 안전 로그를 구현하고 사용자 VP-3 Browser smoke까지 통과했다. **작업 2 완료 — commit checkpoint 도달.** 작업 3은 REST/MySQL baseline과 담당자 ROOM 가시성 최소 구현까지 완료했으며 Browser 동시 검증을 기다리는 IN_PROGRESS다. 작업 4는 질문 추천 500 복구, qf1 초안 보존·서버 보호 회귀, 연속 메시지 AI 요청 묶음 처리를 완료했지만 실제 parent/child MySQL·Browser follow-up E2E가 남아 IN_PROGRESS다. 작업 5는 Context revision/projection과 CUSTOMER_STATEMENT provenance를 REST/MySQL/회귀로 확인했으나 최신 Context 기반 Live AI와 전체 Browser E2E가 남아 IN_PROGRESS다. 세부 AI 품질은 고도화 Backlog로 보류한다.

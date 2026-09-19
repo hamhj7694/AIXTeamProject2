@@ -127,8 +127,11 @@ class HttpDiagnosisAiClient:
             async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
                 response = await client.post(f"{self.base_url}/ai/work-cards/generate", json=payload)
                 if not response.is_success:
-                    detail = response.json().get("detail", {})
-                    message = detail.get("message", "AI 업무 카드를 만들지 못했습니다.")
+                    # FastAPI request-validation errors use a list for detail. Treat that
+                    # as an AI service error instead of raising AttributeError in General.
+                    response_payload = response.json()
+                    detail = response_payload.get("detail", {}) if isinstance(response_payload, dict) else {}
+                    message = detail.get("message", "AI 업무 카드를 만들지 못했습니다.") if isinstance(detail, dict) else "AI 업무 카드 요청 형식이 올바르지 않습니다."
                     if response.status_code == 429:
                         raise AiServiceQuotaError(message)
                     if response.status_code == 401:

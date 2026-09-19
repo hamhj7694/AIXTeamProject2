@@ -3,10 +3,11 @@ import { Bookmark, Bot, CheckCircle2, CircleDot, Download, FileText, Landmark, M
 import { casesApi, CURRENT_BANK_USER } from '../api/cases';
 import type { CaseAction, CaseEvent, CaseMessage, CustomerQuestion, InitialReport, InitialReportSection, VerificationTask } from '../api/types';
 import { actionLabel, formatClock, verificationStatusLabel } from '../presentation';
-import { buildTimeline, type TimelineEntry } from '../timeline';
+import type { TimelineEntry } from '../timeline';
 import type { CaseBundle } from '../api/types';
 import type { BankBookmark } from '../bank/bookmarks';
 import { eventLabel, userText, questionAnswerLabel } from '../userText';
+import { buildConversationEntries } from '../bank/conversationEntries';
 import { SafeMarkdown } from './SafeMarkdown';
 
 interface Props {
@@ -161,7 +162,11 @@ const EntryCard: React.FC<{ entry: TimelineEntry; bookmark: React.ReactNode; onE
   if (entry.kind === 'MESSAGE') return <MessageEntry message={entry.data as CaseMessage} bookmark={bookmark} onRetry={onRetryMessage} onDismiss={onDismissMessage}/>;
   if (entry.kind === 'QUESTION' || entry.kind === 'ANSWER') {
     const question = entry.data as CustomerQuestion;
-    if (entry.kind === 'QUESTION') return <article className="question-dispatch-card"><MessageCircleQuestion size={15}/><div><div className="entry-meta"><b>고객에게 확인 질문 발송</b>{bookmark}<time>{formatClock(entry.occurredAt)}</time></div><p>{question.question_text}</p></div><span>{question.status === 'ANSWERED' ? '답변 수신' : '답변 대기'}</span></article>;
+    if (entry.kind === 'QUESTION') {
+      const status = question.status === 'PENDING' ? '대기' : question.status === 'ASKED' ? '현재 고객에게 표시 중' : question.status === 'ANSWERED' ? '답변 수신' : '건너뜀';
+      const occurredAt = question.asked_at ? formatClock(entry.occurredAt) : '고객 노출 전';
+      return <article className="question-dispatch-card" data-question-status={question.status}><MessageCircleQuestion size={15}/><div><div className="entry-meta"><b>고객 확인 질문 · {question.sequence}번</b>{bookmark}<time>{occurredAt}</time></div><p>{question.question_text}</p></div><span>{status}</span></article>;
+    }
     return <article className="timeline-card question-card is-complete"><div className="timeline-card-icon"><CheckCircle2 size={17}/></div><div><div className="entry-meta"><b>고객 답변</b>{bookmark}<time>{formatClock(entry.occurredAt)}</time></div><p className="timeline-title">{question.question_text}</p><p className="timeline-result">{questionAnswerLabel(question.answer_text ?? '', question.options)}</p><small>담당자 확인 전 고객 진술입니다.</small></div></article>;
   }
   if (entry.kind === 'FINAL_REPORT') {
@@ -186,17 +191,7 @@ export const SharedConversation: React.FC<Props> = ({ bundle, view, channel, com
   const scrollRef = useRef<HTMLDivElement>(null);
   const initialized = useRef(false);
   const followLatest = useRef(true);
-  const entries = useMemo(
-    // Foundation mode keeps the conversation as messages only. Questions,
-    // verification tasks, actions, reports, and technical events wait for the
-    // new frontend View Model instead of rendering legacy cards.
-    () => buildTimeline(bundle, view === 'timeline').filter((entry) => {
-      if (entry.kind !== 'MESSAGE') return false;
-      const message = entry.data as CaseMessage;
-      return channel === 'CUSTOMER' ? message.channel === 'CUSTOMER' : message.channel !== 'CUSTOMER';
-    }),
-    [bundle, channel, view],
-  );
+  const entries = useMemo(() => buildConversationEntries(bundle, view, channel), [bundle, channel, view]);
   const latestEntry = entries[entries.length - 1];
   const latestEntryKey = latestEntry ? `${latestEntry.id}:${latestEntry.occurredAt}` : 'empty';
   useEffect(() => {
@@ -211,7 +206,7 @@ export const SharedConversation: React.FC<Props> = ({ bundle, view, channel, com
     <header className="conversation-channel-header"><strong>{channelLabel}</strong>{!collapsed && <span>{channel === 'CUSTOMER' ? '고객에게 공개되는 대화' : '은행 담당자만 보는 대화'}</span>}<button type="button" className="conversation-channel-toggle" onClick={onToggleCollapse} disabled={collapseDisabled} aria-label={collapsed ? `${channelLabel} 열기` : `${channelLabel} 접기`} title={collapseDisabled ? '다른 채팅창을 먼저 열어 주세요.' : undefined}><CollapseIcon size={15}/></button></header>
     {collapsed ? <div className="conversation-channel-collapsed"><span>{channel === 'CUSTOMER' ? '고객' : '내부'}</span><small>채팅창 열기</small></div> : <>
       <div ref={scrollRef} onScroll={(event) => { const node = event.currentTarget; followLatest.current = node.scrollHeight - node.scrollTop - node.clientHeight < 80; }} className="conversation-scroll" aria-live="polite">
-        {entries.length === 0 ? <div className="conversation-empty">아직 대화 기록이 없습니다.</div> : entries.map((entry) => <div id={`${channel.toLowerCase()}-${entry.id}`} className="bank-timeline-entry" key={entry.id}><MessageEntry message={entry.data as CaseMessage} bookmark={<EntryBookmark entry={entry} active={bookmarkedIds.has(entry.id)} onToggle={onToggleBookmark}/>} onRetry={onRetryMessage} onDismiss={onDismissMessage}/></div>) }
+        {entries.length === 0 ? <div className="conversation-empty">아직 대화 기록이 없습니다.</div> : entries.map((entry) => <div id={`${channel.toLowerCase()}-${entry.id}`} className="bank-timeline-entry" key={entry.id}><EntryCard entry={entry} bookmark={<EntryBookmark entry={entry} active={bookmarkedIds.has(entry.id)} onToggle={onToggleBookmark}/>} onEditVerification={() => undefined} onRetryMessage={onRetryMessage} onDismissMessage={onDismissMessage}/></div>) }
       </div>
       {composer}
     </>}
