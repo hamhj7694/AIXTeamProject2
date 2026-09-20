@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertCircle, Bookmark, CheckCircle2, Clock3, Loader2, PanelRightClose, PanelRightOpen, RefreshCw, RotateCcw, StickyNote, Trash2, Users } from 'lucide-react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { casesApi, CURRENT_BANK_USER } from '../api/cases';
+import { isApiErrorCode } from '../api/client';
 import type { CaseBundle, CaseFact, CaseMessage, CaseSupportSnapshot, StoredCase, VerificationTask } from '../api/types';
 import { ActionDialog, QuestionDialog, VerificationDialog } from '../components/CaseActionDialogs';
 import { AdminCaseDialog } from '../components/AdminCaseDialog';
@@ -17,7 +18,7 @@ import { ParticipantManager } from '../components/ParticipantManager';
 import { CaseAssignmentDialog } from '../components/CaseAssignmentDialog';
 import { readBankBookmarks, writeBankBookmarks, type BankBookmark } from '../bank/bookmarks';
 import { stripBankAiMention } from '../bank/aiMention';
-import { buildConsecutiveAiPrompt, ConsecutiveAiBatcher } from '../bank/consecutiveAiBatch';
+import { buildConsecutiveAiPrompt, ConsecutiveAiBatcher, type AiBatchControl } from '../bank/consecutiveAiBatch';
 import { generateUuid } from '../uuid';
 import { mergePendingMessages, removeMessage, upsertMessage } from '../api/messageState';
 import { caseState, caseStateTone, incidentTitle, statusLabel } from '../presentation';
@@ -91,7 +92,7 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
   const lastSupportRevisionRef = useRef('');
   const aiQueueRef = useRef<Promise<void>>(Promise.resolve());
   const aiBatcherRef = useRef<ConsecutiveAiBatcher | null>(null);
-  const enqueueAiReplyRef = useRef<(prompt?: string, responseStyle?: 'CONVERSATIONAL' | 'BRIEF') => Promise<void>>(async () => undefined);
+  const enqueueAiReplyRef = useRef<(prompt?: string, responseStyle?: 'CONVERSATIONAL' | 'BRIEF', sourceMessageIds?: string[], control?: AiBatchControl) => Promise<void>>(async () => undefined);
   const aiGenerationRef = useRef(0);
   const activeCaseIdRef = useRef(caseId);
   activeCaseIdRef.current = caseId;
@@ -188,17 +189,17 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
     } : current);
   };
 
-  const enqueueAiReply = useCallback((prompt?: string, responseStyle: 'CONVERSATIONAL' | 'BRIEF' = 'CONVERSATIONAL') => {
+  const enqueueAiReply = useCallback((prompt?: string, responseStyle: 'CONVERSATIONAL' | 'BRIEF' = 'CONVERSATIONAL', sourceMessageIds: string[] = [], control?: AiBatchControl) => {
     const generation = aiGenerationRef.current;
     const targetCaseId = caseId;
-    setAiPendingCount((count) => count + 1);
     const run = async () => {
-      if (aiGenerationRef.current !== generation || activeCaseIdRef.current !== targetCaseId) return;
+      if (aiGenerationRef.current !== generation || activeCaseIdRef.current !== targetCaseId || control?.isSuperseded()) return;
+      setAiPendingCount((count) => count + 1);
       try {
         // TEAM은 고객에게 공개되지 않는 은행 내부 채널이며, 응답도 같은
         // 타임라인에 표시된다. AI는 호출 시점에 DB의 최신 Case를 다시 읽는다.
-        const reply = await casesApi.invokeAi(targetCaseId, prompt, 'TEAM', responseStyle);
-        if (aiGenerationRef.current === generation) {
+        const reply = await casesApi.invokeAi(targetCaseId, prompt, 'TEAM', responseStyle, sourceMessageIds, control?.signal);
+        if (aiGenerationRef.current === generation && !control?.isSuperseded()) {
           loadRequestRef.current += 1;
           showMessage({
             message_id: reply.message_id,
@@ -218,9 +219,11 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
             attachments: [],
             created_at: reply.created_at,
           });
-          await load(true, false);
+          void load(true, false);
         }
       } catch (reason) {
+        if (isApiErrorCode(reason, 'AI_GENERATION_STALE')) { control?.supersedeIfPending(); return; }
+        if (control?.isSuperseded()) return;
         if (aiGenerationRef.current === generation) {
           setError(reason instanceof Error ? `메시지는 저장됐지만 실제 AI 서버가 응답하지 않았습니다. 임의 답변은 생성하지 않았습니다. ${reason.message}` : '메시지는 저장됐지만 실제 AI 서버가 응답하지 않았습니다. 임의 답변은 생성하지 않았습니다.');
         }
@@ -237,8 +240,10 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
 
   useEffect(() => {
     aiBatcherRef.current?.dispose();
-    aiBatcherRef.current = new ConsecutiveAiBatcher(async (messages) => {
-      await enqueueAiReplyRef.current(buildConsecutiveAiPrompt(messages));
+    aiBatcherRef.current = new ConsecutiveAiBatcher(async (messages, control) => {
+      await enqueueAiReplyRef.current(
+        buildConsecutiveAiPrompt(messages), 'CONVERSATIONAL', messages.map((message) => message.messageId), control,
+      );
     });
     aiGenerationRef.current += 1;
     aiQueueRef.current = Promise.resolve();
@@ -297,7 +302,7 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
       if (!(item.target === 'TEAM' && item.requestAi && item.content)) {
         window.requestAnimationFrame(() => { if (isCurrent()) void load(true, false); });
       }
-      return true;
+      return message;
     } catch (reason) {
       const failed = {
         ...item.message,
@@ -311,14 +316,14 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
       return false;
     } finally { if (isCurrent()) setBusy(false); }
   };
-  const queueBatchedAi = (item: BankOutboxItem, saved: Promise<boolean>) => {
+  const queueBatchedAi = (item: BankOutboxItem, saved: Promise<CaseMessage | false>) => {
     if (item.target !== 'TEAM' || !item.requestAi || !item.content) return;
     aiBatcherRef.current?.enqueue({
       caseId: item.message.case_id,
       requesterUserId: CURRENT_BANK_USER.user_id,
       messageId: item.message.client_request_id!,
       content: stripBankAiMention(item.content) || '현재 사건에서 가장 시급하게 확인하거나 조치할 사항을 알려주세요.',
-      saved,
+      saved: saved.then((message) => message ? { messageId: message.message_id, createdAt: message.created_at } : false),
     });
   };
   const send = (content: string, files: File[], target: ComposerTarget, requestAi: boolean): Promise<void> => {

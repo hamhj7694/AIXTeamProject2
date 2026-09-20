@@ -69,6 +69,7 @@ class PublicAiInvocationRequest(PublicCollaborationModel):
     requester_user_id: str = Field(min_length=1, max_length=64)
     requester_display_name: str = Field(min_length=1, max_length=80)
     client_request_id: str | None = Field(default=None, max_length=100)
+    source_message_ids: list[str] = Field(default_factory=list, max_length=100)
 
 
 class PublicAiInvocationResponse(PublicCollaborationModel):
@@ -93,3 +94,4 @@ class PublicCustomerAiReplyRequest(PublicCollaborationModel):
     requester_display_name: str = Field(min_length=1, max_length=80)
     reply_to_message_id: str = Field(min_length=1, max_length=64)
     client_request_id: str | None = Field(default=None, max_length=100)
+    source_message_ids: list[str] = Field(default_factory=list, max_length=100)
