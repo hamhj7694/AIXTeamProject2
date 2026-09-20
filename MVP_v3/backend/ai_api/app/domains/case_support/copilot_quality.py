@@ -18,6 +18,8 @@ class QualityCheck:
     criterion: str
     passed: bool
     reason: str
+    # 운영 결과에는 영향을 주지 않는 개발용 세부 판정 식별자
+    rule: str | None = None
 
     @property
     def status(self) -> Literal["PASS", "FAIL"]:
@@ -235,21 +237,36 @@ class CopilotQualityEvaluator:
             receipts = [ref for fact in active if scope is None or cls._scope_matches(scope, fact.semantic_key)
                         for ref in fact.evidence_refs if ref.type in {"ATTACHMENT", "BANK_TRANSACTION"}
                         and ref.summary and cls._grounding_terms(sentence) & cls._grounding_terms(ref.summary)]
-            unsupported = (
-                (bank_claim and not banks)
-                or (receipt_claim and not receipts)
-                or (official and not matching_verified)
-                or (staff_claim and not staff)
-                or (direct_transfer and not attributed and not staff_claim and not banks and not matching_verified)
-                or (attributed and direct_transfer and not statements)
-                or (certainty and attributed and cls._STATEMENT_CONFIRMATION.fullmatch(sentence.strip()) is None)
-                or (certainty and not attributed and not staff_claim and not banks and not matching_verified
-                    and not any(row[3] == "CONFIRMED" and row[4] and row[2] != "CUSTOMER_STATEMENT" for row in matching))
-                or (conflict and (certainty or direct_transfer) and not attributed and not absence)
-                or any(marker in sentence for marker in cls._UNSUPPORTED_CERTAINTY[:3])
-            )
-            if unsupported:
-                return QualityCheck("unsupported_certainty", False, "해당 주장에 대응하는 source/status/scope 근거가 없거나 충돌합니다.")
+            rule = None
+            if bank_claim and not banks:
+                rule = "bank_claim_without_confirmed_bank_record"
+            elif receipt_claim and not receipts:
+                rule = "receipt_claim_without_evidence"
+            elif official and not matching_verified:
+                rule = "official_claim_without_linked_verification"
+            elif staff_claim and not staff:
+                rule = "staff_claim_without_confirmed_staff_source"
+            elif direct_transfer and not attributed and not staff_claim and not banks and not matching_verified:
+                rule = "direct_transfer_without_authorized_source"
+            elif attributed and direct_transfer and not statements:
+                rule = "attributed_transfer_without_customer_statement"
+            elif certainty and attributed and cls._STATEMENT_CONFIRMATION.fullmatch(sentence.strip()) is None:
+                rule = "customer_statement_confirmation_outside_narrow_form"
+            elif (
+                certainty and not attributed and not staff_claim and not banks and not matching_verified
+                and not any(row[3] == "CONFIRMED" and row[4] and row[2] != "CUSTOMER_STATEMENT" for row in matching)
+            ):
+                rule = "unattributed_certainty_without_confirmed_source"
+            elif conflict and (certainty or direct_transfer) and not absence:
+                rule = "conflicting_transfer_state"
+            elif any(marker in sentence for marker in cls._UNSUPPORTED_CERTAINTY[:3]):
+                rule = "absolute_fraud_certainty"
+            if rule is not None:
+                return QualityCheck(
+                    "unsupported_certainty", False,
+                    "해당 주장에 대응하는 source/status/scope 근거가 없거나 충돌합니다.",
+                    rule=rule,
+                )
         return QualityCheck("unsupported_certainty", True, "탐지한 주장과 typed source/status/scope를 대조했습니다.")
 
     @classmethod
@@ -329,7 +346,11 @@ class CopilotQualityEvaluator:
             if amounts:
                 supported = [r for r in supported if amounts <= set(money_values(r))]
             if not supported:
-                return QualityCheck("unsupported_certainty", False, "해당 주장에 대응하는 확정 Fact 또는 완료된 검증 근거가 없습니다.")
+                return QualityCheck(
+                    "unsupported_certainty", False,
+                    "해당 주장에 대응하는 확정 Fact 또는 완료된 검증 근거가 없습니다.",
+                    rule="certainty_without_authorized_source",
+                )
         return QualityCheck("unsupported_certainty", True, "탐지한 확정 표현에 대응하는 근거를 확인했습니다.")
 
     @classmethod

@@ -380,6 +380,10 @@ class CaseCopilotService:
                 "EvidenceRef는 원본 내용 검증이 아닙니다. COMPLETED와 비어 있지 않은 result_summary, 해당 Fact의 "
                 "VERIFICATION_RESULT 참조 및 revision이 연결된 범위에서만 공식 검증 결과를 사용하세요. "
                 "참조의 revision과 결과 version이 다르거나 관계가 없으면 확인 필요로 설명하세요. "
+                "질문이 '확인된 사항'을 묻더라도, 관련 항목에 CONFIRMED와 confirmed_by/confirmed_at, 해당 값의 BANK_RECORD, "
+                "또는 연결된 COMPLETED Verification이 없으면 긍정 확정 표현을 쓰지 마세요. 이 경우 먼저 '현재 객관적으로 확인된 "
+                "사항은 없습니다'라고 직접 답하고, AI_EXTRACTION/PROPOSED는 'AI 분석에서 제안된 정황' 또는 '확인 전 정보'로만 "
+                "설명하세요. 위 승인 근거가 있는 값 범위에서는 기존처럼 확인된 사실로 표현할 수 있습니다. "
                 "REJECTED/SUPERSEDED는 current 근거가 아니며 timestamp만으로 correction/current를 추측하지 마세요. "
                 "typed와 문자열 내용이 다르면 충돌 또는 추가 확인 필요로 설명하고 이전 고객 메시지나 AI_RESPONSE로 현재 Fact를 뒤집지 마세요. "
                 "기록은 제한된 부분집합일 수 있습니다. 거래 Evidence 미전달은 거래 미발생이 아닙니다. "
@@ -454,7 +458,8 @@ class CaseCopilotService:
                 "실제 AI 서버에 연결하지 못해 답변을 생성하지 않았습니다. 잠시 후 다시 시도해 주세요."
             ) from exc
         from contracts.user_text import user_text
-        content = user_text(response.output_text.strip())
+        raw_content = response.output_text.strip()
+        content = user_text(raw_content)
         if not content:
             raise CaseCopilotProviderError("AI 서버가 빈 응답을 반환해 답변을 생성하지 않았습니다.")
         quality = CopilotQualityEvaluator.evaluate(
@@ -473,10 +478,33 @@ class CaseCopilotService:
         )
         blocking_failures = CopilotQualityEvaluator.runtime_blocking_failures(quality)
         if blocking_failures:
-            # 원문·Case 정보 없이 판정 식별자만 남겨 다음 실패 원인을 안전하게 좁힌다.
+            # 차단 결과는 유지하되, 본문·prompt·Case 식별자 없이 세부 rule만 남긴다.
+            raw_rules = ()
+            if raw_content != content:
+                raw_quality = CopilotQualityEvaluator.evaluate(
+                    assistant_mode=request.assistant_mode,
+                    prompt=request.prompt,
+                    response=raw_content,
+                    context=quality_context,
+                    grounding_context=[
+                        *request.known_facts,
+                        *([item for item in request.staff_context if item.startswith("사실:")]
+                          if request.assistant_mode == "BANK_INTERNAL" else []),
+                        *request.published_verification_results,
+                    ],
+                    source_context=request.source_context,
+                )
+                raw_rules = tuple(
+                    check.rule for check in CopilotQualityEvaluator.runtime_blocking_failures(raw_quality)
+                    if check.rule
+                )
             logger.warning(
-                "CaseCopilot quality blocked: criteria=%s",
+                "CaseCopilot quality blocked: criteria=%s rules=%s normalization_changed=%s raw_rules=%s normalized_rules=%s",
                 ",".join(check.criterion for check in blocking_failures),
+                ",".join(check.rule or "unspecified" for check in blocking_failures),
+                raw_content != content,
+                ",".join(raw_rules) or "none",
+                ",".join(check.rule for check in blocking_failures if check.rule) or "none",
             )
             raise CaseCopilotProviderError("AI 응답이 역할·안전 기준을 충족하지 않아 전달하지 않았습니다.")
         return CaseCopilotOutput(content=content, model_mode=model)
