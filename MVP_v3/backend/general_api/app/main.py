@@ -1889,7 +1889,8 @@ async def invoke_case_copilot(case_id: str, request: PublicAiInvocationRequest) 
             "unresolved_verifications": unresolved[:10],
             "assistant_mode": "BANK_INTERNAL",
             "source_context": bank_source_context(case_id, resources, facts=facts, questions=questions,
-                verifications=verifications, messages=[item for item in all_messages if item.get("visibility") in {"CUSTOMER", "BANK_INTERNAL"}]).model_dump(mode="json"),
+                verifications=verifications, messages=[item for item in all_messages if item.get("visibility") in {"CUSTOMER", "BANK_INTERNAL"}],
+                diagnosis=case.get("diagnosis") or {}).model_dump(mode="json"),
             "customer_progress": progress_ai_context(build_customer_progress(actions)),
             "response_style": request.response_style,
         })

@@ -234,6 +234,26 @@ class SemanticAuditReview(StrictModel):
     rationale_codes: list[str] = Field(default_factory=list, max_length=30)
 
 
+class QualityReview(StrictModel):
+    """Privacy-safe extraction or narrative quality review outcome."""
+
+    schema_version: str = "quality-review.v1"
+    review_type: Literal["EXTRACTION", "NARRATIVE"]
+    status: Literal["PASS", "WARN", "REPAIRED", "HUMAN_REVIEW", "FAIL"]
+    severity: Literal["INFO", "LOW", "HIGH", "CRITICAL"] = "INFO"
+    issue_codes: list[str] = Field(default_factory=list, max_length=100)
+    missing_fields: list[str] = Field(default_factory=list, max_length=100)
+    conflicting_fields: list[str] = Field(default_factory=list, max_length=100)
+    unsupported_fields: list[str] = Field(default_factory=list, max_length=100)
+    atom_ids: list[str] = Field(default_factory=list, max_length=100)
+    relation_ids: list[str] = Field(default_factory=list, max_length=100)
+    source_turns: list[int] = Field(default_factory=list, max_length=100)
+    recommended_action: Literal["ACCEPT", "REEXTRACT", "RERENDER", "HUMAN_REVIEW"] = "ACCEPT"
+    repair_attempts: int = Field(default=0, ge=0, le=2)
+    reviewer_model: str | None = Field(default=None, max_length=120)
+    reviewer_version: str = "quality-reviewer.v1"
+
+
 class ConversationEpisode(StrictModel):
     episode_id: str = Field(min_length=1, max_length=100)
     start_turn: int = Field(ge=1)
@@ -417,6 +437,7 @@ class DiagnosisResult(StrictModel):
     entity_registry: list[EntityReference] = Field(default_factory=list)
     semantic_audit: SemanticAuditResult | None = None
     semantic_audit_review: SemanticAuditReview | None = None
+    quality_reviews: list[QualityReview] = Field(default_factory=list, max_length=10)
     model_metadata: dict[str, Any]
     confidence: float = Field(ge=0, le=1)
     partial_failure: bool = False

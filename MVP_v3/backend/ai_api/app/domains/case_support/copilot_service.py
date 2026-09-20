@@ -221,7 +221,7 @@ def _context_sections(request: CaseCopilotInput) -> dict[str, list[str]]:
         "미완료 기관 검증": request.unresolved_verifications,
     }
     if request.source_context is not None:
-        bank_sections["원본 source-aware Case 기록 (source와 status는 별개; 참조는 검증이 아님)"] = [
+        bank_sections["최신 구조화 분석 결과와 source-aware Case 기록 (현재 diagnosis 기준)"] = [
             request.source_context.model_dump_json(),
         ]
     return bank_sections
@@ -372,7 +372,8 @@ class CaseCopilotService:
         )
         if request.assistant_mode == "BANK_INTERNAL" and request.source_context is not None:
             instructions += (
-                " 원본 source-aware Case 기록을 우선 grounding으로 사용하세요. 문자열 대화·검색은 보조 맥락입니다. "
+                " 매 요청에 포함된 최신 구조화 분석(analysis_context, case_context_features, semantic_atoms, semantic_relations, context_signals)을 우선 grounding으로 사용하세요. "
+                "그 구조화 분석은 품질 검정과 제한된 자동 수정이 반영된 현재 diagnosis의 최신본입니다. 원본 source-aware Case 기록과 문자열 대화·검색은 보조 맥락입니다. "
                 "source_kind와 status를 분리하세요. CUSTOMER_STATEMENT가 CONFIRMED여도 BANK_RECORD가 아닙니다. "
                 "고객의 송금 진술은 '고객은 금액을 송금했다고 진술했습니다'라고 귀속하여 설명하세요. "
                 "실제 전달된 BANK_RECORD의 해당 값과 확인 상태 범위에서만 은행 거래기록 확인이라고 표현하세요. "

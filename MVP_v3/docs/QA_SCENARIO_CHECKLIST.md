@@ -492,3 +492,17 @@
 - 고객 공개 Draft/Review/Publish/Withdraw workflow
 - 전체 resource History API
 - 실제 브라우저 기반 장시간 E2E 자동화
+
+---
+
+## 품질 검정 AI와 제한된 자동 수정
+
+- [ ] Extraction reviewer가 주체·사칭 대상·금액·기한·행동 상태와 Atom/Relation 계보를 점검한다.
+- [ ] 추출 검정이 `REEXTRACT`를 반환하면 지정된 turn만 최대 1회 재추출한다.
+- [ ] 재추출 Atom은 병합되며 직원 확정 값은 자동으로 덮어쓰지 않는다.
+- [ ] Narrative reviewer가 요약·주장·요구를 구조화 Envelope와 대조한다.
+- [ ] 문장 검정이 `RERENDER`를 반환하면 해당 문장화만 최대 1회 재생성한다.
+- [ ] 최종 검정 실패 시 원본 결과를 보존하고 `HUMAN_REVIEW`로 표시한다.
+- [ ] `QUALITY_REVIEW_MODE=repair`, `QUALITY_REVIEW_MAX_RETRIES=1`, `QUALITY_REVIEW_MAX_LOOPS=2`가 적용된다.
+- [ ] 원문과 개인정보 literal은 품질 검정 메타데이터에 저장하지 않는다.
+- [ ] AI 제공자 실패·예산 초과에도 안전한 부분 결과와 검정 경고를 반환한다.

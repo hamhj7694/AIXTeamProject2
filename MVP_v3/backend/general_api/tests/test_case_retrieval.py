@@ -192,6 +192,25 @@ class RetrievalWiringTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             bank_source_context('VP-RAG', resources, facts=[], questions=[], verifications=[], messages=messages)
 
+    def test_latest_structured_diagnosis_is_attached_to_every_bank_bundle(self):
+        resources = PublicCaseContextResourcesV2(case_id='VP-RAG', context_revision=4)
+        diagnosis = {
+            'context': {'summary': '최신 구조화 요약'},
+            'case_context_features': {'requested_action_codes': ['REQUEST_TRANSFER']},
+            'semantic_atoms': [{'atom_id': 'ATM-LATEST', 'predicate': 'TRANSFER_FUNDS'}],
+            'semantic_relations': [{'relation_id': 'REL-LATEST'}],
+            'context_signals': [{'signal_id': 'SIG-LATEST'}],
+            'quality_reviews': [{'status': 'REPAIRED'}],
+            'model_metadata': {'context_revision': 4},
+        }
+        context = bank_source_context('VP-RAG', resources, facts=[], questions=[], verifications=[], messages=[], diagnosis=diagnosis)
+        self.assertEqual(context.analysis_context['summary'], '최신 구조화 요약')
+        self.assertEqual(context.semantic_atoms[0]['atom_id'], 'ATM-LATEST')
+        self.assertEqual(context.semantic_relations[0]['relation_id'], 'REL-LATEST')
+        self.assertEqual(context.context_signals[0]['signal_id'], 'SIG-LATEST')
+        self.assertEqual(context.quality_reviews[0]['status'], 'REPAIRED')
+        self.assertEqual(context.analysis_revision, 4)
+
     def test_source_messages_preserve_human_identity_and_conversation_boundary(self):
         resources = PublicCaseContextResourcesV2(case_id='VP-RAG', context_revision=1)
         messages = [dict(

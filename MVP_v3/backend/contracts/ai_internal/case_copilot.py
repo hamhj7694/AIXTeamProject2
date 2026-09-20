@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field, model_validator
 
@@ -68,12 +68,23 @@ class CopilotMessage(StrictModel):
 
 
 class BankCopilotSourceContext(StrictModel):
-    """Bounded original records, not inferred current/correction relationships."""
+    """Latest bank-safe records plus the current structured diagnosis projection."""
     facts: list[PublicCaseFactV2] = Field(default_factory=list, max_length=100)
     legacy_facts: list[CopilotLegacyFact] = Field(default_factory=list, max_length=100)
     questions: list[CopilotQuestionAnswer] = Field(default_factory=list, max_length=50)
     verifications: list[CopilotVerification] = Field(default_factory=list, max_length=20)
     messages: list[CopilotMessage] = Field(default_factory=list, max_length=20)
+    # These fields are rebuilt from the current Case diagnosis for every
+    # Copilot invocation. They intentionally contain structured data only;
+    # raw transcript/input_text is never part of this contract.
+    analysis_context: dict[str, Any] = Field(default_factory=dict)
+    case_context_features: dict[str, Any] = Field(default_factory=dict)
+    semantic_atoms: list[dict[str, Any]] = Field(default_factory=list, max_length=1000)
+    semantic_mentions: list[dict[str, Any]] = Field(default_factory=list, max_length=2000)
+    semantic_relations: list[dict[str, Any]] = Field(default_factory=list, max_length=2000)
+    context_signals: list[dict[str, Any]] = Field(default_factory=list, max_length=1000)
+    quality_reviews: list[dict[str, Any]] = Field(default_factory=list, max_length=10)
+    analysis_revision: int = Field(default=1, ge=1)
     truncated: bool = False
 
 

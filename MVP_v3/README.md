@@ -30,6 +30,10 @@ migration 스크립트와 Docker Compose가 모두 이 파일을 기준으로 �
 | `OPENAI_API_KEY` | 실제 OpenAI API 키 |
 | `OPENAI_CUSTOMER_SUPPORT_MODEL` | 고객용 안전 상담 AI 모델. 미설정 시 `OPENAI_CASE_COPILOT_MODEL` 사용 |
 | `OPENAI_BANK_COPILOT_MODEL` | 은행 직원용 CaseCopilot 모델. 미설정 시 `OPENAI_CASE_COPILOT_MODEL` 사용 |
+| `OPENAI_AUDIT_MODEL` | 추출·문장 품질 검정 모델. 미설정 시 `OPENAI_CONTEXT_MODEL` 사용 |
+| `QUALITY_REVIEW_MODE` | 품질 검정 모드: `repair`(기본), `off` |
+| `QUALITY_REVIEW_MAX_RETRIES` | 단계별 자동 수정 최대 횟수(기본 1) |
+| `QUALITY_REVIEW_MAX_LOOPS` | 전체 품질 루프 최대 횟수(기본 2) |
 | `MYSQL_USER`, `MYSQL_DATABASE` | 실제 MySQL 계정과 DB 이름; 예제는 `ham`, `csr` |
 | `MYSQL_PASSWORD` | `MYSQL_USER` 계정의 실제 비밀번호 |
 | `MYSQL_ROOT_PASSWORD` | 포함된 MySQL 컨테이너를 사용할 때 설정할 별도 비밀번호 |

@@ -12,6 +12,7 @@ import math
 import re
 from collections import Counter, OrderedDict
 from dataclasses import dataclass
+from typing import Any, Mapping
 
 from contracts.user_text import user_text
 from contracts.ai_internal.case_copilot import (
@@ -195,8 +196,8 @@ def staff_context(records: list[CaseRecord]) -> list[str]:
             for r in [r for r in records if r.kind == kind][-6:]]
 
 
-def bank_source_context(case_id: str, resources, *, facts, questions, verifications, messages) -> BankCopilotSourceContext:
-    """Preserve stored provenance before lexical/string projection; never promote sources."""
+def bank_source_context(case_id: str, resources, *, facts, questions, verifications, messages, diagnosis: Mapping[str, Any] | None = None) -> BankCopilotSourceContext:
+    """Build the latest bank-safe Copilot bundle without exposing raw input text."""
     if resources.case_id != case_id:
         raise ValueError("Case context source mismatch")
     if any(fact.case_id != case_id for fact in resources.facts):
@@ -227,6 +228,11 @@ def bank_source_context(case_id: str, resources, *, facts, questions, verificati
     ) for item in verifications[-20:]]
     human_messages = [item for item in messages if item.get("actor_type") in {"CUSTOMER", "BANK_STAFF"}
                       and item.get("message_kind") not in {"AI_RESPONSE", "REPORT_CARD"}][-20:]
+    current_diagnosis = diagnosis or {}
+    structured_truncated = any(len(current_diagnosis.get(key) or []) > limit for key, limit in (
+        ("semantic_atoms", 1000), ("semantic_mentions", 2000), ("semantic_relations", 2000),
+        ("context_signals", 1000), ("quality_reviews", 10),
+    ))
     return BankCopilotSourceContext(
         facts=resources.facts[-100:], legacy_facts=legacy, questions=answers, verifications=checks,
         messages=[CopilotMessage(message_id=item["message_id"], case_id=case_id,
@@ -234,6 +240,14 @@ def bank_source_context(case_id: str, resources, *, facts, questions, verificati
             actor_display_name=item.get("actor_display_name"), actor_role=item.get("actor_role"),
             channel=item.get("channel"), audience=item.get("audience"),
             content=item.get("content", ""), created_at=item.get("created_at")) for item in human_messages],
-        truncated=any(len(items) > limit for items, limit in (
+        analysis_context=current_diagnosis.get("context") or {},
+        case_context_features=current_diagnosis.get("case_context_features") or {},
+        semantic_atoms=list(current_diagnosis.get("semantic_atoms") or [])[:1000],
+        semantic_mentions=list(current_diagnosis.get("semantic_mentions") or [])[:2000],
+        semantic_relations=list(current_diagnosis.get("semantic_relations") or [])[:2000],
+        context_signals=list(current_diagnosis.get("context_signals") or [])[:1000],
+        quality_reviews=list(current_diagnosis.get("quality_reviews") or [])[:10],
+        analysis_revision=int(current_diagnosis.get("model_metadata", {}).get("context_revision", 1) or 1),
+        truncated=structured_truncated or any(len(items) > limit for items, limit in (
             (resources.facts, 100), (facts, 100), (questions, 50), (verifications, 20), (messages, 20))),
     )
