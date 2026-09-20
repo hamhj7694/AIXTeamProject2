@@ -24,7 +24,7 @@ import { BankCardKind } from '../components/cards/BankCardMenu';
 import BankTransactionCard from '../components/cards/BankTransactionCard';
 import FdsResultCard from '../components/cards/FdsResultCard';
 import AdditionalLookupCard from '../components/cards/AdditionalLookupCard';
-import { mockAdditionalLookup, mockBankTransaction, mockFdsResult } from '../mocks/cardMocks';
+import { toBankCardData } from '../components/cards/cardData';
 
 type DialogState = { type: 'questions' } | { type: 'verification'; task?: VerificationTask } | { type: 'action' } | null;
 type AdminAction = 'finalize' | 'reopen' | 'trash' | null;
@@ -389,29 +389,10 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
   if (error && !caseItem) return <section className="room-state error"><AlertCircle size={24}/><strong>정보를 불러오지 못했습니다.</strong><span>{error}</span><button onClick={() => void load()}>다시 시도</button></section>;
   if (!caseItem || !bundle) return <section className="room-state error"><AlertCircle size={24}/><strong>Case 기록을 열 수 없습니다.</strong><span>General API의 Bundle 응답을 확인해 주세요.</span><button onClick={() => void load()}>다시 시도</button></section>;
 
-  const transferStatus = caseItem.victim_transfer_status === 'YES'
-    ? '이체 완료'
-    : caseItem.victim_transfer_status === 'NO'
-      ? '미이체'
-      : caseItem.victim_transfer_status === 'UNKNOWN'
-        ? '확인 필요'
-        : '정보 없음';
-  const transactionCardData = {
-    ...mockBankTransaction,
-    transferAmount: typeof caseItem.actual_loss_amount_krw === 'number' ? caseItem.actual_loss_amount_krw : null,
-    transactionStatus: transferStatus,
-    updatedAt: caseItem.updated_at || '',
-  };
-  const supportBrief = support?.case_brief;
-  const fdsReasons = support?.case_context?.key_signals?.filter((item) => item.trim()) ?? [];
-  const fdsCardData = {
-    ...mockFdsResult,
-    riskScore: typeof supportBrief?.risk_score === 'number' ? supportBrief.risk_score : mockFdsResult.riskScore,
-    riskLevel: supportBrief?.risk_level || mockFdsResult.riskLevel,
-    updatedAt: caseItem.updated_at || mockFdsResult.updatedAt,
-    ...(fdsReasons.length > 0 ? { reasons: fdsReasons } : {}),
-  };
-  const additionalLookupData = { ...mockAdditionalLookup, updatedAt: caseItem.updated_at || mockAdditionalLookup.updatedAt };
+  const cardData = toBankCardData(caseItem, support, bundle);
+  const transactionCardData = cardData.transaction;
+  const fdsCardData = cardData.risk;
+  const additionalLookupData = cardData.additionalLookup;
   const bankCard = selectedBankCard === 'transaction' ? <BankTransactionCard {...transactionCardData} /> : selectedBankCard === 'fds' ? <FdsResultCard {...fdsCardData} /> : selectedBankCard === 'additionalLookup' ? <AdditionalLookupCard {...additionalLookupData} onViewAll={() => undefined} /> : undefined;
 
   return <section className="case-room">
