@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertCircle, AlertTriangle, ArrowLeft, Bookmark, CheckCircle2, Loader2, PanelRightClose, PanelRightOpen, RefreshCw, ShieldCheck, Wifi, X } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { casesApi, CURRENT_CUSTOMER_USER } from '../api/cases';
+import { isApiErrorCode } from '../api/client';
 import type { CaseBundle, CaseMessage, CustomerQuestion, ProgressStep } from '../api/types';
 import { readCustomerBookmarks, writeCustomerBookmarks, type CustomerBookmark } from '../customer/bookmarks';
 import { CustomerBookmarks } from '../customer/CustomerBookmarks';
@@ -12,6 +13,7 @@ import { RecoveryNavigator } from '../customer/RecoveryCards';
 import { RECOVERY_MESSAGE_PREFIX, recoveryStepFromMessage, type RecoveryStep, type RecoveryStepId } from '../customer/recovery';
 import { mergePendingMessages, removeMessage, upsertMessage } from '../api/messageState';
 import { generateUuid } from '../uuid';
+import { buildConsecutiveCustomerAiPrompt, ConsecutiveAiBatcher, type AiBatchControl } from '../bank/consecutiveAiBatch';
 
 type CustomerOutboxItem = {
   message: CaseMessage;
@@ -34,7 +36,8 @@ export const CustomerCaseRoomPage: React.FC = () => {
   const [bookmarkOpen, setBookmarkOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [bookmarks, setBookmarks] = useState<CustomerBookmark[]>([]);
-  const aiQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const aiBatcherRef = useRef<ConsecutiveAiBatcher | null>(null);
+  const enqueueCustomerAiReplyRef = useRef<(prompt: string, replyToMessageId: string, sourceMessageIds: string[], control: AiBatchControl) => Promise<void>>(async () => undefined);
   const aiGenerationRef = useRef(0);
   const activeCaseIdRef = useRef(caseId);
   activeCaseIdRef.current = caseId;
@@ -63,35 +66,41 @@ export const CustomerCaseRoomPage: React.FC = () => {
     } : current);
   };
 
-  const enqueueCustomerAiReply = useCallback((prompt: string, replyToMessageId: string) => {
+  const enqueueCustomerAiReply = useCallback(async (prompt: string, replyToMessageId: string, sourceMessageIds: string[], control: AiBatchControl) => {
     const generation = aiGenerationRef.current;
     const targetCaseId = caseId;
+    if (aiGenerationRef.current !== generation || activeCaseIdRef.current !== targetCaseId || control.isSuperseded()) return;
     setAiPendingCount((count) => count + 1);
-    const run = async () => {
-      if (aiGenerationRef.current !== generation || activeCaseIdRef.current !== targetCaseId) return;
-      try {
-        // 서버는 이 호출 시점의 고객 공개 대화와 누적 질문 답변을 다시 읽는다.
-        const message = await casesApi.invokeCustomerAi(targetCaseId, prompt, replyToMessageId);
-        if (aiGenerationRef.current === generation) {
-          loadRequestRef.current += 1;
-          showMessage(message);
-          await load(true);
-        }
-      } catch (reason) {
-        if (aiGenerationRef.current === generation) {
-          setNotice(`메시지는 전달됐지만 실제 AI 서버가 응답하지 않았습니다. 임의 안내는 생성하지 않았습니다. ${reason instanceof Error ? reason.message : '잠시 후 다시 요청해 주세요.'}`);
-        }
-      } finally {
-        if (aiGenerationRef.current === generation) setAiPendingCount((count) => Math.max(0, count - 1));
+    try {
+      // 서버는 이 호출 시점의 고객 공개 대화와 누적 질문 답변을 다시 읽는다.
+      const message = await casesApi.invokeCustomerAi(targetCaseId, prompt, replyToMessageId, sourceMessageIds, control.signal);
+      if (aiGenerationRef.current === generation && !control.isSuperseded()) {
+        loadRequestRef.current += 1;
+        showMessage(message);
+        void load(true);
       }
-    };
-    // 빠르게 연속 입력해도 AI 응답은 고객 메시지 순서대로 생성한다.
-    aiQueueRef.current = aiQueueRef.current.then(run, run);
+    } catch (reason) {
+      if (isApiErrorCode(reason, 'AI_GENERATION_STALE')) { control.supersedeIfPending(); return; }
+      if (control.isSuperseded()) return;
+      if (aiGenerationRef.current === generation) {
+        setNotice(`메시지는 전달됐지만 실제 AI 서버가 응답하지 않았습니다. 임의 안내는 생성하지 않았습니다. ${reason instanceof Error ? reason.message : '잠시 후 다시 요청해 주세요.'}`);
+      }
+    } finally {
+      if (aiGenerationRef.current === generation) setAiPendingCount((count) => Math.max(0, count - 1));
+    }
   }, [caseId, load]);
+  enqueueCustomerAiReplyRef.current = enqueueCustomerAiReply;
 
   useEffect(() => {
+    aiBatcherRef.current?.dispose();
+    aiBatcherRef.current = new ConsecutiveAiBatcher(async (messages, control) => {
+      const lastMessage = messages[messages.length - 1];
+      await enqueueCustomerAiReplyRef.current(
+        buildConsecutiveCustomerAiPrompt(messages), lastMessage.messageId,
+        messages.map((message) => message.messageId), control,
+      );
+    });
     aiGenerationRef.current += 1;
-    aiQueueRef.current = Promise.resolve();
     loadRequestRef.current += 1;
     pendingMessagesRef.current.clear();
     outboxRef.current.clear();
@@ -103,7 +112,7 @@ export const CustomerCaseRoomPage: React.FC = () => {
     heartbeat();
     const timer = window.setInterval(() => void load(true), 4000);
     const presenceTimer = window.setInterval(heartbeat, 30000);
-    return () => { aiGenerationRef.current += 1; loadRequestRef.current += 1; window.clearInterval(timer); window.clearInterval(presenceTimer); };
+    return () => { aiBatcherRef.current?.dispose(); aiBatcherRef.current = null; aiGenerationRef.current += 1; loadRequestRef.current += 1; window.clearInterval(timer); window.clearInterval(presenceTimer); };
   }, [caseId, load]);
 
   useEffect(() => {
@@ -130,7 +139,7 @@ export const CustomerCaseRoomPage: React.FC = () => {
   const deliverMessage = async (item: CustomerOutboxItem) => {
     const generation = aiGenerationRef.current;
     const isCurrent = () => generation === aiGenerationRef.current && activeCaseIdRef.current === item.message.case_id;
-    if (!isCurrent()) return;
+    if (!isCurrent()) return false;
     setBusy(true); setError(''); setNotice('');
     const sendingMessage = { ...item.message, delivery_state: 'SENDING' as const, delivery_error: null };
     item.message = sendingMessage;
@@ -142,28 +151,39 @@ export const CustomerCaseRoomPage: React.FC = () => {
         item.attachmentIds.push(attachment.attachment_id);
       }
       const message = await casesApi.sendCustomerMessage(caseId, item.content, item.attachmentIds, item.message.client_request_id!);
-      if (!isCurrent()) return;
+      if (!isCurrent()) return false;
       loadRequestRef.current += 1;
       pendingMessagesRef.current.delete(item.message.client_request_id!);
       outboxRef.current.delete(item.message.client_request_id!);
       showMessage(message);
-      if (item.requestAi && item.content) {
-        window.requestAnimationFrame(() => { if (isCurrent()) enqueueCustomerAiReply(item.content, message.message_id); });
-      } else {
+      if (!(item.requestAi && item.content)) {
         window.requestAnimationFrame(() => { if (isCurrent()) void refresh(); });
       }
+      return message;
     } catch (reason) {
       const failed = {
         ...item.message,
         delivery_state: 'FAILED' as const,
         delivery_error: reason instanceof Error ? reason.message : '서버에 전송하지 못했습니다.',
       };
-      if (!isCurrent()) return;
+      if (!isCurrent()) return false;
       item.message = failed;
       pendingMessagesRef.current.set(failed.client_request_id!, failed);
       showMessage(failed);
       setError('메시지를 전송하지 못했습니다. 말풍선의 다시 전송을 눌러주세요.');
+      return false;
     } finally { if (isCurrent()) setBusy(false); }
+  };
+  const queueCustomerAi = (item: CustomerOutboxItem, saved: Promise<CaseMessage | false>) => {
+    if (!item.requestAi || !item.content) return;
+    aiBatcherRef.current?.enqueue({
+      caseId: item.message.case_id,
+      requesterUserId: CURRENT_CUSTOMER_USER.user_id,
+      channel: 'CUSTOMER',
+      messageId: item.message.client_request_id!,
+      content: item.content,
+      saved: saved.then((message) => message ? { messageId: message.message_id, createdAt: message.created_at } : false),
+    });
   };
   const send = (content: string, files: File[], requestAi: boolean): Promise<void> => {
     const clientRequestId = generateUuid();
@@ -192,13 +212,19 @@ export const CustomerCaseRoomPage: React.FC = () => {
     pendingMessagesRef.current.set(clientRequestId, message);
     outboxRef.current.set(clientRequestId, item);
     showMessage(message);
-    void deliverMessage(item);
+    const saved = deliverMessage(item);
+    queueCustomerAi(item, saved);
+    void saved;
     return Promise.resolve();
   };
   const retryMessage = (message: CaseMessage) => {
     if (busy || !message.client_request_id) return;
     const item = outboxRef.current.get(message.client_request_id);
-    if (item) void deliverMessage(item);
+    if (item) {
+      const saved = deliverMessage(item);
+      queueCustomerAi(item, saved);
+      void saved;
+    }
   };
   const dismissMessage = (message: CaseMessage) => {
     if (!message.client_request_id) return;
@@ -250,7 +276,12 @@ export const CustomerCaseRoomPage: React.FC = () => {
       loadRequestRef.current += 1;
       showMessage(message);
       if (kind === 'AI_ADVICE') {
-        window.requestAnimationFrame(() => enqueueCustomerAiReply(`${step.title} 피해구제 단계에서 제가 지금 해야 할 일을 쉬운 순서로 알려주세요.`, message.message_id));
+        aiBatcherRef.current?.enqueue({
+          caseId, requesterUserId: CURRENT_CUSTOMER_USER.user_id, channel: 'CUSTOMER',
+          messageId: message.message_id,
+          content: `${step.title} 피해구제 단계에서 제가 지금 해야 할 일을 쉬운 순서로 알려주세요.`,
+          saved: Promise.resolve({ messageId: message.message_id, createdAt: message.created_at }),
+        });
       } else {
         window.requestAnimationFrame(() => { void refresh(); });
       }

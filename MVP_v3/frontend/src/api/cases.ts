@@ -92,11 +92,13 @@ export const casesApi = {
       }),
     });
   },
-  invokeAi: (caseId: string, prompt = '현재 Shared Case 전체 맥락을 기준으로 확인된 사실, 가장 중요한 위험, 아직 확인할 정보, 다음 권장 조치를 짧게 정리해 주세요.', channel: 'TEAM' | 'AI_INTERNAL' = 'AI_INTERNAL', responseStyle: 'CONVERSATIONAL' | 'BRIEF' = 'CONVERSATIONAL') => request<AiInvocationResult>(`/api/cases/${encodeURIComponent(caseId)}/ai/invocations`, {
+  invokeAi: (caseId: string, prompt = '현재 Shared Case 전체 맥락을 기준으로 확인된 사실, 가장 중요한 위험, 아직 확인할 정보, 다음 권장 조치를 짧게 정리해 주세요.', channel: 'TEAM' | 'AI_INTERNAL' = 'AI_INTERNAL', responseStyle: 'CONVERSATIONAL' | 'BRIEF' = 'CONVERSATIONAL', sourceMessageIds: string[] = [], signal?: AbortSignal) => request<AiInvocationResult>(`/api/cases/${encodeURIComponent(caseId)}/ai/invocations`, {
     method: 'POST',
+    signal,
     body: JSON.stringify({
       prompt, channel, response_style: responseStyle, requester_user_id: CURRENT_BANK_USER.user_id,
       requester_display_name: CURRENT_BANK_USER.display_name, client_request_id: generateUuid(),
+      source_message_ids: sourceMessageIds,
     }),
   }),
   generateWorkCard: (caseId: string, cardType: WorkCardType, questionDrafts: QuestionCandidate[] = []) => request<CaseWorkCard>(`/api/cases/${encodeURIComponent(caseId)}/ai/work-cards`, {
@@ -178,13 +180,14 @@ export const casesApi = {
       actor_display_name: CURRENT_CUSTOMER_USER.display_name,
     }),
   }),
-  invokeCustomerAi: (caseId: string, prompt: string, replyToMessageId: string) => request<CaseMessage>(`/api/cases/${encodeURIComponent(caseId)}/ai/customer-replies`, {
-    method: 'POST', body: JSON.stringify({
+  invokeCustomerAi: (caseId: string, prompt: string, replyToMessageId: string, sourceMessageIds: string[] = [], signal?: AbortSignal) => request<CaseMessage>(`/api/cases/${encodeURIComponent(caseId)}/ai/customer-replies`, {
+    method: 'POST', signal, body: JSON.stringify({
       prompt,
       requester_user_id: CURRENT_CUSTOMER_USER.user_id,
       requester_display_name: CURRENT_CUSTOMER_USER.display_name,
       reply_to_message_id: replyToMessageId,
       client_request_id: generateUuid(),
+      source_message_ids: sourceMessageIds,
     }),
   }),
 };

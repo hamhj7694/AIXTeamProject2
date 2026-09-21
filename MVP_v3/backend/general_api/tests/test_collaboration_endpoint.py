@@ -124,6 +124,38 @@ class CollaborationEndpointTest(unittest.TestCase):
         saved = self.repository.append_message.await_args.args[1]
         self.assertEqual(saved["reply_to_message_id"], "msg-customer-1")
 
+    def test_superseded_bank_generation_returns_conflict_without_ai_response(self) -> None:
+        self.repository.append_message.return_value = None
+
+        response = self.client.post("/api/cases/CASE-1/ai/invocations", json={
+            "prompt": "A를 기준으로 답변", "channel": "TEAM",
+            "requester_user_id": "staff-1", "requester_display_name": "Operator",
+            "source_message_ids": ["msg-a"],
+        })
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["detail"]["code"], "AI_GENERATION_STALE")
+        guard = self.repository.append_message.await_args.kwargs["source_guard"]
+        self.assertEqual(guard, {
+            "source_message_ids": ["msg-a"], "channel": "TEAM",
+            "actor_type": "BANK_STAFF", "actor_user_id": "staff-1",
+        })
+
+    def test_customer_generation_passes_source_stream_guard(self) -> None:
+        self.repository.append_message.return_value = None
+
+        response = self.client.post("/api/cases/CASE-1/ai/customer-replies", json={
+            "prompt": "A와 B를 함께 답변", "requester_user_id": "customer-1",
+            "requester_display_name": "고객", "reply_to_message_id": "msg-b",
+            "source_message_ids": ["msg-a", "msg-b"],
+        })
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["detail"]["code"], "AI_GENERATION_STALE")
+        guard = self.repository.append_message.await_args.kwargs["source_guard"]
+        self.assertEqual(guard["channel"], "CUSTOMER")
+        self.assertEqual(guard["source_message_ids"], ["msg-a", "msg-b"])
+
 
 if __name__ == "__main__":
     unittest.main()

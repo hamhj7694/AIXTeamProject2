@@ -144,6 +144,18 @@ class SourceAwareGroundingTest(unittest.TestCase):
             with self.subTest(reply=bad):
                 self.assertIn("unsupported_certainty", self.check(bad, [fact]).failed_criteria)
 
+    def test_unsupported_certainty_exposes_rule_without_changing_result(self):
+        fact = source_fact(
+            semantic_key="device.remote_control_app",
+            display_label="원격제어 앱",
+            value={"installed": True},
+            display_value="원격제어 앱 설치 요구",
+        )
+        result = self.check("원격제어 앱 설치 요구가 확인되었습니다.", [fact])
+        self.assertIn("unsupported_certainty", result.failed_criteria)
+        check = next(item for item in result.checks if item.criterion == "unsupported_certainty")
+        self.assertEqual(check.rule, "unattributed_certainty_without_confirmed_source")
+
     def test_negative_confirmation_state_is_not_mistaken_for_certainty(self):
         fact = source_fact()
         safe = (
@@ -265,6 +277,40 @@ class SourceAwareProviderTest(unittest.IsolatedAsyncioTestCase):
     async def test_unsupported_objective_reply_is_not_delivered(self):
         with self.assertRaises(CaseCopilotProviderError):
             await self.generate("고객이 1,000만원 송금했습니다.")
+
+    async def test_proposed_ai_extraction_prompt_requires_uncertain_wording(self):
+        fact = source_fact("AI_EXTRACTION")
+        reply = (
+            "현재 객관적으로 확인된 사항은 없습니다. "
+            "AI 분석에서 제안된 정황으로 송금 관련 내용이 있으며 추가 확인이 필요합니다."
+        )
+        result, args = await self.generate(reply, context=BankCopilotSourceContext(facts=[fact]))
+
+        self.assertEqual(result.content, reply)
+        for rule in (
+            "질문이 '확인된 사항'을 묻더라도",
+            "현재 객관적으로 확인된 사항은 없습니다",
+            "AI 분석에서 제안된 정황",
+            "위 승인 근거가 있는 값 범위에서는",
+        ):
+            self.assertIn(rule, args["instructions"])
+
+    async def test_quality_log_distinguishes_user_text_normalization(self):
+        provider_output = "confirmed-provider-marker-7f3a"
+        with self.assertLogs(
+            "ai_api.app.domains.case_support.copilot_service",
+            level="WARNING",
+        ) as captured_logs:
+            with self.assertRaises(CaseCopilotProviderError):
+                await self.generate(provider_output)
+
+        log_output = "\n".join(captured_logs.output)
+        self.assertIn("criteria=unsupported_certainty", log_output)
+        self.assertIn("rules=staff_claim_without_confirmed_staff_source", log_output)
+        self.assertIn("normalization_changed=True", log_output)
+        self.assertIn("raw_rules=none", log_output)
+        self.assertIn("normalized_rules=staff_claim_without_confirmed_staff_source", log_output)
+        self.assertNotIn(provider_output, log_output)
 
     async def test_bank_record_reply_delivered_without_promoting_customer_source(self):
         result, _ = await self.generate("은행 거래기록에서 1,000만원 이체 내역이 확인됩니다.",
