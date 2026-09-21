@@ -8,6 +8,8 @@ import type { CaseBundle } from '../api/types';
 import type { BankBookmark } from '../bank/bookmarks';
 import { eventLabel, userText, questionAnswerLabel } from '../userText';
 import { buildConversationEntries } from '../bank/conversationEntries';
+import { bankAiSummary } from '../bank/aiSummary';
+import { reviewableVerifications } from '../bank/aiNextActions';
 import { SafeMarkdown } from './SafeMarkdown';
 
 interface Props {
@@ -20,6 +22,7 @@ interface Props {
   onRetryMessage: (message: CaseMessage) => void;
   onDismissMessage: (message: CaseMessage) => void;
   onOpenQuestions?: () => void;
+  onEditVerification?: (task: VerificationTask) => void;
   collapsed?: boolean;
   collapseDisabled?: boolean;
   onToggleCollapse?: () => void;
@@ -143,7 +146,7 @@ const EntryBookmark: React.FC<{ entry: TimelineEntry; active: boolean; onToggle:
   return <button type="button" className={`bank-entry-bookmark ${active ? 'active' : ''}`} aria-label={active ? '북마크 해제' : '북마크 추가'} aria-pressed={active} onClick={() => onToggle({ entryId: entry.id, ...details, createdAt: entry.occurredAt })}><Bookmark size={14} fill={active ? 'currentColor' : 'none'}/></button>;
 };
 
-const MessageEntry: React.FC<{ message: CaseMessage; bookmark: React.ReactNode; onRetry: Props['onRetryMessage']; onDismiss: Props['onDismissMessage'] }> = ({ message, bookmark, onRetry, onDismiss }) => {
+const MessageEntry: React.FC<{ message: CaseMessage; bookmark: React.ReactNode; onRetry: Props['onRetryMessage']; onDismiss: Props['onDismissMessage']; onOpenQuestions?: () => void; verificationTasks: VerificationTask[]; onEditVerification: (task: VerificationTask) => void }> = ({ message, bookmark, onRetry, onDismiss, onOpenQuestions, verificationTasks, onEditVerification }) => {
   if (message.message_kind === 'REPORT_CARD') {
     // The frontend foundation intentionally omits report/question/action cards.
     // The underlying message remains in the bundle for the future View Model.
@@ -151,16 +154,17 @@ const MessageEntry: React.FC<{ message: CaseMessage; bookmark: React.ReactNode; 
   }
   const mine = message.actor_user_id === CURRENT_BANK_USER.user_id;
   const system = message.message_kind === 'SYSTEM_EVENT';
+  const bankAiResponse = message.message_kind === 'AI_RESPONSE' && message.actor_type === 'BANK_AGENT' && message.channel === 'TEAM';
   if (system) return <article className="timeline-system"><Bot size={15}/><div><div className="entry-meta"><b>{message.actor_display_name || 'Case 업데이트'}</b>{bookmark}<time>{formatClock(message.created_at)}</time></div><SafeMarkdown content={message.content}/></div></article>;
   const scope = message.channel === 'CUSTOMER' ? 'customer-message' : 'internal-message';
   return <article className={`message-row ${mine ? 'mine' : ''} ${scope}`}>
     <span className={`avatar ${message.actor_type.toLowerCase()}`}>{message.actor_type === 'BANK_AGENT' || message.actor_type === 'CUSTOMER_AGENT' ? <Bot size={16}/> : message.actor_type === 'CUSTOMER' ? <UserRound size={16}/> : <ShieldCheck size={16}/>}</span>
-    <div className="message-wrap"><div className="entry-meta"><b>{mine ? '나' : message.actor_display_name}</b><span>{message.channel === 'CUSTOMER' ? '고객에게' : '은행 내부'}</span>{bookmark}</div><div className="message-bubble"><SafeMarkdown content={message.content}/>{message.attachments?.length > 0 && <div className="attachment-list">{message.attachments.map((attachment) => <a key={attachment.attachment_id} href={casesApi.attachmentUrl(attachment)} target="_blank" rel="noreferrer"><FileText size={14}/><span>{attachment.original_name}</span><small>{Math.ceil(attachment.size_bytes / 1024)}KB</small></a>)}</div>}</div>{message.delivery_state === 'FAILED' && <div className="message-delivery-error"><span>전송되지 않았습니다.</span><button type="button" onClick={() => onRetry(message)}>다시 전송</button><button type="button" onClick={() => onDismiss(message)}>지우기</button></div>}<time className={`message-time${message.delivery_state ? ` ${message.delivery_state.toLowerCase()}` : ''}`}>{message.delivery_state === 'SENDING' ? '전송 중…' : message.delivery_state === 'FAILED' ? '전송 실패' : formatClock(message.created_at)}</time></div>
+    <div className="message-wrap"><div className="entry-meta"><b>{mine ? '나' : message.actor_display_name}</b><span>{message.channel === 'CUSTOMER' ? '고객에게' : '은행 내부'}</span>{bookmark}</div><div className="message-bubble">{bankAiResponse && <div className="bank-ai-summary"><strong>핵심 정리</strong><p>{bankAiSummary(message.content)}</p><small>AI 응답에서 발췌 · 사실 확정 아님</small></div>}<SafeMarkdown content={message.content}/>{message.attachments?.length > 0 && <div className="attachment-list">{message.attachments.map((attachment) => <a key={attachment.attachment_id} href={casesApi.attachmentUrl(attachment)} target="_blank" rel="noreferrer"><FileText size={14}/><span>{attachment.original_name}</span><small>{Math.ceil(attachment.size_bytes / 1024)}KB</small></a>)}</div>}{bankAiResponse && onOpenQuestions && <button type="button" className="bank-ai-question-link" onClick={onOpenQuestions} title="AI 문장을 자동 변환하지 않고 현재 Case의 추천 질문을 불러옵니다.">고객 확인 질문으로 가져오기</button>}{bankAiResponse && verificationTasks.length > 0 && <div className="bank-ai-next-actions">{verificationTasks.map((task) => <button key={task.verification_task_id} type="button" onClick={() => onEditVerification(task)} title="기존 기관 확인 항목을 엽니다. 결과는 담당자가 저장할 때만 변경됩니다.">Verification 확인 · {task.target}</button>)}</div>}</div>{message.delivery_state === 'FAILED' && <div className="message-delivery-error"><span>전송되지 않았습니다.</span><button type="button" onClick={() => onRetry(message)}>다시 전송</button><button type="button" onClick={() => onDismiss(message)}>지우기</button></div>}<time className={`message-time${message.delivery_state ? ` ${message.delivery_state.toLowerCase()}` : ''}`}>{message.delivery_state === 'SENDING' ? '전송 중…' : message.delivery_state === 'FAILED' ? '전송 실패' : formatClock(message.created_at)}</time></div>
   </article>;
 };
 
-const EntryCard: React.FC<{ entry: TimelineEntry; bookmark: React.ReactNode; onEditVerification: (task: VerificationTask) => void; onRetryMessage: Props['onRetryMessage']; onDismissMessage: Props['onDismissMessage'] }> = ({ entry, bookmark, onEditVerification, onRetryMessage, onDismissMessage }) => {
-  if (entry.kind === 'MESSAGE') return <MessageEntry message={entry.data as CaseMessage} bookmark={bookmark} onRetry={onRetryMessage} onDismiss={onDismissMessage}/>;
+const EntryCard: React.FC<{ entry: TimelineEntry; bookmark: React.ReactNode; onEditVerification: (task: VerificationTask) => void; onRetryMessage: Props['onRetryMessage']; onDismissMessage: Props['onDismissMessage']; onOpenQuestions?: () => void; verificationTasks: VerificationTask[] }> = ({ entry, bookmark, onEditVerification, onRetryMessage, onDismissMessage, onOpenQuestions, verificationTasks }) => {
+  if (entry.kind === 'MESSAGE') return <MessageEntry message={entry.data as CaseMessage} bookmark={bookmark} onRetry={onRetryMessage} onDismiss={onDismissMessage} onOpenQuestions={onOpenQuestions} verificationTasks={verificationTasks} onEditVerification={onEditVerification}/>;
   if (entry.kind === 'QUESTION' || entry.kind === 'ANSWER') {
     const question = entry.data as CustomerQuestion;
     if (entry.kind === 'QUESTION') {
@@ -188,11 +192,13 @@ const EntryCard: React.FC<{ entry: TimelineEntry; bookmark: React.ReactNode; onE
   return <article className="timeline-event"><CircleDot size={13}/><span>{eventLabel(event.event_type)}</span>{bookmark}<time>{formatClock(event.occurred_at)}</time></article>;
 };
 
-export const SharedConversation: React.FC<Props> = ({ bundle, view, channel, composer, inlineCard, bookmarkedIds, onToggleBookmark, onRetryMessage, onDismissMessage, onOpenQuestions, collapsed = false, collapseDisabled = false, onToggleCollapse }) => {
+export const SharedConversation: React.FC<Props> = ({ bundle, view, channel, composer, inlineCard, bookmarkedIds, onToggleBookmark, onRetryMessage, onDismissMessage, onOpenQuestions, onEditVerification, collapsed = false, collapseDisabled = false, onToggleCollapse }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const initialized = useRef(false);
   const followLatest = useRef(true);
   const entries = useMemo(() => buildConversationEntries(bundle, view, channel), [bundle, channel, view]);
+  const latestBankAiEntry = [...entries].reverse().find((entry) => entry.kind === 'MESSAGE' && (entry.data as CaseMessage).message_kind === 'AI_RESPONSE' && (entry.data as CaseMessage).actor_type === 'BANK_AGENT' && (entry.data as CaseMessage).channel === 'TEAM');
+  const verificationTasks = channel === 'TEAM' && onEditVerification ? reviewableVerifications(bundle.verification_tasks ?? []) : [];
   const latestEntry = entries[entries.length - 1];
   const latestEntryKey = latestEntry ? `${latestEntry.id}:${latestEntry.occurredAt}` : 'empty';
   useEffect(() => {
@@ -225,9 +231,11 @@ export const SharedConversation: React.FC<Props> = ({ bundle, view, channel, com
                     onToggle={onToggleBookmark}
                   />
                 }
-                onEditVerification={() => undefined}
+                onEditVerification={onEditVerification ?? (() => undefined)}
                 onRetryMessage={onRetryMessage}
                 onDismissMessage={onDismissMessage}
+                onOpenQuestions={onOpenQuestions}
+                verificationTasks={entry.id === latestBankAiEntry?.id ? verificationTasks : []}
               />
             </div>
           ))

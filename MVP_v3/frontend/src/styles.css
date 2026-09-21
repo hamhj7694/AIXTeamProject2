@@ -294,6 +294,13 @@ body.is-resizing-conversations { cursor: col-resize; user-select: none; }
 .entry-meta b { color: #475467; font-size: 10px; }
 .entry-meta time { margin-left: auto; white-space: nowrap; }
 .message-bubble { margin-top: 4px; border: 1px solid var(--line); border-radius: 4px 12px 12px 12px; padding: 9px 11px; color: #1d2939; background: #fff; font-size: 12px; line-height: 1.65; box-shadow: 0 1px 2px rgba(16,24,40,.03); }
+.bank-ai-summary { margin-bottom: 9px; border-left: 3px solid #5281dc; padding: 7px 10px; background: #f4f7ff; color: #243b63; }
+.bank-ai-summary strong, .bank-ai-summary small { display: block; }
+.bank-ai-summary p { margin: 3px 0; font-size: 12px; overflow-wrap: anywhere; }
+.bank-ai-summary small { color: #667085; font-size: 9px; }
+.bank-ai-question-link { margin-top: 9px; border: 1px solid #b2ccff; border-radius: 7px; padding: 6px 9px; background: #eff4ff; color: #175cd3; font-size: 10px; font-weight: 700; cursor: pointer; }
+.bank-ai-next-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+.bank-ai-next-actions button { border: 1px solid #d0d5dd; border-radius: 7px; padding: 6px 9px; background: #fff; color: #344054; font-size: 10px; font-weight: 700; cursor: pointer; text-align: left; overflow-wrap: anywhere; }
 .message-row.mine.customer-message .message-bubble { border-color: #2e62d3; border-radius: 12px 4px 12px 12px; color: #fff; background: #2e62d3; }
 .message-row.mine.internal-message .message-bubble { border-color: #101828; border-radius: 12px 4px 12px 12px; color: #fff; background: #101828; }
 .message-row .entry-meta span { border-radius: 999px; padding: 3px 6px; font-size: 8px; font-weight: 850; }.message-row.customer-message .entry-meta span { color: #175cd3; background: #eff4ff; }.message-row.internal-message .entry-meta span { color: #344054; background: #eaecf0; }
