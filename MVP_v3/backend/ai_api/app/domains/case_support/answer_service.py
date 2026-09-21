@@ -75,6 +75,12 @@ class CustomerAnswerStructuringService:
                 yes_value="EXPOSED",
             )
         if target_field is TargetField.REMOTE_CONTROL_APP:
+            # 설치 안내·요구는 실제 설치 여부에 대한 답이 아니다.
+            if any(marker in text for marker in (
+                "설치안내", "설치하라고", "설치요구", "설치권유",
+                "다운로드하라고", "앱을깔라고", "깔라고",
+            )):
+                return None
             return self._yes_no_value(
                 text,
                 negative=("설치안", "설치하지않", "깔지않", "안깔", "다운로드안"),

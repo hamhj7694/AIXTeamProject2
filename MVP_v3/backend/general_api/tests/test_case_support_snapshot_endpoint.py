@@ -160,14 +160,93 @@ class CaseSupportSnapshotEndpointTest(unittest.TestCase):
         sent_context = general_main.service.ai_client.build_case_support_snapshot.await_args.args[0]["question_context"]
         self.assertEqual(sent_context["answered_question_fields"], ["transfer_status"])
 
-    def test_known_case_transfer_status_is_not_recommended_again(self) -> None:
+    def test_case_transfer_value_alone_does_not_suppress_question(self) -> None:
         self.repository.get.return_value["victim_transfer_status"] = "YES"
 
-        response = self.client.get("/api/cases/CASE-AI-1/ai/case-support")
+        response = self.client.get("/api/cases/CASE-AI-1/customer-question-candidates")
 
         self.assertEqual(response.status_code, 200)
         sent_context = general_main.service.ai_client.build_case_support_snapshot.await_args.args[0]["question_context"]
-        self.assertIn("transfer_status", sent_context["confirmed_fields"])
+        self.assertNotIn("transfer_status", sent_context["confirmed_fields"])
+        self.assertIn("transfer_status", {general_main.normalize_target_field(item["target_field"]) for item in response.json()})
+
+    def test_transfer_question_requires_statement_or_confirmed_fact_not_proposal(self) -> None:
+        for fact_status, expected in (("PROPOSED", True), ("CONFIRMED", False)):
+            with self.subTest(fact_status=fact_status):
+                self.repository.list_case_facts.return_value = [{
+                    "fact_id": "f-transfer", "field": "transfer_status",
+                    "value": "송금했어요", "status": fact_status,
+                }]
+                response = self.client.get("/api/cases/CASE-AI-1/customer-question-candidates")
+                fields = {general_main.normalize_target_field(item["target_field"]) for item in response.json()}
+                self.assertEqual("transfer_status" in fields, expected)
+
+    def test_remote_question_asks_about_actual_installation(self) -> None:
+        response = self.client.get("/api/cases/CASE-AI-1/customer-question-candidates")
+        remote = next(item for item in response.json() if item["target_field"] == "remote_control_app")
+        self.assertIn("실제로 설치", remote["question_text"])
+        self.assertEqual(remote["options"], ["설치했어요", "설치하지 않았어요", "잘 모르겠어요"])
+        self.repository.queue_customer_questions.assert_not_awaited()
+        self.repository.dispatch_next_customer_question.assert_not_awaited()
+
+    def test_confirmed_installation_request_is_not_confirmed_installation(self) -> None:
+        self.repository.list_case_facts.return_value = [{
+            "fact_id": "f-request", "field": "remote_control_app",
+            "value": "원격제어 앱 설치 요구", "status": "CONFIRMED",
+        }]
+        response = self.client.get("/api/cases/CASE-AI-1/customer-question-candidates")
+        self.assertIn("remote_control_app", {item["target_field"] for item in response.json()})
+
+    def test_institution_conceptual_duplicate_keeps_existing_targets_distinct(self) -> None:
+        ai_payload = general_main.service.ai_client.build_case_support_snapshot.return_value
+        ai_payload["recommended_questions"].append({
+            "question_id": "q-claimed", "target_field": "claimed_organization",
+            "question": "상대방은 어느 기관이나 회사 소속이라고 말했나요?",
+            "reason": "소속 주장 확인", "priority": "P1",
+        })
+        response = self.client.get("/api/cases/CASE-AI-1/customer-question-candidates")
+        fields = {item["target_field"] for item in response.json()}
+        self.assertIn("claimed_organization", fields)
+        self.assertNotIn("impersonated_institution", fields)
+        self.assertNotEqual(general_main.normalize_target_field("claimed_organization"),
+                            general_main.normalize_target_field("impersonated_institution"))
+
+    def test_legacy_institution_question_suppresses_matching_new_basic_question(self) -> None:
+        self.repository.list_customer_questions.return_value = [{
+            "question_id": "legacy-institution", "target_field": "impersonated_institution",
+            "question_text": "상대방이 어느 기관이나 은행을 사칭했는지 알려주실 수 있나요?",
+            "status": "ASKED", "answer_text": None,
+        }]
+        response = self.client.get("/api/cases/CASE-AI-1/customer-question-candidates")
+        self.assertNotIn("claimed_organization", {item["target_field"] for item in response.json()})
+
+    def test_all_valid_candidates_are_returned_without_filling_or_capping(self) -> None:
+        ai_payload = general_main.service.ai_client.build_case_support_snapshot.return_value
+        ai_payload["recommended_questions"].extend([
+            {"question_id": "q-purpose", "target_field": "transfer_purpose", "question": "송금 명목은 무엇인가요?", "reason": "명목 확인", "priority": "P1"},
+            {"question_id": "q-claimed", "target_field": "claimed_organization", "question": "상대방은 어느 기관 소속이라고 말했나요?", "reason": "소속 확인", "priority": "P1"},
+            {"question_id": "q-incident", "target_field": "incident_claim", "question": "상대방은 어떤 사건이라고 말했나요?", "reason": "주장 확인", "priority": "P1"},
+            {"question_id": "q-unmapped", "target_field": "ongoing_contact", "question": "지금도 통화 중인가요?", "reason": "미매핑", "priority": "P0"},
+        ])
+        response = self.client.get("/api/cases/CASE-AI-1/customer-question-candidates")
+        fields = [general_main.normalize_target_field(item["target_field"]) for item in response.json()]
+        self.assertEqual(len(fields), 7)
+        self.assertNotIn("ongoing_contact", fields)
+        self.assertEqual(fields[:4], ["transfer_status", "authentication_information_exposure",
+                                       "personal_information_exposure", "remote_control_app"])
+        self.assertEqual(fields[4], "transfer_purpose")
+
+    def test_only_two_needed_candidates_are_returned(self) -> None:
+        self.repository.list_customer_questions.return_value = [
+            {"question_id": f"q-{field}", "target_field": field,
+             "question_text": "상대방은 어느 기관 소속이라고 말했나요?" if field == "impersonated_institution" else f"{field} 확인",
+             "status": "PENDING", "answer_text": None}
+            for field in ("personal_information_exposure", "authentication_information_exposure",
+                          "impersonated_institution")
+        ]
+        response = self.client.get("/api/cases/CASE-AI-1/customer-question-candidates")
+        self.assertEqual(len(response.json()), 2)
+        self.repository.queue_customer_questions.assert_not_awaited()
 
     def test_sends_latest_case_work_state_to_ai_snapshot(self) -> None:
         self.repository.list_customer_questions.return_value = [{

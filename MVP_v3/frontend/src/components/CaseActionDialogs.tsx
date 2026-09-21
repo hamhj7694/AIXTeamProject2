@@ -37,17 +37,28 @@ const isPersistentQuestionDraft = (item: QuestionCandidate) => item.question_id.
 
 export const reconcileQuestionDraft = (items: QuestionCandidate[], selected: string[], authoritative: QuestionCandidate[]): QuestionDraftState => {
   const validTargets = new Set(authoritative.map((item) => questionTargetKey(item.target_field)));
-  const preserved = items.filter((item) => isPersistentQuestionDraft(item) || validTargets.has(questionTargetKey(item.target_field)));
+  const preserved = items.filter((item) => {
+    // 이전 기본 문장은 설치 요구를 물었으므로 실제 설치 여부 후보로 교체한다.
+    if (item.question_id === 'candidate-remote_control_app' && item.question_text.includes('설치하라는 안내')) return false;
+    return isPersistentQuestionDraft(item) || validTargets.has(questionTargetKey(item.target_field));
+  });
   const usedTargets = new Set(preserved.map((item) => questionTargetKey(item.target_field)));
   const usedTexts = new Set(preserved.map((item) => questionTextKey(item.question_text)));
   const added = authoritative.filter((item) => !usedTargets.has(questionTargetKey(item.target_field)) && !usedTexts.has(questionTextKey(item.question_text)));
   const nextItems = [...preserved, ...added];
+  const authoritativeOrder = new Map(authoritative.map((item, index) => [questionTargetKey(item.target_field), index]));
+  nextItems.sort((left, right) =>
+    (authoritativeOrder.get(questionTargetKey(left.target_field)) ?? Number.MAX_SAFE_INTEGER)
+    - (authoritativeOrder.get(questionTargetKey(right.target_field)) ?? Number.MAX_SAFE_INTEGER));
   const validIds = new Set(nextItems.map((item) => item.question_id));
   return {
     items: nextItems,
     selected: [...new Set([...selected.filter((id) => validIds.has(id)), ...added.filter((item) => item.priority === 'P0').map((item) => item.question_id)])],
   };
 };
+
+export const visibleQuestionCandidates = (items: QuestionCandidate[], showAdditional: boolean) =>
+  showAdditional ? items : items.slice(0, 5);
 
 const questionDraftKey = (caseId: string) => `csr:question-drafts:${caseId}`;
 const readQuestionDraft = (caseId: string): QuestionDraftState | null => {
@@ -73,6 +84,7 @@ export const QuestionDialog: React.FC<{ caseId: string; initial: QuestionCandida
   const [aiNote, setAiNote] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState('');
+  const [showAdditional, setShowAdditional] = useState(false);
   const itemsRef = useRef(items);
   const selectedRef = useRef(selected);
   itemsRef.current = items;
@@ -90,6 +102,12 @@ export const QuestionDialog: React.FC<{ caseId: string; initial: QuestionCandida
   useEffect(() => {
     if (!loading) writeQuestionDraft(caseId, { items, selected });
   }, [caseId, items, loading, selected]);
+  useEffect(() => {
+    // 선택된 질문은 접힌 영역에 숨겨진 채로 전송되지 않게 한다.
+    if (!showAdditional && items.slice(5).some((item) => selected.includes(item.question_id))) {
+      setShowAdditional(true);
+    }
+  }, [items, selected, showAdditional]);
   const removeQuestion = (questionId: string) => {
     setItems((current) => current.filter((item) => item.question_id !== questionId));
     setSelected((current) => current.filter((id) => id !== questionId));
@@ -106,6 +124,7 @@ export const QuestionDialog: React.FC<{ caseId: string; initial: QuestionCandida
     const value = custom.trim(); if (!value) return;
     const id = `staff-${generateUuid()}`;
     setItems((current) => [...current, { question_id: id, target_field: id, question_text: value, reason: '은행 담당자가 현재 Case 맥락에 따라 직접 추가했습니다.', priority: 'P1', options: [], answer_mode: 'TEXT', allow_free_text: true }]);
+    if (itemsRef.current.length >= 5) setShowAdditional(true);
     setSelected((current) => [...current, id]); setCustom('');
   };
   const recommendQuestions = async () => {
@@ -121,6 +140,7 @@ export const QuestionDialog: React.FC<{ caseId: string; initial: QuestionCandida
       const latest = await casesApi.questionCandidates(caseId);
       const next = reconcileQuestionDraft(combined, [...selectedRef.current, ...additions.map((item) => item.question_id)], latest);
       setItems(next.items); setSelected(next.selected);
+      if (additions.length > 0 && next.items.length > 5) setShowAdditional(true);
       const acceptedIds = new Set(next.items.map((item) => item.question_id));
       const accepted = additions.filter((item) => acceptedIds.has(item.question_id)).length;
       setAiNote(accepted > 0 ? `${accepted}개의 질문 초안을 현재 목록에 반영했습니다. 내용을 검토하고 수정·선택해 주세요.` : '현재 Case에서 새로 추천할 질문이 없습니다.');
@@ -128,6 +148,8 @@ export const QuestionDialog: React.FC<{ caseId: string; initial: QuestionCandida
     finally { setRecommending(false); }
   };
   const chosen = useMemo(() => items.filter((item) => selected.includes(item.question_id)), [items, selected]);
+  const visibleItems = visibleQuestionCandidates(items, showAdditional);
+  const additionalCount = Math.max(0, items.length - 5);
   const submit = async () => {
     if (!chosen.length || saving) return;
     setSaving(true); setError('');
@@ -159,7 +181,8 @@ export const QuestionDialog: React.FC<{ caseId: string; initial: QuestionCandida
     <div className="dialog-body">
       <div className="ai-dialog-action"><div><Sparkles size={16}/><span><b>AI 질문 추천</b><small>현재 Case의 대화·답변·확인 이력을 읽고 중복되지 않는 질문을 제안합니다.</small></span></div><button type="button" onClick={() => void recommendQuestions()} disabled={recommending || saving}>{recommending ? <Loader2 className="spin" size={15}/> : <Sparkles size={15}/>}AI에게 질문 추천 받기</button></div>
       {aiNote && <p className="ai-recommendation-note">{aiNote}</p>}
-      {loading ? <div className="dialog-loading"><Loader2 className="spin" size={18}/>현재 Case에서 필요한 질문을 정리하고 있습니다.</div> : <div className="question-options">{items.length ? items.map((item) => <article className="question-option-card" key={item.question_id}><label><input type="checkbox" checked={selected.includes(item.question_id)} onChange={() => setSelected((current) => current.includes(item.question_id) ? current.filter((id) => id !== item.question_id) : [...current, item.question_id])}/><span>{editingId === item.question_id ? <input className="question-edit-input" value={editingText} autoFocus onChange={(event) => setEditingText(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); saveEditing(item.question_id); } if (event.key === 'Escape') { setEditingId(null); setEditingText(''); } }}/>: <b>{item.question_text}</b>}<small>{isDynamicQuestionDraft(item) && <strong className="ai-dynamic-question">AI 동적 추천</strong>}<em>{priorityLabel(item.priority)}</em>{item.reason}</small></span></label><div className="question-card-actions">{editingId === item.question_id ? <><button type="button" onClick={() => saveEditing(item.question_id)} disabled={!editingText.trim()} aria-label="질문 수정 저장"><Check size={14}/></button><button type="button" onClick={() => { setEditingId(null); setEditingText(''); }} aria-label="질문 수정 취소"><X size={14}/></button></> : <button type="button" onClick={() => startEditing(item)} aria-label="질문 편집"><Pencil size={14}/></button>}<button type="button" onClick={() => removeQuestion(item.question_id)} aria-label="질문 삭제"><Trash2 size={14}/></button></div></article>) : <p className="dialog-empty">추가로 추천할 질문이 없습니다. 필요한 질문을 직접 추가할 수 있습니다.</p>}</div>}
+      {loading ? <div className="dialog-loading"><Loader2 className="spin" size={18}/>현재 Case에서 필요한 질문을 정리하고 있습니다.</div> : <div className="question-options">{items.length ? visibleItems.map((item) => <article className="question-option-card" key={item.question_id}><label><input type="checkbox" checked={selected.includes(item.question_id)} onChange={() => setSelected((current) => current.includes(item.question_id) ? current.filter((id) => id !== item.question_id) : [...current, item.question_id])}/><span>{editingId === item.question_id ? <input className="question-edit-input" value={editingText} autoFocus onChange={(event) => setEditingText(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); saveEditing(item.question_id); } if (event.key === 'Escape') { setEditingId(null); setEditingText(''); } }}/>: <b>{item.question_text}</b>}<small>{isDynamicQuestionDraft(item) && <strong className="ai-dynamic-question">AI 동적 추천</strong>}<em>{priorityLabel(item.priority)}</em>{item.reason}</small></span></label><div className="question-card-actions">{editingId === item.question_id ? <><button type="button" onClick={() => saveEditing(item.question_id)} disabled={!editingText.trim()} aria-label="질문 수정 저장"><Check size={14}/></button><button type="button" onClick={() => { setEditingId(null); setEditingText(''); }} aria-label="질문 수정 취소"><X size={14}/></button></> : <button type="button" onClick={() => startEditing(item)} aria-label="질문 편집"><Pencil size={14}/></button>}<button type="button" onClick={() => removeQuestion(item.question_id)} aria-label="질문 삭제"><Trash2 size={14}/></button></div></article>) : <p className="dialog-empty">추가로 추천할 질문이 없습니다. 필요한 질문을 직접 추가할 수 있습니다.</p>}</div>}
+      {!loading && additionalCount > 0 && <button type="button" className="secondary-action" onClick={() => setShowAdditional((current) => !current)}>{showAdditional ? '추가 후보 접기' : `추가 후보 ${additionalCount}개 보기`}</button>}
       <div className="inline-add"><input value={custom} onChange={(event) => setCustom(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addCustom(); } }} placeholder="직접 질문 추가"/><button type="button" onClick={addCustom} disabled={!custom.trim()}><Plus size={15}/>추가</button></div>
       <DialogError message={error}/>
       <p className="dialog-queue-note">여러 질문을 등록해도 고객에게는 한 번에 하나씩 표시되며, 나머지는 답변 대기열에 저장됩니다.</p>
