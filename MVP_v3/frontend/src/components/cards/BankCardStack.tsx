@@ -28,7 +28,7 @@ export function BankCardStack({ cards, cardContent, collapsedCards, updatedCards
           <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}><strong style={{ color: '#175cd3', fontSize: 12 }}>{cardTitles[kind]}</strong>{updatedCards[kind] && <span style={{ borderRadius: 999, padding: '2px 6px', color: '#175cd3', background: '#dbe8ff', fontSize: 10, fontWeight: 800 }}>업데이트됨</span>}</div>
           <div style={{ display: 'flex', gap: 4 }}>
             <button type="button" onClick={() => { onToggleCollapsed(kind); onViewed(kind); }} aria-label={collapsed ? `${cardTitles[kind]} 펼치기` : `${cardTitles[kind]} 접기`} title={collapsed ? '펼치기' : '접기'} style={{ border: 0, background: 'transparent', cursor: 'pointer', padding: 3 }}>
-              {collapsed ? <ChevronDown size={15}/> : <ChevronUp size={15}/>} 
+              {collapsed ? <ChevronDown size={15}/> : <ChevronUp size={15}/>}
             </button>
             <button type="button" onClick={() => onClose(kind)} aria-label={`${cardTitles[kind]} 닫기`} title="닫기" style={{ border: 0, background: 'transparent', cursor: 'pointer', padding: 3 }}>
               <X size={15}/>
