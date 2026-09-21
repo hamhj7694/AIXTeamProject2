@@ -3,7 +3,6 @@ import { ChevronUp, CreditCard } from 'lucide-react';
 export type BankCardKind = 'transaction' | 'fds' | 'additionalLookup';
 
 const options: Array<{ value: BankCardKind; label: string }> = [
-  { value: 'transaction', label: '은행 거래 확인' },
   { value: 'fds', label: 'FDS 분석 결과' },
   { value: 'additionalLookup', label: '추가 조회 결과' },
 ];

@@ -29,6 +29,9 @@ def normalize_target_field(value: str) -> str:
 
 
 class CaseRepository(Protocol):
+    async def list_transactions(self, case_id: str) -> list[dict[str, Any]]: ...
+    async def create_transaction(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]: ...
+    async def update_transaction(self, case_id: str, transaction_id: int, changes: dict[str, Any]) -> dict[str, Any] | None: ...
     async def list_bank_staff(self) -> list[dict[str, Any]]: ...
     async def create_bank_staff(self, record: dict[str, Any]) -> dict[str, Any]: ...
     async def update_bank_staff(self, staff_id: str, changes: dict[str, Any]) -> dict[str, Any] | None: ...
@@ -43,7 +46,7 @@ class CaseRepository(Protocol):
     async def restore_case(self, case_id: str) -> None: ...
     async def purge_case(self, case_id: str) -> None: ...
     async def purge_expired_trash(self, retention_days: int = 30) -> list[str]: ...
-    async def append_message(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]: ...
+    async def append_message(self, case_id: str, record: dict[str, Any], *, source_guard: dict[str, Any] | None = None) -> dict[str, Any] | None: ...
     async def find_message_by_client_request_id(self, case_id: str, client_request_id: str) -> dict[str, Any] | None: ...
     async def list_messages(self, case_id: str, channel: str | None = None) -> list[dict[str, Any]]: ...
     async def enqueue_message_extraction(self, case_id: str, message_id: str) -> dict[str, Any]: ...
@@ -272,7 +275,7 @@ class InMemoryCaseRepository:
                 self._remove_case_records(case_id)
             return expired
 
-    async def append_message(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]:
+    async def append_message(self, case_id: str, record: dict[str, Any], *, source_guard: dict[str, Any] | None = None) -> dict[str, Any] | None:
         async with self._lock:
             if not any(item["case_id"] == case_id for item in self._records):
                 raise KeyError(case_id)
@@ -281,6 +284,19 @@ class InMemoryCaseRepository:
                 existing = next((item for item in self._messages if item["case_id"] == case_id and item.get("client_request_id") == client_request_id), None)
                 if existing is not None:
                     return deepcopy(existing)
+            if source_guard:
+                source_ids = list(dict.fromkeys(source_guard.get("source_message_ids", [])))
+                eligible_ids = [
+                    item["message_id"] for item in self._messages
+                    if item["case_id"] == case_id
+                    and item.get("channel") == source_guard.get("channel")
+                    and item.get("actor_type") == source_guard.get("actor_type")
+                    and item.get("actor_user_id") == source_guard.get("actor_user_id")
+                    and item.get("message_kind", "CHAT") == "CHAT"
+                ]
+                # source batch가 해당 대화 stream의 최신 연속 MESSAGE가 아니면 늦은 AI 응답을 저장하지 않는다.
+                if not source_ids or eligible_ids[-len(source_ids):] != source_ids:
+                    return None
             attachment_ids = list(dict.fromkeys(record.get("attachment_ids", [])))
             attachments = [item for item in self._attachments if item["case_id"] == case_id and item["attachment_id"] in attachment_ids]
             if len(attachments) != len(attachment_ids):

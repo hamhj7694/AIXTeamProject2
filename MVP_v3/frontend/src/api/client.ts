@@ -3,6 +3,26 @@ const baseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 
 export const apiUrl = (path: string) => `${baseUrl}${path}`;
 
+export class ApiRequestError extends Error {
+  constructor(message: string, readonly status: number, readonly code?: string) {
+    super(message);
+    this.name = 'ApiRequestError';
+  }
+}
+
+const responseErrorCode = (payload: unknown) => {
+  if (!payload || typeof payload !== 'object') return undefined;
+  const body = payload as { error?: { code?: unknown }; detail?: unknown };
+  const detail = body.error ?? (body.detail && typeof body.detail === 'object' && !Array.isArray(body.detail)
+    ? body.detail as { code?: unknown }
+    : undefined);
+  return typeof detail?.code === 'string' ? detail.code : undefined;
+};
+
+export const isApiErrorCode = (reason: unknown, code: string) => (
+  reason instanceof ApiRequestError && reason.code === code
+);
+
 export const errorMessage = (payload: unknown, status: number) => {
   const codes: Record<string, string> = {
     CASE_NOT_FOUND: '사건을 찾을 수 없습니다. 목록을 새로고침해 주세요.',
@@ -20,6 +40,7 @@ export const errorMessage = (payload: unknown, status: number) => {
     OPENAI_QUOTA_EXHAUSTED: 'AI 사용 한도에 도달했습니다. 관리자에게 사용량 확인을 요청해 주세요.',
     AI_BUDGET_LIMIT_REACHED: '이번 분석 내용이 현재 AI 처리 한도를 넘어섰습니다. 입력을 나누거나 잠시 후 다시 시도해 주세요.',
     AI_FINAL_REPORT_FAILED: 'AI 최종 보고서 생성에 실패했습니다. 연결 상태 확인 후 다시 시도해 주세요.',
+    AI_GENERATION_STALE: '새 메시지가 추가되어 이전 AI 답변 생성을 종료했습니다.',
   };
   if (payload && typeof payload === 'object') {
     const body = payload as { error?: { code?: unknown; message?: unknown }; detail?: unknown };
@@ -55,12 +76,13 @@ export const request = async <T>(path: string, init?: RequestInit): Promise<T> =
   let response: Response;
   try {
     response = await fetch(apiUrl(path), { ...init, headers });
-  } catch {
+  } catch (reason) {
+    if (reason instanceof Error && reason.name === 'AbortError') throw reason;
     throw new Error('서버에 연결할 수 없습니다. 네트워크와 서버 실행 상태를 확인해 주세요.');
   }
   if (response.status === 204) return undefined as T;
   const payload: unknown = await response.json().catch(() => null);
-  if (!response.ok) throw new Error(errorMessage(payload, response.status));
+  if (!response.ok) throw new ApiRequestError(errorMessage(payload, response.status), response.status, responseErrorCode(payload));
   return presentResponse(payload) as T;
 };
 

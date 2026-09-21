@@ -261,6 +261,22 @@ export interface StoredCase {
   trash_expires_at?: string | null;
 }
 
+export interface CaseTransaction {
+  id: number;
+  case_id: string;
+  transaction_type: string;
+  transaction_at: string;
+  amount: number;
+  account_number?: string | null;
+  counterparty_name?: string | null;
+  counterparty_account?: string | null;
+  bank_name?: string | null;
+  memo?: string | null;
+  source: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Attachment {
   attachment_id: string;
   case_id: string;

@@ -64,6 +64,44 @@ class MySqlCaseRepository:
             if not row or row[0] != 1:
                 raise RuntimeError("MySQL readiness query failed")
 
+    async def list_transactions(self, case_id: str) -> list[dict[str, Any]]:
+        pool = await self._get_pool()
+        async with pool.acquire() as connection, connection.cursor(aiomysql.DictCursor) as cursor:
+            await cursor.execute("SELECT * FROM case_transactions WHERE case_id=%s ORDER BY transaction_at DESC, id DESC", (case_id,))
+            rows = await cursor.fetchall()
+        return [{**row, "transaction_at": _utc_iso(row["transaction_at"]), "created_at": _utc_iso(row["created_at"]), "updated_at": _utc_iso(row["updated_at"]), "amount": float(row["amount"])} for row in rows]
+
+    async def create_transaction(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]:
+        pool = await self._get_pool()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        async with pool.acquire() as connection:
+            try:
+                async with connection.cursor() as cursor:
+                    await cursor.execute("INSERT INTO case_transactions (case_id, transaction_type, transaction_at, amount, account_number, counterparty_name, counterparty_account, bank_name, memo, source, created_at, updated_at) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)", (case_id, record["transaction_type"], _utc_naive(record["transaction_at"]), record["amount"], record.get("account_number"), record.get("counterparty_name"), record.get("counterparty_account"), record.get("bank_name"), record.get("memo"), record.get("source", "MANUAL"), now, now))
+                    transaction_id = cursor.lastrowid
+                await connection.commit()
+            except Exception:
+                await connection.rollback()
+                raise
+        rows = await self.list_transactions(case_id)
+        return next(row for row in rows if row["id"] == transaction_id)
+
+    async def update_transaction(self, case_id: str, transaction_id: int, changes: dict[str, Any]) -> dict[str, Any] | None:
+        allowed = ("transaction_type", "transaction_at", "amount", "account_number", "counterparty_name", "counterparty_account", "bank_name", "memo", "source")
+        fields = [(key, _utc_naive(changes[key]) if key == "transaction_at" else changes[key]) for key in allowed if key in changes]
+        pool = await self._get_pool()
+        async with pool.acquire() as connection:
+            try:
+                if fields:
+                    assignments = ", ".join(f"{key}=%s" for key, _ in fields)
+                    async with connection.cursor() as cursor:
+                        await cursor.execute(f"UPDATE case_transactions SET {assignments}, updated_at=%s WHERE id=%s AND case_id=%s", [value for _, value in fields] + [datetime.now(timezone.utc).replace(tzinfo=None), transaction_id, case_id])
+                await connection.commit()
+            except Exception:
+                await connection.rollback()
+                raise
+        return next((row for row in await self.list_transactions(case_id) if row["id"] == transaction_id), None)
+
     async def close(self) -> None:
         """테스트·애플리케이션 종료 시 MySQL 연결 Pool을 정리한다."""
         if self._pool is None:
@@ -350,7 +388,7 @@ class MySqlCaseRepository:
             await self.purge_case(case_id)
         return expired
 
-    async def append_message(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]:
+    async def append_message(self, case_id: str, record: dict[str, Any], *, source_guard: dict[str, Any] | None = None) -> dict[str, Any] | None:
         client_request_id = record.get("client_request_id")
         if client_request_id:
             existing = await self.find_message_by_client_request_id(case_id, client_request_id)
@@ -366,6 +404,27 @@ class MySqlCaseRepository:
                     await cursor.execute("SELECT case_id FROM cases WHERE case_id=%s FOR UPDATE", (case_id,))
                     if not await cursor.fetchone():
                         raise KeyError(case_id)
+                    if source_guard:
+                        source_ids = list(dict.fromkeys(source_guard.get("source_message_ids", [])))
+                        if not source_ids:
+                            await connection.rollback()
+                            return None
+                        await cursor.execute(
+                            f"""SELECT message_id FROM messages
+                                WHERE case_id=%s AND channel=%s AND actor_type=%s AND actor_user_id=%s AND message_kind='CHAT'
+                                ORDER BY created_at DESC, message_id DESC LIMIT {len(source_ids)}""",
+                            (
+                                case_id,
+                                source_guard.get("channel"),
+                                source_guard.get("actor_type"),
+                                source_guard.get("actor_user_id"),
+                            ),
+                        )
+                        latest_source_ids = [row[0] for row in reversed(await cursor.fetchall())]
+                        # Case row lock은 모든 MESSAGE append가 사용하는 동일 lock이므로 검사와 insert 사이를 보호한다.
+                        if latest_source_ids != source_ids:
+                            await connection.rollback()
+                            return None
                     if attachment_ids:
                         placeholders = ",".join(["%s"] * len(attachment_ids))
                         await cursor.execute(
