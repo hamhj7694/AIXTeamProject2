@@ -58,7 +58,7 @@ assert.match(source, /isDynamicQuestionDraft[\s\S]*qf1:/);
 assert.match(source, /AI 동적 추천/);
 const recommendationHandler = source.slice(source.indexOf('const recommendQuestions'), source.indexOf('const chosen'));
 assert.doesNotMatch(recommendationHandler, /queueQuestions/);
-assert.match(source, /created\.length === chosen\.length/);
+assert.match(source, /created\.length === reviewItems\.length/);
 assert.match(source, /created\.length === 0/);
 assert.match(source, /개 중.*개를 등록했습니다/);
 assert.match(source, /한 번에 하나씩 표시/);

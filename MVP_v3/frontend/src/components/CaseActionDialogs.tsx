@@ -85,6 +85,7 @@ export const QuestionDialog: React.FC<{ caseId: string; initial: QuestionCandida
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState('');
   const [showAdditional, setShowAdditional] = useState(false);
+  const [reviewItems, setReviewItems] = useState<QuestionCandidate[] | null>(null);
   const itemsRef = useRef(items);
   const selectedRef = useRef(selected);
   itemsRef.current = items;
@@ -151,11 +152,11 @@ export const QuestionDialog: React.FC<{ caseId: string; initial: QuestionCandida
   const visibleItems = visibleQuestionCandidates(items, showAdditional);
   const additionalCount = Math.max(0, items.length - 5);
   const submit = async () => {
-    if (!chosen.length || saving) return;
+    if (!reviewItems?.length || saving) return;
     setSaving(true); setError('');
     try {
-      const created = await casesApi.queueQuestions(caseId, chosen);
-      if (created.length === chosen.length) {
+      const created = await casesApi.queueQuestions(caseId, reviewItems);
+      if (created.length === reviewItems.length) {
         clearQuestionDraft(caseId); await onDone(); onClose(); return;
       }
       if (created.length > 0) await onDone();
@@ -172,22 +173,25 @@ export const QuestionDialog: React.FC<{ caseId: string; initial: QuestionCandida
         setItems(remaining); setSelected((current) => current.filter((id) => remainingIds.has(id)));
       }
       if (created.length === 0) setError('새로 등록된 질문이 없습니다. 이미 등록·발송·답변되었거나 확인이 완료된 질문일 수 있습니다.');
-      else setAiNote(`${chosen.length}개 중 ${created.length}개를 등록했습니다. 나머지는 이미 처리된 질문이라 제외되었습니다.`);
+      else setAiNote(`${reviewItems.length}개 중 ${created.length}개를 등록했습니다. 나머지는 이미 처리된 질문이라 제외되었습니다.`);
+      setReviewItems(null);
     }
     catch (reason) { setError(reason instanceof Error ? reason.message : '질문을 고객 대기열에 등록하지 못했습니다.'); }
     finally { setSaving(false); }
   };
-  return <DialogShell title="고객에게 확인 질문" description="AI가 이미 확인한 내용을 제외하고 제안한 질문입니다. 필요한 항목만 선택하세요." onClose={onClose}>
+  return <DialogShell title="고객에게 확인 질문" description={reviewItems ? '고객 대기열에 등록할 질문을 전송 전에 확인하세요.' : 'AI가 이미 확인한 내용을 제외하고 제안한 질문입니다. 필요한 항목만 선택하세요.'} onClose={onClose}>
     <div className="dialog-body">
+      {reviewItems ? <section className="question-send-review" aria-label="보낼 질문 묶음"><h3>보낼 질문 묶음 · {reviewItems.length}개</h3><ol>{reviewItems.map((item) => <li key={item.question_id}>{item.question_text}</li>)}</ol><p className="dialog-queue-note">등록 후 첫 질문만 고객에게 표시됩니다. 나머지는 답변 대기열에서 순서대로 진행됩니다.</p></section> : <>
       <div className="ai-dialog-action"><div><Sparkles size={16}/><span><b>AI 질문 추천</b><small>현재 Case의 대화·답변·확인 이력을 읽고 중복되지 않는 질문을 제안합니다.</small></span></div><button type="button" onClick={() => void recommendQuestions()} disabled={recommending || saving}>{recommending ? <Loader2 className="spin" size={15}/> : <Sparkles size={15}/>}AI에게 질문 추천 받기</button></div>
       {aiNote && <p className="ai-recommendation-note">{aiNote}</p>}
       {loading ? <div className="dialog-loading"><Loader2 className="spin" size={18}/>현재 Case에서 필요한 질문을 정리하고 있습니다.</div> : <div className="question-options">{items.length ? visibleItems.map((item) => <article className="question-option-card" key={item.question_id}><label><input type="checkbox" checked={selected.includes(item.question_id)} onChange={() => setSelected((current) => current.includes(item.question_id) ? current.filter((id) => id !== item.question_id) : [...current, item.question_id])}/><span>{editingId === item.question_id ? <input className="question-edit-input" value={editingText} autoFocus onChange={(event) => setEditingText(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); saveEditing(item.question_id); } if (event.key === 'Escape') { setEditingId(null); setEditingText(''); } }}/>: <b>{item.question_text}</b>}<small>{isDynamicQuestionDraft(item) && <strong className="ai-dynamic-question">AI 동적 추천</strong>}<em>{priorityLabel(item.priority)}</em>{item.reason}</small></span></label><div className="question-card-actions">{editingId === item.question_id ? <><button type="button" onClick={() => saveEditing(item.question_id)} disabled={!editingText.trim()} aria-label="질문 수정 저장"><Check size={14}/></button><button type="button" onClick={() => { setEditingId(null); setEditingText(''); }} aria-label="질문 수정 취소"><X size={14}/></button></> : <button type="button" onClick={() => startEditing(item)} aria-label="질문 편집"><Pencil size={14}/></button>}<button type="button" onClick={() => removeQuestion(item.question_id)} aria-label="질문 삭제"><Trash2 size={14}/></button></div></article>) : <p className="dialog-empty">추가로 추천할 질문이 없습니다. 필요한 질문을 직접 추가할 수 있습니다.</p>}</div>}
       {!loading && additionalCount > 0 && <button type="button" className="secondary-action" onClick={() => setShowAdditional((current) => !current)}>{showAdditional ? '추가 후보 접기' : `추가 후보 ${additionalCount}개 보기`}</button>}
       <div className="inline-add"><input value={custom} onChange={(event) => setCustom(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addCustom(); } }} placeholder="직접 질문 추가"/><button type="button" onClick={addCustom} disabled={!custom.trim()}><Plus size={15}/>추가</button></div>
+      </>}
       <DialogError message={error}/>
-      <p className="dialog-queue-note">여러 질문을 등록해도 고객에게는 한 번에 하나씩 표시되며, 나머지는 답변 대기열에 저장됩니다.</p>
+      {!reviewItems && <p className="dialog-queue-note">여러 질문을 등록해도 고객에게는 한 번에 하나씩 표시되며, 나머지는 답변 대기열에 저장됩니다.</p>}
     </div>
-    <footer className="dialog-footer"><button className="secondary-action" onClick={onClose}>취소</button><button className="primary-action" onClick={() => void submit()} disabled={!chosen.length || saving}>{saving ? <Loader2 className="spin" size={15}/> : <Check size={15}/>}선택한 질문 {chosen.length}개 전달</button></footer>
+    <footer className="dialog-footer"><button className="secondary-action" onClick={reviewItems ? () => setReviewItems(null) : onClose}>{reviewItems ? '질문 수정' : '취소'}</button><button className="primary-action" onClick={reviewItems ? () => void submit() : () => setReviewItems([...chosen])} disabled={reviewItems ? saving : !chosen.length || loading || Boolean(editingId)}>{saving ? <Loader2 className="spin" size={15}/> : <Check size={15}/>} {reviewItems ? `질문 ${reviewItems.length}개 등록` : `선택한 질문 ${chosen.length}개 검토`}</button></footer>
   </DialogShell>;
 };
 

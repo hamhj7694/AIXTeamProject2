@@ -36,7 +36,7 @@ const bookmarkDetails = (entry: TimelineEntry): Pick<BankBookmark, 'label' | 'su
   }
   if (entry.kind === 'QUESTION' || entry.kind === 'ANSWER') {
     const question = entry.data as CustomerQuestion;
-    return { label: entry.kind === 'QUESTION' ? '고객 확인 질문' : '고객 답변', summary: entry.kind === 'ANSWER' ? `${question.question_text} — ${question.answer_text || ''}` : question.question_text };
+    return { label: entry.kind === 'QUESTION' ? '고객 확인 질문' : '질문 · 답변', summary: entry.kind === 'ANSWER' ? `${question.question_text} — ${question.answer_text || ''}` : question.question_text };
   }
   if (entry.kind === 'VERIFICATION_REQUEST' || entry.kind === 'VERIFICATION_RESULT') {
     const task = entry.data as VerificationTask;
@@ -168,7 +168,7 @@ const EntryCard: React.FC<{ entry: TimelineEntry; bookmark: React.ReactNode; onE
       const occurredAt = question.asked_at ? formatClock(entry.occurredAt) : '고객 노출 전';
       return <article className="question-dispatch-card" data-question-status={question.status}><MessageCircleQuestion size={15}/><div><div className="entry-meta"><b>고객 확인 질문 · {question.sequence}번</b>{bookmark}<time>{occurredAt}</time></div><p>{question.question_text}</p></div><span>{status}</span></article>;
     }
-    return <article className="timeline-card question-card is-complete"><div className="timeline-card-icon"><CheckCircle2 size={17}/></div><div><div className="entry-meta"><b>고객 답변</b>{bookmark}<time>{formatClock(entry.occurredAt)}</time></div><p className="timeline-title">{question.question_text}</p><p className="timeline-result">{questionAnswerLabel(question.answer_text ?? '', question.options)}</p><small>담당자 확인 전 고객 진술입니다.</small></div></article>;
+    return <article className="timeline-card question-card is-complete" data-question-id={question.question_id}><div className="timeline-card-icon"><CheckCircle2 size={17}/></div><div><div className="entry-meta"><b>질문 · 답변 {question.sequence}번</b>{bookmark}<time>{formatClock(entry.occurredAt)}</time></div><small>질문 · {question.asked_at ? formatClock(question.asked_at) : '시각 확인 필요'}</small><p className="timeline-title">{question.question_text}</p><small>답변 · 답변 접수</small><p className="timeline-result">{questionAnswerLabel(question.answer_text ?? '', question.options)}</p><small>담당자 확인 전 고객 진술입니다. 답변 접수만으로 사실이 확정되지는 않습니다.</small></div></article>;
   }
   if (entry.kind === 'FINAL_REPORT') {
     const stored = entry.data as InitialReport;
