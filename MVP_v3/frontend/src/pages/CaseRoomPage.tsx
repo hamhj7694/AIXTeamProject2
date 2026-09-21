@@ -1,8 +1,8 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, Bookmark, CheckCircle2, Clock3, Loader2, PanelRightClose, PanelRightOpen, RefreshCw, RotateCcw, StickyNote, Trash2, Users } from 'lucide-react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { casesApi, CURRENT_BANK_USER } from '../api/cases';
-import type { CaseBundle, CaseFact, CaseMessage, CaseSupportSnapshot, StoredCase, VerificationTask } from '../api/types';
+import type { CaseBundle, CaseFact, CaseMessage, CaseSupportSnapshot, StoredCase, VerificationTask, CaseTransaction } from '../api/types';
 import { ActionDialog, QuestionDialog, VerificationDialog } from '../components/CaseActionDialogs';
 import { AdminCaseDialog } from '../components/AdminCaseDialog';
 import { ContextPanelFoundation } from '../context-v3/ContextPanelFoundation';
@@ -21,9 +21,9 @@ import { generateUuid } from '../uuid';
 import { mergePendingMessages, removeMessage, upsertMessage } from '../api/messageState';
 import { caseState, caseStateTone, incidentTitle, statusLabel } from '../presentation';
 import { BankCardKind } from '../components/cards/BankCardMenu';
-import BankTransactionCard from '../components/cards/BankTransactionCard';
 import FdsResultCard from '../components/cards/FdsResultCard';
-import AdditionalLookupCard from '../components/cards/AdditionalLookupCard';
+import AdditionalLookupCard, { type TransactionItem } from '../components/cards/AdditionalLookupCard';
+import { BankCardStack } from '../components/cards/BankCardStack';
 import { toBankCardData } from '../components/cards/cardData';
 
 type DialogState = { type: 'questions' } | { type: 'verification'; task?: VerificationTask } | { type: 'action' } | null;
@@ -62,10 +62,20 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
   const navigate = useNavigate();
   const initialAssignmentRecommendation = Boolean((location.state as { initialAssignmentRecommendation?: boolean } | null)?.initialAssignmentRecommendation);
   const [caseItem, setCaseItem] = useState<StoredCase | null>(null);
+  const [transactions, setTransactions] = useState<CaseTransaction[]>([]);
+  const [fdsReflectedAt, setFdsReflectedAt] = useState('');
+  const fdsDataFingerprintRef = useRef('');
   const [bundle, setBundle] = useState<CaseBundle | null>(null);
   const [support, setSupport] = useState<CaseSupportSnapshot | null>(null);
   const [facts, setFacts] = useState<CaseFact[]>([]);
   const [selectedBankCard, setSelectedBankCard] = useState<BankCardKind | null>(null);
+  const [openBankCards, setOpenBankCards] = useState<BankCardKind[]>([]);
+  const [collapsedBankCards, setCollapsedBankCards] = useState<Partial<Record<BankCardKind, boolean>>>({});
+  const [updatedBankCards, setUpdatedBankCards] = useState<Partial<Record<BankCardKind, boolean>>>({});
+  const [highlightedBankCard, setHighlightedBankCard] = useState<BankCardKind | null>(null);
+  const [selectedTransaction, setSelectedTransaction] = useState<TransactionItem | null>(null);
+  const cardDataSnapshots = useRef<Partial<Record<BankCardKind, string>>>({});
+  const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -136,8 +146,8 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
     const requestId = ++loadRequestRef.current;
     const generation = aiGenerationRef.current;
     if (quiet) setRefreshing(true); else setLoading(true);
-    const [caseResult, bundleResult, factsResult] = await Promise.allSettled([
-      casesApi.get(caseId), casesApi.bundle(caseId), casesApi.facts(caseId),
+    const [caseResult, bundleResult, factsResult, transactionsResult] = await Promise.allSettled([
+      casesApi.get(caseId), casesApi.bundle(caseId), casesApi.facts(caseId), casesApi.transactions(caseId),
     ]);
     if (requestId !== loadRequestRef.current || generation !== aiGenerationRef.current) return;
     if (caseResult.status === 'rejected') {
@@ -156,6 +166,7 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
       recent_messages: mergePendingMessages(bundleResult.value.recent_messages, pendingMessagesRef.current.values()),
     } : null;
     const nextFacts = factsResult.status === 'fulfilled' ? factsResult.value : null;
+    if (transactionsResult.status === 'fulfilled') setTransactions(transactionsResult.value);
     if (nextBundle) setBundle(nextBundle); else warnings.push('대화와 업무 기록을 갱신하지 못했습니다.');
     if (nextFacts) setFacts(nextFacts); else warnings.push('확인된 사실을 갱신하지 못했습니다.');
     const nextRevision = nextBundle && nextFacts ? caseContextRevision(caseResult.value, nextBundle, nextFacts) : '';
@@ -385,15 +396,66 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
     : teamPaneCollapsed
       ? { gridTemplateColumns: 'minmax(0, 1fr) 4px 52px' }
       : { gridTemplateColumns: `minmax(0, ${customerPaneRatio}fr) 4px minmax(0, ${100 - customerPaneRatio}fr)` };
+  const liveCardData = useMemo(() => caseItem && bundle ? toBankCardData(caseItem, support, bundle, selectedTransaction, transactions, fdsReflectedAt || undefined) : null, [caseItem, support, bundle, selectedTransaction, transactions, fdsReflectedAt]);
+  useEffect(() => {
+    if (!liveCardData) return;
+    const { updatedAt: _ignoredRiskTimestamp, ...fdsRiskValues } = liveCardData.risk;
+    const fdsFingerprint = JSON.stringify(fdsRiskValues);
+    if (!fdsDataFingerprintRef.current) {
+      fdsDataFingerprintRef.current = fdsFingerprint;
+      if (caseItem?.updated_at) setFdsReflectedAt(caseItem.updated_at);
+    } else if (fdsDataFingerprintRef.current !== fdsFingerprint) {
+      fdsDataFingerprintRef.current = fdsFingerprint;
+      setFdsReflectedAt(new Date().toISOString());
+    }
+    const nextSnapshots: Partial<Record<BankCardKind, string>> = {
+      transaction: JSON.stringify(liveCardData.transaction),
+      fds: JSON.stringify(liveCardData.risk),
+      additionalLookup: JSON.stringify(liveCardData.additionalLookup),
+    };
+    const previousSnapshots = cardDataSnapshots.current;
+    setUpdatedBankCards((current) => {
+      const next = { ...current };
+      (Object.keys(nextSnapshots) as BankCardKind[]).forEach((kind) => {
+        if (openBankCards.includes(kind) && previousSnapshots[kind] && previousSnapshots[kind] !== nextSnapshots[kind]) next[kind] = true;
+      });
+      return next;
+    });
+    cardDataSnapshots.current = nextSnapshots;
+  }, [caseItem?.updated_at, liveCardData, openBankCards]);
   if (loading && !caseItem) return <section className="room-state"><Loader2 className="spin" size={24}/><strong>Shared Case를 불러오고 있습니다.</strong><span>대화와 현재 맥락을 함께 준비합니다.</span></section>;
   if (error && !caseItem) return <section className="room-state error"><AlertCircle size={24}/><strong>정보를 불러오지 못했습니다.</strong><span>{error}</span><button onClick={() => void load()}>다시 시도</button></section>;
   if (!caseItem || !bundle) return <section className="room-state error"><AlertCircle size={24}/><strong>Case 기록을 열 수 없습니다.</strong><span>General API의 Bundle 응답을 확인해 주세요.</span><button onClick={() => void load()}>다시 시도</button></section>;
 
-  const cardData = toBankCardData(caseItem, support, bundle);
+  const cardData = liveCardData!;
   const transactionCardData = cardData.transaction;
   const fdsCardData = cardData.risk;
   const additionalLookupData = cardData.additionalLookup;
-  const bankCard = selectedBankCard === 'transaction' ? <BankTransactionCard {...transactionCardData} /> : selectedBankCard === 'fds' ? <FdsResultCard {...fdsCardData} /> : selectedBankCard === 'additionalLookup' ? <AdditionalLookupCard {...additionalLookupData} onViewAll={() => undefined} /> : undefined;
+  const cardContent: Record<BankCardKind, React.ReactNode> = {
+    transaction: null,
+    fds: <FdsResultCard {...fdsCardData} />,
+    additionalLookup: <AdditionalLookupCard {...additionalLookupData} selectedTransaction={selectedTransaction} transactionCardData={transactionCardData} onSelectTransaction={setSelectedTransaction} onBackToList={() => setSelectedTransaction(null)} />,
+  };
+  const selectBankCard = (kind: BankCardKind) => {
+    if (kind === 'additionalLookup') setSelectedTransaction(null);
+    setSelectedBankCard(kind);
+    setOpenBankCards((current) => current.includes(kind) ? current : [...current, kind]);
+    setCollapsedBankCards((current) => ({ ...current, [kind]: false }));
+    setUpdatedBankCards((current) => ({ ...current, [kind]: false }));
+    setHighlightedBankCard(kind);
+    if (highlightTimer.current) clearTimeout(highlightTimer.current);
+    highlightTimer.current = setTimeout(() => setHighlightedBankCard(null), 1000);
+    requestAnimationFrame(() => document.getElementById(`bank-card-${kind}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+  };
+  const closeBankCard = (kind: BankCardKind) => {
+    setOpenBankCards((current) => current.filter((item) => item !== kind));
+    setSelectedBankCard((current) => current === kind ? null : current);
+  };
+  const toggleBankCardCollapsed = (kind: BankCardKind) => setCollapsedBankCards((current) => ({ ...current, [kind]: !current[kind] }));
+  // The conversation stream contains only the additional lookup result. FDS is
+  // rendered in its own analysis area below the chat grid.
+  const bankCard = openBankCards.includes('additionalLookup') ? <BankCardStack cards={['additionalLookup']} cardContent={cardContent} collapsedCards={collapsedBankCards} updatedCards={updatedBankCards} highlightedCard={highlightedBankCard} onToggleCollapsed={toggleBankCardCollapsed} onClose={closeBankCard} onViewed={(kind) => setUpdatedBankCards((current) => ({ ...current, [kind]: false }))}/> : undefined;
+  const fdsFlowCard = openBankCards.includes('fds') ? <BankCardStack cards={['fds']} cardContent={cardContent} collapsedCards={collapsedBankCards} updatedCards={updatedBankCards} highlightedCard={highlightedBankCard} onToggleCollapsed={toggleBankCardCollapsed} onClose={closeBankCard} onViewed={(kind) => setUpdatedBankCards((current) => ({ ...current, [kind]: false }))}/> : undefined;
 
   return <section className="case-room">
     <header className="case-room-header case-command-header">
@@ -410,7 +472,7 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
         <div ref={splitRef} className={`conversation-channel-grid ${splitDragging ? 'is-resizing' : ''}`} style={conversationGridStyle}>
           <SharedConversation bundle={bundle} view="conversation" channel="CUSTOMER" collapsed={customerPaneCollapsed} collapseDisabled={teamPaneCollapsed} onToggleCollapse={toggleCustomerPane} onOpenQuestions={() => setDialog({ type: 'questions' })} composer={<ConversationComposer foundationMode fixedTarget="CUSTOMER" showAi={false} showUtilities={false} showQuestionAction onOpenQuestions={() => setDialog({ type: 'questions' })} showInlineError={false} onErrorChange={(message) => handleComposerError('CUSTOMER', message)} busy={busy} aiBusy={false} onSend={send} onOpenVerification={() => undefined} onOpenAction={() => undefined} onInvokeAi={() => undefined} onOpenNotes={() => undefined} onOpenBookmarks={() => undefined} bookmarkCount={0}/>} bookmarkedIds={new Set(bookmarks.map((item) => item.entryId))} onToggleBookmark={toggleBookmark} onRetryMessage={retryMessage} onDismissMessage={dismissMessage}/>
           <button type="button" className="conversation-split-handle" onPointerDown={(event) => { if (customerPaneCollapsed || teamPaneCollapsed) return; event.preventDefault(); setSplitDragging(true); }} onDoubleClick={() => { if (!customerPaneCollapsed && !teamPaneCollapsed) setCustomerPaneRatio(50); }} onKeyDown={(event) => { if (event.key === 'Home') { event.preventDefault(); setCustomerPaneRatio(50); return; } if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return; event.preventDefault(); setCustomerPaneRatio((value) => Math.min(75, Math.max(25, value + (event.key === 'ArrowLeft' ? -5 : 5)))); }} aria-label="고객 소통과 은행 내부 소통 채팅창 너비 조절, 더블클릭하면 1대1로 맞춤" title="드래그하여 폭 조절 · 더블클릭하여 1:1 맞춤" aria-valuemin={25} aria-valuemax={75} aria-valuenow={Math.round(customerPaneRatio)} role="separator"><span/></button>
-          <SharedConversation bundle={bundle} view="conversation" channel="TEAM" inlineCard={bankCard} collapsed={teamPaneCollapsed} collapseDisabled={customerPaneCollapsed} onToggleCollapse={toggleTeamPane} composer={<ConversationComposer foundationMode fixedTarget="TEAM" showAi showUtilities={false} showInlineError={false} selectedBankCard={selectedBankCard} onSelectBankCard={setSelectedBankCard} onErrorChange={(message) => handleComposerError('TEAM', message)} busy={busy} aiBusy={aiPendingCount > 0} onSend={send} onOpenQuestions={() => undefined} onOpenVerification={() => undefined} onOpenAction={() => undefined} onInvokeAi={() => void invokeAi()} onOpenNotes={() => setNoteOpen(true)} onOpenBookmarks={() => setBookmarkOpen(true)} bookmarkCount={bookmarks.length}/>} bookmarkedIds={new Set(bookmarks.map((item) => item.entryId))} onToggleBookmark={toggleBookmark} onRetryMessage={retryMessage} onDismissMessage={dismissMessage}/>
+          <SharedConversation bundle={bundle} view="conversation" channel="TEAM" flowCard={fdsFlowCard} inlineCard={bankCard} collapsed={teamPaneCollapsed} collapseDisabled={customerPaneCollapsed} onToggleCollapse={toggleTeamPane} composer={<ConversationComposer foundationMode fixedTarget="TEAM" showAi showUtilities={false} showInlineError={false} selectedBankCard={selectedBankCard} onSelectBankCard={selectBankCard} onErrorChange={(message) => handleComposerError('TEAM', message)} busy={busy} aiBusy={aiPendingCount > 0} onSend={send} onOpenQuestions={() => undefined} onOpenVerification={() => undefined} onOpenAction={() => undefined} onInvokeAi={() => void invokeAi()} onOpenNotes={() => setNoteOpen(true)} onOpenBookmarks={() => setBookmarkOpen(true)} bookmarkCount={bookmarks.length}/>} bookmarkedIds={new Set(bookmarks.map((item) => item.entryId))} onToggleBookmark={toggleBookmark} onRetryMessage={retryMessage} onDismissMessage={dismissMessage}/>
         </div>
       </main>
       <ContextPanelFoundation open={contextOpen} onToggle={() => onContextOpenChange(!contextOpen)}/>
