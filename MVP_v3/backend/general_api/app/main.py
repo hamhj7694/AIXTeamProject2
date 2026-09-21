@@ -48,6 +48,11 @@ from contracts.public_api.case_analyze import (
 )
 from contracts.public_api.case_read import PublicCaseReadResponse, to_public_case_read_response, to_public_case_summary_response
 from contracts.public_api.case_transition import PublicCasePatchRequest
+from contracts.public_api.case_transactions import (
+    PublicCaseTransactionCreateRequest,
+    PublicCaseTransactionPatchRequest,
+    PublicCaseTransactionResponse,
+)
 from contracts.public_api.case_context_v2 import (
     PublicAiSuggestionV2,
     PublicCancelTaskV2Request,
@@ -413,6 +418,30 @@ async def to_case_read(record: dict) -> PublicCaseReadResponse:
 @app.get("/api/cases", response_model=list[PublicCaseReadResponse], response_model_exclude_none=True)
 async def list_cases() -> list[PublicCaseReadResponse]:
     return [await to_case_read(record) for record in await repository.list()]
+
+@app.get("/api/cases/{case_id}/transactions", response_model=list[PublicCaseTransactionResponse])
+async def list_case_transactions(case_id: str):
+    if await repository.get(case_id) is None:
+        raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case not found"})
+    return await repository.list_transactions(case_id)
+
+@app.post("/api/cases/{case_id}/transactions", response_model=PublicCaseTransactionResponse, status_code=201)
+async def create_case_transaction(case_id: str, request: PublicCaseTransactionCreateRequest):
+    if await repository.get(case_id) is None:
+        raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case not found"})
+    return await repository.create_transaction(case_id, request.model_dump())
+
+@app.patch("/api/cases/{case_id}/transactions/{transaction_id}", response_model=PublicCaseTransactionResponse)
+async def update_case_transaction(case_id: str, transaction_id: int, request: PublicCaseTransactionPatchRequest):
+    if await repository.get(case_id) is None:
+        raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case not found"})
+    changes = request.model_dump(exclude_unset=True)
+    if not changes:
+        raise HTTPException(status_code=400, detail={"code": "EMPTY_PATCH", "message": "At least one field is required"})
+    updated = await repository.update_transaction(case_id, transaction_id, changes)
+    if updated is None:
+        raise HTTPException(status_code=404, detail={"code": "TRANSACTION_NOT_FOUND", "message": "Transaction not found"})
+    return updated
 
 
 def _bank_staff_response(item: dict) -> PublicBankStaffResponse:

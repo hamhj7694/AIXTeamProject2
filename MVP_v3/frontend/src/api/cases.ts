@@ -3,7 +3,7 @@ import type {
   CustomerProgressItem, ProgressStep, UpdateCustomerProgress,
   AiInvocationResult, AnalyzeCaseResponse, Attachment, CaseAction, CaseBundle, CaseFact, CaseMember, CaseMessage, CasePresence, CaseWorkCard, InitialReport,
   CaseSupportSnapshot, CustomerQuestion, MessageChannel, MessageVisibility,
-  PersonalNote, QuestionCandidate, StructuredQuestionAnswer, StoredCase, VerificationTask, WorkCardType, BankStaff,
+  PersonalNote, QuestionCandidate, StructuredQuestionAnswer, StoredCase, VerificationTask, WorkCardType, BankStaff, CaseTransaction,
 } from './types';
 import { generateUuid } from '../uuid';
 
@@ -56,6 +56,9 @@ export const casesApi = {
     method: 'POST', body: JSON.stringify({ text, client_request_id: clientRequestId }),
   }),
   get: (caseId: string) => request<StoredCase>(`/api/cases/${encodeURIComponent(caseId)}`),
+  transactions: (caseId: string) => request<CaseTransaction[]>(`/api/cases/${encodeURIComponent(caseId)}/transactions`),
+  createTransaction: (caseId: string, values: Omit<CaseTransaction, 'id' | 'case_id' | 'created_at' | 'updated_at'>) => request<CaseTransaction>(`/api/cases/${encodeURIComponent(caseId)}/transactions`, { method: 'POST', body: JSON.stringify(values) }),
+  updateTransaction: (caseId: string, transactionId: number, values: Partial<Omit<CaseTransaction, 'id' | 'case_id' | 'created_at' | 'updated_at'>>) => request<CaseTransaction>(`/api/cases/${encodeURIComponent(caseId)}/transactions/${transactionId}`, { method: 'PATCH', body: JSON.stringify(values) }),
   bundle: (caseId: string) => request<CaseBundle>(`/api/cases/${encodeURIComponent(caseId)}/bundle?view=bank`),
   customerBundle: (caseId: string) => request<CaseBundle>(`/api/cases/${encodeURIComponent(caseId)}/bundle?view=customer`),
   support: (caseId: string) => request<CaseSupportSnapshot>(`/api/cases/${encodeURIComponent(caseId)}/ai/case-support`),

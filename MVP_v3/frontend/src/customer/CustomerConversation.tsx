@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useMemo } from 'react';
 import { BadgeCheck, Bookmark, Bot, CheckCircle2, FileText, ShieldCheck, UserRound } from 'lucide-react';
 import { casesApi, CURRENT_CUSTOMER_USER } from '../api/cases';
 import type { CaseBundle, CaseMessage, CustomerQuestion, CustomerVerificationResult, StructuredQuestionAnswer } from '../api/types';
@@ -10,6 +10,7 @@ import type { RecoveryStep } from './recovery';
 import { buildCustomerTimeline, type CustomerTimelineEntry } from './timeline';
 import { SafeMarkdown } from '../components/SafeMarkdown';
 import { questionAnswerLabel } from '../userText';
+import { useScrollToLatest } from '../useScrollToLatest';
 
 interface Props {
   bundle: CaseBundle;
@@ -34,20 +35,12 @@ const MessageEntry: React.FC<{ entry: CustomerTimelineEntry; message: CaseMessag
 };
 
 export const CustomerConversation: React.FC<Props> = ({ bundle, busy, bookmarkedIds, onAnswer, onRecoveryRequest, onToggleBookmark, onRetryMessage, onDismissMessage }) => {
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const initialized = useRef(false);
-  const followLatest = useRef(true);
   const entries = useMemo(() => buildCustomerTimeline(bundle), [bundle]);
   const latestEntry = entries[entries.length - 1];
   const latestEntryKey = latestEntry ? `${latestEntry.id}:${latestEntry.occurredAt}` : 'empty';
   const answeredCount = bundle.questions.filter((question) => question.status === 'ANSWERED').length;
   const totalQuestions = bundle.questions.filter((question) => question.status !== 'SKIPPED').length;
-  useEffect(() => {
-    const node = scrollRef.current;
-    if (!node) return;
-    if (!initialized.current || followLatest.current) node.scrollTop = node.scrollHeight;
-    initialized.current = true;
-  }, [latestEntryKey]);
+  const { scrollRef, showJumpToLatest, onScroll, jumpToLatest } = useScrollToLatest(latestEntryKey, 96);
 
   const renderEntry = (entry: CustomerTimelineEntry) => {
     const active = bookmarkedIds.has(entry.id);
@@ -68,7 +61,10 @@ export const CustomerConversation: React.FC<Props> = ({ bundle, busy, bookmarked
     return <div id={entry.id} key={entry.id} className="customer-card-entry recovery-entry" data-recovery-step={value.step.id}><div className="customer-card-bookmark"><BookmarkButton entry={entry} active={active} label={`피해구제 · ${value.step.title}`} summary={value.step.summary} onToggle={onToggleBookmark}/></div><RecoveryDetailCard step={value.step} busy={busy} onRequest={onRecoveryRequest}/><time>{formatClock(entry.occurredAt)}</time></div>;
   };
 
-  return <div ref={scrollRef} className="customer-conversation-scroll" aria-live="polite" onScroll={(event) => { const node = event.currentTarget; followLatest.current = node.scrollHeight - node.scrollTop - node.clientHeight < 96; }}>
-    {entries.length > 0 ? entries.map(renderEntry) : <div className="customer-conversation-empty"><Bot size={25}/><strong>아직 상담 대화가 없습니다.</strong><span>현재 상황을 알려주시면 필요한 내용을 차례로 확인합니다.</span></div>}
-  </div>;
+  return <>
+    <div ref={scrollRef} className="customer-conversation-scroll" aria-live="polite" onScroll={onScroll}>
+      {entries.length > 0 ? entries.map(renderEntry) : <div className="customer-conversation-empty"><Bot size={25}/><strong>아직 상담 대화가 없습니다.</strong><span>현재 상황을 알려주시면 필요한 내용을 차례로 확인합니다.</span></div>}
+    </div>
+    {showJumpToLatest && <div className="conversation-scroll-action"><button type="button" onClick={jumpToLatest} aria-label="최신 채팅으로 이동" title="최신 채팅으로 이동">↓</button></div>}
+  </>;
 };

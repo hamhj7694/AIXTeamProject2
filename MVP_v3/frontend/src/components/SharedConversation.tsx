@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useRef } from 'react';
-import { Bookmark, Bot, CheckCircle2, CircleDot, Download, FileText, Landmark, MessageCircleQuestion, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, ShieldCheck, UserRound } from 'lucide-react';
+import React, { useMemo } from 'react';
+import { ArrowDown, Bookmark, Bot, CheckCircle2, CircleDot, Download, FileText, Landmark, MessageCircleQuestion, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, ShieldCheck, UserRound } from 'lucide-react';
 import { casesApi, CURRENT_BANK_USER } from '../api/cases';
 import type { CaseAction, CaseEvent, CaseMessage, CustomerQuestion, InitialReport, InitialReportSection, VerificationTask } from '../api/types';
 import { actionLabel, formatClock, verificationStatusLabel } from '../presentation';
@@ -9,6 +9,7 @@ import type { BankBookmark } from '../bank/bookmarks';
 import { eventLabel, userText, questionAnswerLabel } from '../userText';
 import { buildConversationEntries } from '../bank/conversationEntries';
 import { SafeMarkdown } from './SafeMarkdown';
+import { useScrollToLatest } from '../useScrollToLatest';
 
 interface Props {
   bundle: CaseBundle;
@@ -24,6 +25,7 @@ interface Props {
   collapseDisabled?: boolean;
   onToggleCollapse?: () => void;
   inlineCard?: React.ReactNode;
+  flowCard?: React.ReactNode;
 }
 
 const actionTimelineTitle = (action: CaseAction): string => action.title?.trim() || actionLabel(action.action_type);
@@ -188,25 +190,21 @@ const EntryCard: React.FC<{ entry: TimelineEntry; bookmark: React.ReactNode; onE
   return <article className="timeline-event"><CircleDot size={13}/><span>{eventLabel(event.event_type)}</span>{bookmark}<time>{formatClock(event.occurred_at)}</time></article>;
 };
 
-export const SharedConversation: React.FC<Props> = ({ bundle, view, channel, composer, inlineCard, bookmarkedIds, onToggleBookmark, onRetryMessage, onDismissMessage, onOpenQuestions, collapsed = false, collapseDisabled = false, onToggleCollapse }) => {
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const initialized = useRef(false);
-  const followLatest = useRef(true);
+export const SharedConversation: React.FC<Props> = ({ bundle, view, channel, composer, inlineCard, flowCard, bookmarkedIds, onToggleBookmark, onRetryMessage, onDismissMessage, onOpenQuestions, collapsed = false, collapseDisabled = false, onToggleCollapse }) => {
   const entries = useMemo(() => buildConversationEntries(bundle, view, channel), [bundle, channel, view]);
   const latestEntry = entries[entries.length - 1];
   const latestEntryKey = latestEntry ? `${latestEntry.id}:${latestEntry.occurredAt}` : 'empty';
-  useEffect(() => {
-    const node = scrollRef.current;
-    if (!node) return;
-    if (!initialized.current || followLatest.current) node.scrollTop = node.scrollHeight;
-    initialized.current = true;
-  }, [latestEntryKey, inlineCard]);
+  const { scrollRef, showJumpToLatest, onScroll, jumpToLatest } = useScrollToLatest(`${latestEntryKey}:${inlineCard ? 'card' : 'no-card'}`);
   const channelLabel = channel === 'CUSTOMER' ? '고객 소통용' : '은행 내부 소통용';
   const CollapseIcon = channel === 'CUSTOMER' ? (collapsed ? PanelLeftOpen : PanelLeftClose) : (collapsed ? PanelRightOpen : PanelRightClose);
   return <section className={`conversation-channel-pane conversation-channel-${channel.toLowerCase()} ${collapsed ? 'is-collapsed' : ''}`} aria-label={channelLabel}>
     <header className="conversation-channel-header"><strong>{channelLabel}</strong>{!collapsed && <span>{channel === 'CUSTOMER' ? '고객에게 공개되는 대화' : '은행 담당자만 보는 대화'}</span>}<button type="button" className="conversation-channel-toggle" onClick={onToggleCollapse} disabled={collapseDisabled} aria-label={collapsed ? `${channelLabel} 열기` : `${channelLabel} 접기`} title={collapseDisabled ? '다른 채팅창을 먼저 열어 주세요.' : undefined}><CollapseIcon size={15}/></button></header>
     {collapsed ? <div className="conversation-channel-collapsed"><span>{channel === 'CUSTOMER' ? '고객' : '내부'}</span><small>채팅창 열기</small></div> : <>
-      <div ref={scrollRef} onScroll={(event) => { const node = event.currentTarget; followLatest.current = node.scrollHeight - node.scrollTop - node.clientHeight < 80; }} className="conversation-scroll" aria-live="polite">
+      <div ref={scrollRef} onScroll={onScroll} className="conversation-scroll" aria-live="polite">
+        {flowCard && <div className="bank-timeline-entry bank-card-message">{flowCard}</div>}
+        {entries.length === 0 && !inlineCard && !flowCard ? <div className="conversation-empty">아직 대화 기록이 없습니다.</div> : entries.map((entry) => <div id={`${channel.toLowerCase()}-${entry.id}`} className="bank-timeline-entry" key={entry.id}><MessageEntry message={entry.data as CaseMessage} bookmark={<EntryBookmark entry={entry} active={bookmarkedIds.has(entry.id)} onToggle={onToggleBookmark}/>} onRetry={onRetryMessage} onDismiss={onDismissMessage}/></div>)}
+        {inlineCard && <div className="bank-timeline-entry bank-card-message">{inlineCard}</div>}
+        {flowCard && <div className="bank-timeline-entry bank-card-message">{flowCard}</div>}
         {entries.length === 0 && !inlineCard ? (
           <div className="conversation-empty">아직 대화 기록이 없습니다.</div>
         ) : (
@@ -239,6 +237,7 @@ export const SharedConversation: React.FC<Props> = ({ bundle, view, channel, com
           </div>
         )}
       </div>
+      {showJumpToLatest && <div className="conversation-scroll-action"><button type="button" onClick={jumpToLatest} aria-label="최신 채팅으로 이동" title="최신 채팅으로 이동"><ArrowDown size={14}/>최신 채팅</button></div>}
       {composer}
     </>}
   </section>;
