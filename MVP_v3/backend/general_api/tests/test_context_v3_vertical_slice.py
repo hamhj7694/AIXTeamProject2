@@ -12,6 +12,31 @@ from general_api.app.domains.cases.repository import InMemoryCaseRepository
 
 
 class ContextV3VerticalSliceTest(unittest.IsolatedAsyncioTestCase):
+    async def test_free_staff_and_customer_messages_only_create_proposals(self) -> None:
+        repository = InMemoryCaseRepository()
+        repository._records = [{"case_id": "VP-V3-MESSAGE", "context_revision": 1, "status": "TRIAGE"}]
+        extractor = ContextFactExtractionService()
+        with patch.object(main, "repository", repository), patch.object(
+            main.service.ai_client, "extract_context_facts", new=AsyncMock(side_effect=extractor.extract),
+        ):
+            for actor_type in ("BANK_STAFF", "CUSTOMER"):
+                message = await repository.append_message("VP-V3-MESSAGE", {
+                    "actor_type": actor_type, "actor_user_id": actor_type.lower(),
+                    "actor_display_name": actor_type, "content": "100만원 송금했습니다.",
+                    "channel": "TEAM" if actor_type == "BANK_STAFF" else "CUSTOMER",
+                    "audience": "BANK_INTERNAL" if actor_type == "BANK_STAFF" else "CUSTOMER",
+                    "visibility": "BANK_INTERNAL" if actor_type == "BANK_STAFF" else "CUSTOMER",
+                    "message_kind": "CHAT",
+                })
+                await main.enqueue_context_extraction(message)
+                await main.process_message_context_extraction("VP-V3-MESSAGE", message["message_id"])
+            facts = (await main.case_context_v2_repository().list_resources("VP-V3-MESSAGE")).facts
+
+        self.assertTrue(facts)
+        self.assertEqual({fact.source_kind for fact in facts}, {"STAFF_OBSERVATION", "CUSTOMER_STATEMENT"})
+        self.assertTrue(all(fact.status == "PROPOSED" for fact in facts))
+        self.assertTrue(all(fact.confirmed_by is None for fact in facts))
+
     async def test_committed_customer_message_flows_to_proposals_and_three_sections(self) -> None:
         repository = InMemoryCaseRepository()
         repository._records = [{"case_id": "VP-V3-E2E", "context_revision": 1, "initial_brief": "전화 사칭 의심", "status": "TRIAGE"}]
