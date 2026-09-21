@@ -58,6 +58,11 @@ class CopilotMessage(StrictModel):
     message_id: str
     case_id: str
     actor_type: str
+    actor_user_id: str | None = Field(default=None, max_length=64)
+    actor_display_name: str | None = Field(default=None, max_length=80)
+    actor_role: str | None = Field(default=None, max_length=64)
+    channel: str | None = Field(default=None, max_length=40)
+    audience: str | None = Field(default=None, max_length=40)
     content: str
     created_at: datetime | None = None
 
@@ -85,6 +90,9 @@ class CustomerServiceQuestion(StrictModel):
 class CaseCopilotInput(StrictModel):
     case_id: str = Field(min_length=1, max_length=80)
     prompt: str = Field(min_length=1, max_length=6_000)
+    requester_user_id: str | None = Field(default=None, max_length=64)
+    requester_display_name: str | None = Field(default=None, max_length=80)
+    requester_role: str | None = Field(default=None, max_length=64)
     case_summary: str = Field(default="", max_length=4_000)
     workflow_status: str = Field(default="TRIAGE", max_length=80)
     fraud_type: str | None = Field(default=None, max_length=160)

@@ -387,7 +387,7 @@ class MySqlCaseRepository:
             await self.purge_case(case_id)
         return expired
 
-    async def append_message(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]:
+    async def append_message(self, case_id: str, record: dict[str, Any], *, source_guard: dict[str, Any] | None = None) -> dict[str, Any] | None:
         client_request_id = record.get("client_request_id")
         if client_request_id:
             existing = await self.find_message_by_client_request_id(case_id, client_request_id)
@@ -403,6 +403,27 @@ class MySqlCaseRepository:
                     await cursor.execute("SELECT case_id FROM cases WHERE case_id=%s FOR UPDATE", (case_id,))
                     if not await cursor.fetchone():
                         raise KeyError(case_id)
+                    if source_guard:
+                        source_ids = list(dict.fromkeys(source_guard.get("source_message_ids", [])))
+                        if not source_ids:
+                            await connection.rollback()
+                            return None
+                        await cursor.execute(
+                            f"""SELECT message_id FROM messages
+                                WHERE case_id=%s AND channel=%s AND actor_type=%s AND actor_user_id=%s AND message_kind='CHAT'
+                                ORDER BY created_at DESC, message_id DESC LIMIT {len(source_ids)}""",
+                            (
+                                case_id,
+                                source_guard.get("channel"),
+                                source_guard.get("actor_type"),
+                                source_guard.get("actor_user_id"),
+                            ),
+                        )
+                        latest_source_ids = [row[0] for row in reversed(await cursor.fetchall())]
+                        # Case row lock은 모든 MESSAGE append가 사용하는 동일 lock이므로 검사와 insert 사이를 보호한다.
+                        if latest_source_ids != source_ids:
+                            await connection.rollback()
+                            return None
                     if attachment_ids:
                         placeholders = ",".join(["%s"] * len(attachment_ids))
                         await cursor.execute(

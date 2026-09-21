@@ -3,6 +3,7 @@ import { AlertCircle, Bookmark, CheckCircle2, Clock3, Loader2, PanelRightClose, 
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { casesApi, CURRENT_BANK_USER } from '../api/cases';
 import type { CaseBundle, CaseFact, CaseMessage, CaseSupportSnapshot, StoredCase, VerificationTask, CaseTransaction } from '../api/types';
+import { isApiErrorCode } from '../api/client';
 import { ActionDialog, QuestionDialog, VerificationDialog } from '../components/CaseActionDialogs';
 import { AdminCaseDialog } from '../components/AdminCaseDialog';
 import { ContextPanelFoundation } from '../context-v3/ContextPanelFoundation';
@@ -17,6 +18,7 @@ import { ParticipantManager } from '../components/ParticipantManager';
 import { CaseAssignmentDialog } from '../components/CaseAssignmentDialog';
 import { readBankBookmarks, writeBankBookmarks, type BankBookmark } from '../bank/bookmarks';
 import { stripBankAiMention } from '../bank/aiMention';
+import { buildConsecutiveAiPrompt, ConsecutiveAiBatcher, type AiBatchControl } from '../bank/consecutiveAiBatch';
 import { generateUuid } from '../uuid';
 import { mergePendingMessages, removeMessage, upsertMessage } from '../api/messageState';
 import { caseState, caseStateTone, incidentTitle, statusLabel } from '../presentation';
@@ -99,6 +101,8 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
   const [splitDragging, setSplitDragging] = useState(false);
   const lastSupportRevisionRef = useRef('');
   const aiQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const aiBatcherRef = useRef<ConsecutiveAiBatcher | null>(null);
+  const enqueueAiReplyRef = useRef<(prompt?: string, responseStyle?: 'CONVERSATIONAL' | 'BRIEF', sourceMessageIds?: string[], control?: AiBatchControl) => Promise<void>>(async () => undefined);
   const aiGenerationRef = useRef(0);
   const activeCaseIdRef = useRef(caseId);
   activeCaseIdRef.current = caseId;
@@ -196,17 +200,17 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
     } : current);
   };
 
-  const enqueueAiReply = useCallback((prompt?: string, responseStyle: 'CONVERSATIONAL' | 'BRIEF' = 'CONVERSATIONAL') => {
+  const enqueueAiReply = useCallback((prompt?: string, responseStyle: 'CONVERSATIONAL' | 'BRIEF' = 'CONVERSATIONAL', sourceMessageIds: string[] = [], control?: AiBatchControl) => {
     const generation = aiGenerationRef.current;
     const targetCaseId = caseId;
-    setAiPendingCount((count) => count + 1);
     const run = async () => {
-      if (aiGenerationRef.current !== generation || activeCaseIdRef.current !== targetCaseId) return;
+      if (aiGenerationRef.current !== generation || activeCaseIdRef.current !== targetCaseId || control?.isSuperseded()) return;
+      setAiPendingCount((count) => count + 1);
       try {
         // TEAM은 고객에게 공개되지 않는 은행 내부 채널이며, 응답도 같은
         // 타임라인에 표시된다. AI는 호출 시점에 DB의 최신 Case를 다시 읽는다.
-        const reply = await casesApi.invokeAi(targetCaseId, prompt, 'TEAM', responseStyle);
-        if (aiGenerationRef.current === generation) {
+        const reply = await casesApi.invokeAi(targetCaseId, prompt, 'TEAM', responseStyle, sourceMessageIds, control?.signal);
+        if (aiGenerationRef.current === generation && !control?.isSuperseded()) {
           loadRequestRef.current += 1;
           showMessage({
             message_id: reply.message_id,
@@ -226,9 +230,11 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
             attachments: [],
             created_at: reply.created_at,
           });
-          await load(true, false);
+          void load(true, false);
         }
       } catch (reason) {
+        if (isApiErrorCode(reason, 'AI_GENERATION_STALE')) { control?.supersedeIfPending(); return; }
+        if (control?.isSuperseded()) return;
         if (aiGenerationRef.current === generation) {
           setError(reason instanceof Error ? `메시지는 저장됐지만 실제 AI 서버가 응답하지 않았습니다. 임의 답변은 생성하지 않았습니다. ${reason.message}` : '메시지는 저장됐지만 실제 AI 서버가 응답하지 않았습니다. 임의 답변은 생성하지 않았습니다.');
         }
@@ -237,10 +243,19 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
       }
     };
     // 연속 입력은 병렬 호출하지 않고 저장 순서대로 분석해 응답 순서를 지킨다.
-    aiQueueRef.current = aiQueueRef.current.then(run, run);
+    const queued = aiQueueRef.current.then(run, run);
+    aiQueueRef.current = queued;
+    return queued;
   }, [caseId, load]);
+  enqueueAiReplyRef.current = enqueueAiReply;
 
   useEffect(() => {
+    aiBatcherRef.current?.dispose();
+    aiBatcherRef.current = new ConsecutiveAiBatcher(async (messages, control) => {
+      await enqueueAiReplyRef.current(
+        buildConsecutiveAiPrompt(messages), 'CONVERSATIONAL', messages.map((message) => message.messageId), control,
+      );
+    });
     aiGenerationRef.current += 1;
     aiQueueRef.current = Promise.resolve();
     loadRequestRef.current += 1;
@@ -269,14 +284,14 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
     heartbeat();
     const timer = window.setInterval(() => { void load(true); }, 5000);
     const presenceTimer = window.setInterval(heartbeat, 30000);
-    return () => { active = false; aiGenerationRef.current += 1; loadRequestRef.current += 1; window.clearInterval(timer); window.clearInterval(presenceTimer); };
+    return () => { active = false; aiBatcherRef.current?.dispose(); aiBatcherRef.current = null; aiGenerationRef.current += 1; loadRequestRef.current += 1; window.clearInterval(timer); window.clearInterval(presenceTimer); };
   }, [load]);
 
   const refreshAfterMutation = async () => { await load(true, false); onMutated(); };
   const deliverMessage = async (item: BankOutboxItem) => {
     const generation = aiGenerationRef.current;
     const isCurrent = () => generation === aiGenerationRef.current && activeCaseIdRef.current === item.message.case_id;
-    if (!isCurrent()) return;
+    if (!isCurrent()) return false;
     setBusy(true); setError('');
     const sendingMessage = { ...item.message, delivery_state: 'SENDING' as const, delivery_error: null };
     item.message = sendingMessage;
@@ -289,30 +304,38 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
         item.attachmentIds.push(attachment.attachment_id);
       }
       const message = await casesApi.sendMessage(caseId, item.content, item.target, item.attachmentIds, item.message.client_request_id!);
-      if (!isCurrent()) return;
+      if (!isCurrent()) return false;
       loadRequestRef.current += 1;
       pendingMessagesRef.current.delete(item.message.client_request_id!);
       outboxRef.current.delete(item.message.client_request_id!);
       showMessage(message);
       onMutated();
-      if (item.target === 'TEAM' && item.requestAi && item.content) {
-        const requestText = stripBankAiMention(item.content) || '현재 사건에서 가장 시급하게 확인하거나 조치할 사항을 알려주세요.';
-        const copilotPrompt = `은행 담당자의 질문: ${requestText}\n\n현재 Shared Case 맥락만 바탕으로, 동료에게 답하듯 자연스럽게 업무를 지원해 주세요. 확인되지 않은 사실은 추정하지 말고, 고객에게 자동 전송하거나 지급정지·신고 등 외부 조치를 완료한 것처럼 표현하지 마세요.`;
-        window.requestAnimationFrame(() => { if (isCurrent()) enqueueAiReply(copilotPrompt); });
-      } else {
+      if (!(item.target === 'TEAM' && item.requestAi && item.content)) {
         window.requestAnimationFrame(() => { if (isCurrent()) void load(true, false); });
       }
+      return message;
     } catch (reason) {
       const failed = {
         ...item.message,
         delivery_state: 'FAILED' as const,
         delivery_error: reason instanceof Error ? reason.message : '서버에 전송하지 못했습니다.',
       };
-      if (!isCurrent()) return;
+      if (!isCurrent()) return false;
       item.message = failed;
       pendingMessagesRef.current.set(failed.client_request_id!, failed);
       showMessage(failed);
+      return false;
     } finally { if (isCurrent()) setBusy(false); }
+  };
+  const queueBatchedAi = (item: BankOutboxItem, saved: Promise<CaseMessage | false>) => {
+    if (item.target !== 'TEAM' || !item.requestAi || !item.content) return;
+    aiBatcherRef.current?.enqueue({
+      caseId: item.message.case_id,
+      requesterUserId: CURRENT_BANK_USER.user_id,
+      messageId: item.message.client_request_id!,
+      content: stripBankAiMention(item.content) || '현재 사건에서 가장 시급하게 확인하거나 조치할 사항을 알려주세요.',
+      saved: saved.then((message) => message ? { messageId: message.message_id, createdAt: message.created_at } : false),
+    });
   };
   const send = (content: string, files: File[], target: ComposerTarget, requestAi: boolean): Promise<void> => {
     const clientRequestId = generateUuid();
@@ -342,13 +365,19 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
     pendingMessagesRef.current.set(clientRequestId, message);
     outboxRef.current.set(clientRequestId, item);
     showMessage(message);
-    void deliverMessage(item);
+    const saved = deliverMessage(item);
+    queueBatchedAi(item, saved);
+    void saved;
     return Promise.resolve();
   };
   const retryMessage = (message: CaseMessage) => {
     if (busy || !message.client_request_id) return;
     const item = outboxRef.current.get(message.client_request_id);
-    if (item) void deliverMessage(item);
+    if (item) {
+      const saved = deliverMessage(item);
+      queueBatchedAi(item, saved);
+      void saved;
+    }
   };
   const dismissMessage = (message: CaseMessage) => {
     if (!message.client_request_id) return;

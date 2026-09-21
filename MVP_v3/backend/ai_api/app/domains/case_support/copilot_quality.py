@@ -18,6 +18,8 @@ class QualityCheck:
     criterion: str
     passed: bool
     reason: str
+    # 운영 결과에는 영향을 주지 않는 개발용 세부 판정 식별자
+    rule: str | None = None
 
     @property
     def status(self) -> Literal["PASS", "FAIL"]:
@@ -208,7 +210,12 @@ class CopilotQualityEvaluator:
                 re.search(r"확인(?:됩니다|됐|된\s*상태)|확인됨|이체\s*완료|송금\s*완료", sentence)) or bool(
                 scope is not None and re.search(r"확인(?:했습니다|했|하였)", sentence))
             # 부재/보류 표현은 실제 거래의 부정 Fact와 다르다.
-            absence = bool(re.search(r"(?:확인|검증)(?:되지|할\s*수\s*없)|근거.{0,10}(?:없|부족)|전달되지|미확인|확인.{0,8}필요|(?:거래\s*(?:기록|Evidence)|증빙|영수증).{0,12}(?:없|미전달)", sentence))
+            absence = bool(re.search(
+                r"(?:확인|검증)(?:되지|할\s*수\s*없)|확인된\s*상태(?:가|는)?\s*(?:아니|아닙)|"
+                r"근거.{0,10}(?:없|부족)|전달되지|미확인|확인.{0,8}필요|"
+                r"(?:거래\s*(?:기록|Evidence)|증빙|영수증).{0,12}(?:없|미전달)",
+                sentence,
+            ))
             direct_transfer = scope == "transfer_status" and cls._source_transfer_value(sentence) is not None
             attributed = bool(re.search(r"고객.{0,80}(?:진술|답변|말했)|고객\s*진술(?:상|\s*기준)|고객.{0,80}보냈다고", sentence))
             unknown_claim = bool(re.search(r"(?:여부|사실|것).{0,20}(?:확인|검증)(?:되지|할\s*수\s*없).{0,15}$", sentence))
@@ -230,21 +237,36 @@ class CopilotQualityEvaluator:
             receipts = [ref for fact in active if scope is None or cls._scope_matches(scope, fact.semantic_key)
                         for ref in fact.evidence_refs if ref.type in {"ATTACHMENT", "BANK_TRANSACTION"}
                         and ref.summary and cls._grounding_terms(sentence) & cls._grounding_terms(ref.summary)]
-            unsupported = (
-                (bank_claim and not banks)
-                or (receipt_claim and not receipts)
-                or (official and not matching_verified)
-                or (staff_claim and not staff)
-                or (direct_transfer and not attributed and not staff_claim and not banks and not matching_verified)
-                or (attributed and direct_transfer and not statements)
-                or (certainty and attributed and cls._STATEMENT_CONFIRMATION.fullmatch(sentence.strip()) is None)
-                or (certainty and not attributed and not staff_claim and not banks and not matching_verified
-                    and not any(row[3] == "CONFIRMED" and row[4] and row[2] != "CUSTOMER_STATEMENT" for row in matching))
-                or (conflict and (certainty or direct_transfer) and not attributed and not absence)
-                or any(marker in sentence for marker in cls._UNSUPPORTED_CERTAINTY[:3])
-            )
-            if unsupported:
-                return QualityCheck("unsupported_certainty", False, "해당 주장에 대응하는 source/status/scope 근거가 없거나 충돌합니다.")
+            rule = None
+            if bank_claim and not banks:
+                rule = "bank_claim_without_confirmed_bank_record"
+            elif receipt_claim and not receipts:
+                rule = "receipt_claim_without_evidence"
+            elif official and not matching_verified:
+                rule = "official_claim_without_linked_verification"
+            elif staff_claim and not staff:
+                rule = "staff_claim_without_confirmed_staff_source"
+            elif direct_transfer and not attributed and not staff_claim and not banks and not matching_verified:
+                rule = "direct_transfer_without_authorized_source"
+            elif attributed and direct_transfer and not statements:
+                rule = "attributed_transfer_without_customer_statement"
+            elif certainty and attributed and cls._STATEMENT_CONFIRMATION.fullmatch(sentence.strip()) is None:
+                rule = "customer_statement_confirmation_outside_narrow_form"
+            elif (
+                certainty and not attributed and not staff_claim and not banks and not matching_verified
+                and not any(row[3] == "CONFIRMED" and row[4] and row[2] != "CUSTOMER_STATEMENT" for row in matching)
+            ):
+                rule = "unattributed_certainty_without_confirmed_source"
+            elif conflict and (certainty or direct_transfer) and not absence:
+                rule = "conflicting_transfer_state"
+            elif any(marker in sentence for marker in cls._UNSUPPORTED_CERTAINTY[:3]):
+                rule = "absolute_fraud_certainty"
+            if rule is not None:
+                return QualityCheck(
+                    "unsupported_certainty", False,
+                    "해당 주장에 대응하는 source/status/scope 근거가 없거나 충돌합니다.",
+                    rule=rule,
+                )
         return QualityCheck("unsupported_certainty", True, "탐지한 주장과 typed source/status/scope를 대조했습니다.")
 
     @classmethod
@@ -324,7 +346,11 @@ class CopilotQualityEvaluator:
             if amounts:
                 supported = [r for r in supported if amounts <= set(money_values(r))]
             if not supported:
-                return QualityCheck("unsupported_certainty", False, "해당 주장에 대응하는 확정 Fact 또는 완료된 검증 근거가 없습니다.")
+                return QualityCheck(
+                    "unsupported_certainty", False,
+                    "해당 주장에 대응하는 확정 Fact 또는 완료된 검증 근거가 없습니다.",
+                    rule="certainty_without_authorized_source",
+                )
         return QualityCheck("unsupported_certainty", True, "탐지한 확정 표현에 대응하는 근거를 확인했습니다.")
 
     @classmethod

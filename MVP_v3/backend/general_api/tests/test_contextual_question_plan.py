@@ -101,7 +101,7 @@ class ContextualQuestionEndpointTest(unittest.IsolatedAsyncioTestCase):
             case_id="CASE-CONTEXT", available=True,
             case_context=main.PublicCaseContextProjection(offender_claims=["수사기관 소속 주장"]),
         )
-        baseline = [candidate("personal_information_exposure", "개인정보를 제공하셨나요?")]
+        baseline = [candidate("personal_information_exposure", "개인정보를 제공하셨나요?").model_copy(update={"allow_multi_select": True})]
         ai_payload = CaseWorkCardOutput(
             card_type="QUESTION_PLAN", title="추가 질문", summary="추가 확인", context_sources=[],
             rationale=[], next_action="담당자 검토", questions=[
@@ -136,6 +136,8 @@ class ContextualQuestionEndpointTest(unittest.IsolatedAsyncioTestCase):
         sent = generate_work_card.await_args.args[0]
         self.assertTrue(any("ANSWERED" in item and "답변: 아니요" in item for item in sent["known_facts"]))
         self.assertTrue(any("현재 미발송 직원 검토 초안" in item for item in sent["known_facts"]))
+        self.assertEqual(sent["question_candidates"][0]["target_field"], "personal_information_exposure")
+        self.assertNotIn("allow_multi_select", sent["question_candidates"][0])
 
     async def test_non_question_plan_keeps_original_first_thirty_known_facts(self) -> None:
         repository = AsyncMock()

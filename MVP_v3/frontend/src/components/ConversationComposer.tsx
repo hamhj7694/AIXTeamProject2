@@ -46,12 +46,14 @@ export const ConversationComposer: React.FC<Props> = ({ busy, aiBusy, onSend, on
   const submittingRef = useRef(false);
   const mentionRequestsAi = target === 'TEAM' && hasBankAiMention(draft);
   const aiRequested = target === 'TEAM' && (requestAi || mentionRequestsAi);
+  // TEAM 텍스트는 저장 요청 중에도 이어서 보낼 수 있어야 연속 입력을 한 AI 요청으로 묶을 수 있다.
+  const sendBlocked = busy && target !== 'TEAM';
   const updateError = (message: string) => { setError(message); onErrorChange?.(message); };
   const updateDraft = (value: string) => {
     setDraft(value);
   };
   const submit = async () => {
-    if (submittingRef.current || busy || (!draft.trim() && files.length === 0)) return;
+    if (submittingRef.current || sendBlocked || (!draft.trim() && files.length === 0)) return;
     if (fixedTarget === 'CUSTOMER' && hasBankAiMention(draft)) {
       updateError('고객 메시지에는 AI 요청을 넣을 수 없습니다.');
       return;
@@ -94,7 +96,7 @@ export const ConversationComposer: React.FC<Props> = ({ busy, aiBusy, onSend, on
         <input ref={inputRef} type="file" multiple className="sr-only" onChange={(event) => { addFiles(event.target.files); event.currentTarget.value = ''; }}/>
         <button type="button" className="icon-button" onClick={() => inputRef.current?.click()} disabled={busy} aria-label="파일 또는 사진 첨부"><Paperclip size={18}/></button>
         <textarea rows={2} value={draft} onChange={(event) => updateDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void submit(); } }} placeholder={target === 'CUSTOMER' ? '고객에게 보낼 메시지를 입력하세요.' : '은행 내부 메시지 또는 @AI 요청사항을 입력하세요.'}/>
-        <button className="send-button" type="submit" disabled={busy || (!draft.trim() && files.length === 0)} aria-label="메시지 전송"><Send size={18}/></button>
+        <button className="send-button" type="submit" disabled={sendBlocked || (!draft.trim() && files.length === 0)} aria-label="메시지 전송"><Send size={18}/></button>
       </div>
       {showInlineError && error && <p className="composer-error">{error}</p>}
       {mentionRequestsAi && !aiBusy && <p className="composer-ai-mention"><Sparkles size={13}/><b>@AI 호출 준비됨</b><span>전송하면 최신 Shared Case와 요청사항을 함께 분석합니다.</span></p>}
