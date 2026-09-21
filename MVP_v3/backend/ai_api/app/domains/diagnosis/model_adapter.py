@@ -67,17 +67,31 @@ def predict(features: dict[str, float]) -> dict[str, Any]:
     signal_count = sum(float(features.get(name, 0) or 0) != 0 for name in bundle["guardrail_signal_features"])
     final_probability = raw_probability
     guardrail_applied = signal_count == 0
+    # A transfer/amount event is important evidence, but it is not by itself
+    # sufficient to label a case as voice phishing.  Keep the ML score for
+    # diagnostics, while requiring at least one corroborating scam family
+    # (impersonation, pressure/strategy, or a high-risk action) for the label.
+    money_only_guardrail_applied = bool(
+        features.get("money_movement_present", 0)
+        and not features.get("imp_present", 0)
+        and not features.get("strategy_event_count_qc", 0)
+        and not features.get("action_event_count_qc", 0)
+    )
     if guardrail_applied:
         guardrail = bundle["guardrail"]
         cap = float(guardrail.get("zero_feature_cap_score", 20.0)) / 100.0
         margin = float(guardrail.get("threshold_margin", 0.01))
         final_probability = min(raw_probability, cap, max(0.0, threshold - margin))
+    elif money_only_guardrail_applied:
+        margin = float(bundle.get("guardrail", {}).get("threshold_margin", 0.01))
+        final_probability = min(raw_probability, max(0.0, threshold - margin))
     return {
         "raw_ml_risk_score": raw_probability * 100,
         "final_risk_score": final_probability * 100,
         "threshold_score": threshold * 100,
         "candidate_signal_count": signal_count,
         "guardrail_applied": guardrail_applied,
+        "money_only_guardrail_applied": money_only_guardrail_applied,
         "label": "PHISHING" if final_probability >= threshold else "NORMAL",
     }
 

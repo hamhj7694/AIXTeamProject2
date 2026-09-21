@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { List, ShieldCheck } from 'lucide-react';
+import { Bell, List, ShieldCheck } from 'lucide-react';
 import { BrowserRouter, Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { casesApi } from './api/cases';
 import type { StoredCase } from './api/types';
@@ -7,6 +7,7 @@ import { CaseRoomPage } from './pages/CaseRoomPage';
 import { CustomerCaseRoomPage } from './pages/CustomerCaseRoomPage';
 import { HomeDashboardPage } from './pages/HomeDashboardPage';
 import { HomePage } from './pages/HomePage';
+import { loadNotifications, notificationEventName, NotificationCenter, type AppNotification } from './components/NotificationCenter';
 
 const Workspace: React.FC = () => {
   const location = useLocation();
@@ -20,6 +21,12 @@ const Workspace: React.FC = () => {
   const [trashOpen, setTrashOpen] = useState(false);
   const [analysisBusy, setAnalysisBusy] = useState(false);
   const [contextOpen, setContextOpen] = useState(() => typeof window === 'undefined' || !window.matchMedia('(max-width: 1180px)').matches);
+  const [notifications, setNotifications] = useState<AppNotification[]>(loadNotifications);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const unreadCount = notifications.filter((item) => !item.read).length;
+  useEffect(() => { const onNotification = () => setNotifications(loadNotifications()); window.addEventListener(notificationEventName, onNotification); return () => window.removeEventListener(notificationEventName, onNotification); }, []);
+  const markNotificationsRead = () => { const next = notifications.map((item) => ({ ...item, read: true })); localStorage.setItem('csr-app-notifications-v1', JSON.stringify(next)); setNotifications(next); };
+  const deleteNotification = (id: string) => { const next = notifications.filter((item) => item.id !== id); localStorage.setItem('csr-app-notifications-v1', JSON.stringify(next)); setNotifications(next); };
   const loadCases = useCallback(async () => {
     try { setCases(await casesApi.list()); setError(''); }
     catch (reason) { setError(reason instanceof Error ? reason.message : 'Case 목록을 불러오지 못했습니다.'); }
@@ -53,6 +60,7 @@ const Workspace: React.FC = () => {
     <header className="app-header">
       <Link className={`brand ${analysisBusy ? 'is-disabled' : ''}`} to="/" aria-disabled={analysisBusy || undefined} onClick={(event) => { if (analysisBusy) event.preventDefault(); }}><span><ShieldCheck size={19}/></span><div><b>CSR | Case Share Room</b><small>보이스피싱 양방향 상담·대응 플랫폼</small></div></Link>
       <div className="app-header-actions">
+        <div className="notification-header-control"><button type="button" className="notification-button" onClick={() => { setNotificationsOpen((current) => !current); if (!notificationsOpen) markNotificationsRead(); }} aria-label="알림함 열기" aria-expanded={notificationsOpen}><Bell size={17}/>{unreadCount > 0 && <span className="notification-badge">{unreadCount > 9 ? '9+' : unreadCount}</span>}</button>{notificationsOpen && <NotificationCenter items={notifications} onReadAll={markNotificationsRead} onDelete={deleteNotification} onClose={() => setNotificationsOpen(false)}/>}</div>
         {selectedCaseId && <div className="active-case-header-actions">
           <Link className="customer-preview-link" to={`/customer/cases/${encodeURIComponent(selectedCaseId)}`}><strong>고객 화면 체험하기</strong><small> · 고객 화면을 살펴볼 수 있습니다!</small></Link>
         </div>}

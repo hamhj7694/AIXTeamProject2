@@ -13,6 +13,7 @@ import {
 import { caseState, caseStateTone } from '../presentation';
 import { generateUuid } from '../uuid';
 import { markInitialAssignmentPending } from '../assignmentPromptState';
+import { startBackgroundAnalysis } from '../analysisQueue';
 
 type AnalysisState = 'INPUT' | 'ANALYZING' | 'CREATED' | 'NO_CASE' | 'ERROR';
 type SampleType = 'PHISHING' | 'FINANCE' | 'DAILY';
@@ -616,7 +617,7 @@ export const HomePage: React.FC<HomePageProps> = ({ embedded = false, onCloseEmb
     analysisRequestRef.current = analysisRequest;
     setState('ANALYZING'); setError(''); setResult(null); setCaseItem(undefined);
     try {
-      const response = await casesApi.analyze(submittedText, analysisRequest.requestId);
+      const response = await startBackgroundAnalysis(submittedText, analysisRequest.requestId);
       analysisRequestRef.current = null;
       // The source transcript is intentionally transient in this screen too.
       setSourceText(submittedText);

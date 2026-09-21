@@ -292,6 +292,7 @@ class WindowResult(StrictModel):
     threshold_score: float = Field(ge=0, le=100)
     candidate_signal_count: int = Field(ge=0)
     guardrail_applied: bool
+    money_only_guardrail_applied: bool = False
     label: Literal["NORMAL", "PHISHING"]
 
 

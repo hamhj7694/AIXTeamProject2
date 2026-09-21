@@ -101,7 +101,6 @@ export const ConversationComposer: React.FC<Props> = ({ busy, aiBusy, onSend, on
       {showInlineError && error && <p className="composer-error">{error}</p>}
       {mentionRequestsAi && !aiBusy && <p className="composer-ai-mention"><Sparkles size={13}/><b>@AI 호출 준비됨</b><span>전송하면 최신 Shared Case와 요청사항을 함께 분석합니다.</span></p>}
       <p className="composer-help">Enter 전송 · Shift+Enter 줄바꿈 · 이미지·PDF·문서 최대 10개/각 10MB</p>
-      {aiBusy && <p className="composer-ai-progress"><Sparkles size={13}/>AI가 방금 보낸 내용과 최신 Case 기록을 함께 검토하고 있습니다. 입력은 계속할 수 있습니다.</p>}
     </form>
   </div>;
 };

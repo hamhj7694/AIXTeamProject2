@@ -1,27 +1,18 @@
-import React, { useEffect, useRef } from 'react';
-import { Bookmark, X } from 'lucide-react';
-import type { BankBookmark } from '../bank/bookmarks';
+import React, { useEffect, useRef, useState } from 'react';
+import { Bookmark, Pencil, Save, Trash2, X } from 'lucide-react';
+import { bookmarkDisplayText, type BankBookmark } from '../bank/bookmarks';
 
-interface Props {
-  open: boolean;
-  items: BankBookmark[];
-  onClose: () => void;
-}
-
-export const BankBookmarks: React.FC<Props> = ({ open, items, onClose }) => {
-  const closeRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    closeRef.current?.focus();
-    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', closeOnEscape);
-    return () => window.removeEventListener('keydown', closeOnEscape);
-  }, [onClose, open]);
+interface Props { open: boolean; items: BankBookmark[]; onClose: () => void; onUpdate: (item: BankBookmark) => void; onDelete: (entryId: string) => void; }
+export const BankBookmarks: React.FC<Props> = ({ open, items, onClose, onUpdate, onDelete }) => {
+  const closeRef = useRef<HTMLButtonElement>(null); const onCloseRef = useRef(onClose); const [editingId, setEditingId] = useState<string | null>(null); const [draft, setDraft] = useState({ label: '', summary: '' });
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+  useEffect(() => { if (!open) return; closeRef.current?.focus(); const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') onCloseRef.current(); }; window.addEventListener('keydown', closeOnEscape); return () => window.removeEventListener('keydown', closeOnEscape); }, [open]);
   if (!open) return null;
-  return <div className="bank-drawer-backdrop" role="presentation" onMouseDown={onClose}>
-    <aside className="bank-bookmark-drawer" role="dialog" aria-modal="true" aria-labelledby="bank-bookmark-title" onMouseDown={(event) => event.stopPropagation()}>
-      <header><Bookmark size={18}/><div><h2 id="bank-bookmark-title">내 북마크</h2><p>이 Case에서 개인적으로 저장한 대화와 업무 기록입니다.</p></div><button ref={closeRef} type="button" onClick={onClose} aria-label="북마크 닫기"><X size={18}/></button></header>
-      <div>{items.length > 0 ? items.map((item) => <button key={item.entryId} type="button" onClick={() => { document.getElementById(item.entryId)?.scrollIntoView({ behavior: 'smooth', block: 'center' }); onClose(); }}><span>{item.label}</span><p>{item.summary}</p><time>{new Date(item.createdAt).toLocaleString('ko-KR')}</time></button>) : <p className="bank-bookmark-empty">아직 북마크한 기록이 없습니다.</p>}</div>
-    </aside>
-  </div>;
+  const beginEdit = (item: BankBookmark) => { setEditingId(item.entryId); setDraft({ label: item.label, summary: item.summary }); };
+  const saveEdit = (item: BankBookmark) => { const label = draft.label.trim(); const summary = draft.summary.trim(); if (!label || !summary) return; onUpdate({ ...item, entryId: item.entryId, label, summary }); setEditingId(null); };
+  const jumpToBookmark = (entryId: string) => { const target = document.getElementById(entryId) || document.querySelector(`[id$="-${CSS.escape(entryId)}"]`); if (target instanceof HTMLElement) { target.scrollIntoView({ behavior: 'smooth', block: 'center' }); target.classList.add('bookmark-target-highlight'); window.setTimeout(() => target.classList.remove('bookmark-target-highlight'), 1400); } onClose(); };
+  return <div className="bank-drawer-backdrop" role="presentation" onMouseDown={onClose}><aside className="bank-bookmark-drawer" role="dialog" aria-modal="true" aria-labelledby="bank-bookmark-title" onMouseDown={(event) => event.stopPropagation()}>
+    <header><Bookmark size={18}/><div><h2 id="bank-bookmark-title">내 북마크</h2><p>이 Case에서 개인적으로 저장한 대화와 업무 기록입니다.</p></div><button ref={closeRef} type="button" onClick={onClose} aria-label="북마크 닫기"><X size={18}/></button></header>
+    <div>{items.length > 0 ? items.map((item) => editingId === item.entryId ? <article key={item.entryId} className="bank-bookmark-card is-editing"><input value={draft.label} maxLength={120} onChange={(event) => setDraft({ ...draft, label: event.target.value })} aria-label="북마크 제목"/><textarea value={draft.summary} maxLength={1000} onChange={(event) => setDraft({ ...draft, summary: event.target.value })} aria-label="북마크 내용"/><div className="bank-bookmark-edit-actions"><button type="button" onClick={() => saveEdit(item)} disabled={!draft.label.trim() || !draft.summary.trim()}><Save size={13}/>저장</button><button type="button" onClick={() => setEditingId(null)}>취소</button></div></article> : <article key={item.entryId} className="bank-bookmark-card"><button type="button" className="bank-bookmark-jump" onClick={() => jumpToBookmark(item.entryId)}><span>{bookmarkDisplayText(item.label)}</span><p>{bookmarkDisplayText(item.summary)}</p><time>{new Date(item.createdAt).toLocaleString('ko-KR')}</time></button><div className="bank-bookmark-card-actions"><button type="button" onClick={() => beginEdit(item)} aria-label="북마크 수정"><Pencil size={13}/></button><button type="button" onClick={() => onDelete(item.entryId)} aria-label="북마크 삭제"><Trash2 size={13}/></button></div></article>) : <p className="bank-bookmark-empty">아직 북마크한 기록이 없습니다.</p>}</div>
+  </aside></div>;
 };

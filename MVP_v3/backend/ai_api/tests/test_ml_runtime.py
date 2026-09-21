@@ -28,6 +28,27 @@ class MlRuntimeTest(unittest.TestCase):
             result = predict({})
         self.assertEqual(result["label"], "NORMAL")
 
+    def test_transfer_without_corroborating_scam_signal_is_not_phishing(self):
+        result = predict({
+            "money_movement_present": 1,
+            "money_transfer_present": 1,
+            "money_movement_count_qc": 1,
+            "money_transfer_count_qc": 1,
+        })
+        self.assertEqual(result["label"], "NORMAL")
+        self.assertTrue(result["money_only_guardrail_applied"])
+
+    def test_transfer_with_impersonation_can_be_phishing(self):
+        result = predict({
+            "imp_present": 1,
+            "imp_public": 1,
+            "money_movement_present": 1,
+            "money_transfer_present": 1,
+            "money_movement_count_qc": 1,
+            "money_transfer_count_qc": 1,
+        })
+        self.assertFalse(result["money_only_guardrail_applied"])
+
     def test_runtime_threshold_override_does_not_change_artifact(self):
         bundle = {"threshold": 0.95}
         with patch.dict("os.environ", {"WINDOW_RISK_THRESHOLD": "0.60"}, clear=False):

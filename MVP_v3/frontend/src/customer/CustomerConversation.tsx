@@ -10,10 +10,12 @@ import type { RecoveryStep } from './recovery';
 import { buildCustomerTimeline, type CustomerTimelineEntry } from './timeline';
 import { SafeMarkdown } from '../components/SafeMarkdown';
 import { questionAnswerLabel } from '../userText';
+import { AiThinkingBubble } from '../components/AiThinkingBubble';
 
 interface Props {
   bundle: CaseBundle;
   busy: boolean;
+  aiBusy: boolean;
   bookmarkedIds: Set<string>;
   onAnswer: (question: CustomerQuestion, answer: StructuredQuestionAnswer) => Promise<void>;
   onRecoveryRequest: (kind: 'AI_ADVICE' | 'HUMAN_HANDOFF', step: RecoveryStep) => Promise<void>;
@@ -33,7 +35,7 @@ const MessageEntry: React.FC<{ entry: CustomerTimelineEntry; message: CaseMessag
   </article>;
 };
 
-export const CustomerConversation: React.FC<Props> = ({ bundle, busy, bookmarkedIds, onAnswer, onRecoveryRequest, onToggleBookmark, onRetryMessage, onDismissMessage }) => {
+export const CustomerConversation: React.FC<Props> = ({ bundle, busy, aiBusy, bookmarkedIds, onAnswer, onRecoveryRequest, onToggleBookmark, onRetryMessage, onDismissMessage }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const initialized = useRef(false);
   const followLatest = useRef(true);
@@ -69,6 +71,7 @@ export const CustomerConversation: React.FC<Props> = ({ bundle, busy, bookmarked
   };
 
   return <div ref={scrollRef} className="customer-conversation-scroll" aria-live="polite" onScroll={(event) => { const node = event.currentTarget; followLatest.current = node.scrollHeight - node.scrollTop - node.clientHeight < 96; }}>
-    {entries.length > 0 ? entries.map(renderEntry) : <div className="customer-conversation-empty"><Bot size={25}/><strong>아직 상담 대화가 없습니다.</strong><span>현재 상황을 알려주시면 필요한 내용을 차례로 확인합니다.</span></div>}
+    {entries.length > 0 ? entries.map(renderEntry) : !aiBusy ? <div className="customer-conversation-empty"><Bot size={25}/><strong>아직 상담 대화가 없습니다.</strong><span>현재 상황을 알려주시면 필요한 내용을 차례로 확인합니다.</span></div> : null}
+    {aiBusy && <AiThinkingBubble detail="현재 상황에 맞는 안전 안내를 준비하고 있습니다."/>}
   </div>;
 };

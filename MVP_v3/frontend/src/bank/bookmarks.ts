@@ -6,6 +6,8 @@ export interface BankBookmark {
   createdAt: string;
 }
 
+export const bookmarkDisplayText = (value: string): string => value.replace(/```[\s\S]*?```/g, '').replace(/[*_`~#]+/g, '').replace(/\{\{?[^{}]+\}?\}/g, '').replace(/\$\{[^}]+\}/g, '').replace(/\s+/g, ' ').trim();
+
 const storageKey = (caseId: string) => `mvp-v3:bank-bookmarks:${caseId}`;
 
 export const readBankBookmarks = (caseId: string): BankBookmark[] => {

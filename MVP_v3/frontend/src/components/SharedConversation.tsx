@@ -9,6 +9,7 @@ import type { BankBookmark } from '../bank/bookmarks';
 import { eventLabel, userText, questionAnswerLabel } from '../userText';
 import { buildConversationEntries } from '../bank/conversationEntries';
 import { SafeMarkdown } from './SafeMarkdown';
+import { AiThinkingBubble } from './AiThinkingBubble';
 
 interface Props {
   bundle: CaseBundle;
@@ -24,6 +25,7 @@ interface Props {
   collapseDisabled?: boolean;
   onToggleCollapse?: () => void;
   inlineCard?: React.ReactNode;
+  aiBusy?: boolean;
 }
 
 const actionTimelineTitle = (action: CaseAction): string => action.title?.trim() || actionLabel(action.action_type);
@@ -138,9 +140,9 @@ const FinalReportCard: React.FC<{ report: FinalReportCardPayload; caseId: string
   </article>;
 };
 
-const EntryBookmark: React.FC<{ entry: TimelineEntry; active: boolean; onToggle: Props['onToggleBookmark'] }> = ({ entry, active, onToggle }) => {
+const EntryBookmark: React.FC<{ entry: TimelineEntry; targetId: string; active: boolean; onToggle: Props['onToggleBookmark'] }> = ({ entry, targetId, active, onToggle }) => {
   const details = bookmarkDetails(entry);
-  return <button type="button" className={`bank-entry-bookmark ${active ? 'active' : ''}`} aria-label={active ? '북마크 해제' : '북마크 추가'} aria-pressed={active} onClick={() => onToggle({ entryId: entry.id, ...details, createdAt: entry.occurredAt })}><Bookmark size={14} fill={active ? 'currentColor' : 'none'}/></button>;
+  return <button type="button" className={`bank-entry-bookmark ${active ? 'active' : ''}`} aria-label={active ? '북마크 해제' : '북마크 추가'} aria-pressed={active} onClick={() => onToggle({ entryId: targetId, ...details, createdAt: entry.occurredAt })}><Bookmark size={14} fill={active ? 'currentColor' : 'none'}/></button>;
 };
 
 const MessageEntry: React.FC<{ message: CaseMessage; bookmark: React.ReactNode; onRetry: Props['onRetryMessage']; onDismiss: Props['onDismissMessage'] }> = ({ message, bookmark, onRetry, onDismiss }) => {
@@ -188,7 +190,7 @@ const EntryCard: React.FC<{ entry: TimelineEntry; bookmark: React.ReactNode; onE
   return <article className="timeline-event"><CircleDot size={13}/><span>{eventLabel(event.event_type)}</span>{bookmark}<time>{formatClock(event.occurred_at)}</time></article>;
 };
 
-export const SharedConversation: React.FC<Props> = ({ bundle, view, channel, composer, inlineCard, bookmarkedIds, onToggleBookmark, onRetryMessage, onDismissMessage, onOpenQuestions, collapsed = false, collapseDisabled = false, onToggleCollapse }) => {
+export const SharedConversation: React.FC<Props> = ({ bundle, view, channel, composer, inlineCard, aiBusy = false, bookmarkedIds, onToggleBookmark, onRetryMessage, onDismissMessage, onOpenQuestions, collapsed = false, collapseDisabled = false, onToggleCollapse }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const initialized = useRef(false);
   const followLatest = useRef(true);
@@ -207,7 +209,7 @@ export const SharedConversation: React.FC<Props> = ({ bundle, view, channel, com
     <header className="conversation-channel-header"><button type="button" className="conversation-channel-toggle" onClick={onToggleCollapse} disabled={collapseDisabled} aria-label={collapsed ? `${channelLabel} 열기` : `${channelLabel} 접기`} title={collapseDisabled ? '다른 채팅창을 먼저 열어 주세요.' : undefined}><CollapseIcon size={15}/></button><strong>{channelLabel}</strong>{!collapsed && <span>{channel === 'CUSTOMER' ? '고객에게 공개되는 대화' : '은행 담당자만 보는 대화'}</span>}</header>
     {collapsed ? <div className="conversation-channel-collapsed"><span>{channel === 'CUSTOMER' ? '고객' : '내부'}</span><small>채팅창 열기</small></div> : <>
       <div ref={scrollRef} onScroll={(event) => { const node = event.currentTarget; followLatest.current = node.scrollHeight - node.scrollTop - node.clientHeight < 80; }} className="conversation-scroll" aria-live="polite">
-        {entries.length === 0 && !inlineCard ? (
+        {entries.length === 0 && !inlineCard && !aiBusy ? (
           <div className="conversation-empty">아직 대화 기록이 없습니다.</div>
         ) : (
           entries.map((entry) => (
@@ -221,7 +223,8 @@ export const SharedConversation: React.FC<Props> = ({ bundle, view, channel, com
                 bookmark={
                   <EntryBookmark
                     entry={entry}
-                    active={bookmarkedIds.has(entry.id)}
+                    targetId={`${channel.toLowerCase()}-${entry.id}`}
+                    active={bookmarkedIds.has(`${channel.toLowerCase()}-${entry.id}`) || bookmarkedIds.has(entry.id)}
                     onToggle={onToggleBookmark}
                   />
                 }
@@ -238,6 +241,7 @@ export const SharedConversation: React.FC<Props> = ({ bundle, view, channel, com
             {inlineCard}
           </div>
         )}
+        {aiBusy && <AiThinkingBubble detail="현재 은행 내부 대화와 사건 기록을 확인하고 있습니다."/>}
       </div>
       {composer}
     </>}

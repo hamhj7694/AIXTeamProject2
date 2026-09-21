@@ -67,12 +67,21 @@ export const CustomerCaseRoomPage: React.FC = () => {
     const generation = aiGenerationRef.current;
     const targetCaseId = caseId;
     setAiPendingCount((count) => count + 1);
+    let pendingReleased = false;
+    const releasePending = () => {
+      if (pendingReleased) return;
+      pendingReleased = true;
+      setAiPendingCount((count) => Math.max(0, count - 1));
+    };
     const run = async () => {
       if (aiGenerationRef.current !== generation || activeCaseIdRef.current !== targetCaseId) return;
       try {
         // 서버는 이 호출 시점의 고객 공개 대화와 누적 질문 답변을 다시 읽는다.
         const message = await casesApi.invokeCustomerAi(targetCaseId, prompt, replyToMessageId);
         if (aiGenerationRef.current === generation) {
+          // Remove the thinking bubble before adding the completed answer so
+          // the two states are never rendered together.
+          releasePending();
           loadRequestRef.current += 1;
           showMessage(message);
           await load(true);
@@ -82,7 +91,7 @@ export const CustomerCaseRoomPage: React.FC = () => {
           setNotice(`메시지는 전달됐지만 실제 AI 서버가 응답하지 않았습니다. 임의 안내는 생성하지 않았습니다. ${reason instanceof Error ? reason.message : '잠시 후 다시 요청해 주세요.'}`);
         }
       } finally {
-        if (aiGenerationRef.current === generation) setAiPendingCount((count) => Math.max(0, count - 1));
+        if (aiGenerationRef.current === generation) releasePending();
       }
     };
     // 빠르게 연속 입력해도 AI 응답은 고객 메시지 순서대로 생성한다.
@@ -272,7 +281,7 @@ export const CustomerCaseRoomPage: React.FC = () => {
       {error && <div className="customer-global-message danger"><AlertCircle size={16}/><span>{error}</span><button type="button" onClick={() => setError('')} aria-label="오류 닫기"><X size={15}/></button></div>}
       {notice && <div className="customer-global-message"><AlertCircle size={16}/><span>{notice}</span><button type="button" onClick={() => setNotice('')} aria-label="안내 닫기"><X size={15}/></button></div>}
       <div className="customer-room-grid">
-        <section className="customer-chat-panel"><header><div><h1>보이스피싱 대응 AI 상담</h1><p>필요한 내용을 한 가지씩 확인하고 은행 담당자와 연결합니다.</p></div><span>고객 공개 채널</span></header><CustomerConversation bundle={bundle} busy={busy} bookmarkedIds={new Set(bookmarks.map((item) => item.entryId))} onAnswer={answer} onRecoveryRequest={requestRecoveryHelp} onToggleBookmark={toggleBookmark} onRetryMessage={retryMessage} onDismissMessage={dismissMessage}/><CustomerComposer busy={busy} aiBusy={aiPendingCount > 0} disabled={closed} onSend={send}/></section>
+        <section className="customer-chat-panel"><header><div><h1>보이스피싱 대응 AI 상담</h1><p>필요한 내용을 한 가지씩 확인하고 은행 담당자와 연결합니다.</p></div><span>고객 공개 채널</span></header><CustomerConversation bundle={bundle} busy={busy} aiBusy={aiPendingCount > 0} bookmarkedIds={new Set(bookmarks.map((item) => item.entryId))} onAnswer={answer} onRecoveryRequest={requestRecoveryHelp} onToggleBookmark={toggleBookmark} onRetryMessage={retryMessage} onDismissMessage={dismissMessage}/><CustomerComposer busy={busy} aiBusy={aiPendingCount > 0} disabled={closed} onSend={send}/></section>
         {detailsOpen && <button type="button" className="customer-side-scrim" aria-label="현재 진행 상황 닫기" onClick={() => setDetailsOpen(false)}/>}
         <aside id="customer-side-panel" className={`customer-side-panel ${detailsOpen ? 'is-open' : ''}`}><CustomerProgressPanel key={caseId} bundle={bundle} recovery={recovery} onRequestConfirmation={requestProgressConfirmation}/>{recovery ? <RecoveryNavigator selected={selectedStep} busy={busy} onSelect={selectRecoveryStep}/> : <CustomerSafetyGuide/>}</aside>
       </div>

@@ -199,6 +199,12 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
     const generation = aiGenerationRef.current;
     const targetCaseId = caseId;
     setAiPendingCount((count) => count + 1);
+    let pendingReleased = false;
+    const releasePending = () => {
+      if (pendingReleased) return;
+      pendingReleased = true;
+      setAiPendingCount((count) => Math.max(0, count - 1));
+    };
     const run = async () => {
       if (aiGenerationRef.current !== generation || activeCaseIdRef.current !== targetCaseId) return;
       try {
@@ -206,6 +212,9 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
         // 타임라인에 표시된다. AI는 호출 시점에 DB의 최신 Case를 다시 읽는다.
         const reply = await casesApi.invokeAi(targetCaseId, prompt, 'TEAM', responseStyle);
         if (aiGenerationRef.current === generation) {
+          // Remove the thinking bubble before adding the completed answer so
+          // the two states are never rendered together.
+          releasePending();
           loadRequestRef.current += 1;
           showMessage({
             message_id: reply.message_id,
@@ -232,7 +241,7 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
           setError(reason instanceof Error ? `메시지는 저장됐지만 실제 AI 서버가 응답하지 않았습니다. 임의 답변은 생성하지 않았습니다. ${reason.message}` : '메시지는 저장됐지만 실제 AI 서버가 응답하지 않았습니다. 임의 답변은 생성하지 않았습니다.');
         }
       } finally {
-        if (aiGenerationRef.current === generation) setAiPendingCount((count) => Math.max(0, count - 1));
+        if (aiGenerationRef.current === generation) releasePending();
       }
     };
     // 연속 입력은 병렬 호출하지 않고 저장 순서대로 분석해 응답 순서를 지킨다.
@@ -385,6 +394,8 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
     const next = bookmarks.some((item) => item.entryId === bookmark.entryId) ? bookmarks.filter((item) => item.entryId !== bookmark.entryId) : [...bookmarks, bookmark];
     setBookmarks(next); writeBankBookmarks(caseId, next);
   };
+  const updateBookmark = (bookmark: BankBookmark) => { const next = bookmarks.map((item) => item.entryId === bookmark.entryId ? bookmark : item); setBookmarks(next); writeBankBookmarks(caseId, next); };
+  const deleteBookmark = (entryId: string) => { const next = bookmarks.filter((item) => item.entryId !== entryId); setBookmarks(next); writeBankBookmarks(caseId, next); };
   const finalizeCase = async (password: string, note: string) => {
     if (!caseItem) return;
     await casesApi.finalize(caseId, caseItem.version, password, note);
@@ -464,7 +475,7 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
   return <section className="case-room">
     <header className="case-room-header case-command-header">
       <div className="case-heading"><span className={`risk-dot ${caseStateTone(caseState(caseItem))}`}/><div><div className="case-title-line"><span>{caseItem.case_id}</span><h1>{incidentTitle(caseItem)}</h1></div><div className="case-header-meta"><span>{statusLabel(caseItem.status, caseItem.mode)}</span><span>주 담당자 {caseItem.primary_assignee || '미배정'}</span></div></div></div>
-      <div className="room-header-actions"><button className="participant-open" type="button" onClick={() => setParticipantOpen(true)}><Users size={16}/>참여자 <b>{participantCount}</b></button><button type="button" className="header-tool-action header-tool-note" onClick={() => setNoteOpen(true)}><StickyNote size={15}/>개인 메모</button><button type="button" className="header-tool-action header-tool-bookmark" onClick={() => setBookmarkOpen(true)}><Bookmark size={15}/>북마크{bookmarks.length > 0 && <b>{bookmarks.length}</b>}</button><button className="icon-button" onClick={() => void load(true, true)} aria-label="Case와 AI 사건 맥락 새로고침"><RefreshCw size={17} className={refreshing ? 'spin' : ''}/></button><MoreMenu label="Case 관리 메뉴"><button onClick={() => setAnalysisResultOpen(true)}><FileSearch size={14}/>초기 분석 결과 보기</button>{caseItem.mode === 'CLOSED' ? <button onClick={() => setAdminAction('reopen')}><RotateCcw size={14}/>사건 다시 진행</button> : <button onClick={() => setAdminAction('finalize')}><CheckCircle2 size={14}/>해결 및 종료</button>}<button className="danger" onClick={() => setAdminAction('trash')}><Trash2 size={14}/>휴지통으로 이동</button></MoreMenu></div>
+      <div className="room-header-actions"><button className="participant-open" type="button" onClick={() => setParticipantOpen(true)}><Users size={16}/>참여자 <b>{participantCount}</b></button><button type="button" className="header-tool-action header-tool-analysis" onClick={() => setAnalysisResultOpen(true)}><FileSearch size={15}/>초기 분석 결과 보기</button><button type="button" className="header-tool-action header-tool-note" onClick={() => setNoteOpen(true)}><StickyNote size={15}/>개인 메모</button><button type="button" className="header-tool-action header-tool-bookmark" onClick={() => setBookmarkOpen(true)}><Bookmark size={15}/>북마크{bookmarks.length > 0 && <b>{bookmarks.length}</b>}</button><button className="icon-button" onClick={() => void load(true, true)} aria-label="Case와 AI 사건 맥락 새로고침"><RefreshCw size={17} className={refreshing ? 'spin' : ''}/></button><MoreMenu label="Case 관리 메뉴"><>{caseItem.mode === 'CLOSED' ? <button onClick={() => setAdminAction('reopen')}><RotateCcw size={14}/>사건 다시 진행</button> : <button onClick={() => setAdminAction('finalize')}><CheckCircle2 size={14}/>해결 및 종료</button>}<button className="danger" onClick={() => setAdminAction('trash')}><Trash2 size={14}/>휴지통으로 이동</button></></MoreMenu></div>
     </header>
     <CaseContextLayout contextOpen={contextOpen}>
       <main className="conversation-column">
@@ -474,9 +485,9 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
           {composerWarningMessages.map((message) => <div className="partial-warning danger" key={message}><AlertCircle size={15}/><span>{message}</span></div>)}
         </div>}
         <div ref={splitRef} className={`conversation-channel-grid ${splitDragging ? 'is-resizing' : ''}`} style={conversationGridStyle}>
-          <SharedConversation bundle={bundle} view="conversation" channel="CUSTOMER" collapsed={customerPaneCollapsed} collapseDisabled={teamPaneCollapsed} onToggleCollapse={toggleCustomerPane} onOpenQuestions={() => setDialog({ type: 'questions' })} composer={<ConversationComposer foundationMode fixedTarget="CUSTOMER" showAi={false} showUtilities={false} showQuestionAction onOpenQuestions={() => setDialog({ type: 'questions' })} showInlineError={false} onErrorChange={(message) => handleComposerError('CUSTOMER', message)} busy={busy} aiBusy={false} onSend={send} onOpenVerification={() => undefined} onOpenAction={() => undefined} onInvokeAi={() => undefined} onOpenNotes={() => undefined} onOpenBookmarks={() => undefined} bookmarkCount={0}/>} bookmarkedIds={new Set(bookmarks.map((item) => item.entryId))} onToggleBookmark={toggleBookmark} onRetryMessage={retryMessage} onDismissMessage={dismissMessage}/>
+          <SharedConversation bundle={bundle} view="conversation" channel="CUSTOMER" aiBusy={false} collapsed={customerPaneCollapsed} collapseDisabled={teamPaneCollapsed} onToggleCollapse={toggleCustomerPane} onOpenQuestions={() => setDialog({ type: 'questions' })} composer={<ConversationComposer foundationMode fixedTarget="CUSTOMER" showAi={false} showUtilities={false} showQuestionAction onOpenQuestions={() => setDialog({ type: 'questions' })} showInlineError={false} onErrorChange={(message) => handleComposerError('CUSTOMER', message)} busy={busy} aiBusy={false} onSend={send} onOpenVerification={() => undefined} onOpenAction={() => undefined} onInvokeAi={() => undefined} onOpenNotes={() => undefined} onOpenBookmarks={() => undefined} bookmarkCount={0}/>} bookmarkedIds={new Set(bookmarks.map((item) => item.entryId))} onToggleBookmark={toggleBookmark} onRetryMessage={retryMessage} onDismissMessage={dismissMessage}/>
           <button type="button" className="conversation-split-handle" onPointerDown={(event) => { if (customerPaneCollapsed || teamPaneCollapsed) return; event.preventDefault(); setSplitDragging(true); }} onDoubleClick={() => { if (!customerPaneCollapsed && !teamPaneCollapsed) setCustomerPaneRatio(50); }} onKeyDown={(event) => { if (event.key === 'Home') { event.preventDefault(); setCustomerPaneRatio(50); return; } if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return; event.preventDefault(); setCustomerPaneRatio((value) => Math.min(75, Math.max(25, value + (event.key === 'ArrowLeft' ? -5 : 5)))); }} aria-label="고객 소통과 은행 내부 소통 채팅창 너비 조절, 더블클릭하면 1대1로 맞춤" title="드래그하여 폭 조절 · 더블클릭하여 1:1 맞춤" aria-valuemin={25} aria-valuemax={75} aria-valuenow={Math.round(customerPaneRatio)} role="separator"><span/></button>
-          <SharedConversation bundle={bundle} view="conversation" channel="TEAM" inlineCard={bankCard} collapsed={teamPaneCollapsed} collapseDisabled={customerPaneCollapsed} onToggleCollapse={toggleTeamPane} composer={<ConversationComposer foundationMode fixedTarget="TEAM" showAi showUtilities={false} showInlineError={false} selectedBankCard={selectedBankCard} onSelectBankCard={setSelectedBankCard} onErrorChange={(message) => handleComposerError('TEAM', message)} busy={busy} aiBusy={aiPendingCount > 0} onSend={send} onOpenQuestions={() => undefined} onOpenVerification={() => undefined} onOpenAction={() => undefined} onInvokeAi={() => void invokeAi()} onOpenNotes={() => setNoteOpen(true)} onOpenBookmarks={() => setBookmarkOpen(true)} bookmarkCount={bookmarks.length}/>} bookmarkedIds={new Set(bookmarks.map((item) => item.entryId))} onToggleBookmark={toggleBookmark} onRetryMessage={retryMessage} onDismissMessage={dismissMessage}/>
+          <SharedConversation bundle={bundle} view="conversation" channel="TEAM" aiBusy={aiPendingCount > 0} inlineCard={bankCard} collapsed={teamPaneCollapsed} collapseDisabled={customerPaneCollapsed} onToggleCollapse={toggleTeamPane} composer={<ConversationComposer foundationMode fixedTarget="TEAM" showAi showUtilities={false} showInlineError={false} selectedBankCard={selectedBankCard} onSelectBankCard={setSelectedBankCard} onErrorChange={(message) => handleComposerError('TEAM', message)} busy={busy} aiBusy={aiPendingCount > 0} onSend={send} onOpenQuestions={() => undefined} onOpenVerification={() => undefined} onOpenAction={() => undefined} onInvokeAi={() => void invokeAi()} onOpenNotes={() => setNoteOpen(true)} onOpenBookmarks={() => setBookmarkOpen(true)} bookmarkCount={bookmarks.length}/>} bookmarkedIds={new Set(bookmarks.map((item) => item.entryId))} onToggleBookmark={toggleBookmark} onRetryMessage={retryMessage} onDismissMessage={dismissMessage}/>
         </div>
       </main>
       <ContextPanelFoundation open={contextOpen} onToggle={() => onContextOpenChange(!contextOpen)}/>
@@ -484,7 +495,7 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
     {dialog?.type === 'questions' && <QuestionDialog caseId={caseId} initial={support?.recommended_questions ?? []} onDone={refreshAfterMutation} onClose={() => setDialog(null)}/>} 
     {dialog?.type === 'verification' && <VerificationDialog caseId={caseId} task={dialog.task} onDone={refreshAfterMutation} onClose={() => setDialog(null)}/>} 
     {dialog?.type === 'action' && <ActionDialog caseId={caseId} recovery={caseItem.mode === 'RECOVERY'} onDone={refreshAfterMutation} onClose={() => setDialog(null)}/>} 
-    <BankBookmarks open={bookmarkOpen} items={bookmarks} onClose={() => setBookmarkOpen(false)}/>
+    <BankBookmarks open={bookmarkOpen} items={bookmarks} onClose={() => setBookmarkOpen(false)} onUpdate={updateBookmark} onDelete={deleteBookmark}/>
     <BankPersonalNotes caseId={caseId} open={noteOpen} onClose={() => setNoteOpen(false)}/>
     {participantOpen && <CaseAssignmentDialog caseId={caseId} mode="edit" onClose={() => setParticipantOpen(false)} onSaved={async () => { setParticipantOpen(false); setAccessRevision((value) => value + 1); const members = await casesApi.members(caseId); setParticipantCount(members.length); await refreshAfterMutation(); }}/>}
     {analysisResultOpen && <div className="case-analysis-result-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setAnalysisResultOpen(false); }}><section className="case-analysis-result-dialog" role="dialog" aria-modal="true" aria-labelledby="case-analysis-result-title"><header><div><p className="eyebrow">ANALYSIS RESULT</p><h2 id="case-analysis-result-title">초기 분석 결과</h2><small>Case 생성 당시의 구조화 분석 결과를 다시 확인합니다.</small></div><button type="button" className="icon-button" onClick={() => setAnalysisResultOpen(false)} aria-label="초기 분석 결과 닫기"><X size={18}/></button></header><AnalysisResult result={analysisResult} caseItem={caseItem} sourceText="" onOpenCase={() => setAnalysisResultOpen(false)} onRestart={() => setAnalysisResultOpen(false)} showActions={false}/></section></div>}
