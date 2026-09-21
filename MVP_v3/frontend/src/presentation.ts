@@ -13,12 +13,8 @@ export const caseStateLabel = (state: CaseState) => ({ LOSS: '피해 발생', SU
 export const caseStateTone = (state: CaseState) => ({ LOSS: 'danger', SUSPECTED: 'warning', RESOLVED: 'safe' }[state]);
 
 export const statusLabel = (status: string, mode?: string) => {
-  if (status === 'CLOSED' || mode === 'CLOSED') return '종료';
-  if (mode === 'RECOVERY') return '피해구제';
-  if (status === 'VERIFYING') return '검증 중';
-  if (status === 'IN_PROGRESS') return '대응 중';
-  if (status === 'TRIAGE' || status === 'NEW') return '확인 중';
-  return '확인 중';
+  if (status === 'CLOSED' || mode === 'CLOSED') return '해결 및 종료';
+  return '진행 중';
 };
 
 export const verificationStatusLabel = (status: string) => ({

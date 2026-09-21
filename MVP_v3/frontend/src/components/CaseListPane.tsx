@@ -1,9 +1,10 @@
-import React, { useMemo, useState } from 'react';
-import { AlertCircle, ArrowDown, ArrowUp, Pencil, Search, Trash2 } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { AlertCircle, ArrowDown, ArrowUp, Loader2, Pencil, Search, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { StoredCase } from '../api/types';
 import { compareCases, type CaseSortField, type SortDirection } from '../caseSort';
 import { caseState, caseStateLabel, caseStateTone, incidentTitle, relativeTime, statusLabel } from '../presentation';
+import { analysisPendingEventName, getPendingAnalysisCount } from '../analysisQueue';
 
 interface Props {
   cases: StoredCase[];
@@ -23,18 +24,24 @@ export const CaseListPane: React.FC<Props> = ({ cases, selectedCaseId, loading, 
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [stateFilter, setStateFilter] = useState<'ALL' | 'LOSS' | 'SUSPECTED' | 'RESOLVED'>('ALL');
-  const [status, setStatus] = useState<'ALL' | 'ACTIVE' | 'RECOVERY' | 'CLOSED'>('ALL');
+  const [status, setStatus] = useState<'ALL' | 'ACTIVE' | 'CLOSED'>('ALL');
   const [sortField, setSortField] = useState<CaseSortField>('UPDATED_AT');
   const [sortDirection, setSortDirection] = useState<SortDirection>('DESC');
   const [editingCaseId, setEditingCaseId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [renameBusy, setRenameBusy] = useState(false);
   const [renameError, setRenameError] = useState('');
+  const [pendingAnalysisCount, setPendingAnalysisCount] = useState(getPendingAnalysisCount);
+  useEffect(() => {
+    const syncPendingAnalysis = () => setPendingAnalysisCount(getPendingAnalysisCount());
+    window.addEventListener(analysisPendingEventName, syncPendingAnalysis);
+    syncPendingAnalysis();
+    return () => window.removeEventListener(analysisPendingEventName, syncPendingAnalysis);
+  }, []);
   const rows = useMemo(() => [...cases]
     .filter((item) => stateFilter === 'ALL' || caseState(item) === stateFilter)
     .filter((item) => status === 'ALL'
-      || (status === 'ACTIVE' && item.status !== 'CLOSED' && item.mode !== 'RECOVERY')
-      || (status === 'RECOVERY' && item.mode === 'RECOVERY')
+      || (status === 'ACTIVE' && item.status !== 'CLOSED' && item.mode !== 'CLOSED')
       || (status === 'CLOSED' && (item.status === 'CLOSED' || item.mode === 'CLOSED')))
     .filter((item) => `${item.case_id} ${incidentTitle(item)} ${item.initial_brief}`.toLowerCase().includes(query.trim().toLowerCase()))
     .sort((a, b) => compareCases(a, b, sortField, sortDirection)), [cases, query, stateFilter, status, sortField, sortDirection]);
@@ -89,10 +96,11 @@ export const CaseListPane: React.FC<Props> = ({ cases, selectedCaseId, loading, 
       <div className="risk-filter" aria-label="사건 상태 필터">
         {(['ALL', 'LOSS', 'SUSPECTED', 'RESOLVED'] as const).map((value) => <button key={value} className={stateFilter === value ? 'active' : ''} onClick={() => setStateFilter(value)}>{value === 'ALL' ? '전체' : caseStateLabel(value)}</button>)}
       </div>
-      <div className="case-list-control-row"><label className="status-filter"><span>업무 상태</span><select value={status} onChange={(event) => setStatus(event.target.value as typeof status)}><option value="ALL">전체 상태</option><option value="ACTIVE">대응 중</option><option value="RECOVERY">피해구제</option><option value="CLOSED">종료</option></select></label><div className="case-sort-controls"><label htmlFor="case-sort-field">정렬</label><select id="case-sort-field" value={sortField} onChange={(event) => setSortField(event.target.value as CaseSortField)}><option value="CASE_ID">ID 순서</option><option value="UPDATED_AT">최신 업데이트 시간</option></select><button type="button" onClick={() => setSortDirection((value) => value === 'ASC' ? 'DESC' : 'ASC')} aria-label={`현재 ${sortDirection === 'ASC' ? '오름차순' : '내림차순'}, 정렬 방향 변경`} title="정렬 방향 변경">{sortDirection === 'ASC' ? <ArrowUp size={13}/> : <ArrowDown size={13}/>}<span>{sortDirection === 'ASC' ? '오름차순' : '내림차순'}</span></button></div></div>
+      <div className="case-list-control-row"><label className="status-filter"><span>업무 상태</span><select value={status} onChange={(event) => setStatus(event.target.value as typeof status)}><option value="ALL">전체 상태</option><option value="ACTIVE">진행 중</option><option value="CLOSED">해결 및 종료</option></select></label><div className="case-sort-controls"><label htmlFor="case-sort-field">정렬</label><select id="case-sort-field" value={sortField} onChange={(event) => setSortField(event.target.value as CaseSortField)}><option value="CASE_ID">ID 순서</option><option value="UPDATED_AT">최신 업데이트 시간</option></select><button type="button" onClick={() => setSortDirection((value) => value === 'ASC' ? 'DESC' : 'ASC')} aria-label={`현재 ${sortDirection === 'ASC' ? '오름차순' : '내림차순'}, 정렬 방향 변경`} title="정렬 방향 변경">{sortDirection === 'ASC' ? <ArrowUp size={13}/> : <ArrowDown size={13}/>}<span>{sortDirection === 'ASC' ? '오름차순' : '내림차순'}</span></button></div></div>
     </div>
     <div className="case-list-scroll">
       <div className="case-list-table-header" aria-hidden="true"><span>사건 ID</span><span>사건</span><span>업무 상태</span><span>최초 생성</span><span>최근 업데이트</span><span>상태·편집</span></div>
+      {pendingAnalysisCount > 0 && <div className="case-analysis-pending-notice" role="status" aria-live="polite"><Loader2 size={16} className="spin"/><span><strong>분석 중인 케이스가 있습니다.</strong><small>{pendingAnalysisCount}건의 분석이 진행 중이며, 분석 결과에 따라 Case Room이 생성되거나 생성되지 않습니다.</small></span></div>}
       {loading && Array.from({ length: 5 }).map((_, index) => <div className="case-skeleton" key={index}/>) }
       {!loading && error && <div className="pane-state error"><AlertCircle size={20}/><strong>사건을 불러오지 못했습니다.</strong><span>{error}</span><button onClick={onRetry}>다시 시도</button></div>}
       {!loading && !error && rows.length === 0 && <div className="pane-state"><strong>현재 대응 중인 사건이 없습니다.</strong><span>위험 이벤트가 Case로 생성되면 여기에 표시됩니다.</span></div>}

@@ -208,7 +208,7 @@ export const SharedConversation: React.FC<Props> = ({ bundle, view, channel, com
   return <section className={`conversation-channel-pane conversation-channel-${channel.toLowerCase()} ${collapsed ? 'is-collapsed' : ''}`} aria-label={channelLabel}>
     <header className="conversation-channel-header"><button type="button" className="conversation-channel-toggle" onClick={onToggleCollapse} disabled={collapseDisabled} aria-label={collapsed ? `${channelLabel} 열기` : `${channelLabel} 접기`} title={collapseDisabled ? '다른 채팅창을 먼저 열어 주세요.' : undefined}><CollapseIcon size={15}/></button><strong>{channelLabel}</strong>{!collapsed && <span>{channel === 'CUSTOMER' ? '고객에게 공개되는 대화' : '은행 담당자만 보는 대화'}</span>}</header>
     {collapsed ? <div className="conversation-channel-collapsed"><span>{channel === 'CUSTOMER' ? '고객' : '내부'}</span><small>채팅창 열기</small></div> : <>
-      <div ref={scrollRef} onScroll={(event) => { const node = event.currentTarget; followLatest.current = node.scrollHeight - node.scrollTop - node.clientHeight < 80; }} className="conversation-scroll" aria-live="polite">
+      <div ref={scrollRef} onScroll={(event) => { const node = event.currentTarget; followLatest.current = node.scrollHeight - node.scrollTop - node.clientHeight < 80; }} className={`conversation-scroll${inlineCard ? ' has-inline-card' : ''}`} aria-live="polite">
         {entries.length === 0 && !inlineCard && !aiBusy ? (
           <div className="conversation-empty">아직 대화 기록이 없습니다.</div>
         ) : (

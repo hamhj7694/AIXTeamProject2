@@ -4,6 +4,11 @@ import { publishAnalysisNotification } from './components/NotificationCenter';
 
 type Pending = Promise<AnalyzeCaseResponse>;
 const pending = new Map<string, Pending>();
+export const analysisPendingEventName = 'csr:analysis-pending-changed';
+export const getPendingAnalysisCount = () => pending.size;
+const notifyPendingAnalysisChanged = () => {
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(analysisPendingEventName));
+};
 
 /** Keeps an in-flight analysis alive when the analysis panel unmounts during SPA navigation. */
 export const startBackgroundAnalysis = (text: string, requestId: string): Pending => {
@@ -19,7 +24,8 @@ export const startBackgroundAnalysis = (text: string, requestId: string): Pendin
       publishAnalysisNotification({ title: '통화 분석 실패', message: `‘${subject}’ 관련 분석을 완료하지 못했습니다. 다시 시도해 주세요.`, tone: 'info' });
     }
     return response;
-  }).finally(() => { pending.delete(requestId); });
+  }).finally(() => { pending.delete(requestId); notifyPendingAnalysisChanged(); });
   pending.set(requestId, request);
+  notifyPendingAnalysisChanged();
   return request;
 };

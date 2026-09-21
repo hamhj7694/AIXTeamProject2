@@ -6,7 +6,7 @@ import type { QuestionCandidate, VerificationTask } from '../api/types';
 import { actionLabel } from '../presentation';
 import { generateUuid } from '../uuid';
 
-const DialogShell: React.FC<{ title: string; description: string; children: React.ReactNode; onClose: () => void }> = ({ title, description, children, onClose }) => {
+const DialogShell: React.FC<{ title: string; description: string; children: React.ReactNode; onClose: () => void; inline?: boolean }> = ({ title, description, children, onClose, inline = false }) => {
   const dialogRef = useRef<HTMLElement>(null);
   const onCloseRef = useRef(onClose);
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
@@ -16,7 +16,7 @@ const DialogShell: React.FC<{ title: string; description: string; children: Reac
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
-  return <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) onClose(); }}><section ref={dialogRef} tabIndex={-1} className="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title"><header><div><h2 id="dialog-title">{title}</h2><p>{description}</p></div><button className="icon-button" onClick={onClose} aria-label="창 닫기"><X size={18}/></button></header>{children}</section></div>;
+  return <div className={inline ? 'conversation-question-panel' : 'dialog-backdrop'} role={inline ? undefined : 'presentation'} onMouseDown={inline ? undefined : (event) => { if (event.currentTarget === event.target) onClose(); }}><section ref={dialogRef} tabIndex={-1} className={inline ? 'conversation-question-card' : 'dialog'} role="dialog" aria-modal={inline ? undefined : 'true'} aria-labelledby="dialog-title"><header><div><h2 id="dialog-title">{title}</h2><p>{description}</p></div><button className="icon-button" onClick={onClose} aria-label="창 닫기"><X size={18}/></button></header>{children}</section></div>;
 };
 
 const DialogError = ({ message }: { message: string }) => message ? <p className="dialog-error"><AlertCircle size={15}/>{message}</p> : null;
@@ -61,7 +61,7 @@ const writeQuestionDraft = (caseId: string, value: QuestionDraftState) => {
 };
 const clearQuestionDraft = (caseId: string) => window.localStorage.removeItem(questionDraftKey(caseId));
 
-export const QuestionDialog: React.FC<{ caseId: string; initial: QuestionCandidate[]; onDone: () => Promise<void>; onClose: () => void }> = ({ caseId, initial, onDone, onClose }) => {
+export const QuestionDialog: React.FC<{ caseId: string; initial: QuestionCandidate[]; onDone: () => Promise<void>; onClose: () => void; inline?: boolean }> = ({ caseId, initial, onDone, onClose, inline = false }) => {
   const savedDraft = useMemo(() => readQuestionDraft(caseId), [caseId]);
   const [items, setItems] = useState<QuestionCandidate[]>(savedDraft?.items ?? initial);
   const [selected, setSelected] = useState<string[]>(savedDraft?.selected ?? initial.filter((item) => item.priority === 'P0').map((item) => item.question_id));
@@ -155,7 +155,7 @@ export const QuestionDialog: React.FC<{ caseId: string; initial: QuestionCandida
     catch (reason) { setError(reason instanceof Error ? reason.message : '질문을 고객 대기열에 등록하지 못했습니다.'); }
     finally { setSaving(false); }
   };
-  return <DialogShell title="고객에게 확인 질문" description="AI가 이미 확인한 내용을 제외하고 제안한 질문입니다. 필요한 항목만 선택하세요." onClose={onClose}>
+  return <DialogShell title="고객에게 확인 질문" description="AI가 이미 확인한 내용을 제외하고 제안한 질문입니다. 필요한 항목만 선택하세요." onClose={onClose} inline={inline}>
     <div className="dialog-body">
       <div className="ai-dialog-action"><div><Sparkles size={16}/><span><b>AI 질문 추천</b><small>현재 Case의 대화·답변·확인 이력을 읽고 중복되지 않는 질문을 제안합니다.</small></span></div><button type="button" onClick={() => void recommendQuestions()} disabled={recommending || saving}>{recommending ? <Loader2 className="spin" size={15}/> : <Sparkles size={15}/>}AI에게 질문 추천 받기</button></div>
       {aiNote && <p className="ai-recommendation-note">{aiNote}</p>}
