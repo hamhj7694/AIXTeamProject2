@@ -1,7 +1,7 @@
 import { request } from './client';
 import { CURRENT_BANK_USER } from './cases';
 
-export type ContextFact = { fact_id: string; semantic_key: string; display_label: string; display_value: string; source_kind: string; status: string; version: number; confirmed_at: string | null };
+export type ContextFact = { fact_id: string; semantic_key: string; display_label: string; display_value: string; source_kind: string; status: string; version: number; confirmed_by?: string | null; confirmed_at: string | null };
 export type ContextGap = { gap_id: string; semantic_key: string; title: string; reason: string; status: string; version: number };
 export type ContextGapHistory = { entity_id: string; entity_version: number; operation: 'EDIT' | 'SET_DISMISSED' | 'SET_RESOLVED'; actor_user_id: string; before?: ContextGap | null; after: ContextGap; created_at: string };
 export type ContextSuggestion = { suggestion_id: string; title: string; rationale: string; status: string; version: number; dismissal_reason?: string };

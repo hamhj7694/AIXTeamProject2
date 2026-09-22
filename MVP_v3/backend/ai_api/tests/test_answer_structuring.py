@@ -42,6 +42,21 @@ class CustomerAnswerStructuringTest(unittest.TestCase):
         self.assertGreaterEqual(result.confidence, 0)
         self.assertLessEqual(result.confidence, 1)
 
+    def test_remote_app_installation_is_distinct_from_installation_request(self) -> None:
+        for answer, expected in (("설치했어요", "INSTALLED"),
+                                 ("설치하지 않았어요", "NOT_INSTALLED")):
+            with self.subTest(answer=answer):
+                self.assertEqual(
+                    self.service.structure_answer(TargetField.REMOTE_CONTROL_APP, answer).structured_value,
+                    expected,
+                )
+        requested = self.service.structure_answer(TargetField.REMOTE_CONTROL_APP, "설치하라고 안내받았어요")
+        self.assertTrue(requested.unresolved)
+        self.assertIsNone(requested.structured_value)
+        request_only = self.service.structure_answer(TargetField.REMOTE_CONTROL_APP, "설치 안내만 받았어요")
+        self.assertTrue(request_only.unresolved)
+        self.assertIsNone(request_only.structured_value)
+
     def test_unsupported_field_uses_safe_fallback(self) -> None:
         result = self.service.structure_answer(TargetField.CLAIMED_ORGANIZATION, "검찰청이라고 했어요")
         self.assertTrue(result.unresolved)

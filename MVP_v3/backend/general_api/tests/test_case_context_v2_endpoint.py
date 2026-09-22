@@ -122,6 +122,9 @@ class CaseContextV2EndpointTest(unittest.TestCase):
         self.assertEqual(confirmed.status_code, 200, confirmed.text)
         self.assertEqual(confirmed.json()["status"], "CONFIRMED")
         self.assertEqual(confirmed.json()["confirmed_by"], "owner")
+        self.assertIsNotNone(confirmed.json()["confirmed_at"])
+        self.assertEqual(confirmed.json()["source_kind"], "STAFF_OBSERVATION")
+        self.assertEqual(self.repository._context_v2_history[-1]["operation"], "CONFIRM")
 
     def test_rejected_fact_can_be_restored_for_review_without_losing_history(self):
         created = self.create_fact().json()

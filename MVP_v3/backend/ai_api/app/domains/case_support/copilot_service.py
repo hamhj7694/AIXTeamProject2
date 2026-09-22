@@ -507,7 +507,11 @@ class CaseCopilotService:
                 ",".join(raw_rules) or "none",
                 ",".join(check.rule for check in blocking_failures if check.rule) or "none",
             )
-            raise CaseCopilotProviderError("AI 응답이 역할·안전 기준을 충족하지 않아 전달하지 않았습니다.")
+            # 차단된 원문은 폐기하고, 근거 상태만 설명하는 고정 응답을 기존 AI_RESPONSE 경로로 보낸다.
+            return CaseCopilotOutput(
+                content="현재 확인된 근거만으로는 해당 내용을 확정하기 어렵습니다. 담당자의 추가 확인이나 관련 근거 검토가 필요합니다.",
+                model_mode=model,
+            )
         return CaseCopilotOutput(content=content, model_mode=model)
 
 

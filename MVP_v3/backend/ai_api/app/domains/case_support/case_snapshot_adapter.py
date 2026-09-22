@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+import re
 from typing import Any
 
 from pydantic import ValidationError
@@ -79,6 +80,37 @@ class CaseSnapshotAiAdapter:
         return presentation
 
     @staticmethod
+    def _clear_remote_installation(value: str) -> bool:
+        """설치 요구 기록은 실제 설치 여부의 답이나 확인 사실이 아니다."""
+        compact = re.sub(r"\s+", "", value).casefold()
+        if compact in {"installed", "not_installed", "설치함", "설치안함", "설치됨", "설치되지않음"}:
+            return True
+        return not CustomerAnswerStructuringService().structure_answer(
+            TargetField.REMOTE_CONTROL_APP, value
+        ).unresolved
+
+    @staticmethod
+    def _clear_customer_answer(scope: str, answer: str) -> bool:
+        try:
+            target = TargetField(scope)
+        except ValueError:
+            return True
+        if target is TargetField.REMOTE_CONTROL_APP:
+            return CaseSnapshotAiAdapter._clear_remote_installation(answer)
+        if target not in {
+            TargetField.TRANSFER_STATUS,
+            TargetField.PERSONAL_INFORMATION_EXPOSURE,
+            TargetField.AUTHENTICATION_INFORMATION_EXPOSURE,
+        }:
+            return True
+        compact = re.sub(r"\s+", "", answer).casefold()
+        if compact in {"네", "예", "아니요", "아니오"}:
+            return True
+        if target is TargetField.TRANSFER_STATUS and compact in {"있음", "없음"}:
+            return True
+        return not CustomerAnswerStructuringService().structure_answer(target, answer).unresolved
+
+    @staticmethod
     def question_eligibilities(ai_input: CaseSnapshotAiInput) -> dict[str, QuestionEligibility]:
         """기존 typed 입력만 연결한다. 관계가 없는 복수 기록의 current를 선택하지 않는다."""
         context = ai_input.question_context
@@ -90,11 +122,22 @@ class CaseSnapshotAiAdapter:
             questions = [question.model_copy(update={"target_field": scope}) for question in ai_input.questions
                          if canonical_question_scope(question.target_field) == scope]
             facts = [fact for fact in ai_input.facts if fact.field == scope]
+            has_scope_facts = bool(facts)
+            if scope == TargetField.REMOTE_CONTROL_APP.value:
+                facts = [fact for fact in facts if fact.status != "CONFIRMED"
+                         or CaseSnapshotAiAdapter._clear_remote_installation(fact.value)]
             # 동일 값·상태의 중복 외에는 한 기록을 대표값으로 임의 선택하지 않는다.
             fact_signals = {(fact.status, fact.value) for fact in facts}
+            current_question = questions[0] if len(questions) == 1 else None
+            answer_uncertain = (
+                current_question is not None
+                and bool((current_question.answer_text or "").strip())
+                and not CaseSnapshotAiAdapter._clear_customer_answer(scope, current_question.answer_text or "")
+            )
             evaluation = QuestionStateEvaluator.evaluate(
                 semantic_scope=scope,
-                question=questions[0] if len(questions) == 1 else None,
+                question=current_question,
+                is_uncertain=True if answer_uncertain else None,
                 fact=facts[0] if len(fact_signals) == 1 else None,
             )
             result[scope] = question_eligibility(
@@ -108,7 +151,7 @@ class CaseSnapshotAiAdapter:
                 ),
                 # field 이력만으로 STAFF_CONFIRMED를 만들지 않는다.
                 # 호환 입력의 반복 억제와 실제 근거의 충분성은 별개다.
-                has_confirmed_history=not facts and scope in context.confirmed_fields,
+                has_confirmed_history=not has_scope_facts and scope in context.confirmed_fields,
             )
         return result
 

@@ -2,6 +2,7 @@
 
 import os
 import unittest
+from hashlib import sha256
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -83,7 +84,8 @@ class FactGroundingProviderTest(unittest.IsolatedAsyncioTestCase):
             return_value=SimpleNamespace(responses=SimpleNamespace(create=create)),
         ):
             result = await CaseCopilotService().generate(CaseCopilotInput(
-                case_id=f"grounding-{self._testMethodName}-{mode}", prompt="송금 여부를 설명해 주세요",
+                case_id=f"grounding-{sha256(self._testMethodName.encode()).hexdigest()[:12]}-{mode}",
+                prompt="송금 여부를 설명해 주세요",
                 assistant_mode=mode, known_facts=facts, **kwargs,
             ))
         return result, create.await_args.kwargs
@@ -100,20 +102,21 @@ class FactGroundingProviderTest(unittest.IsolatedAsyncioTestCase):
                 if mode == "CUSTOMER_SUPPORT":
                     self.assertIn("그대로 출력하지 마세요", args["instructions"])
 
-    async def test_customer_proposed_reply_is_rejected(self):
-        with self.assertRaises(CaseCopilotProviderError):
-            await self.generate("CUSTOMER_SUPPORT", ["송금함 (PROPOSED)"], "송금한 것이 확인되었습니다.")
+    async def test_customer_proposed_reply_is_replaced_with_safe_explanation(self):
+        result, _ = await self.generate("CUSTOMER_SUPPORT", ["송금함 (PROPOSED)"], "송금한 것이 확인되었습니다.")
+        self.assertIn("확정하기 어렵습니다", result.content)
+        self.assertNotIn("송금한 것이 확인되었습니다", result.content)
 
     async def test_confirmed_bank_reply_is_delivered(self):
         result, _ = await self.generate("BANK_INTERNAL", ["송금함 (CONFIRMED)"], "송금한 것이 확인되었습니다.")
         self.assertEqual(result.content, "송금한 것이 확인되었습니다.")
 
     async def test_previous_ai_reply_cannot_authorize_certainty(self):
-        with self.assertRaises(CaseCopilotProviderError):
-            await self.generate(
-                "CUSTOMER_SUPPORT", ["질문: 송금 여부 / 고객 답변: 송금했어요"],
-                "송금한 것이 확인되었습니다.", recent_conversation=["이전 AI: 송금함 (CONFIRMED)"],
-            )
+        result, _ = await self.generate(
+            "CUSTOMER_SUPPORT", ["질문: 송금 여부 / 고객 답변: 송금했어요"],
+            "송금한 것이 확인되었습니다.", recent_conversation=["이전 AI: 송금함 (CONFIRMED)"],
+        )
+        self.assertIn("확정하기 어렵습니다", result.content)
 
 
 def source_fact(source="CUSTOMER_STATEMENT", status="PROPOSED", **updates):
@@ -275,8 +278,9 @@ class SourceAwareProviderTest(unittest.IsolatedAsyncioTestCase):
             self.assertIn(rule, args["instructions"])
 
     async def test_unsupported_objective_reply_is_not_delivered(self):
-        with self.assertRaises(CaseCopilotProviderError):
-            await self.generate("고객이 1,000만원 송금했습니다.")
+        result, _ = await self.generate("고객이 1,000만원 송금했습니다.")
+        self.assertIn("확정하기 어렵습니다", result.content)
+        self.assertNotIn("1,000만원", result.content)
 
     async def test_proposed_ai_extraction_prompt_requires_uncertain_wording(self):
         fact = source_fact("AI_EXTRACTION")
@@ -301,8 +305,7 @@ class SourceAwareProviderTest(unittest.IsolatedAsyncioTestCase):
             "ai_api.app.domains.case_support.copilot_service",
             level="WARNING",
         ) as captured_logs:
-            with self.assertRaises(CaseCopilotProviderError):
-                await self.generate(provider_output)
+            result, _ = await self.generate(provider_output)
 
         log_output = "\n".join(captured_logs.output)
         self.assertIn("criteria=unsupported_certainty", log_output)
@@ -311,6 +314,8 @@ class SourceAwareProviderTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("raw_rules=none", log_output)
         self.assertIn("normalized_rules=staff_claim_without_confirmed_staff_source", log_output)
         self.assertNotIn(provider_output, log_output)
+        self.assertNotIn(provider_output, result.content)
+        self.assertIn("추가 확인", result.content)
 
     async def test_bank_record_reply_delivered_without_promoting_customer_source(self):
         result, _ = await self.generate("은행 거래기록에서 1,000만원 이체 내역이 확인됩니다.",
