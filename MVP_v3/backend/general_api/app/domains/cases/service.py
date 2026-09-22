@@ -30,7 +30,9 @@ class AnalyzeCaseService:
 
         with trace_stage("case.ai_analysis"):
             diagnosis = await self.ai_client.analyze(request.model_copy(update={"text": text}))
-        # Do not let the transient source utterance cross the Case boundary.
+        # The demo keeps the submitted transcript as a replayable Case input,
+        # but the diagnosis projection below removes source text/evidence from
+        # every structured payload that is sent to CSR/Context AI.
         diagnosis = project_diagnosis_for_case(diagnosis)
         if diagnosis.risk_level is RiskLevel.NORMAL:
             return AnalyzeCaseResponse(
@@ -51,7 +53,10 @@ class AnalyzeCaseService:
                     stored = await self.repository.create({
                         "case_id": case_id,
                         "client_request_id": request.client_request_id,
-                        "input_text": "",
+                        # Demo-only retention: this is the original input shown
+                        # to an authorized Case reader.  It is never included
+                        # in the AI support/snapshot contract.
+                        "input_text": text,
                         "risk": diagnosis.risk_level.value,
                         "risk_score": diagnosis.risk_score,
                         "mode": "PREVENT", "status": "TRIAGE",

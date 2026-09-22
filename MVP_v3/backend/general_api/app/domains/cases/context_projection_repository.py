@@ -37,6 +37,13 @@ class ContextProjectionRepository:
             value = value.decode('utf-8')
         return json.loads(value)
 
+    @staticmethod
+    def _as_utc(value: datetime | None) -> datetime | None:
+        """MySQL DATETIME is returned timezone-naive; compare it as UTC."""
+        if value is None:
+            return None
+        return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+
     async def get_revision(self, case_id: str) -> int:
         pool = await self.cases._get_pool()
         async with pool.acquire() as connection, connection.cursor() as cursor:
@@ -74,7 +81,8 @@ class ContextProjectionRepository:
                     if success_revision == current and payload is not None and row.get('schema_version') == CASE_SUPPORT_SCHEMA_VERSION:
                         await connection.commit()
                         return ProjectionClaim('CACHED', current, last_success_revision=success_revision, last_success_payload=payload)
-                    if row and row.get('generating_revision') == current and row.get('lease_expires_at') and row['lease_expires_at'] > now:
+                    lease_expires_at = self._as_utc(row.get('lease_expires_at')) if row else None
+                    if row and row.get('generating_revision') == current and lease_expires_at and lease_expires_at > now:
                         await connection.commit()
                         return ProjectionClaim('IN_PROGRESS', current, last_success_revision=success_revision, last_success_payload=payload)
                     expires = now + timedelta(seconds=lease_seconds)

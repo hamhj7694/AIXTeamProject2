@@ -11,6 +11,8 @@ on:
       - integration/dev2-with-ham3-frontend
     paths:
       - "MVP_v3/backend/**"
+      - "MVP_v3/database/**"
+      - "MVP_v3/docker-compose.yml"
       - "MVP_v3/frontend/**"
       - "MVP_v3/docs/04_PRIVACY_SAFE_SIGNAL_FLOW.md"
       - "MVP_v3/docs/33_ANALYSIS_ENVELOPE_FREEZE_CONTRACT.md"
@@ -43,6 +45,40 @@ jobs:
         run: python -m pytest --import-mode=importlib ai_api/tests/test_analysis_envelope.py ai_api/tests/test_feature_narratives.py -q
       - name: Verify Case creation boundary
         run: python -m pytest --import-mode=importlib general_api/tests/test_analyze_case.py general_api/tests/test_public_analyze_endpoint.py general_api/tests/test_case_creation_transaction.py general_api/tests/test_case_retrieval.py -q
+      - name: Verify generated DB bootstrap and schema tooling
+        run: python -m pytest --import-mode=importlib general_api/tests/test_schema_normalization.py::SchemaToolUnitTest -q
+
+  database-schema:
+    name: Database schema consistency
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: ci-schema-only
+          MYSQL_ROOT_HOST: "%"
+        ports:
+          - 3306/tcp
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -pci-schema-only"
+          --health-interval=10s --health-timeout=5s --health-retries=12
+    defaults:
+      run:
+        working-directory: MVP_v3/backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install schema-test dependencies
+        run: python -m pip install pymysql cryptography python-dotenv pytest pytest-subtests
+      - name: Verify fresh, bootstrap, legacy and repeated migrations
+        env:
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: ${{ job.services.mysql.ports[3306] }}
+          MYSQL_USER: root
+          MYSQL_PASSWORD: ci-schema-only
+        run: python -m pytest --import-mode=importlib general_api/tests/test_schema_normalization.py -q
 
   frontend-build:
     name: Frontend typecheck and build

@@ -43,7 +43,7 @@ class PublicAnalyzeContractTest(unittest.TestCase):
 
     def test_public_case_value_sets_reject_values_not_in_current_schema(self) -> None:
         payload = {
-            "case_id": "VP-000001", "client_request_id": None, "input_text": "test",
+            "case_id": "VP-000001", "client_request_id": None,
             "risk": "HIGH", "risk_score": 0.9, "mode": "PREVENT", "status": "TRIAGE",
             "initial_brief": "brief", "diagnosis": {}, "initial_report": None,
             "created_at": "2026-09-02T00:00:00Z", "updated_at": "2026-09-02T00:00:00Z",

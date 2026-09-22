@@ -6,10 +6,6 @@ export const MOCK_ACCOUNT_DATA = {
   receivingAccount: { bankName: '우리은행', accountNumber: '987-654-3210', holder: '박지훈' },
 };
 
-export const MOCK_ADDITIONAL_TRANSACTIONS = [
-  { datetime: '정보 없음', amount: 0, description: '' },
-];
-
 const MOCK_FDS_ACCOUNT_INFO = {
   reportCount: 3,
   suspiciousAccountStatus: '의심',
@@ -45,7 +41,7 @@ export function toBankCardData(caseItem: StoredCase, support: CaseSupportSnapsho
     },
     additionalLookup: {
       updatedAt: caseItem.updated_at || '',
-      transactions: (apiTransactions.length ? apiTransactions.map((item) => ({ datetime: item.transaction_at, amount: item.amount, description: item.memo || '-', })) : MOCK_ADDITIONAL_TRANSACTIONS).map((transaction) => ({
+      transactions: apiTransactions.map((item) => ({ datetime: item.transaction_at, amount: item.amount, description: item.memo || '-', })).map((transaction) => ({
         ...transaction,
         description: transaction.description?.trim() || '-',
       })),

@@ -18,11 +18,15 @@ class PublicCaseReadModel(BaseModel):
 
 
 class PublicCaseReadResponse(PublicCaseReadModel):
+    """Case read contract; raw demo input is intentionally excluded.
+
+    The initial analysis screen keeps the submitted text transiently in the
+    browser. Later Case read/list/bundle responses must not expose it.
+    """
     case_id: str
     version: int = 1
     case_name: str | None = None
     client_request_id: str | None
-    input_text: str
     risk: CaseRisk
     risk_score: float
     mode: CaseMode
@@ -63,7 +67,6 @@ def to_public_case_read_response(record: dict[str, Any]) -> PublicCaseReadRespon
         "version": record.get("version", 1),
         "case_name": record.get("case_name"),
         "client_request_id": record.get("client_request_id"),
-        "input_text": record["input_text"],
         "risk": record["risk"],
         "risk_score": record["risk_score"],
         "mode": record["mode"],

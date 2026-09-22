@@ -42,7 +42,7 @@ class CaseActivityEndpointTest(unittest.TestCase):
         self.client = TestClient(general_main.app)
         self.original_repository = general_main.repository
         self.repository = AsyncMock()
-        for name in ("facts", "gaps", "suggestions", "tasks", "decisions", "requests"):
+        for name in ("facts", "gaps", "suggestions", "tasks", "decisions", "requests", "observations"):
             setattr(self.repository, f"_context_v2_{name}", {})
         self.repository.get.return_value = CASE
         self.repository.get_voice_session.return_value = None
@@ -200,19 +200,20 @@ class CaseActivityEndpointTest(unittest.TestCase):
         self.assertEqual(reopened.status_code, 200)
         self.assertEqual(reopened.json()["status"], "REQUESTED")
 
-    def test_voice_session_transcript_and_final_report_contracts(self) -> None:
+    def test_voice_session_rejects_transcript_and_final_report_contracts(self) -> None:
         self.repository.create_voice_session.return_value = {
             "session_id": "voice-1", "case_id": "VP-ACTIVITY", "status": "REQUESTED", "participants": ["CUSTOMER", "BANK_STAFF"],
             "started_at": None, "ended_at": None, "created_at": "2026-09-02T01:00:00+00:00",
         }
         self.repository.update_voice_session.return_value = {**self.repository.create_voice_session.return_value, "status": "ACTIVE", "started_at": "2026-09-02T01:01:00+00:00"}
-        self.repository.append_transcript.return_value = {"segment_id": "seg-1", "session_id": "voice-1", "case_id": "VP-ACTIVITY", "speaker": "CUSTOMER", "content": "상담 내용", "started_at": None, "created_at": "2026-09-02T01:01:00+00:00"}
         self.repository.finalize_report.return_value = {"report_id": "final-VP-ACTIVITY", "case_id": "VP-ACTIVITY", "report_version": 1, "status": "FINAL", "sections": [], "created_at": "2026-09-02T01:02:00+00:00"}
         voice = self.client.post("/api/cases/VP-ACTIVITY/voice-sessions", json={"participants": ["CUSTOMER", "BANK_STAFF"]})
         active = self.client.patch("/api/cases/VP-ACTIVITY/voice-sessions/voice-1", json={"status": "ACTIVE"})
         transcript = self.client.post("/api/cases/VP-ACTIVITY/voice-sessions/voice-1/transcript", json={"speaker": "CUSTOMER", "content": "상담 내용"})
         final = self.client.post("/api/cases/VP-ACTIVITY/reports/finalize", json={"expected_version": 1, "password": "test-admin", "note": "종료"})
-        self.assertEqual([voice.status_code, active.status_code, transcript.status_code, final.status_code], [201, 200, 201, 200])
+        self.assertEqual([voice.status_code, active.status_code, transcript.status_code, final.status_code], [201, 200, 410, 200])
+        self.assertEqual(transcript.json()["detail"]["code"], "TRANSCRIPT_STORAGE_DISABLED")
+        self.repository.append_transcript.assert_not_called()
         self.assertEqual(final.json()["status"], "FINAL")
         self.generate_final_report.assert_awaited_once()
         report_input = self.generate_final_report.await_args.args[0]
@@ -288,8 +289,6 @@ class CaseActivityEndpointTest(unittest.TestCase):
         self.assertTrue(word.content.startswith(b"PK"))
 
     def test_case_trash_restore_and_permanent_delete_require_admin_password(self) -> None:
-        self.repository.list_attachments.return_value = []
-
         denied = self.client.post("/api/cases/VP-ACTIVITY/trash", json={"password": "wrong"})
         moved = self.client.post("/api/cases/VP-ACTIVITY/trash", json={"password": "test-admin"})
         restored = self.client.post("/api/cases/VP-ACTIVITY/restore", json={"password": "test-admin"})

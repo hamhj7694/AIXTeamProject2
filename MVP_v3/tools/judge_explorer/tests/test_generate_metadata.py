@@ -17,6 +17,15 @@ from scanners.common import ScanAudit, canonical_json  # noqa: E402
 
 
 class JudgeMetadataGeneratorTest(unittest.TestCase):
+    def test_database_scanner_uses_all_manifest_entries_and_excludes_rollback(self):
+        from scanners.database import scan_database
+        result = scan_database(MVP_ROOT, ScanAudit(MVP_ROOT))
+        manifest = json.loads((MVP_ROOT / 'backend/migrations/manifest.json').read_text(encoding='utf-8'))
+        self.assertEqual([item['source_path'] for item in result['migrations']],
+                         ['backend/migrations/' + entry for entry in manifest])
+        self.assertEqual(result['table_count'], 36)
+        self.assertEqual(result['marker_gaps'], [])
+
     def generate(self, suffix: str):
         base = Path(tempfile.gettempdir()) / f"judge-explorer-test-{suffix}"
         return generate_all(MVP_ROOT, base, generated_at=f"2026-01-01T00:00:0{suffix[-1]}+00:00")

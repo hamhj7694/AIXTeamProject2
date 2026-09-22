@@ -4,7 +4,7 @@
 상태: 현재 구현 기준선(FREEZE)
 적용 범위: 데모 입력, 데모 Envelope 변환, AI API, Case 저장, 새 통화 분석 결과 패널
 
-이 문서는 다른 브랜치나 팀원 작업을 병합할 때 현재의 원문 비접근형 CSR 구조가 과거 방식으로 되돌아가지 않도록 고정하는 계약이다. 코드가 문서와 다르면 무조건 코드를 정답으로 간주하지 말고, 이 계약의 불변 조건과 회귀 테스트를 먼저 확인한다.
+이 문서는 다른 브랜치나 팀원 작업을 병합할 때 현재의 **저장 원문을 지원 AI가 다시 읽지 않는 CSR 구조**가 과거 방식으로 되돌아가지 않도록 고정하는 계약이다. 코드가 문서와 다르면 무조건 코드를 정답으로 간주하지 말고, 이 계약의 불변 조건과 회귀 테스트를 먼저 확인한다.
 
 > 보호 수준: 문서·strict contract·회귀 테스트와 `.github/workflows/analysis-envelope-guard.yml`을 제공한다. 원격 GitHub Required Check와 Branch Protection은 저장소 관리자 설정 전까지 활성 상태가 아니므로, 그 전에는 PR 작성자와 검토자가 병합 게이트를 직접 확인한다.
 
@@ -35,14 +35,15 @@ Envelope 분석 코어는 `POST /ai/analyze/signals`이며 원문 필드를 받�
 
 ## 2. 병합으로 변경하면 안 되는 불변 조건
 
-### 2.1 원문 비접근·비저장
+### 2.1 원문 보관·AI 비접근
 
 - CSR 운영 분석 API에 통화 원문, 긴 인용문, raw evidence span을 추가하지 않는다.
 - `AnalysisEnvelope.source_text_included`는 항상 `false`다.
 - `raw_transcript`, `full_transcript`, `raw_text` 같은 임의 필드는 strict contract에서 거부한다.
-- 신규 Case의 `input_text`는 빈 문자열로 저장한다.
+- 데모 신규 Case의 `case_inputs.input_text`에는 제출한 통화 원문을 보관하고 `input_type=VOICE_TRANSCRIPT`로 기록한다.
+- 저장된 `input_text`는 원장에만 보관한다. 원문은 최초 분석 결과 화면에서만 일시적으로 표시하고, 이후 Case read/list/bundle·Case Copilot·Context AI·Snapshot 입력에는 반환하거나 포함하지 않는다.
 - Window와 Event의 저장 문자열은 원문이 아니라 정규화된 요약·신호 라벨이어야 한다.
-- Frontend는 분석 완료 후 입력 텍스트를 비우고 결과 화면에서 원문을 다시 표시하지 않는다.
+- Frontend는 분석 완료 후 입력 textarea를 비우고, 최초 분석 결과 화면에서만 transient 원문을 표시한다. Case Room 재조회에서는 원문을 표시하지 않는다.
 - 로그·trace·오류 응답에 원문이나 인증정보·계좌번호·OTP를 남기지 않는다.
 
 ### 2.2 역할 귀속
@@ -131,7 +132,7 @@ Envelope가 제공한 다음 정보는 generic label로 덮어쓰지 않는다.
 | Atom JSON schema와 추출 지침 | `backend/ai_api/app/domains/diagnosis/constants.py` |
 | 구조화 문장 생성·검증 | `backend/ai_api/app/domains/diagnosis/extractor.py` |
 | 저장 전 privacy-safe projection | `backend/general_api/app/domains/cases/signal_projection.py` |
-| Case 생성과 빈 `input_text` | `backend/general_api/app/domains/cases/service.py` |
+| Case 생성과 데모 `input_text` 보관 경계 | `backend/general_api/app/domains/cases/service.py` |
 | Frontend 타입 | `frontend/src/api/types.ts` |
 | 새 통화 분석 결과 표시 | `frontend/src/pages/HomePage.tsx` |
 | 결과 패널·메타정보 스타일 | `frontend/src/styles.css` |
@@ -145,7 +146,7 @@ Envelope가 제공한 다음 정보는 generic label로 덮어쓰지 않는다.
 3. 새 필드는 가능한 additive·optional 방식으로 추가해 기존 Case 조회를 깨지 않는다.
 4. `AnalysisEnvelope`, `SemanticAtom`, `ContextNarrative` 필드를 삭제하거나 이름을 바꿀 때는 migration·하위 호환·Frontend 타입을 함께 변경한다.
 5. `/ai/analyze/signals`를 텍스트 입력 API로 되돌리지 않는다.
-6. `input_text` 저장, 원문 결과 UI, raw evidence 저장 코드가 재도입되면 병합을 중단한다.
+6. `input_text`를 Case read/list/bundle 또는 Case Copilot/Context AI payload에 포함하거나 raw evidence를 구조화 결과에 복제하면 병합을 중단한다. 데모 분석 완료 직후의 일회성 원문 확인만 허용한다.
 7. UI 충돌은 결과 카드 수를 줄이는 방식이 아니라 내부 스크롤·접기·가상화로 해결한다.
 8. 충돌 해소 후 아래 병합 게이트를 모두 실행한다.
 
@@ -169,7 +170,7 @@ git diff --check
 
 - `test_analysis_envelope.py`: raw transcript 거부, 호칭/화자 귀속, 정규화 Window
 - `test_feature_narratives.py`: 근거 참조 검증, 잘못된 주체 문구 교정, 은행 내부 확인 문구
-- Case 생성 테스트: `input_text` 비저장과 구조화 diagnosis 복원
+- Case 생성 테스트: `input_text` 데모 보관과 구조화 diagnosis 분리
 
 현재 기준 검증 기록:
 
@@ -185,7 +186,7 @@ git diff --check
 
 - [ ] 운영 CSR 입력이 여전히 `AnalysisEnvelope`인가?
 - [ ] 데모 원문 입력과 운영 Envelope 입력이 구분돼 있는가?
-- [ ] 원문·긴 인용문·민감 literal이 DB/API read/log에 남지 않는가?
+- [ ] 원문은 의도한 데모 `case_inputs`에만 보관되고, 지원 AI payload·로그·구조화 결과에 복제되지 않는가?
 - [ ] 화자·행위자·대상자·보고자가 분리돼 있는가?
 - [ ] 구체 기관명·인물명·관계·시간 정보가 보존되는가?
 - [ ] `보이스피싱 의심 인물` 용어가 유지되는가?

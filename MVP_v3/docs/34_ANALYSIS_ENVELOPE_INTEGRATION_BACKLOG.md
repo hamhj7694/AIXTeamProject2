@@ -18,7 +18,7 @@
 ```
 
 - `/api/cases/analyze`가 위 전체 데모 흐름을 시작하며 Case는 이미 생성된다.
-- `/ai/analyze/signals`는 원문 비접근형 목표 구조를 검증하기 위한 내부 분석 경계다.
+- `/ai/analyze/signals`는 저장 원문을 다시 받지 않는 지원 AI 분석 경계를 검증하기 위한 내부 분석 경계다.
 - 외부 사업자가 Envelope를 직접 제출하는 General API endpoint는 데모 완료 조건이 아니다.
 - 통신사 인증, mTLS, 외부 webhook, 실제 기기 SDK, ASAP/FDS 연결은 명시적으로 범위 밖이다.
 - Vector DB와 embedding 파이프라인은 구현하지 않는다. MySQL 구조화 데이터, Case Snapshot JSON, 기존 Case-local TF-IDF 검색을 사용한다.
@@ -29,7 +29,7 @@
 - strict `AnalysisEnvelope`와 참조 무결성 검증
 - 데모 입력 → Envelope → 동일 분석 코어 → Case 생성
 - 동일 `client_request_id`의 Case 생성 멱등성
-- Case의 원문 비저장과 privacy-safe projection
+- 데모 Case 입력 원문 보관과 지원 AI의 privacy-safe projection
 - 화자·행위자·대상자·보고자, 기관·인물·관계·시간 metadata 보존
 - GPT 기반 정황 문장·사건 초기 요약과 결정적 fallback
 - 주요 정황 카드와 `추가 구조화 정보` 상세 영역
@@ -103,7 +103,7 @@
 ```text
 1. 팀원 작업 브랜치에서 `integration/dev2-with-ham3-frontend`로 PR 생성
 2. 이 브랜치의 Branch Protection에서 3개 check를 필수로 지정
-3. 데모 브라우저 E2E와 원문 비저장 확인
+3. 데모 브라우저 E2E와 `case_inputs` 원문 보관·지원 AI 입력 제외 확인
 4. 역할·시간·구체 명칭 fixture 확대
 5. GPT 품질·비용 측정과 문장 개선
 ```

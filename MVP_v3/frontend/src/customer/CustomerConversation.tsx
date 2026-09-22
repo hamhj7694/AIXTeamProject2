@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
-import { BadgeCheck, Bookmark, Bot, CheckCircle2, FileText, ShieldCheck, UserRound } from 'lucide-react';
-import { casesApi, CURRENT_CUSTOMER_USER } from '../api/cases';
+import { BadgeCheck, Bookmark, Bot, CheckCircle2, ShieldCheck, UserRound } from 'lucide-react';
+import { CURRENT_CUSTOMER_USER } from '../api/cases';
 import type { CaseBundle, CaseMessage, CustomerQuestion, CustomerVerificationResult, StructuredQuestionAnswer } from '../api/types';
 import { formatClock } from '../presentation';
 import type { CustomerBookmark } from './bookmarks';
@@ -32,7 +32,7 @@ const MessageEntry: React.FC<{ entry: CustomerTimelineEntry; message: CaseMessag
   const ai = message.actor_type === 'CUSTOMER_AGENT' || message.message_kind === 'AI_RESPONSE';
   return <article id={entry.id} className={`customer-message-row ${mine ? 'mine' : ''}`}>
     <span className={`customer-avatar ${mine ? 'customer' : ai ? 'ai' : 'bank'}`}>{mine ? <UserRound size={17}/> : ai ? <Bot size={17}/> : <ShieldCheck size={17}/>}</span>
-    <div className="customer-message-wrap"><div className="customer-entry-meta"><b>{mine ? '나' : message.actor_display_name || (ai ? '안전 상담 AI' : '은행 담당자')}</b><BookmarkButton entry={entry} active={active} label={mine ? '내 메시지' : ai ? 'AI 안내' : '은행 안내'} summary={message.content || '첨부파일'} onToggle={onToggle}/></div><div className="customer-message-bubble"><SafeMarkdown content={message.content}/>{message.attachments?.length > 0 && <div className="attachment-list">{message.attachments.map((attachment) => <a key={attachment.attachment_id} href={casesApi.customerAttachmentUrl(attachment)} target="_blank" rel="noreferrer"><FileText size={15}/><span>{attachment.original_name}</span><small>{Math.ceil(attachment.size_bytes / 1024)}KB</small></a>)}</div>}</div>{message.delivery_state === 'FAILED' && <div className="message-delivery-error"><span>전송되지 않았습니다.</span><button type="button" onClick={() => onRetry(message)}>다시 전송</button><button type="button" onClick={() => onDismiss(message)}>지우기</button></div>}<time className={message.delivery_state ? message.delivery_state.toLowerCase() : undefined}>{message.delivery_state === 'SENDING' ? '전송 중…' : message.delivery_state === 'FAILED' ? '전송 실패' : formatClock(message.created_at)}</time></div>
+    <div className="customer-message-wrap"><div className="customer-entry-meta"><b>{mine ? '나' : message.actor_display_name || (ai ? '안전 상담 AI' : '은행 담당자')}</b><BookmarkButton entry={entry} active={active} label={mine ? '내 메시지' : ai ? 'AI 안내' : '은행 안내'} summary={message.content || '메시지'} onToggle={onToggle}/></div><div className="customer-message-bubble"><SafeMarkdown content={message.content}/></div>{message.delivery_state === 'FAILED' && <div className="message-delivery-error"><span>전송되지 않았습니다.</span><button type="button" onClick={() => onRetry(message)}>다시 전송</button><button type="button" onClick={() => onDismiss(message)}>지우기</button></div>}<time className={message.delivery_state ? message.delivery_state.toLowerCase() : undefined}>{message.delivery_state === 'SENDING' ? '전송 중…' : message.delivery_state === 'FAILED' ? '전송 실패' : formatClock(message.created_at)}</time></div>
   </article>;
 };
 
@@ -68,6 +68,6 @@ export const CustomerConversation: React.FC<Props> = ({ bundle, busy, aiBusy, bo
       {entries.length > 0 ? entries.map(renderEntry) : !aiBusy ? <div className="customer-conversation-empty"><Bot size={25}/><strong>아직 상담 대화가 없습니다.</strong><span>현재 상황을 알려주시면 필요한 내용을 차례로 확인합니다.</span></div> : null}
       {aiBusy && <AiThinkingBubble detail="현재 상황에 맞는 안전 안내를 준비하고 있습니다."/>}
     </div>
-    {showJumpToLatest && <div className="conversation-scroll-action"><button type="button" onClick={jumpToLatest} aria-label="최신 채팅으로 이동" title="최신 채팅으로 이동">↓</button></div>}
+    {showJumpToLatest && <div className="conversation-scroll-action"><button type="button" onClick={jumpToLatest} aria-label="최신 채팅으로 가기" title="최신 채팅으로 가기">최신 채팅으로 가기</button></div>}
   </>;
 };

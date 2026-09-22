@@ -18,8 +18,6 @@ import { buildConsecutiveCustomerAiPrompt, ConsecutiveAiBatcher, type AiBatchCon
 type CustomerOutboxItem = {
   message: CaseMessage;
   content: string;
-  files: File[];
-  attachmentIds: string[];
   requestAi: boolean;
 };
 
@@ -155,11 +153,7 @@ export const CustomerCaseRoomPage: React.FC = () => {
     pendingMessagesRef.current.set(sendingMessage.client_request_id!, sendingMessage);
     showMessage(sendingMessage);
     try {
-      for (const file of item.files.slice(item.attachmentIds.length)) {
-        const attachment = await casesApi.uploadCustomerAttachment(caseId, file);
-        item.attachmentIds.push(attachment.attachment_id);
-      }
-      const message = await casesApi.sendCustomerMessage(caseId, item.content, item.attachmentIds, item.message.client_request_id!);
+      const message = await casesApi.sendCustomerMessage(caseId, item.content, item.message.client_request_id!);
       if (!isCurrent()) return false;
       loadRequestRef.current += 1;
       pendingMessagesRef.current.delete(item.message.client_request_id!);
@@ -194,7 +188,7 @@ export const CustomerCaseRoomPage: React.FC = () => {
       saved: saved.then((message) => message ? { messageId: message.message_id, createdAt: message.created_at } : false),
     });
   };
-  const send = (content: string, files: File[], requestAi: boolean): Promise<void> => {
+  const send = (content: string, requestAi: boolean): Promise<void> => {
     const clientRequestId = generateUuid();
     const message: CaseMessage = {
       message_id: `pending-${clientRequestId}`,
@@ -217,7 +211,7 @@ export const CustomerCaseRoomPage: React.FC = () => {
       delivery_state: 'SENDING',
       delivery_error: null,
     };
-    const item: CustomerOutboxItem = { message, content, files, attachmentIds: [], requestAi };
+    const item: CustomerOutboxItem = { message, content, requestAi };
     pendingMessagesRef.current.set(clientRequestId, message);
     outboxRef.current.set(clientRequestId, item);
     showMessage(message);

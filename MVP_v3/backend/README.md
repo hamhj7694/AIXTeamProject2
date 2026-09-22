@@ -28,19 +28,7 @@ general_api + ai_api -> contracts
 
 ## MySQL `csr` 연결
 
-빈 스키마는 `MVP_v3/database/01_mysql_csr_schema.sql`에 있다.
-
-```powershell
-mysql -u ham -p csr
-```
-
-MySQL prompt에서 실행한다.
-
-```sql
-SOURCE MVP_v3/database/01_mysql_csr_schema.sql;
-```
-
-그다음 Backend 환경 파일을 만든다.
+최초 실행에서만 Backend 환경 파일을 만든다. 기존 `.env`를 덮어쓰지 않는다.
 
 ```powershell
 cd MVP_v3/backend
@@ -48,6 +36,11 @@ Copy-Item ../.env.example ../.env
 ```
 
 `MVP_v3/.env`에서 `OPENAI_API_KEY`, `MYSQL_PASSWORD`, `CASE_ADMIN_DELETE_PASSWORD`를 실제 값으로 바꾼다. `.env`와 AWS Secret은 Git에 커밋하지 않는다.
+
+Backend 폴더에서 `../.venv/Scripts/python.exe scripts/apply_migrations.py`로 DB를 초기화한다.
+`database/01_mysql_csr_schema.sql`은 동일 migration에서 생성한 빈 DB/Docker 전용 파일이다.
+기존 DB 구조 변경·백업·정상화는 [DB 운영 안내](../database/README.md)를 따르고,
+[전체 DB 표](../database/DB_CATALOG.md)와 [엔티티별 migration](migrations/README.md)을 확인한다.
 
 ## 최초 진단 Vertical Slice 실행
 

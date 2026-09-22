@@ -8,7 +8,7 @@
 
 - `GET/POST /api/bank/staff`
 - `PATCH/DELETE /api/bank/staff/{staff_id}`
-- 마이그레이션: `backend/migrations/020_bank_staff_directory.sql`
+- 마이그레이션: `backend/migrations/staff/020_bank_staff_directory.sql`
 - 삭제는 `deleted_at`을 기록하는 soft delete입니다.
 - 상태 색상은 GREEN, BLUE, YELLOW, ORANGE, RED, PURPLE, GRAY 토큰만 허용합니다.
 - 전사 담당자 화면에서는 Case별 역할을 배정하지 않습니다. Case별 배정 역할은 `case_members.assignment_role`에 저장합니다.

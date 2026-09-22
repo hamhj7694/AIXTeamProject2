@@ -6,7 +6,6 @@ import json
 import os
 import hashlib
 import logging
-import mimetypes
 import re
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -19,7 +18,7 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import JSONResponse
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, model_validator
 from .domains.cases.context_items import Section, ContextItemChange, ContextItemConflictError
@@ -75,12 +74,10 @@ from contracts.public_api.case_context_v2 import (
 )
 from contracts.public_api.case_activity import (
     PublicCaseEventResponse,
-    PublicAttachmentResponse,
     PublicCreateMessageRequest,
     PublicCustomerEmergencyRequest,
     PublicMessageResponse,
     to_public_event,
-    to_public_attachment,
     to_public_message,
 )
 from contracts.public_api.case_workflow import (
@@ -98,8 +95,6 @@ from contracts.public_api.case_workflow import (
     PublicCreateVoiceSessionRequest,
     PublicUpdateVoiceSessionRequest,
     PublicVoiceSessionResponse,
-    PublicCreateTranscriptRequest,
-    PublicTranscriptResponse,
     PublicReportResponse,
     PublicCreateVerificationRequest,
     PublicCustomerQuestionResponse,
@@ -241,54 +236,7 @@ app.add_middleware(
 )
 repository = build_repository()
 
-ATTACHMENT_STORAGE_ROOT = Path(os.getenv("ATTACHMENT_STORAGE_ROOT", str(Path(__file__).resolve().parents[2] / "data" / "uploads"))).resolve()
-MAX_ATTACHMENT_BYTES = int(os.getenv("MAX_ATTACHMENT_BYTES", str(10 * 1024 * 1024)))
-ALLOWED_ATTACHMENT_TYPES = {
-    "image/jpeg": ".jpg", "image/png": ".png", "image/gif": ".gif", "image/webp": ".webp",
-    "application/pdf": ".pdf", "text/plain": ".txt", "text/csv": ".csv", "application/json": ".json",
-    "application/msword": ".doc", "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
-    "application/vnd.ms-excel": ".xls", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
-}
-
-
-def _clean_file_name(value: str) -> str:
-    name = Path(value).name
-    name = re.sub(r"[\x00-\x1f\x7f]", "", name).strip()
-    return name[:160] or "attachment"
-
-
-def _resolve_attachment_type(file_name: str, content_type: str | None) -> tuple[str, str]:
-    candidate = (content_type or "").split(";", 1)[0].strip().lower()
-    if candidate not in ALLOWED_ATTACHMENT_TYPES:
-        candidate = (mimetypes.guess_type(file_name)[0] or "").lower()
-    extension = ALLOWED_ATTACHMENT_TYPES.get(candidate)
-    if not extension:
-        raise HTTPException(status_code=415, detail={"code": "ATTACHMENT_TYPE_NOT_ALLOWED", "message": "지원하지 않는 파일 형식입니다."})
-    return candidate, extension
-
-
-def _has_valid_signature(mime_type: str, content: bytes) -> bool:
-    signatures = {
-        "image/jpeg": lambda value: value.startswith(b"\xff\xd8\xff"),
-        "image/png": lambda value: value.startswith(b"\x89PNG\r\n\x1a\n"),
-        "image/gif": lambda value: value.startswith((b"GIF87a", b"GIF89a")),
-        "image/webp": lambda value: len(value) >= 12 and value[:4] == b"RIFF" and value[8:12] == b"WEBP",
-        "application/pdf": lambda value: value.startswith(b"%PDF-"),
-        "application/msword": lambda value: value.startswith(b"\xd0\xcf\x11\xe0"),
-        "application/vnd.ms-excel": lambda value: value.startswith(b"\xd0\xcf\x11\xe0"),
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": lambda value: value.startswith(b"PK\x03\x04"),
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": lambda value: value.startswith(b"PK\x03\x04"),
-    }
-    validator = signatures.get(mime_type)
-    if validator:
-        return validator(content)
-    if mime_type.startswith("text/") or mime_type == "application/json":
-        try:
-            content.decode("utf-8")
-            return True
-        except UnicodeDecodeError:
-            return False
-    return True
+ATTACHMENTS_DISABLED_MESSAGE = "데모에서는 메시지 첨부파일을 지원하지 않습니다. 텍스트로 입력해 주세요."
 service = AnalyzeCaseService(HttpDiagnosisAiClient(), repository)
 
 
@@ -524,20 +472,10 @@ async def restore_case_from_trash(case_id: str, request: AdminCaseDeleteRequest)
 @app.delete("/api/cases/trash/{case_id}", status_code=204)
 async def permanently_delete_trashed_case(case_id: str, request: AdminCaseDeleteRequest) -> None:
     require_admin_password(request.password)
-    attachments = await repository.list_attachments(case_id)
     try:
         await repository.purge_case(case_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case not found in trash."}) from exc
-    for attachment in attachments:
-        stored_path = (ATTACHMENT_STORAGE_ROOT / attachment["storage_path"]).resolve()
-        if ATTACHMENT_STORAGE_ROOT not in stored_path.parents:
-            logger.error("Skipped unsafe attachment path during Case purge: %s", stored_path)
-            continue
-        try:
-            stored_path.unlink(missing_ok=True)
-        except OSError:
-            logger.exception("Failed to remove attachment after Case purge: %s", stored_path)
 
 
 @app.get("/api/cases/{case_id}", response_model=PublicCaseReadResponse, response_model_exclude_none=True)
@@ -1474,90 +1412,20 @@ async def delete_personal_note(case_id: str, note_id: str, author_id: str) -> No
         raise HTTPException(status_code=404, detail={"code": "PERSONAL_NOTE_NOT_FOUND", "message": "개인 메모를 찾을 수 없습니다."}) from exc
 
 
-@app.post("/api/cases/{case_id}/attachments", response_model=PublicAttachmentResponse, status_code=201)
-async def upload_case_attachment(
-    case_id: str,
-    request: Request,
-    file_name: str,
-    uploaded_by: str,
-    visibility: Literal["BANK_INTERNAL", "CUSTOMER", "AI_PRIVATE"] = "CUSTOMER",
-) -> PublicAttachmentResponse:
-    await require_case(case_id)
-    if not uploaded_by.strip():
-        raise HTTPException(status_code=422, detail={"code": "UPLOADER_REQUIRED", "message": "업로드 사용자가 필요합니다."})
-    content_length = request.headers.get("content-length")
-    if content_length:
-        try:
-            if int(content_length) > MAX_ATTACHMENT_BYTES:
-                raise HTTPException(status_code=413, detail={"code": "ATTACHMENT_TOO_LARGE", "message": f"파일은 최대 {MAX_ATTACHMENT_BYTES // (1024 * 1024)}MB까지 업로드할 수 있습니다."})
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail={"code": "INVALID_CONTENT_LENGTH", "message": "잘못된 파일 크기 정보입니다."}) from exc
-    content = await request.body()
-    if not content:
-        raise HTTPException(status_code=422, detail={"code": "ATTACHMENT_EMPTY", "message": "빈 파일은 업로드할 수 없습니다."})
-    if len(content) > MAX_ATTACHMENT_BYTES:
-        raise HTTPException(status_code=413, detail={"code": "ATTACHMENT_TOO_LARGE", "message": f"파일은 최대 {MAX_ATTACHMENT_BYTES // (1024 * 1024)}MB까지 업로드할 수 있습니다."})
-
-    original_name = _clean_file_name(file_name)
-    mime_type, extension = _resolve_attachment_type(original_name, request.headers.get("content-type"))
-    if not _has_valid_signature(mime_type, content):
-        raise HTTPException(status_code=415, detail={"code": "ATTACHMENT_SIGNATURE_MISMATCH", "message": "파일 내용과 형식이 일치하지 않습니다."})
-
-    case_directory = ATTACHMENT_STORAGE_ROOT / hashlib.sha256(case_id.encode("utf-8")).hexdigest()[:24]
-    case_directory.mkdir(parents=True, exist_ok=True)
-    stored_name = f"{uuid4().hex}{extension}"
-    stored_path = (case_directory / stored_name).resolve()
-    if not stored_path.is_relative_to(ATTACHMENT_STORAGE_ROOT):
-        raise HTTPException(status_code=400, detail={"code": "INVALID_ATTACHMENT_PATH", "message": "잘못된 파일 경로입니다."})
-    stored_path.write_bytes(content)
-    try:
-        record = await repository.create_attachment(case_id, {
-            "original_name": original_name,
-            "stored_name": stored_name,
-            "storage_path": stored_path.relative_to(ATTACHMENT_STORAGE_ROOT).as_posix(),
-            "mime_type": mime_type,
-            "size_bytes": len(content),
-            "sha256": hashlib.sha256(content).hexdigest(),
-            "uploaded_by": uploaded_by.strip()[:80],
-            "status": "UPLOADED",
-            "visibility": visibility,
-            "ai_readable": True,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        })
-    except Exception:
-        stored_path.unlink(missing_ok=True)
-        raise
-    return to_public_attachment(record)
+@app.api_route("/api/cases/{case_id}/attachments", methods=["POST", "GET"], status_code=410)
+async def retired_case_attachments(case_id: str) -> None:
+    """Attachments are intentionally out of scope for the demo."""
+    raise HTTPException(status_code=410, detail={"code": "ATTACHMENTS_DISABLED", "message": ATTACHMENTS_DISABLED_MESSAGE})
 
 
-@app.get("/api/cases/{case_id}/attachments", response_model=list[PublicAttachmentResponse])
-async def list_case_attachments(case_id: str, view: Literal["bank", "customer"] = "bank") -> list[PublicAttachmentResponse]:
-    await require_case(case_id)
-    records = await repository.list_attachments(case_id)
-    if view == "customer":
-        records = [item for item in records if item.get("visibility") == "CUSTOMER"]
-    return [to_public_attachment(item) for item in records]
+@app.get("/api/internal/cases/{case_id}/attachments", status_code=410)
+async def retired_case_attachments_for_ai(case_id: str) -> None:
+    raise HTTPException(status_code=410, detail={"code": "ATTACHMENTS_DISABLED", "message": ATTACHMENTS_DISABLED_MESSAGE})
 
 
-@app.get("/api/internal/cases/{case_id}/attachments", response_model=list[PublicAttachmentResponse])
-async def list_case_attachments_for_ai(case_id: str) -> list[PublicAttachmentResponse]:
-    """AI 서비스용 메타데이터 목록. 서비스 인증은 배포 게이트웨이에서 적용한다."""
-    await require_case(case_id)
-    return [to_public_attachment(item, download_view="bank") for item in await repository.list_attachments(case_id) if item.get("ai_readable", True)]
-
-
-@app.get("/api/cases/{case_id}/attachments/{attachment_id}/content")
-async def download_case_attachment(case_id: str, attachment_id: str, view: Literal["bank", "customer"] = "customer") -> FileResponse:
-    await require_case(case_id)
-    record = await repository.get_attachment(case_id, attachment_id)
-    if record is None:
-        raise HTTPException(status_code=404, detail={"code": "ATTACHMENT_NOT_FOUND", "message": "첨부 파일을 찾을 수 없습니다."})
-    if view == "customer" and record.get("visibility") != "CUSTOMER":
-        raise HTTPException(status_code=403, detail={"code": "ATTACHMENT_FORBIDDEN", "message": "이 첨부 파일을 열 권한이 없습니다."})
-    stored_path = (ATTACHMENT_STORAGE_ROOT / record["storage_path"]).resolve()
-    if not stored_path.is_relative_to(ATTACHMENT_STORAGE_ROOT) or not stored_path.is_file():
-        raise HTTPException(status_code=410, detail={"code": "ATTACHMENT_CONTENT_MISSING", "message": "첨부 파일 원본을 찾을 수 없습니다."})
-    return FileResponse(stored_path, media_type=record["mime_type"], filename=None if record["mime_type"].startswith("image/") else record["original_name"])
+@app.get("/api/cases/{case_id}/attachments/{attachment_id}/content", status_code=410)
+async def retired_case_attachment_content(case_id: str, attachment_id: str) -> None:
+    raise HTTPException(status_code=410, detail={"code": "ATTACHMENTS_DISABLED", "message": ATTACHMENTS_DISABLED_MESSAGE})
 
 
 @app.get("/api/cases/{case_id}/messages", response_model=list[PublicMessageResponse])
@@ -1680,7 +1548,7 @@ async def create_case_message(case_id: str, request: PublicCreateMessageRequest,
     except KeyError as exc:
         raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."}) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail={"code": "ATTACHMENT_NOT_FOUND", "message": "메시지에 연결할 첨부 파일을 찾을 수 없습니다."}) from exc
+        raise HTTPException(status_code=422, detail={"code": str(exc), "message": ATTACHMENTS_DISABLED_MESSAGE}) from exc
     try:
         await enqueue_context_extraction(record, background_tasks)
     except Exception:
@@ -1793,7 +1661,6 @@ async def generate_case_work_card(case_id: str, request: PublicWorkCardGenerateR
     verifications = await repository.list_verifications(case_id)
     actions = await repository.list_actions(case_id)
     messages = await repository.list_messages(case_id)
-    attachments = await repository.list_attachments(case_id)
     support = await get_case_support_snapshot(case_id)
     staff = await read_staff_context_records(case_id)
     previous_questions = await repository.list_customer_questions(case_id)
@@ -1842,10 +1709,7 @@ async def generate_case_work_card(case_id: str, request: PublicWorkCardGenerateR
                 f"{item.get('action_type')}: {item.get('note') or '상세 내용 없음'} ({item.get('status', 'REQUESTED')})"
                 for item in actions_for_ai(actions) if item.get("status") not in {"COMPLETED", "CANCELLED"}
             ][:20],
-            "attachment_summaries": [
-                f"{item.get('original_name', '첨부 파일')} ({item.get('mime_type', '형식 미상')}, {item.get('visibility', '공개 범위 미상')})"
-                for item in attachments[-10:]
-            ],
+            "attachment_summaries": [],
             "unresolved_items": [f"{item.priority}: {item.description}" for item in support.unresolved_items[:20]],
             "pending_verifications": [f"{item.get('target')}: {item.get('claim')}" for item in verifications if item.get("status") != "COMPLETED"][:20],
             # Public 후보에는 고객 UI 전용 allow_multi_select가 있지만, AI 내부 WorkCardQuestion
@@ -1878,7 +1742,6 @@ async def invoke_case_copilot(case_id: str, request: PublicAiInvocationRequest) 
     verifications = await repository.list_verifications(case_id)
     facts = await repository.list_case_facts(case_id)
     actions = await repository.list_actions(case_id)
-    attachments = await repository.list_attachments(case_id)
     all_messages = await repository.list_messages(case_id)
     members = await repository.list_members(case_id)
     requester_member = next(
@@ -1934,10 +1797,7 @@ async def invoke_case_copilot(case_id: str, request: PublicAiInvocationRequest) 
                 f"{item.get('action_type')}: {item.get('note') or '상세 내용 없음'} ({item.get('status', 'REQUESTED')})"
                 for item in actions_for_ai(actions) if item.get("status") not in {"COMPLETED", "CANCELLED"}
             ][:20],
-            "attachment_summaries": [
-                f"{item.get('original_name', '첨부 파일')} ({item.get('mime_type', '형식 미상')}, {item.get('visibility', '공개 범위 미상')})"
-                for item in attachments[-10:]
-            ],
+            "attachment_summaries": [],
             "unresolved_verifications": unresolved[:10],
             "assistant_mode": "BANK_INTERNAL",
             "source_context": bank_source_context(case_id, resources, facts=facts, questions=questions,
@@ -1989,7 +1849,6 @@ async def invoke_customer_support_ai(case_id: str, request: PublicCustomerAiRepl
     verifications = await repository.list_verifications(case_id)
     published_results = [f"{item.get('target')}: {item.get('result_summary')} (공개 확인 결과)"
                          for item in verifications if item.get('customer_visible') and item.get('status') == 'COMPLETED' and item.get('result_summary')][-10:]
-    attachments = await repository.list_attachments(case_id)
     customer_history = [
         f"{item.get('actor_display_name', '상담 참여자')}: {item.get('content', '')[:500]}"
         for item in all_messages[-20:]
@@ -2033,8 +1892,7 @@ async def invoke_customer_support_ai(case_id: str, request: PublicCustomerAiRepl
             "customer_progress": progress_ai_context(progress),
             "customer_service_questions": service_questions,
             "published_verification_results": published_results,
-            "attachment_summaries": [str(item.get('original_name', '첨부 자료')) for item in attachments
-                                     if item.get('visibility') == 'CUSTOMER'][-10:],
+            "attachment_summaries": [],
         })
     except AiServiceQuotaError as exc:
         raise HTTPException(status_code=429, detail={"code": "OPENAI_QUOTA_EXHAUSTED", "message": str(exc)}) from exc
@@ -2397,11 +2255,13 @@ async def read_case_context_v2_resources(case_id: str, actor_user_id: str) -> Pu
 async def read_context_workspace(case_id: str, actor_user_id: str):
     store = await require_context_v2_member(case_id, actor_user_id, access="READ")
     resources = await store.list_resources(case_id)
-    facts, actions, questions, members, gap_history = await asyncio.gather(
-        repository.list_case_facts(case_id), repository.list_actions(case_id),
-        repository.list_customer_questions(case_id), repository.list_members(case_id), store.list_gap_history(case_id),
+    actions, questions, members, gap_history = await asyncio.gather(
+        repository.list_actions(case_id), repository.list_customer_questions(case_id),
+        repository.list_members(case_id), store.list_gap_history(case_id),
     )
-    result = build_workspace(resources, facts, actions, questions, gap_history)
+    # Context V2 is now authoritative.  The legacy facts list is retained only
+    # by the compatibility /facts route and is not duplicated in the workspace.
+    result = build_workspace(resources, [], actions, questions, gap_history)
     role = next((case_role_for_member(m) for m in members if m.get("user_id") == actor_user_id and m.get("status", "ACTIVE") == "ACTIVE"), None)
     allow_all = mvp_context_permissions(actor_user_id)
     result["permissions_mode"] = "MVP_OPEN" if allow_all else "ROLE_BASED"
@@ -2781,19 +2641,26 @@ async def update_voice_session(case_id: str, session_id: str, request: PublicUpd
         raise HTTPException(status_code=404, detail={"code": "VOICE_SESSION_NOT_FOUND", "message": "Voice session not found."}) from exc
 
 
-@app.get("/api/cases/{case_id}/voice-sessions/{session_id}/transcript", response_model=list[PublicTranscriptResponse])
-async def list_voice_transcript(case_id: str, session_id: str) -> list[PublicTranscriptResponse]:
-    await require_case(case_id)
-    return [PublicTranscriptResponse.model_validate(item) for item in await repository.list_transcript(case_id, session_id)]
+@app.api_route(
+    "/api/cases/{case_id}/voice-sessions/{session_id}/transcript",
+    methods=["GET", "POST"],
+    status_code=410,
+)
+async def retired_voice_transcript(case_id: str, session_id: str) -> None:
+    """Legacy multi-segment endpoint retained as an explicit storage boundary.
 
-
-@app.post("/api/cases/{case_id}/voice-sessions/{session_id}/transcript", response_model=PublicTranscriptResponse, status_code=201)
-async def append_voice_transcript(case_id: str, session_id: str, request: PublicCreateTranscriptRequest) -> PublicTranscriptResponse:
-    await require_case(case_id)
-    try:
-        return PublicTranscriptResponse.model_validate(await repository.append_transcript(case_id, session_id, request.model_dump()))
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail={"code": "VOICE_SESSION_NOT_FOUND", "message": "Voice session not found."}) from exc
+    The request body is intentionally not parsed. CSR never accepts, stores, or
+    returns transcript segments through this legacy voice-session URL. The demo
+    analyzer stores its single submitted input in ``case_inputs`` instead, and
+    that value is excluded from Case Copilot/Context AI payloads.
+    """
+    raise HTTPException(
+        status_code=410,
+        detail={
+            "code": "TRANSCRIPT_STORAGE_DISABLED",
+            "message": "레거시 통화 구간 저장·조회 API는 지원하지 않습니다. 데모 분석 입력은 Case 입력으로 별도 보관됩니다.",
+        },
+    )
 
 
 @app.get("/api/cases/{case_id}/reports/live")

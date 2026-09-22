@@ -78,7 +78,7 @@ class AnalyzeCaseServiceTest(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(stored)
         self.assertEqual(stored["initial_brief"], first.initial_brief)
 
-    async def test_case_persistence_keeps_signals_not_source_transcript(self) -> None:
+    async def test_case_persistence_keeps_demo_source_separate_from_ai_signals(self) -> None:
         source = "검찰 수사관입니다. 오늘 안에 안전계좌로 이체하고 가족에게 알리지 마세요. OTP 583921도 알려주세요."
         with patch(
             "ai_api.app.domains.diagnosis.window_ai.service.extract_events",
@@ -89,8 +89,10 @@ class AnalyzeCaseServiceTest(unittest.IsolatedAsyncioTestCase):
         stored = await self.repository.get(result.case_id or "")
         self.assertIsNotNone(stored)
         persisted = json.dumps(stored, ensure_ascii=False)
-        self.assertEqual(stored["input_text"], "")
-        self.assertNotIn(source, persisted)
+        self.assertEqual(stored["input_text"], source)
+        self.assertIn(source, persisted)
+        structured = json.dumps(stored["diagnosis"], ensure_ascii=False)
+        self.assertNotIn("583921", structured)
         self.assertEqual(stored["diagnosis"]["model_metadata"]["source_text_retention"], "NONE")
         features = stored["diagnosis"]["case_context_features"]
         self.assertEqual(features["extraction_method"], "LLM_INDEPENDENT")
@@ -98,7 +100,6 @@ class AnalyzeCaseServiceTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(stored["diagnosis"]["evidence"])
         # Safe lexical cues are intentionally retained; sensitive values are not.
         self.assertIn("안전계좌", persisted)
-        self.assertNotIn("583921", persisted)
 
     async def test_normal_call_does_not_create_case(self) -> None:
         request = AnalyzeTextRequest(text="예금 만기일은 다음 달 15일입니다.")

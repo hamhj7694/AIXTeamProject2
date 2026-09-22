@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import os
 import re
+import sys
 from pathlib import Path
 
 import pymysql
@@ -12,7 +13,8 @@ from pymysql.constants import CLIENT
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 MVP_ROOT = BACKEND_DIR.parent
-MIGRATIONS_DIR = BACKEND_DIR / "migrations"
+sys.path.insert(0, str(BACKEND_DIR))
+from scripts.migration_manifest import ordered_migrations
 
 
 def connection_options() -> dict[str, object]:
@@ -41,7 +43,7 @@ def requested_migrations() -> set[str] | None:
     values = set(parser.parse_args().only)
     if not values:
         return None
-    available = {path.name for path in MIGRATIONS_DIR.glob("*.sql")}
+    available = {path.name for path in ordered_migrations()}
     unknown = values - available
     if unknown:
         parser.error(f"unknown migration: {', '.join(sorted(unknown))}")
@@ -50,6 +52,7 @@ def requested_migrations() -> set[str] | None:
 
 def main() -> None:
     selected = requested_migrations()
+    migrations = ordered_migrations()  # Validate before opening/writing any DB.
     load_dotenv(MVP_ROOT / ".env")
     database = os.getenv("MYSQL_DATABASE", "csr")
     if not re.fullmatch(r"[A-Za-z0-9_]+", database):
@@ -78,6 +81,9 @@ def main() -> None:
     connection = pymysql.connect(database=database, **options)
     try:
         with connection.cursor() as cursor:
+            cursor.execute('SELECT GET_LOCK(%s, 5)', (f'{database}:schema-migrations',))
+            if cursor.fetchone()[0] != 1:
+                raise RuntimeError('Another schema migration is running; retry later.')
             cursor.execute(
                 """CREATE TABLE IF NOT EXISTS schema_migrations (
                     migration_name VARCHAR(255) PRIMARY KEY,
@@ -86,7 +92,6 @@ def main() -> None:
             )
             connection.commit()
 
-            migrations = sorted(MIGRATIONS_DIR.glob("*.sql"))
             if selected is not None:
                 migrations = [item for item in migrations if item.name in selected]
             for migration in migrations:
