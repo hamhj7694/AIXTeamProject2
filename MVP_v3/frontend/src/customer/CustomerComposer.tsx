@@ -19,8 +19,8 @@ interface Props {
 }
 
 
-export const CustomerComposer: React.FC<Props> = ({ busy, aiBusy, disabled = false, showEmergency = false, emergencyActive = false, guideOpen = false, onEmergency, onOpenRecoveryGuide, onSend }) => {
-  const [draft, setDraft] = useState('');
+export const CustomerComposer: React.FC<Props> = ({ busy, aiBusy, disabled = false, showEmergency = false, emergencyActive = false, guideOpen = false, onEmergency, onOpenRecoveryGuide, onSend, draftStorageKey }) => {
+  const [draft, setDraft] = usePersistentDraft(draftStorageKey);
 
   //나중에 형준이랑 얘기해서 통합
 // export const CustomerComposer: React.FC<Props> = ({ busy, aiBusy, disabled = false, onSend, draftStorageKey }) => {
