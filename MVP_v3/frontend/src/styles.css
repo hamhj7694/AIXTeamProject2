@@ -285,7 +285,7 @@ body.is-resizing-conversations { cursor: col-resize; user-select: none; }
 .conversation-toolbar button.active { color: #1d2939; background: #fff; box-shadow: 0 1px 2px rgba(16,24,40,.08); }
 .conversation-toolbar > span { color: #98a2b3; font-size: 9px; }
 .conversation-scroll { position: relative; min-height: 0; flex: 1; overflow-y: auto; padding: 17px 20px; scroll-behavior: smooth; }
-.conversation-inline-cards { flex: 0 0 auto; max-height: min(42vh, 360px); overflow-y: auto; padding: 0 20px 8px; background: #f7f8fa; scrollbar-gutter: stable; }
+.conversation-inline-cards { position: relative; z-index: 20; flex: 0 0 auto; overflow: visible; border-top: 1px solid #e4e7ec; padding: 8px 20px; background: #f7f8fa; }
 .conversation-inline-card { max-width: 620px; margin: 0 auto; }
 .conversation-inline-card + .conversation-inline-card { margin-top: 10px; }
 .conversation-channel-pane.has-inline-cards .conversation-scroll-action { position: static; flex: 0 0 auto; padding: 0 20px 7px; }
