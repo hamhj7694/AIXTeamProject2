@@ -118,9 +118,12 @@ def merge_support_records(resources, facts, actions):
     new_facts = [{"fact_id": f["fact_id"], "field": SEMANTIC_FIELDS[f["semantic_key"]],
                   "value": f["display_value"], "status": f["status"]}
                  for f in data["facts"] if f["status"] in {"CONFIRMED", "PROPOSED"} and f["semantic_key"] in SEMANTIC_FIELDS]
+    v2_ids = {f["fact_id"] for f in new_facts}
     confirmed = {f["field"] for f in new_facts if f["status"] == "CONFIRMED"}
     from .repository import normalize_target_field
-    merged_facts = [f for f in facts if normalize_target_field(str(f.get("field", ""))) not in confirmed] + new_facts
+    # V2 is authoritative. Keep legacy rows only when they are not the same
+    # migrated fact, and never let an old proposed value shadow a V2 value.
+    merged_facts = [f for f in facts if f.get("fact_id") not in v2_ids and normalize_target_field(str(f.get("field", ""))) not in confirmed] + new_facts
     tasks = [{"action_id": t["task_id"], "action_type": "STAFF_TASK",
               "status": t["status"], "note": f"{t['title']}: {t['description']}"}
              for t in data["tasks"]]

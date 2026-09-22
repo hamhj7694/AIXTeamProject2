@@ -36,7 +36,7 @@ const bookmarkDetails = (entry: TimelineEntry): Pick<BankBookmark, 'label' | 'su
   if (entry.kind === 'MESSAGE') {
     const message = entry.data as CaseMessage;
     if (message.message_kind === 'REPORT_CARD') return { label: 'AI 최종 결과 보고서', summary: '사건 종결 시점의 최종 결과 보고서' };
-    return { label: message.channel === 'CUSTOMER' ? '고객 대화' : '은행 내부 대화', summary: message.content || '첨부파일' };
+    return { label: message.channel === 'CUSTOMER' ? '고객 대화' : '은행 내부 대화', summary: message.content || '메시지' };
   }
   if (entry.kind === 'QUESTION' || entry.kind === 'ANSWER') {
     const question = entry.data as CustomerQuestion;
@@ -159,7 +159,7 @@ const MessageEntry: React.FC<{ message: CaseMessage; bookmark: React.ReactNode; 
   const scope = message.channel === 'CUSTOMER' ? 'customer-message' : 'internal-message';
   return <article className={`message-row ${mine ? 'mine' : ''} ${scope}`}>
     <span className={`avatar ${message.actor_type.toLowerCase()}`}>{message.actor_type === 'BANK_AGENT' || message.actor_type === 'CUSTOMER_AGENT' ? <Bot size={16}/> : message.actor_type === 'CUSTOMER' ? <UserRound size={16}/> : <ShieldCheck size={16}/>}</span>
-    <div className="message-wrap"><div className="entry-meta"><b>{mine ? '나' : message.actor_display_name}</b><span>{message.channel === 'CUSTOMER' ? '고객에게' : '은행 내부'}</span>{bookmark}</div><div className="message-bubble"><SafeMarkdown content={message.content}/>{message.attachments?.length > 0 && <div className="attachment-list">{message.attachments.map((attachment) => <a key={attachment.attachment_id} href={casesApi.attachmentUrl(attachment)} target="_blank" rel="noreferrer"><FileText size={14}/><span>{attachment.original_name}</span><small>{Math.ceil(attachment.size_bytes / 1024)}KB</small></a>)}</div>}</div>{message.delivery_state === 'FAILED' && <div className="message-delivery-error"><span>전송되지 않았습니다.</span><button type="button" onClick={() => onRetry(message)}>다시 전송</button><button type="button" onClick={() => onDismiss(message)}>지우기</button></div>}<time className={`message-time${message.delivery_state ? ` ${message.delivery_state.toLowerCase()}` : ''}`}>{message.delivery_state === 'SENDING' ? '전송 중…' : message.delivery_state === 'FAILED' ? '전송 실패' : formatClock(message.created_at)}</time></div>
+    <div className="message-wrap"><div className="entry-meta"><b>{mine ? '나' : message.actor_display_name}</b><span>{message.channel === 'CUSTOMER' ? '고객에게' : '은행 내부'}</span>{bookmark}</div><div className="message-bubble"><SafeMarkdown content={message.content}/></div>{message.delivery_state === 'FAILED' && <div className="message-delivery-error"><span>전송되지 않았습니다.</span><button type="button" onClick={() => onRetry(message)}>다시 전송</button><button type="button" onClick={() => onDismiss(message)}>지우기</button></div>}<time className={`message-time${message.delivery_state ? ` ${message.delivery_state.toLowerCase()}` : ''}`}>{message.delivery_state === 'SENDING' ? '전송 중…' : message.delivery_state === 'FAILED' ? '전송 실패' : formatClock(message.created_at)}</time></div>
   </article>;
 };
 
@@ -242,7 +242,7 @@ export const SharedConversation: React.FC<Props> = ({ bundle, view, channel, com
         )}
         {aiBusy && <AiThinkingBubble detail="현재 은행 내부 대화와 사건 기록을 확인하고 있습니다."/>}
       </div>
-      {showJumpToLatest && <div className="conversation-scroll-action"><button type="button" onClick={jumpToLatest} aria-label="최신 채팅으로 이동" title="최신 채팅으로 이동"><ArrowDown size={14}/>최신 채팅</button></div>}
+      {showJumpToLatest && <div className="conversation-scroll-action"><button type="button" onClick={jumpToLatest} aria-label="최신 채팅으로 가기" title="최신 채팅으로 가기"><ArrowDown size={14}/>최신 채팅으로 가기</button></div>}
       {composer}
     </>}
   </section>;

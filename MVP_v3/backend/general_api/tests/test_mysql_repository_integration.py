@@ -107,7 +107,7 @@ class MySqlCaseRepositoryIntegrationTest(unittest.IsolatedAsyncioTestCase):
                     self.case_ids,
                 )
                 cursor.execute(f"DELETE FROM case_context_item_history WHERE item_id IN (SELECT item_id FROM case_context_items WHERE case_id IN ({placeholders}))", self.case_ids)
-                for table in ("case_context_v2_history", "case_decisions", "case_tasks", "case_ai_suggestions", "case_gaps", "case_context_facts_v2", "case_context_items", "case_context_projections", "personal_notes", "case_facts", "customer_questions", "case_presence", "case_members", "message_context_extractions", "messages", "verification_tasks", "actions", "context_features", "analysis_segments", "case_inputs", "case_events", "case_reports"):
+                for table in ("case_context_v2_history", "case_decisions", "case_tasks", "case_ai_suggestions", "case_gaps", "case_context_facts_v2", "case_context_items", "case_context_projections", "personal_notes", "customer_questions", "case_presence", "case_members", "message_context_extractions", "messages", "verification_tasks", "actions", "context_features", "analysis_segments", "case_inputs", "case_events", "case_reports"):
                     cursor.execute(f"DELETE FROM {table} WHERE case_id IN ({placeholders})", self.case_ids)
                 cursor.execute(f"DELETE FROM cases WHERE case_id IN ({placeholders})", self.case_ids)
             connection.commit()
@@ -128,13 +128,14 @@ class MySqlCaseRepositoryIntegrationTest(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(
                     {row[0] for row in cursor.fetchall()},
                     {
-                        "actions", "analysis_segments", "case_attachments", "case_events", "case_facts", "case_inputs",
+                        "actions", "analysis_segments", "case_events", "case_inputs",
                         "case_members", "case_presence", "case_report_sections", "case_reports", "cases", "context_features",
-                        "customer_questions", "message_attachments", "messages", "personal_notes", "schema_migrations",
-                        "transcript_segments", "verification_tasks", "voice_sessions", "case_context_items",
+                        "customer_questions", "messages", "personal_notes", "schema_migrations",
+                        "verification_tasks", "voice_sessions", "case_context_items",
                         "case_context_item_history", "case_context_projections", "case_context_facts_v2",
                         "case_gaps", "case_ai_suggestions", "case_tasks", "case_decisions", "case_context_v2_history",
-                        "message_context_extractions", "case_number_sequences",
+                        "message_context_extractions", "case_semantic_atoms", "case_semantic_relations",
+                        "case_context_signals", "case_context_observations", "bank_staff_directory", "case_transactions",
                     },
                 )
                 cursor.execute(
@@ -576,7 +577,7 @@ class MySqlCaseRepositoryIntegrationTest(unittest.IsolatedAsyncioTestCase):
         original_execute = aiomysql.DictCursor.execute
 
         async def fail_fact_insert(cursor, query, args=None):
-            if query.startswith('INSERT INTO case_facts'):
+            if query.startswith('INSERT INTO case_context_facts_v2'):
                 raise RuntimeError('audit injected fact failure')
             return await original_execute(cursor, query, args)
 
@@ -619,7 +620,7 @@ class ContextPanelV3MigrationRollbackTest(unittest.TestCase):
                                      database=self.database, client_flag=CLIENT.MULTI_STATEMENTS, autocommit=False)
         try:
             with connection.cursor() as cursor:
-                execute_all(cursor, (BACKEND_DIR / "migrations/rollback/015_context_panel_v3.sql").read_text(encoding="utf-8"))
+                execute_all(cursor, (BACKEND_DIR / "migrations/rollback/conversations/015_context_panel_v3.sql").read_text(encoding="utf-8"))
             connection.commit()
             with connection.cursor() as cursor:
                 cursor.execute("SHOW TABLES LIKE 'message_context_extractions'")

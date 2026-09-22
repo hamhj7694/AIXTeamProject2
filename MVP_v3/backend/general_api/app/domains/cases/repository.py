@@ -8,6 +8,8 @@ from typing import Any, Protocol
 from uuid import uuid4
 from contracts.question_target import decode_follow_up_target, canonical_question_scope, is_follow_up_target, follow_up_registration_allowed
 from general_api.app.domains.cases.member_roles import case_role_for_member
+from .legacy_fact_compat import legacy_row_from_v2, v2_payload_from_legacy
+from contracts.public_api.case_context_v2 import PublicCaseFactV2
 
 
 _TARGET_FIELD_ALIASES = {
@@ -55,9 +57,6 @@ class CaseRepository(Protocol):
     async def fail_message_extraction(self, message_id: str, error: str) -> None: ...
     async def list_retryable_message_extractions(self, limit: int = 20) -> list[dict[str, Any]]: ...
     async def get_message_extraction(self, case_id: str, message_id: str) -> dict[str, Any] | None: ...
-    async def create_attachment(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]: ...
-    async def get_attachment(self, case_id: str, attachment_id: str) -> dict[str, Any] | None: ...
-    async def list_attachments(self, case_id: str) -> list[dict[str, Any]]: ...
     async def list_events(self, case_id: str, after: int | None = None) -> list[dict[str, Any]]: ...
     async def list_members(self, case_id: str) -> list[dict[str, Any]]: ...
     async def upsert_member(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]: ...
@@ -75,8 +74,6 @@ class CaseRepository(Protocol):
     async def create_voice_session(self, case_id: str, participants: list[str]) -> dict[str, Any]: ...
     async def update_voice_session(self, case_id: str, session_id: str, status: str) -> dict[str, Any]: ...
     async def get_voice_session(self, case_id: str, session_id: str | None = None) -> dict[str, Any] | None: ...
-    async def append_transcript(self, case_id: str, session_id: str, record: dict[str, Any]) -> dict[str, Any]: ...
-    async def list_transcript(self, case_id: str, session_id: str) -> list[dict[str, Any]]: ...
     async def finalize_report(self, case_id: str, expected_version: int, note: str, sections: list[dict[str, Any]], report_card: dict[str, Any]) -> dict[str, Any]: ...
     async def reopen_case(self, case_id: str, expected_version: int) -> dict[str, Any]: ...
     async def get_final_report(self, case_id: str) -> dict[str, Any] | None: ...
@@ -119,17 +116,18 @@ class InMemoryCaseRepository:
     def __init__(self) -> None:
         self._records: list[dict[str, Any]] = []
         self._messages: list[dict[str, Any]] = []
-        self._attachments: list[dict[str, Any]] = []
         self._events: list[dict[str, Any]] = []
         self._verifications: list[dict[str, Any]] = []
         self._actions: list[dict[str, Any]] = []
         self._voice_sessions: list[dict[str, Any]] = []
-        self._transcripts: list[dict[str, Any]] = []
         self._members: list[dict[str, Any]] = []
         self._bank_staff: list[dict[str, Any]] = []
         self._presence: list[dict[str, Any]] = []
         self._customer_questions: list[dict[str, Any]] = []
         self._case_facts: list[dict[str, Any]] = []
+        # Compatibility mirror only; authoritative fact records live in V2.
+        self._context_v2_facts: dict[tuple[str, str], PublicCaseFactV2] = {}
+        self._context_v2_requests: dict[tuple[str, str, str | None], str] = {}
         self._personal_notes: list[dict[str, Any]] = []
         self._message_extractions: list[dict[str, Any]] = []
         self._case_number = 0
@@ -146,16 +144,16 @@ class InMemoryCaseRepository:
     def _remove_case_records(self, case_id: str) -> None:
         self._records = [item for item in self._records if item.get("case_id") != case_id]
         self._messages = [item for item in self._messages if item.get("case_id") != case_id]
-        self._attachments = [item for item in self._attachments if item.get("case_id") != case_id]
         self._events = [item for item in self._events if item.get("case_id") != case_id]
         self._verifications = [item for item in self._verifications if item.get("case_id") != case_id]
         self._actions = [item for item in self._actions if item.get("case_id") != case_id]
         self._voice_sessions = [item for item in self._voice_sessions if item.get("case_id") != case_id]
-        self._transcripts = [item for item in self._transcripts if item.get("case_id") != case_id]
         self._members = [item for item in self._members if item.get("case_id") != case_id]
         self._presence = [item for item in self._presence if item.get("case_id") != case_id]
         self._customer_questions = [item for item in self._customer_questions if item.get("case_id") != case_id]
         self._case_facts = [item for item in self._case_facts if item.get("case_id") != case_id]
+        self._context_v2_facts = {key: item for key, item in self._context_v2_facts.items() if key[0] != case_id}
+        self._context_v2_requests = {key: item for key, item in self._context_v2_requests.items() if key[0] != case_id}
         self._personal_notes = [item for item in self._personal_notes if item.get("case_id") != case_id]
         self._message_extractions = [item for item in self._message_extractions if item.get("case_id") != case_id]
 
@@ -298,11 +296,8 @@ class InMemoryCaseRepository:
                 if not source_ids or eligible_ids[-len(source_ids):] != source_ids:
                     return None
             attachment_ids = list(dict.fromkeys(record.get("attachment_ids", [])))
-            attachments = [item for item in self._attachments if item["case_id"] == case_id and item["attachment_id"] in attachment_ids]
-            if len(attachments) != len(attachment_ids):
-                raise ValueError("ATTACHMENT_NOT_FOUND")
-            if any(item.get("status") != "UPLOADED" or item.get("visibility") != record.get("visibility", record.get("audience", "CUSTOMER")) for item in attachments):
-                raise ValueError("ATTACHMENT_NOT_LINKABLE")
+            if attachment_ids:
+                raise ValueError("ATTACHMENTS_DISABLED")
             now = datetime.now(timezone.utc).isoformat()
             message = {
                 "message_id": f"msg-{uuid4().hex}", "case_id": case_id, **record,
@@ -312,13 +307,10 @@ class InMemoryCaseRepository:
                 "message_kind": record.get("message_kind", "CHAT"),
                 "mentions": record.get("mentions", []),
                 "reply_to_message_id": record.get("reply_to_message_id"),
-                "attachment_ids": attachment_ids,
+                "attachment_ids": [],
                 "created_at": now,
             }
-            for attachment in attachments:
-                attachment["status"] = "LINKED"
-                attachment["message_id"] = message["message_id"]
-            message["attachments"] = [deepcopy(item) for item in attachments]
+            message["attachments"] = []
             self._messages.append(message)
             self._touch_case(case_id, now)
             if record.get("log_event", True):
@@ -331,20 +323,6 @@ class InMemoryCaseRepository:
 
     async def find_message_by_client_request_id(self, case_id: str, client_request_id: str) -> dict[str, Any] | None:
         return next((deepcopy(item) for item in self._messages if item["case_id"] == case_id and item.get("client_request_id") == client_request_id), None)
-
-    async def create_attachment(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]:
-        async with self._lock:
-            if not any(item["case_id"] == case_id for item in self._records):
-                raise KeyError(case_id)
-            attachment = {"attachment_id": f"att-{uuid4().hex}", "case_id": case_id, **record}
-            self._attachments.append(attachment)
-            return deepcopy(attachment)
-
-    async def get_attachment(self, case_id: str, attachment_id: str) -> dict[str, Any] | None:
-        return next((deepcopy(item) for item in self._attachments if item["case_id"] == case_id and item["attachment_id"] == attachment_id), None)
-
-    async def list_attachments(self, case_id: str) -> list[dict[str, Any]]:
-        return [deepcopy(item) for item in self._attachments if item["case_id"] == case_id]
 
     async def list_messages(self, case_id: str, channel: str | None = None) -> list[dict[str, Any]]:
         return [deepcopy(item) for item in self._messages if item["case_id"] == case_id and (channel is None or item.get("channel") == channel)]
@@ -589,19 +567,6 @@ class InMemoryCaseRepository:
         found = [item for item in self._voice_sessions if item["case_id"] == case_id and (session_id is None or item["session_id"] == session_id)]
         return deepcopy(found[-1]) if found else None
 
-    async def append_transcript(self, case_id: str, session_id: str, record: dict[str, Any]) -> dict[str, Any]:
-        async with self._lock:
-            session = await self.get_voice_session(case_id, session_id)
-            if session is None: raise KeyError(session_id)
-            now = datetime.now(timezone.utc).isoformat()
-            item = {"segment_id": f"seg-{uuid4().hex}", "session_id": session_id, "case_id": case_id, **record, "created_at": now}
-            self._transcripts.append(item)
-            self._events.append({"event_id": len(self._events) + 1, "case_id": case_id, "event_type": "TRANSCRIPT_SEGMENT_ADDED", "actor_type": "SYSTEM", "payload": {"session_id": session_id, "segment_id": item["segment_id"]}, "occurred_at": now})
-            return deepcopy(item)
-
-    async def list_transcript(self, case_id: str, session_id: str) -> list[dict[str, Any]]:
-        return [deepcopy(item) for item in self._transcripts if item["case_id"] == case_id and item["session_id"] == session_id]
-
     async def finalize_report(self, case_id: str, expected_version: int, note: str, sections: list[dict[str, Any]], report_card: dict[str, Any]) -> dict[str, Any]:
         async with self._lock:
             case = next((item for item in self._records if item["case_id"] == case_id), None)
@@ -815,6 +780,17 @@ class InMemoryCaseRepository:
                 existing.update(fact)
             else:
                 self._case_facts.append(fact)
+            payload = v2_payload_from_legacy(field=field, value=answer_text, source="AI_EXTRACTED", evidence_message_id=message_id, source_question_id=question_id, fact_id=fact["fact_id"])
+            # Keep the raw answer separate from a later structured semantic
+            # proposal produced by the answer classifier.
+            payload["semantic_key"] = f"legacy.{field}"
+            payload["display_label"] = field
+            v2_existing = self._context_v2_facts.get((case_id, fact["fact_id"]))
+            if v2_existing:
+                v2 = v2_existing.model_copy(update={"value": payload["value"], "display_value": answer_text, "evidence_refs": payload["evidence_refs"], "updated_at": datetime.fromisoformat(now)})
+            else:
+                v2 = PublicCaseFactV2(fact_id=fact["fact_id"], case_id=case_id, semantic_key=payload["semantic_key"], display_label=payload["display_label"], value=payload["value"], display_value=payload["display_value"], source_kind=payload["source_kind"], status="PROPOSED", confidence=payload["confidence"], evidence_refs=payload["evidence_refs"], visibility="BANK_INTERNAL", version=1, created_at=datetime.fromisoformat(now), updated_at=datetime.fromisoformat(now))
+            self._context_v2_facts[(case_id, v2.fact_id)] = v2
             question.update(status='ANSWERED', answered_at=now, answer_message_id=message_id, answer_text=answer_text,
                             answer_payload=deepcopy(answer_payload), answer_question_version=answer_question_version)
             for event_type, actor, payload in [
@@ -826,7 +802,12 @@ class InMemoryCaseRepository:
             return deepcopy(question)
 
     async def list_case_facts(self, case_id: str) -> list[dict[str, Any]]:
-        return [deepcopy(item) for item in self._case_facts if item["case_id"] == case_id]
+        mirrored_ids = {row["fact_id"] for row in self._case_facts if row.get("case_id") == case_id}
+        rows = [legacy_row_from_v2({**item.model_dump(), "value_json": item.value, "evidence_refs_json": item.evidence_refs})
+                for (cid, fact_id), item in self._context_v2_facts.items()
+                if cid == case_id and (not mirrored_ids or fact_id in mirrored_ids)]
+        # A small test-only compatibility fallback for fixtures that predate V2.
+        return rows or [deepcopy(item) for item in self._case_facts if item["case_id"] == case_id]
 
     async def propose_case_fact(self, case_id: str, question_id: str, value: str, evidence_message_id: str | None) -> dict[str, Any]:
         async with self._lock:
@@ -837,31 +818,49 @@ class InMemoryCaseRepository:
                 raise KeyError(question_id)
             canonical_field = canonical_question_scope(normalize_target_field(question["target_field"]))
             follow_up = is_follow_up_target(question["target_field"])
-            existing = next((row for row in self._case_facts if row["case_id"] == case_id and normalize_target_field(row["field"]) == canonical_field and row["status"] == "PROPOSED"
-                             and (not follow_up or row.get("source_question_id") == question_id)), None)
-            if existing is not None:
-                existing["field"] = canonical_field
-                existing["value"] = value
-                existing["evidence_message_id"] = evidence_message_id
-                existing["source_question_id"] = question_id
-                return deepcopy(existing)
+            semantic_key = {"authentication_information_exposure": "exposure.authentication_information", "personal_information_exposure": "exposure.personal_information"}.get(canonical_field)
+            if semantic_key is None:
+                raise ValueError(f"Unsupported fact field: {canonical_field}")
+            existing_v2 = next((row for (cid, _), row in self._context_v2_facts.items() if cid == case_id and row.semantic_key == semantic_key and row.status == "PROPOSED"
+                                and (not follow_up or any(ref.get("type") == "QUESTION_ANSWER" and ref.get("id") == question_id for ref in row.evidence_refs))), None)
+            existing = next((row for row in self._case_facts if row.get("fact_id") == (existing_v2.fact_id if existing_v2 else None)), None)
+            if existing_v2 is not None:
+                if existing is not None:
+                    existing.update(field=canonical_field, value=value, evidence_message_id=evidence_message_id, source_question_id=question_id)
+                refs = ([{"type": "MESSAGE", "id": evidence_message_id}] if evidence_message_id else []) + [{"type": "QUESTION_ANSWER", "id": question_id}]
+                v2 = existing_v2.model_copy(update={"value": {"legacy_value": value, "legacy_field": canonical_field}, "display_value": value, "evidence_refs": refs, "updated_at": datetime.now(timezone.utc)})
+                self._context_v2_facts[(case_id, v2.fact_id)] = v2
+                return legacy_row_from_v2({**v2.model_dump(), "value_json": v2.value, "evidence_refs_json": v2.evidence_refs})
             now = datetime.now(timezone.utc).isoformat()
             fact = {"fact_id": f"fact-{uuid4().hex}", "case_id": case_id, "field": canonical_field, "value": value, "source": "AI_EXTRACTED", "status": "PROPOSED", "confidence": 0.7, "evidence_message_id": evidence_message_id, "source_question_id": question_id, "confirmed_by": None, "confirmed_at": None, "created_at": now}
             self._case_facts.append(fact)
+            payload = v2_payload_from_legacy(field=canonical_field, value=value, source="AI_EXTRACTED", evidence_message_id=evidence_message_id, source_question_id=question_id, fact_id=fact["fact_id"])
+            v2 = PublicCaseFactV2(fact_id=fact["fact_id"], case_id=case_id, semantic_key=payload["semantic_key"], display_label=payload["display_label"], value=payload["value"], display_value=payload["display_value"], source_kind=payload["source_kind"], status="PROPOSED", confidence=payload["confidence"], evidence_refs=payload["evidence_refs"], visibility="BANK_INTERNAL", version=1, created_at=datetime.fromisoformat(now), updated_at=datetime.fromisoformat(now))
+            self._context_v2_facts[(case_id, v2.fact_id)] = v2
             self._events.append({"event_id": len(self._events) + 1, "case_id": case_id, "event_type": "CASE_FACT_PROPOSED", "actor_type": "CUSTOMER_AGENT", "payload": {"fact_id": fact["fact_id"], "field": fact["field"]}, "occurred_at": now})
             self._touch_case(case_id, now)
-            return deepcopy(fact)
+            return legacy_row_from_v2({**v2.model_dump(), "value_json": v2.value, "evidence_refs_json": v2.evidence_refs})
 
     async def confirm_case_fact(self, case_id: str, fact_id: str, confirmed_by: str) -> dict[str, Any]:
         async with self._lock:
-            fact = next((row for row in self._case_facts if row["case_id"] == case_id and row["fact_id"] == fact_id), None)
-            if fact is None:
-                raise KeyError(fact_id)
+            v2 = self._context_v2_facts.get((case_id, fact_id))
+            if v2 is None:
+                legacy = next((row for row in self._case_facts if row["case_id"] == case_id and row["fact_id"] == fact_id), None)
+                if legacy is None:
+                    raise KeyError(fact_id)
+                payload = v2_payload_from_legacy(field=legacy["field"], value=legacy["value"], source=legacy.get("source", "UNRESOLVED"), evidence_message_id=legacy.get("evidence_message_id"), source_question_id=legacy.get("source_question_id"), fact_id=fact_id)
+                stamp = datetime.fromisoformat(legacy["created_at"]) if isinstance(legacy.get("created_at"), str) else datetime.now(timezone.utc)
+                v2 = PublicCaseFactV2(fact_id=fact_id, case_id=case_id, semantic_key=payload["semantic_key"], display_label=payload["display_label"], value=payload["value"], display_value=payload["display_value"], source_kind=payload["source_kind"], status="PROPOSED", confidence=payload["confidence"], evidence_refs=payload["evidence_refs"], visibility="BANK_INTERNAL", version=1, created_at=stamp, updated_at=stamp)
+                self._context_v2_facts[(case_id, fact_id)] = v2
             now = datetime.now(timezone.utc).isoformat()
-            fact["status"] = "CONFIRMED"; fact["source"] = "HUMAN_CONFIRMED"; fact["confirmed_by"] = confirmed_by; fact["confirmed_at"] = now
+            v2 = v2.model_copy(update={"status": "CONFIRMED", "source_kind": "STAFF_OBSERVATION", "confirmed_by": confirmed_by, "confirmed_at": datetime.fromisoformat(now), "updated_at": datetime.fromisoformat(now), "version": v2.version + 1})
+            self._context_v2_facts[(case_id, fact_id)] = v2
+            fact = next((row for row in self._case_facts if row["case_id"] == case_id and row["fact_id"] == fact_id), None)
+            if fact is not None:
+                fact.update(status="CONFIRMED", source="HUMAN_CONFIRMED", confirmed_by=confirmed_by, confirmed_at=now)
             self._events.append({"event_id": len(self._events) + 1, "case_id": case_id, "event_type": "CASE_FACT_CONFIRMED", "actor_type": "BANK_STAFF", "payload": {"fact_id": fact_id, "field": fact["field"]}, "occurred_at": now})
             self._touch_case(case_id, now)
-            return deepcopy(fact)
+            return legacy_row_from_v2({**v2.model_dump(), "value_json": v2.value, "evidence_refs_json": v2.evidence_refs})
 
     async def list_personal_notes(self, case_id: str, author_id: str) -> list[dict[str, Any]]:
         return [deepcopy(item) for item in self._personal_notes if item["case_id"] == case_id and item["author_id"] == author_id]

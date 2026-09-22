@@ -105,10 +105,6 @@ class CustomerProgressTest(unittest.TestCase):
             {'case_id': 'VP-TEST', 'target': '공개 기관', 'status': 'COMPLETED', 'customer_visible': True, 'result_summary': '공개 확인 결과'},
             {'case_id': 'VP-TEST', 'target': '비공개 기관', 'status': 'COMPLETED', 'customer_visible': False, 'result_summary': '내부 비밀'},
         ])
-        self.repo._attachments.extend([
-            {'case_id': 'VP-TEST', 'attachment_id': 'public-file', 'original_name': '고객 증빙.pdf', 'visibility': 'CUSTOMER'},
-            {'case_id': 'VP-TEST', 'attachment_id': 'private-file', 'original_name': '직원 전용.pdf', 'visibility': 'BANK_INTERNAL'},
-        ])
         generator = AsyncMock(return_value={'content': '현재 접수 확인 기록이 있습니다.', 'model_mode': 'test'})
         with patch.object(main.service.ai_client, 'generate_case_copilot_reply', generator):
             response = self.client.post('/api/cases/VP-TEST/ai/customer-replies', json={
@@ -119,10 +115,9 @@ class CustomerProgressTest(unittest.TestCase):
         payload = generator.await_args.args[0]
         self.assertIn('TEST-1', payload['customer_progress'][-1])
         self.assertIn('담당자 완료 확인', payload['customer_progress'][-1])
-        self.assertEqual(payload['attachment_summaries'], ['고객 증빙.pdf'])
+        self.assertEqual(payload['attachment_summaries'], [])
         self.assertEqual(len(payload['published_verification_results']), 1)
         self.assertNotIn('내부 비밀', str(payload))
-        self.assertNotIn('직원 전용', str(payload))
 
 
 class ProgressSqlTransactionTest(unittest.IsolatedAsyncioTestCase):

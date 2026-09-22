@@ -53,8 +53,9 @@ class PublicCaseReadEndpointTest(unittest.TestCase):
         self.assertEqual(item["initial_brief"], RECORD["initial_brief"])
         self.assertEqual(item["case_name"], RECORD["case_name"])
         self.assertNotIn("internal_only", item)
+        self.assertNotIn("input_text", item)
         self.assertEqual(set(item), {
-            "case_id", "version", "case_name", "client_request_id", "input_text", "risk", "risk_score", "mode", "status",
+            "case_id", "version", "case_name", "client_request_id", "risk", "risk_score", "mode", "status",
             "initial_brief", "diagnosis", "initial_report", "created_at", "updated_at",
             "victim_transfer_status",
         })
@@ -67,6 +68,7 @@ class PublicCaseReadEndpointTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["case_id"], "VP-READ001")
         self.assertEqual(response.json()["diagnosis"], RECORD["diagnosis"])
+        self.assertNotIn("input_text", response.json())
 
     def test_detail_not_found_keeps_existing_error_response(self) -> None:
         self.repository.get.return_value = None

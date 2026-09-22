@@ -5,9 +5,10 @@ from pathlib import Path
 from typing import Any
 
 from .common import ScanAudit, evidence, read_text, repository_relative
+from .common import read_json
 
 
-TABLE_PATTERN = re.compile(r"CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+`?([A-Za-z0-9_]+)`?", re.IGNORECASE)
+TABLE_PATTERN = re.compile(r"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?`?([A-Za-z0-9_]+)`?", re.IGNORECASE)
 TRIGGER_PATTERN = re.compile(r"CREATE\s+TRIGGER\s+`?([A-Za-z0-9_]+)`?", re.IGNORECASE)
 
 
@@ -18,7 +19,12 @@ def scan_database(root: Path, audit: ScanAudit) -> dict[str, Any]:
     all_tables = set(TABLE_PATTERN.findall(base_text))
     all_triggers = set(TRIGGER_PATTERN.findall(base_text))
     migration_dir = root / "backend/migrations"
-    for path in sorted(migration_dir.glob("*.sql"), key=lambda item: item.name):
+    entries = read_json(migration_dir / 'manifest.json', audit)
+    for entry in entries:
+        path = migration_dir / entry
+        relative = path.resolve().relative_to(migration_dir.resolve())
+        if len(relative.parts) != 2 or relative.parts[0] == 'rollback':
+            raise ValueError(f'Invalid forward migration path: {entry}')
         text = read_text(path, audit)
         tables = sorted(set(TABLE_PATTERN.findall(text)))
         triggers = sorted(set(TRIGGER_PATTERN.findall(text)))
@@ -45,7 +51,7 @@ def scan_database(root: Path, audit: ScanAudit) -> dict[str, Any]:
         "trigger_count": len(all_triggers),
         "evidence": [
             evidence(repository_relative(root, base_path), "New database baseline schema and migration markers"),
-            evidence("backend/migrations/", "Additive migration files discovered by filename"),
+            evidence("backend/migrations/manifest.json", "Ordered entity-grouped forward migrations; rollback excluded"),
         ],
     }
 

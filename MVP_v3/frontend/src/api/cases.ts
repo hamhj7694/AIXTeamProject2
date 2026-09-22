@@ -1,7 +1,7 @@
-import { apiUrl, readUploadError, request } from './client';
+import { apiUrl, request } from './client';
 import type {
   CustomerProgressItem, ProgressStep, UpdateCustomerProgress,
-  AiInvocationResult, AnalyzeCaseResponse, Attachment, CaseAction, CaseBundle, CaseFact, CaseMember, CaseMessage, CasePresence, CaseWorkCard, InitialReport,
+  AiInvocationResult, AnalyzeCaseResponse, CaseAction, CaseBundle, CaseFact, CaseMember, CaseMessage, CasePresence, CaseWorkCard, InitialReport,
   CaseSupportSnapshot, CustomerQuestion, MessageChannel, MessageVisibility,
   PersonalNote, QuestionCandidate, StructuredQuestionAnswer, StoredCase, VerificationTask, WorkCardType, BankStaff, CaseTransaction,
 } from './types';
@@ -83,7 +83,7 @@ export const casesApi = {
   heartbeat: (caseId: string, user: { user_id: string; display_name: string }, presence: CasePresence['presence'], channel: MessageChannel) => request<CasePresence>(`/api/cases/${encodeURIComponent(caseId)}/presence/heartbeat`, {
     method: 'POST', body: JSON.stringify({ user_id: user.user_id, display_name: user.display_name, presence, channel }),
   }),
-  sendMessage: (caseId: string, content: string, channel: Exclude<MessageChannel, 'AI_INTERNAL'>, attachmentIds: string[] = [], clientRequestId: string = generateUuid()) => {
+  sendMessage: (caseId: string, content: string, channel: Exclude<MessageChannel, 'AI_INTERNAL'>, clientRequestId: string = generateUuid()) => {
     const customer = channel === 'CUSTOMER';
     return request<CaseMessage>(`/api/cases/${encodeURIComponent(caseId)}/messages`, {
       method: 'POST',
@@ -92,7 +92,7 @@ export const casesApi = {
         actor_display_name: CURRENT_BANK_USER.display_name, actor_role: CURRENT_BANK_USER.role,
         content, channel, audience: customer ? 'CUSTOMER' : 'BANK_INTERNAL',
         visibility: customer ? 'CUSTOMER' : 'BANK_INTERNAL', message_kind: 'CHAT',
-        mentions: [], attachment_ids: attachmentIds, client_request_id: clientRequestId,
+        mentions: [], attachment_ids: [], client_request_id: clientRequestId,
       }),
     });
   },
@@ -141,34 +141,16 @@ export const casesApi = {
       method: 'PATCH', body: JSON.stringify({ ...values, expected_version: version, updated_by: CURRENT_BANK_USER.display_name }),
     });
   },
-  uploadAttachment: async (caseId: string, file: File, visibility: MessageVisibility): Promise<Attachment> => {
-    const path = `/api/cases/${encodeURIComponent(caseId)}/attachments?file_name=${encodeURIComponent(file.name)}&uploaded_by=${encodeURIComponent(CURRENT_BANK_USER.display_name)}&visibility=${encodeURIComponent(visibility)}`;
-    const response = await fetch(apiUrl(path), {
-      method: 'POST', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file,
-    });
-    if (!response.ok) throw new Error(await readUploadError(response));
-    return response.json() as Promise<Attachment>;
-  },
-  attachmentUrl: (attachment: Attachment) => apiUrl(attachment.download_url.replace(/\?view=(bank|customer)$/, '?view=bank')),
-  sendCustomerMessage: (caseId: string, content: string, attachmentIds: string[] = [], clientRequestId: string = generateUuid()) => request<CaseMessage>(`/api/cases/${encodeURIComponent(caseId)}/messages`, {
+  sendCustomerMessage: (caseId: string, content: string, clientRequestId: string = generateUuid()) => request<CaseMessage>(`/api/cases/${encodeURIComponent(caseId)}/messages`, {
     method: 'POST',
     body: JSON.stringify({
       actor_type: 'CUSTOMER', actor_user_id: CURRENT_CUSTOMER_USER.user_id,
       actor_display_name: CURRENT_CUSTOMER_USER.display_name, actor_role: CURRENT_CUSTOMER_USER.role,
       content, channel: 'CUSTOMER', audience: 'CUSTOMER', visibility: 'CUSTOMER',
-      message_kind: 'CHAT', mentions: [], attachment_ids: attachmentIds,
+      message_kind: 'CHAT', mentions: [], attachment_ids: [],
       client_request_id: clientRequestId,
     }),
   }),
-  uploadCustomerAttachment: async (caseId: string, file: File): Promise<Attachment> => {
-    const path = `/api/cases/${encodeURIComponent(caseId)}/attachments?file_name=${encodeURIComponent(file.name)}&uploaded_by=${encodeURIComponent(CURRENT_CUSTOMER_USER.display_name)}&visibility=CUSTOMER`;
-    const response = await fetch(apiUrl(path), {
-      method: 'POST', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file,
-    });
-    if (!response.ok) throw new Error(await readUploadError(response));
-    return response.json() as Promise<Attachment>;
-  },
-  customerAttachmentUrl: (attachment: Attachment) => apiUrl(attachment.download_url.replace(/\?view=(bank|customer)$/, '?view=customer')),
   answerCustomerQuestion: (caseId: string, questionId: string, answer: StructuredQuestionAnswer) => request<CustomerQuestion>(`/api/cases/${encodeURIComponent(caseId)}/customer-questions/${encodeURIComponent(questionId)}/answer`, {
     method: 'POST', body: JSON.stringify({
       selected_option_ids: answer.selected_option_ids,
