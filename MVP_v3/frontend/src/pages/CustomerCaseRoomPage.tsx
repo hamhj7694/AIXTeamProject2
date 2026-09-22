@@ -1,14 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, AlertTriangle, ArrowLeft, Bookmark, CheckCircle2, ChevronDown, Loader2, PanelRightClose, PanelRightOpen, RefreshCw, ShieldCheck, Wifi, X } from 'lucide-react';
+import { AlertCircle, AlertTriangle, ArrowLeft, Bookmark, ChevronDown, Loader2, RefreshCw, ShieldCheck, Wifi, X } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { casesApi, CURRENT_CUSTOMER_USER } from '../api/cases';
 import { isApiErrorCode } from '../api/client';
-import type { CaseBundle, CaseMessage, CustomerQuestion, ProgressStep } from '../api/types';
+import type { CaseBundle, CaseMessage, CustomerQuestion } from '../api/types';
 import { readCustomerBookmarks, writeCustomerBookmarks, type CustomerBookmark } from '../customer/bookmarks';
 import { CustomerBookmarks } from '../customer/CustomerBookmarks';
 import { CustomerComposer } from '../customer/CustomerComposer';
 import { CustomerConversation } from '../customer/CustomerConversation';
-import { CustomerProgressPanel, CustomerSafetyGuide } from '../customer/CustomerProgressPanel';
 import { RecoveryNavigator } from '../customer/RecoveryCards';
 import { RECOVERY_MESSAGE_PREFIX, recoveryStepFromMessage, type RecoveryStep, type RecoveryStepId } from '../customer/recovery';
 import { buildCustomerTimeline } from '../customer/timeline';
@@ -132,11 +131,6 @@ export const CustomerCaseRoomPage: React.FC = () => {
   }, [detailsOpen]);
 
   const refresh = async () => { await load(true); };
-  const requestProgressConfirmation = async (step: ProgressStep) => {
-    const items = await casesApi.requestProgressConfirmation(caseId, step);
-    loadRequestRef.current += 1;
-    setBundle((current) => current ? { ...current, customer_progress: items } : current);
-  };
   const recovery = String(bundle?.case.mode ?? '') === 'RECOVERY' || String(bundle?.case.victim_transfer_status ?? '') === 'YES';
   useEffect(() => {
     if (recovery) setDetailsOpen(true);
@@ -314,18 +308,6 @@ export const CustomerCaseRoomPage: React.FC = () => {
     <main className="customer-main">
       {error && <div className="customer-global-message danger"><AlertCircle size={16}/><span>{error}</span><button type="button" onClick={() => setError('')} aria-label="오류 닫기"><X size={15}/></button></div>}
       {notice && <div className="customer-global-message"><AlertCircle size={16}/><span>{notice}</span><button type="button" onClick={() => setNotice('')} aria-label="안내 닫기"><X size={15}/></button></div>}
-      {false && <div className="customer-room-grid">
-
-        {/* <section className="customer-chat-panel"><header><div><h1>보이스피싱 대응 AI 상담</h1><p>필요한 내용을 한 가지씩 확인하고 은행 담당자와 연결합니다.</p></div><span>고객 공개 채널</span></header><div className="customer-conversation-host"><CustomerConversation bundle={bundle} busy={busy} aiBusy={aiPendingCount > 0} bookmarkedIds={new Set(bookmarks.map((item) => item.entryId))} onAnswer={answer} onRecoveryRequest={requestRecoveryHelp} onToggleBookmark={toggleBookmark} onRetryMessage={retryMessage} onDismissMessage={dismissMessage}/><CustomerBookmarks open={bookmarkOpen} items={bookmarks} onClose={() => setBookmarkOpen(false)}/></div><section className={`customer-recovery-guide ${closed ? 'closed' : recovery ? 'recovery' : ''}`}>
-          <div className="customer-recovery-guide-header"><div>{closed ? <CheckCircle2 size={20}/> : <AlertTriangle size={20}/>}<span><strong>{closed ? '상담이 마무리되었습니다.' : recovery ? '피해 대응 안내를 확인하고 있습니다.' : '피해 대응 안내를 확인해 주세요.'}</strong><small>{closed ? '추가 피해가 의심되면 공식 은행 고객센터로 다시 상담을 요청해 주세요.' : recovery ? '실제 신청·처리 여부는 현재 진행 상황에서 확인하세요.' : '필요한 피해구제 절차를 선택할 수 있습니다.'}</small></span></div>{recovery ? <span className="customer-recovery-active-status">피해 대응 안내 중</span> : !closed && <button type="button" className="customer-emergency-button" disabled={busy} onClick={() => { setDetailsOpen(true); setConfirmRecovery(true); }}>이미 사기 당했어요</button>}</div>
-          <details className="customer-recovery-guide-details" open={detailsOpen} onToggle={(event) => setDetailsOpen(event.currentTarget.open)}><summary>피해 대응 안내 <span className="customer-recovery-open-label">열기</span><span className="customer-recovery-close-label">닫기</span><ChevronDown size={15}/></summary><div className="customer-recovery-guide-content"><RecoveryNavigator selected={selectedStep} busy={busy} onSelect={selectRecoveryStep}/></div></details>
-        </section>{detailsOpen && <div className="customer-recovery-menu"><div className="customer-recovery-menu-intro"><strong><AlertTriangle size={15} aria-hidden="true"/>보이스피싱 피해 구제 안내</strong><span>피해 발생 시 필요한 대응 단계를 선택해주세요.</span><button type="button" className="customer-recovery-close-button" onClick={() => setDetailsOpen(false)} aria-label="구제 안내 닫기"><ChevronDown size={14}/></button></div><RecoveryNavigator selected={selectedStep} busy={busy} onSelect={selectRecoveryStep}/></div>}<CustomerComposer busy={busy} aiBusy={aiPendingCount > 0} disabled={closed} showEmergency={!closed} emergencyActive={recoveryUiActive} guideOpen={detailsOpen} onEmergency={() => { setDetailsOpen(true); setConfirmRecovery(true); }} onOpenRecoveryGuide={() => setDetailsOpen(true)} onSend={send}/></section> */}
-
-        <section className="customer-chat-panel"><header><div><h1>보이스피싱 대응 AI 상담</h1><p>필요한 내용을 한 가지씩 확인하고 은행 담당자와 연결합니다.</p></div><span>고객 공개 채널</span></header><CustomerConversation bundle={bundle!} busy={busy} aiBusy={aiPendingCount > 0} bookmarkedIds={new Set(bookmarks.map((item) => item.entryId))} onAnswer={answer} onRecoveryRequest={requestRecoveryHelp} onToggleBookmark={toggleBookmark} onRetryMessage={retryMessage} onDismissMessage={dismissMessage}/><CustomerComposer busy={busy} aiBusy={aiPendingCount > 0} disabled={closed} onSend={send} draftStorageKey={`csr:composer-draft:${caseId}:customer`}/></section>
-        {detailsOpen && <button type="button" className="customer-side-scrim" aria-label="현재 진행 상황 닫기" onClick={() => setDetailsOpen(false)}/>}
-        <aside id="customer-side-panel" className={`customer-side-panel ${detailsOpen ? 'is-open' : ''}`}><CustomerProgressPanel key={caseId} bundle={bundle!} recovery={recovery} onRequestConfirmation={requestProgressConfirmation}/>{recovery ? <RecoveryNavigator selected={selectedStep} busy={busy} onSelect={selectRecoveryStep}/> : <CustomerSafetyGuide/>}</aside>
-
-      </div>}
       <div className="customer-app-grid">
         <section className="customer-chat-panel">
           <header><div><h1>보이스피싱 대응 AI 상담</h1><p>필요한 내용을 한 가지씩 확인하고 은행 담당자와 연결합니다.</p></div><span>고객 공개 채널</span></header>
