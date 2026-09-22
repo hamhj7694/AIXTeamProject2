@@ -34,7 +34,12 @@ assert.match(timeline, /kind: 'FINAL_REPORT'/);
 assert.match(timeline, /Boolean\(bundle\.final_report\)/);
 assert.match(conversation, /PDF 다운로드/);
 assert.match(conversation, /Word 다운로드/);
-assert.match(dialogs, /queueQuestions\(caseId, chosen\)[\s\S]*await onDone\(\)/);
+assert.match(dialogs, /queueQuestions\(caseId, reviewItems\)[\s\S]*await onDone\(\)/);
+assert.match(dialogs, /보낼 질문 묶음/);
+assert.match(dialogs, /setReviewItems\(\[\.\.\.chosen\]\)/);
+assert.match(conversation, /data-question-id=\{question\.question_id\}/);
+assert.match(conversation, /질문 · 답변/);
+assert.match(timeline, /question\.status === 'ANSWERED' && question\.answered_at && question\.answer_text\?\.trim\(\)/);
 assert.match(page, /const refreshAfterMutation = async \(\) => \{ await load\(true, false\)/);
 assert.match(page, /<QuestionDialog[\s\S]*onDone=\{refreshAfterMutation\}/);
 assert.match(casesApi, /bundle\?view=bank/);
@@ -84,6 +89,10 @@ const questionEntries = customerEntries.filter(entry => entry.kind === 'QUESTION
 assert.deepEqual(Array.from(questionEntries, entry => entry.data.question_id), ['default', 'ai-context-1', 'qf1-child', 'staff-manual']);
 assert.deepEqual(Array.from(questionEntries, entry => entry.data.status), ['ASKED', 'ASKED', 'ANSWERED', 'PENDING']);
 assert.equal(customerEntries.filter(entry => entry.kind === 'ANSWER').length, 1);
+assert.equal(customerEntries.find(entry => entry.kind === 'ANSWER').data.question_id, 'qf1-child');
+const inconsistent = question('not-answered', 'transfer_status', 'ASKED', 5, '아직 확정되지 않은 답변');
+inconsistent.answered_at = '2026-09-19T00:15:00Z';
+assert.equal(timelineModule.buildTimeline({ ...bundle, questions: [inconsistent] }, false).filter(entry => entry.kind === 'ANSWER').length, 0);
 assert.deepEqual(Array.from(customerEntries.filter(entry => entry.kind === 'MESSAGE'), entry => entry.data.message_id), ['ordinary']);
 assert.deepEqual(Array.from(conversationModule.buildConversationEntries(bundle, 'conversation', 'TEAM'), entry => entry.data.message_id), ['team']);
 

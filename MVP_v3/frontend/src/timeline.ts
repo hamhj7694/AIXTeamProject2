@@ -34,7 +34,7 @@ export const buildTimeline = (bundle: CaseBundle, includeTechnicalEvents: boolea
 
   for (const question of questions) {
     if (question.asked_at) entries.push({ id: `question-${question.question_id}`, kind: 'QUESTION', occurredAt: question.asked_at, sequence: sequence++, data: question });
-    if (question.answered_at && question.answer_text) entries.push({ id: `answer-${question.question_id}`, kind: 'ANSWER', occurredAt: question.answered_at, sequence: sequence++, data: question });
+    if (question.status === 'ANSWERED' && question.answered_at && question.answer_text?.trim()) entries.push({ id: `answer-${question.question_id}`, kind: 'ANSWER', occurredAt: question.answered_at, sequence: sequence++, data: question });
   }
 
   for (const task of bundle.verification_tasks ?? []) {

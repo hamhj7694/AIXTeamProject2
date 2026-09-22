@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, patch
 from contracts.ai_internal.case_copilot import CaseCopilotInput
 
 from ai_api.app.domains.case_support.copilot_quality import CopilotQualityEvaluator
-from ai_api.app.domains.case_support.copilot_service import CaseCopilotProviderError, CaseCopilotService
+from ai_api.app.domains.case_support.copilot_service import CaseCopilotService
 
 
 def evaluation(mode: str, response: str, *, prompt: str = "송금 피해 여부를 확인해 주세요", context=()):
@@ -315,15 +315,16 @@ class CopilotRoleBoundaryTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("직원 메모", bank_args["input"])
 
     async def test_runtime_rejects_unsafe_provider_response(self) -> None:
-        with self.assertRaises(CaseCopilotProviderError):
-            await self._provider_call(
-                CaseCopilotInput(
-                    case_id="CASE-UNSAFE",
-                    prompt="인증번호는 어떻게 해야 하나요?",
-                    assistant_mode="CUSTOMER_SUPPORT",
-                ),
-                output="OTP 인증번호를 입력해 주세요.",
-            )
+        result, _ = await self._provider_call(
+            CaseCopilotInput(
+                case_id="CASE-UNSAFE",
+                prompt="인증번호는 어떻게 해야 하나요?",
+                assistant_mode="CUSTOMER_SUPPORT",
+            ),
+            output="OTP 인증번호를 입력해 주세요.",
+        )
+        self.assertIn("추가 확인", result.content)
+        self.assertNotIn("OTP 인증번호를 입력", result.content)
 
     async def test_runtime_logs_only_blocking_criterion_identifier(self) -> None:
         request = CaseCopilotInput(
@@ -337,14 +338,14 @@ class CopilotRoleBoundaryTest(unittest.IsolatedAsyncioTestCase):
             "ai_api.app.domains.case_support.copilot_service",
             level="WARNING",
         ) as captured_logs:
-            with self.assertRaises(CaseCopilotProviderError):
-                await self._provider_call(request, output=provider_output)
+            result, _ = await self._provider_call(request, output=provider_output)
 
         log_output = "\n".join(captured_logs.output)
         self.assertIn("criteria=role_adherence", log_output)
         self.assertNotIn(provider_output, log_output)
         self.assertNotIn(request.prompt, log_output)
         self.assertNotIn(request.case_id, log_output)
+        self.assertNotIn(provider_output, result.content)
 
 
 if __name__ == "__main__":

@@ -160,6 +160,23 @@ class CollaborationEndpointTest(unittest.TestCase):
             "actor_type": "BANK_STAFF", "actor_user_id": "staff-1",
         })
 
+    def test_quality_fallback_uses_existing_ai_response_path(self) -> None:
+        safe_content = "현재 확인된 근거만으로는 해당 내용을 확정하기 어렵습니다. 담당자의 추가 확인이나 관련 근거 검토가 필요합니다."
+        general_main.service.ai_client.generate_case_copilot_reply.return_value = {
+            "content": safe_content, "model_mode": "TEST_ONLY",
+        }
+
+        response = self.client.post("/api/cases/CASE-1/ai/invocations", json={
+            "prompt": "확인된 내용을 알려 주세요", "channel": "TEAM",
+            "requester_user_id": "staff-1", "requester_display_name": "Operator",
+        })
+
+        self.assertEqual(response.status_code, 201, response.text)
+        self.assertEqual(response.json()["content"], safe_content)
+        saved = self.repository.append_message.await_args.args[1]
+        self.assertEqual(saved["message_kind"], "AI_RESPONSE")
+        self.assertEqual(saved["content"], safe_content)
+
     def test_customer_generation_passes_source_stream_guard(self) -> None:
         self.repository.append_message.return_value = None
 

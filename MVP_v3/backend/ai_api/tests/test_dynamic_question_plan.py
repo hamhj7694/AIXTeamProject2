@@ -6,7 +6,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from contracts.ai_internal.case_snapshot import CaseSnapshotAiInput, CaseSnapshotQuestion
+from contracts.ai_internal.case_snapshot import CaseSnapshotAiInput, CaseSnapshotFact, CaseSnapshotQuestion, CaseSnapshotVerification
 from contracts.ai_internal.work_card import CaseWorkCardInput
 from contracts.question_target import (
     canonical_question_scope, decode_follow_up_target, encode_follow_up_target,
@@ -71,6 +71,51 @@ class FollowUpContractTest(unittest.TestCase):
 
 
 class DynamicPolicyTest(unittest.TestCase):
+    def test_transfer_request_is_not_a_clear_transfer_answer(self):
+        adapter = CaseSnapshotAiAdapter()
+        for answer, state_name in (("송금하라고 했어요", "UNCERTAIN"),
+                                   ("송금하지 않았어요", "CLEAR_CUSTOMER_STATEMENT"),
+                                   ("아니요", "CLEAR_CUSTOMER_STATEMENT")):
+            with self.subTest(answer=answer):
+                current = state(answer)
+                policy = adapter.question_eligibilities(current)["transfer_status"]
+                self.assertEqual(policy.evaluation.state.value, state_name)
+                self.assertFalse(policy.allow_basic_question)
+                self.assertEqual(bool(adapter.follow_up_parents(current)), state_name == "UNCERTAIN")
+
+    def test_remote_installation_request_and_actual_installation_are_distinct(self):
+        adapter = CaseSnapshotAiAdapter()
+        request_fact = CaseSnapshotFact(fact_id="request", field="remote_control_app",
+                                        value="원격제어 앱 설치 요구", status="CONFIRMED")
+        current = CaseSnapshotAiInput(case_id="CASE-DYNAMIC", facts=[request_fact])
+        policy = adapter.question_eligibilities(current)["remote_control_app"]
+        self.assertEqual(policy.evaluation.state.value, "UNRESOLVED")
+        self.assertTrue(policy.allow_basic_question)
+        installed = request_fact.model_copy(update={"value": "설치됨"})
+        policy = adapter.question_eligibilities(current.model_copy(update={"facts": [installed]}))["remote_control_app"]
+        self.assertEqual(policy.evaluation.state.value, "STAFF_CONFIRMED")
+        self.assertFalse(policy.allow_basic_question)
+        answered_request = CaseSnapshotQuestion(
+            question_id="q-app", target_field="remote_control_app",
+            question_text="실제로 설치하셨나요?", status="ANSWERED", answer_text="설치 안내만 받았어요",
+        )
+        policy = adapter.question_eligibilities(CaseSnapshotAiInput(
+            case_id="CASE-DYNAMIC", questions=[answered_request],
+        ))["remote_control_app"]
+        self.assertEqual(policy.evaluation.state.value, "UNCERTAIN")
+        self.assertFalse(policy.allow_basic_question)
+
+    def test_unlinked_completed_verification_does_not_suppress_question(self):
+        verification = CaseSnapshotVerification(
+            verification_task_id="v1", target="은행", claim="송금 여부 확인",
+            status="COMPLETED", result_summary="확인 완료",
+        )
+        policy = CaseSnapshotAiAdapter.question_eligibilities(CaseSnapshotAiInput(
+            case_id="CASE-DYNAMIC", verifications=[verification],
+        ))["transfer_status"]
+        self.assertEqual(policy.evaluation.state.value, "UNRESOLVED")
+        self.assertTrue(policy.allow_basic_question)
+
     def test_auth_follow_checks_past_action_without_requesting_actual_code(self):
         parent = state().questions[0].model_copy(update={
             "target_field": "authentication_information_exposure", "question_text": "OTP를 알려주셨나요?",

@@ -169,7 +169,10 @@ AUTONOMOUS_P0_QUESTION_FIELDS = {
     "authentication_information_exposure",
     "remote_control_app",
 }
-BASELINE_QUESTION_FIELDS = AUTONOMOUS_P0_QUESTION_FIELDS | {"impersonated_institution"}
+BASELINE_QUESTION_FIELDS = AUTONOMOUS_P0_QUESTION_FIELDS | {"claimed_organization", "impersonated_institution"}
+MANUAL_BASIC_QUESTION_FIELDS = AUTONOMOUS_P0_QUESTION_FIELDS | {
+    "transfer_purpose", "claimed_organization", "incident_claim",
+}
 AI_CHECKLIST_ACTION_PREFIX = "AI_CHECKLIST:"
 CURRENT_BANK_USER_ID = os.getenv("CURRENT_BANK_USER_ID", "mvp-v3-bank-operator")
 STAFF_JUDGMENT_ACTION_TYPE = "STAFF_JUDGMENT"
@@ -794,14 +797,12 @@ def build_customer_question_candidates(case: dict, queued: list[dict]) -> list[P
     """Deterministic MVP candidates. AI may replace this source, not the queue contract."""
     already_handled = {item["target_field"] for item in queued if item.get("status") in {"PENDING", "ASKED", "SKIPPED"}}
     fields = [
-        ("victim_transfer_status", "현재 송금하거나 이체한 금액이 있나요?", "피해 여부와 피해 금액을 먼저 확인해야 합니다.", "안전을 위해 피해 발생 여부를 가장 먼저 확인합니다.", "P0", ["없음", "있음", "잘 모르겠어요"]),
-        ("remote_control_app", "휴대폰에 원격 제어 또는 화면 공유 앱을 설치하라는 안내를 받으셨나요?", "추가 피해 가능성을 확인해야 합니다.", "휴대폰 제어 가능성을 확인해 추가 피해를 막기 위한 질문입니다.", "P0", ["설치함", "설치하지 않음", "잘 모르겠어요"]),
+        ("victim_transfer_status", "상대방의 요구대로 실제로 송금하거나 이체하셨나요?", "실제 송금 여부를 먼저 확인해야 합니다.", "피해 발생 여부를 확인하기 위한 질문입니다.", "P0", ["송금하지 않았어요", "송금했어요", "잘 모르겠어요"]),
+        ("remote_control_app", "원격 제어 또는 화면 공유 앱을 실제로 설치하셨나요?", "실제 앱 설치 여부를 확인해야 합니다.", "기기에 앱이 설치됐는지 확인해 추가 피해 가능성을 살펴보기 위한 질문입니다.", "P0", ["설치했어요", "설치하지 않았어요", "잘 모르겠어요"]),
         ("personal_information_exposure", "주민등록번호나 계좌번호 등 개인정보를 제공하셨나요?", "개인정보 노출 여부는 추가 보호 조치 판단에 필요합니다.", "개인정보 보호 조치가 필요한지 확인하는 질문입니다.", "P0", ["제공하지 않았어요", "일부 제공했어요", "제공했어요", "잘 모르겠어요"]),
         ("authentication_information_exposure", "인증번호, 비밀번호 또는 OTP를 제공하셨나요?", "인증정보 노출 여부는 계정 보호 판단에 필요합니다.", "계정과 금융정보를 보호하기 위해 인증정보 노출 여부를 확인합니다.", "P0", ["제공하지 않았어요", "제공했어요", "잘 모르겠어요"]),
-        ("impersonated_institution", "상대방이 어느 기관이나 은행을 사칭했는지 알려주실 수 있나요?", "공식 채널 검증 대상을 정해야 합니다.", "상대방의 주장을 공식 채널에서 확인하기 위한 질문입니다.", "P1", []),
+        ("claimed_organization", "상대방은 어느 기관이나 회사 소속이라고 말했나요?", "상대방이 주장한 소속을 확인해야 합니다.", "상대방의 주장을 공식 채널에서 확인하기 위한 질문입니다.", "P1", []),
     ]
-    if case.get("victim_transfer_status") != "UNKNOWN":
-        already_handled.add("victim_transfer_status")
     return [
         PublicQuestionCandidateResponse(
             question_id=f"candidate-{target_field}", target_field=target_field,
@@ -821,8 +822,6 @@ def build_question_recommendation_context(facts: list[dict], questions: list[dic
         "remote_control_app",
     }
     confirmed_fields = [normalize_target_field(item["field"]) for item in facts if item.get("status") == "CONFIRMED" and normalize_target_field(item.get("field", "")) in valid_fields]
-    if case and case.get("victim_transfer_status") in {"YES", "NO"}:
-        confirmed_fields.append("transfer_status")
     return {
         "confirmed_fields": list(dict.fromkeys(confirmed_fields)),
         "pending_question_fields": [normalize_target_field(item["target_field"]) for item in questions if item.get("status") in {"PENDING", "ASKED"} and normalize_target_field(item.get("target_field", "")) in valid_fields],
@@ -1139,9 +1138,33 @@ async def list_customer_question_candidates(case_id: str) -> list[PublicQuestion
     eligibility = adapter.question_eligibilities(adapter.adapt(
         _case_support_ai_input(case_id, case, facts, queued, [], [])
     ))
-    return [candidate for candidate in exclude_handled_question_candidates(candidates, queued)
-            if (policy := eligibility.get(normalize_target_field(candidate.target_field))) is None
-            or policy.allow_basic_question]
+    filtered = [candidate for candidate in exclude_handled_question_candidates(candidates, queued)
+                if normalize_target_field(candidate.target_field) in MANUAL_BASIC_QUESTION_FIELDS
+                and ((policy := eligibility.get(normalize_target_field(candidate.target_field))) is None
+                     or policy.allow_basic_question)]
+    # 레거시 저장 target은 alias로 합치지 않고, 사칭 대상 질문일 때만 새 기본 후보와 비교한다.
+    if any(
+        normalize_target_field(str(q.get("target_field", ""))) == "impersonated_institution"
+        and any(word in str(q.get("question_text", "")) for word in ("기관", "은행", "회사", "소속", "사칭"))
+        and any(word in str(q.get("question_text", "")) for word in ("어느", "어떤", "어디", "말했", "주장", "사칭"))
+        for q in queued if q.get("status") in {"PENDING", "ASKED", "ANSWERED"}
+    ):
+        filtered = [item for item in filtered if item.target_field != "claimed_organization"]
+    stage_order = {
+        "transfer_status": 1, "authentication_information_exposure": 1,
+        "personal_information_exposure": 1, "remote_control_app": 1,
+        "transfer_purpose": 2, "claimed_organization": 3, "incident_claim": 3,
+    }
+    target_order = {
+        "transfer_status": 0, "authentication_information_exposure": 1,
+        "personal_information_exposure": 2, "remote_control_app": 3,
+        "transfer_purpose": 4, "claimed_organization": 5, "incident_claim": 6,
+    }
+    return sorted(filtered, key=lambda item: (
+        stage_order.get(normalize_target_field(item.target_field), 4),
+        {"P0": 0, "P1": 1, "P2": 2}[item.priority],
+        target_order.get(normalize_target_field(item.target_field), 99),
+    ))
 
 
 @app.get("/api/cases/{case_id}/customer-questions", response_model=list[PublicCustomerQuestionResponse | PublicCustomerQuestionView])
