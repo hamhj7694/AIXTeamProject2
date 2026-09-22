@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import type { StoredCase } from '../api/types';
 import { compareCases, type CaseSortField, type SortDirection } from '../caseSort';
 import { caseState, caseStateLabel, caseStateTone, incidentTitle, relativeTime, statusLabel } from '../presentation';
+import { isNewCase, markCaseOpened, newCaseStateEventName } from '../newCaseState';
 import { analysisPendingEventName, getPendingAnalysisCount } from '../analysisQueue';
 
 interface Props {
@@ -31,6 +32,9 @@ export const CaseListPane: React.FC<Props> = ({ cases, selectedCaseId, loading, 
   const [renameValue, setRenameValue] = useState('');
   const [renameBusy, setRenameBusy] = useState(false);
   const [renameError, setRenameError] = useState('');
+  const [newCaseIds, setNewCaseIds] = useState<Set<string>>(() => new Set(cases.filter((item) => isNewCase(item.case_id)).map((item) => item.case_id)));
+  React.useEffect(() => { setNewCaseIds(new Set(cases.filter((item) => isNewCase(item.case_id)).map((item) => item.case_id))); }, [cases]);
+  React.useEffect(() => { const sync = () => setNewCaseIds(new Set(cases.filter((item) => isNewCase(item.case_id)).map((item) => item.case_id))); window.addEventListener(newCaseStateEventName, sync); return () => window.removeEventListener(newCaseStateEventName, sync); }, [cases]);
   const [pendingAnalysisCount, setPendingAnalysisCount] = useState(getPendingAnalysisCount);
   useEffect(() => {
     const syncPendingAnalysis = () => setPendingAnalysisCount(getPendingAnalysisCount());
@@ -45,7 +49,7 @@ export const CaseListPane: React.FC<Props> = ({ cases, selectedCaseId, loading, 
       || (status === 'CLOSED' && (item.status === 'CLOSED' || item.mode === 'CLOSED')))
     .filter((item) => `${item.case_id} ${incidentTitle(item)} ${item.initial_brief}`.toLowerCase().includes(query.trim().toLowerCase()))
     .sort((a, b) => compareCases(a, b, sortField, sortDirection)), [cases, query, stateFilter, status, sortField, sortDirection]);
-  const openCase = (caseId: string) => { onSelectCase(); navigate(`/cases/${caseId}`); onCloseMobile(); };
+  const openCase = (caseId: string) => { markCaseOpened(caseId); setNewCaseIds((current) => { const next = new Set(current); next.delete(caseId); return next; }); onSelectCase(); navigate(`/cases/${caseId}`); onCloseMobile(); };
   const startRename = (item: StoredCase) => { setEditingCaseId(item.case_id); setRenameValue(incidentTitle(item)); setRenameError(''); };
   const cancelRename = () => { if (renameBusy) return; setEditingCaseId(null); setRenameValue(''); setRenameError(''); };
   const saveRename = async (item: StoredCase) => {
@@ -82,7 +86,7 @@ export const CaseListPane: React.FC<Props> = ({ cases, selectedCaseId, loading, 
         <span className="case-item-rename-actions"><button type="button" onClick={cancelRename} disabled={renameBusy}>취소</button><button type="submit" disabled={renameBusy || !renameValue.trim()}>저장</button></span>
       </form> : <>
         <span className="case-item-top"><button type="button" className="case-item-id-open" onClick={() => openCase(item.case_id)}><b>{item.case_id}</b></button><span className="case-item-top-actions"><span className={`risk-pill ${caseStateTone(caseState(item))}`}>{caseStateLabel(caseState(item))}</span><button type="button" className="case-item-edit" onClick={() => startRename(item)} aria-label={`${incidentTitle(item)} 사건 이름 수정`} title="사건 이름 수정"><Pencil size={14}/></button></span></span>
-        <button type="button" className="case-list-item-open" onClick={() => openCase(item.case_id)}>{caseContent}</button>
+        <button type="button" className="case-list-item-open" onClick={() => openCase(item.case_id)}>{caseContent}</button>{newCaseIds.has(item.case_id) && <span className="case-new-badge">새 Case</span>}
       </>}
     </div>;
   };

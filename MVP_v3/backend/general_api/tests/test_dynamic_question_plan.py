@@ -192,6 +192,6 @@ class MysqlFollowUpTransactionTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((fact["field"], fact["status"]), ("transfer_status", "PROPOSED"))
         self.assertEqual(parent_fact["value"], "기억이 잘 안 나요")
         queries = [call.args[0] for call in cursor.execute.await_args_list]
-        self.assertFalse(any(q.startswith("UPDATE case_facts") for q in queries))
-        self.assertTrue(any(q.startswith("INSERT INTO case_facts") for q in queries))
+        self.assertFalse(any(q.startswith("UPDATE case_context_facts_v2") for q in queries))
+        self.assertTrue(any(q.startswith("INSERT INTO case_context_facts_v2") for q in queries))
         connection.commit.assert_awaited_once()

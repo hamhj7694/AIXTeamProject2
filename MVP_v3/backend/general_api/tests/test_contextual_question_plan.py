@@ -92,7 +92,6 @@ class ContextualQuestionEndpointTest(unittest.IsolatedAsyncioTestCase):
         repository.list_verifications.return_value = []
         repository.list_actions.return_value = []
         repository.list_messages.return_value = []
-        repository.list_attachments.return_value = []
         repository.list_customer_questions.return_value = [{
             "question_id": "answered", "target_field": "transfer_status",
             "question_text": "송금하셨나요?", "status": "ANSWERED", "answer_text": "아니요", "priority": "P0",
@@ -153,7 +152,6 @@ class ContextualQuestionEndpointTest(unittest.IsolatedAsyncioTestCase):
         repository.list_verifications.return_value = []
         repository.list_actions.return_value = []
         repository.list_messages.return_value = []
-        repository.list_attachments.return_value = []
         repository.list_customer_questions.return_value = []
         support = main.PublicCaseSupportSnapshotResponse(
             case_id="CASE-FACTS", available=True,

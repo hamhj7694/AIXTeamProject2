@@ -4,7 +4,7 @@ export type BankCardKind = 'transaction' | 'fds' | 'additionalLookup';
 
 const options: Array<{ value: BankCardKind; label: string }> = [
   { value: 'fds', label: 'FDS 분석 결과' },
-  { value: 'additionalLookup', label: '추가 조회 결과' },
+  { value: 'additionalLookup', label: '송금 기록 조회' },
 ];
 
 export function BankCardMenu({ value: _value, onChange }: { value: BankCardKind | null; onChange: (value: BankCardKind) => void }) {

@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertCircle, Bookmark, CheckCircle2, FileSearch, Loader2, RefreshCw, RotateCcw, StickyNote, Trash2, Users, X } from 'lucide-react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { casesApi, CURRENT_BANK_USER } from '../api/cases';
-import type { AnalyzeCaseResponse, CaseBundle, CaseFact, CaseMessage, CaseSupportSnapshot, StoredCase, VerificationTask, CaseTransaction } from '../api/types';
+import type { AnalyzeCaseResponse, CaseBundle, CaseMessage, CaseSupportSnapshot, StoredCase, VerificationTask, CaseTransaction } from '../api/types';
+import { loadContextWorkspace, type ContextFact } from '../api/contextWorkspace';
 import { isApiErrorCode } from '../api/client';
 import { ActionDialog, QuestionDialog, VerificationDialog } from '../components/CaseActionDialogs';
 import { AdminCaseDialog } from '../components/AdminCaseDialog';
@@ -33,18 +34,16 @@ type AdminAction = 'finalize' | 'reopen' | 'trash' | null;
 type BankOutboxItem = {
   message: CaseMessage;
   content: string;
-  files: File[];
-  attachmentIds: string[];
   target: ComposerTarget;
   requestAi: boolean;
 };
 
-const caseContextRevision = (caseItem: StoredCase, bundle: CaseBundle, facts: CaseFact[]) => JSON.stringify({
+const caseContextRevision = (caseItem: StoredCase, bundle: CaseBundle, facts: ContextFact[]) => JSON.stringify({
   // AI support에 실제로 전달되는 의미 상태만 지문화한다. 일반 채팅이나
   // presence 갱신만으로 동일한 AI 사건 맥락을 다시 만들지 않는다.
   case: [caseItem.victim_transfer_status, caseItem.mode, caseItem.status, caseItem.diagnosis],
   questions: bundle.questions.map((item) => [item.question_id, item.status, item.answer_text, item.asked_at, item.answered_at]),
-  facts: facts.map((item) => [item.fact_id, item.status, item.value, item.confirmed_at]),
+  facts: facts.map((item) => [item.fact_id, item.status, item.display_value, item.confirmed_at]),
   verifications: bundle.verification_tasks.map((item) => [item.verification_task_id, item.version, item.status, item.result_summary, item.updated_at]),
   actions: bundle.recent_actions.map((item) => [item.action_id, item.status, item.note, item.created_at]),
   customer_progress: bundle.customer_progress,
@@ -69,7 +68,7 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
   const fdsDataFingerprintRef = useRef('');
   const [bundle, setBundle] = useState<CaseBundle | null>(null);
   const [support, setSupport] = useState<CaseSupportSnapshot | null>(null);
-  const [facts, setFacts] = useState<CaseFact[]>([]);
+  const [facts, setFacts] = useState<ContextFact[]>([]);
   const [selectedBankCard, setSelectedBankCard] = useState<BankCardKind | null>(null);
   const [openBankCards, setOpenBankCards] = useState<BankCardKind[]>([]);
   const [collapsedBankCards, setCollapsedBankCards] = useState<Partial<Record<BankCardKind, boolean>>>({});
@@ -150,8 +149,8 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
     const requestId = ++loadRequestRef.current;
     const generation = aiGenerationRef.current;
     if (quiet) setRefreshing(true); else setLoading(true);
-    const [caseResult, bundleResult, factsResult, membersResult, transactionsResult] = await Promise.allSettled([
-      casesApi.get(caseId), casesApi.bundle(caseId), casesApi.facts(caseId), casesApi.members(caseId), casesApi.transactions(caseId),
+    const [caseResult, bundleResult, contextResult, membersResult, transactionsResult] = await Promise.allSettled([
+      casesApi.get(caseId), casesApi.bundle(caseId), loadContextWorkspace(caseId), casesApi.members(caseId), casesApi.transactions(caseId),
     ]);
     if (requestId !== loadRequestRef.current || generation !== aiGenerationRef.current) return;
     if (caseResult.status === 'rejected') {
@@ -176,7 +175,7 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
       ...bundleResult.value,
       recent_messages: mergePendingMessages(bundleResult.value.recent_messages, pendingMessagesRef.current.values()),
     } : null;
-    const nextFacts = factsResult.status === 'fulfilled' ? factsResult.value : null;
+    const nextFacts = contextResult.status === 'fulfilled' ? [...contextResult.value.confirmed_facts, ...contextResult.value.proposed_facts] : null;
     if (transactionsResult.status === 'fulfilled') setTransactions(transactionsResult.value);
     if (nextBundle) setBundle(nextBundle); else warnings.push('대화와 업무 기록을 갱신하지 못했습니다.');
     if (nextFacts) setFacts(nextFacts); else warnings.push('확인된 사실을 갱신하지 못했습니다.');
@@ -314,12 +313,7 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
     pendingMessagesRef.current.set(sendingMessage.client_request_id!, sendingMessage);
     showMessage(sendingMessage);
     try {
-      const visibility = item.target === 'CUSTOMER' ? 'CUSTOMER' : 'BANK_INTERNAL';
-      for (const file of item.files.slice(item.attachmentIds.length)) {
-        const attachment = await casesApi.uploadAttachment(caseId, file, visibility);
-        item.attachmentIds.push(attachment.attachment_id);
-      }
-      const message = await casesApi.sendMessage(caseId, item.content, item.target, item.attachmentIds, item.message.client_request_id!);
+      const message = await casesApi.sendMessage(caseId, item.content, item.target, item.message.client_request_id!);
       if (!isCurrent()) return false;
       loadRequestRef.current += 1;
       pendingMessagesRef.current.delete(item.message.client_request_id!);
@@ -353,7 +347,7 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
       saved: saved.then((message) => message ? { messageId: message.message_id, createdAt: message.created_at } : false),
     });
   };
-  const send = (content: string, files: File[], target: ComposerTarget, requestAi: boolean): Promise<void> => {
+  const send = (content: string, target: ComposerTarget, requestAi: boolean): Promise<void> => {
     const clientRequestId = generateUuid();
     const visibility = target === 'CUSTOMER' ? 'CUSTOMER' : 'BANK_INTERNAL';
     const message: CaseMessage = {
@@ -377,7 +371,7 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
       delivery_state: 'SENDING',
       delivery_error: null,
     };
-    const item: BankOutboxItem = { message, content, files, attachmentIds: [], target, requestAi };
+    const item: BankOutboxItem = { message, content, target, requestAi };
     pendingMessagesRef.current.set(clientRequestId, message);
     outboxRef.current.set(clientRequestId, item);
     showMessage(message);
@@ -522,11 +516,19 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
     setOpenBankCards((current) => current.filter((item) => item !== kind));
     setSelectedBankCard((current) => current === kind ? null : current);
   };
-  const toggleBankCardCollapsed = (kind: BankCardKind) => setCollapsedBankCards((current) => ({ ...current, [kind]: !current[kind] }));
-  // The conversation stream contains only the additional lookup result. FDS is
-  // rendered in its own analysis area below the chat grid.
-  const bankCard = openBankCards.includes('additionalLookup') ? <BankCardStack cards={['additionalLookup']} cardContent={cardContent} collapsedCards={collapsedBankCards} updatedCards={updatedBankCards} highlightedCard={highlightedBankCard} onToggleCollapsed={toggleBankCardCollapsed} onClose={closeBankCard} onViewed={(kind) => setUpdatedBankCards((current) => ({ ...current, [kind]: false }))}/> : undefined;
-  const fdsFlowCard = openBankCards.includes('fds') ? <BankCardStack cards={['fds']} cardContent={cardContent} collapsedCards={collapsedBankCards} updatedCards={updatedBankCards} highlightedCard={highlightedBankCard} onToggleCollapsed={toggleBankCardCollapsed} onClose={closeBankCard} onViewed={(kind) => setUpdatedBankCards((current) => ({ ...current, [kind]: false }))}/> : undefined;
+  const toggleBankCardCollapsed = (kind: BankCardKind) => {
+    const willExpand = Boolean(collapsedBankCards[kind]);
+    setCollapsedBankCards((current) => ({ ...current, [kind]: !current[kind] }));
+    if (willExpand) {
+      requestAnimationFrame(() => {
+        document.getElementById(`bank-card-${kind}`)?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+      });
+    }
+  };
+  // Keep the cards in the order they were opened. The first selected result
+  // stays at the top, while closing and reopening a result places it at the end.
+  const orderedBankCards = openBankCards.filter((kind) => kind === 'fds' || kind === 'additionalLookup');
+  const bankCardStack = orderedBankCards.length > 0 ? <BankCardStack cards={orderedBankCards} cardContent={cardContent} collapsedCards={collapsedBankCards} updatedCards={updatedBankCards} highlightedCard={highlightedBankCard} onToggleCollapsed={toggleBankCardCollapsed} onClose={closeBankCard} onViewed={(kind) => setUpdatedBankCards((current) => ({ ...current, [kind]: false }))}/> : undefined;
 
   return <section className="case-room">
     <header className="case-room-header case-command-header">
@@ -543,7 +545,7 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
         <div ref={splitRef} className={`conversation-channel-grid ${splitDragging ? 'is-resizing' : ''}`} style={conversationGridStyle}>
           <SharedConversation bundle={bundle} view="conversation" channel="CUSTOMER" aiBusy={false} inlineCard={dialog?.type === 'questions' ? <QuestionDialog inline caseId={caseId} initial={support?.recommended_questions ?? []} onDone={refreshAfterMutation} onClose={() => setDialog(null)}/> : undefined} collapsed={customerPaneCollapsed} collapseDisabled={false} onToggleCollapse={toggleCustomerPane} onOpenQuestions={() => setDialog({ type: 'questions' })} composer={<ConversationComposer foundationMode fixedTarget="CUSTOMER" showAi={false} showUtilities={false} showQuestionAction onOpenQuestions={() => setDialog({ type: 'questions' })} showInlineError={false} onErrorChange={(message) => handleComposerError('CUSTOMER', message)} busy={busy} aiBusy={false} onSend={send} onOpenVerification={() => undefined} onOpenAction={() => undefined} onInvokeAi={() => undefined} onOpenNotes={() => undefined} onOpenBookmarks={() => undefined} bookmarkCount={0}/>} bookmarkedIds={new Set(bookmarks.map((item) => item.entryId))} onToggleBookmark={toggleBookmark} onRetryMessage={retryMessage} onDismissMessage={dismissMessage}/>
           <button type="button" className="conversation-split-handle" onPointerDown={(event) => { if (customerPaneCollapsed || teamPaneCollapsed) return; event.preventDefault(); setSplitDragging(true); }} onDoubleClick={() => { if (!customerPaneCollapsed && !teamPaneCollapsed) setCustomerPaneRatio(50); }} onKeyDown={(event) => { if (event.key === 'Home') { event.preventDefault(); setCustomerPaneRatio(50); return; } if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return; event.preventDefault(); setCustomerPaneRatio((value) => Math.min(75, Math.max(25, value + (event.key === 'ArrowLeft' ? -5 : 5)))); }} aria-label="고객 소통과 은행 내부 소통 채팅창 너비 조절, 더블클릭하면 1대1로 맞춤" title="드래그하여 폭 조절 · 더블클릭하여 1:1 맞춤" aria-valuemin={25} aria-valuemax={75} aria-valuenow={Math.round(customerPaneRatio)} role="separator"><span/></button>
-          <SharedConversation bundle={bundle} view="conversation" channel="TEAM" flowCard={fdsFlowCard} inlineCard={bankCard} collapsed={teamPaneCollapsed} collapseDisabled={customerPaneCollapsed} onToggleCollapse={toggleTeamPane} composer={<ConversationComposer foundationMode fixedTarget="TEAM" showAi showUtilities={false} showInlineError={false} selectedBankCard={selectedBankCard} onSelectBankCard={selectBankCard} onErrorChange={(message) => handleComposerError('TEAM', message)} busy={busy} aiBusy={aiPendingCount > 0} onSend={send} onOpenQuestions={() => undefined} onOpenVerification={() => undefined} onOpenAction={() => undefined} onInvokeAi={() => void invokeAi()} onOpenNotes={() => setNoteOpen(true)} onOpenBookmarks={() => setBookmarkOpen(true)} bookmarkCount={bookmarks.length}/>} bookmarkedIds={new Set(bookmarks.map((item) => item.entryId))} onToggleBookmark={toggleBookmark} onRetryMessage={retryMessage} onDismissMessage={dismissMessage}/>
+          <SharedConversation bundle={bundle} view="conversation" channel="TEAM" inlineCard={bankCardStack} collapsed={teamPaneCollapsed} collapseDisabled={customerPaneCollapsed} onToggleCollapse={toggleTeamPane} composer={<ConversationComposer foundationMode fixedTarget="TEAM" showAi showUtilities={false} showInlineError={false} selectedBankCard={selectedBankCard} onSelectBankCard={selectBankCard} onErrorChange={(message) => handleComposerError('TEAM', message)} busy={busy} aiBusy={aiPendingCount > 0} onSend={send} onOpenQuestions={() => undefined} onOpenVerification={() => undefined} onOpenAction={() => undefined} onInvokeAi={() => void invokeAi()} onOpenNotes={() => setNoteOpen(true)} onOpenBookmarks={() => setBookmarkOpen(true)} bookmarkCount={bookmarks.length}/>} bookmarkedIds={new Set(bookmarks.map((item) => item.entryId))} onToggleBookmark={toggleBookmark} onRetryMessage={retryMessage} onDismissMessage={dismissMessage}/>
         </div>
       </main>
       <ContextPanelFoundation open={contextOpen} onToggle={() => onContextOpenChange(!contextOpen)}/>

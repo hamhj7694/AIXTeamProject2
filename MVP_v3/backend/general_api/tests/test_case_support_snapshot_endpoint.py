@@ -28,7 +28,7 @@ class CaseSupportSnapshotEndpointTest(unittest.TestCase):
         # 실제 신규 Case는 송금 여부를 UNKNOWN으로 생성한다. 이 상태에서만
         # 송금 여부 후보가 아직 처리되지 않은 P0 질문으로 남는다.
         self.repository.get.return_value = {
-            "case_id": "CASE-AI-1", "diagnosis": diagnosis,
+            "case_id": "CASE-AI-1", "input_text": "원문은 지원 AI로 보내면 안 됩니다.", "diagnosis": diagnosis,
             "victim_transfer_status": "UNKNOWN",
         }
         self.repository.list_case_facts.return_value = []
@@ -66,6 +66,9 @@ class CaseSupportSnapshotEndpointTest(unittest.TestCase):
         self.assertEqual(response.json()["case_context"]["offender_demands"], ["안전계좌 이체 요구"])
         self.assertEqual(response.json()["recommended_questions"][0]["question_text"], "송금하셨나요?")
         self.assertNotIn("evidence_refs", response.json()["recommended_questions"][0])
+        sent = general_main.service.ai_client.build_case_support_snapshot.await_args.args[0]
+        self.assertNotIn("input_text", sent)
+        self.assertNotIn("원문은 지원 AI로 보내면 안 됩니다.", json.dumps(sent, ensure_ascii=False))
 
     def test_uses_deterministic_candidates_when_ai_is_unavailable(self) -> None:
         general_main.service.ai_client.build_case_support_snapshot = AsyncMock(side_effect=general_main.AiServiceError("AI 서버 연결 실패"))

@@ -1,16 +1,13 @@
 import React, { FormEvent, useRef, useState } from 'react';
-import { Bookmark, Bot, Building2, MessageCircleQuestion, Paperclip, Send, ShieldCheck, Sparkles, StickyNote, X } from 'lucide-react';
+import { Bookmark, Bot, Building2, MessageCircleQuestion, Send, ShieldCheck, Sparkles, StickyNote } from 'lucide-react';
 import { hasBankAiMention } from '../bank/aiMention';
 import { BankCardMenu, type BankCardKind } from './cards/BankCardMenu';
 
 export type ComposerTarget = 'CUSTOMER' | 'TEAM';
-const MAX_FILES = 10;
-const MAX_FILE_BYTES = 10 * 1024 * 1024;
-
 interface Props {
   busy: boolean;
   aiBusy: boolean;
-  onSend: (content: string, files: File[], target: ComposerTarget, requestAi: boolean) => Promise<void>;
+  onSend: (content: string, target: ComposerTarget, requestAi: boolean) => Promise<void>;
   onOpenQuestions: () => void;
   onOpenVerification: () => void;
   onOpenAction: () => void;
@@ -39,10 +36,8 @@ interface Props {
 export const ConversationComposer: React.FC<Props> = ({ busy, aiBusy, onSend, onOpenQuestions, onOpenVerification, onOpenAction, onInvokeAi, onOpenNotes, onOpenBookmarks, bookmarkCount, foundationMode = false, fixedTarget, showAi = true, showUtilities = true, showQuestionAction = false, onErrorChange, showInlineError = true, onSelectBankCard, selectedBankCard = null }) => {
   const target = fixedTarget ?? 'TEAM';
   const [draft, setDraft] = useState('');
-  const [files, setFiles] = useState<File[]>([]);
   const [requestAi, setRequestAi] = useState(true);
   const [error, setError] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
   const submittingRef = useRef(false);
   const mentionRequestsAi = target === 'TEAM' && hasBankAiMention(draft);
   const aiRequested = target === 'TEAM' && (requestAi || mentionRequestsAi);
@@ -53,23 +48,15 @@ export const ConversationComposer: React.FC<Props> = ({ busy, aiBusy, onSend, on
     setDraft(value);
   };
   const submit = async () => {
-    if (submittingRef.current || sendBlocked || (!draft.trim() && files.length === 0)) return;
+    if (submittingRef.current || sendBlocked || !draft.trim()) return;
     if (fixedTarget === 'CUSTOMER' && hasBankAiMention(draft)) {
       updateError('고객 메시지에는 AI 요청을 넣을 수 없습니다.');
       return;
     }
     submittingRef.current = true;
-    try { await onSend(draft.trim(), files, target, aiRequested && Boolean(draft.trim())); setDraft(''); setFiles([]); updateError(''); }
+    try { await onSend(draft.trim(), target, aiRequested); setDraft(''); updateError(''); }
     catch (reason) { updateError(reason instanceof Error ? reason.message : '메시지를 전송하지 못했습니다.'); }
     finally { submittingRef.current = false; }
-  };
-  const addFiles = (incoming: FileList | null) => {
-    if (!incoming) return;
-    const next = [...files, ...Array.from(incoming)];
-    if (next.length > MAX_FILES) { updateError(`파일은 한 번에 최대 ${MAX_FILES}개까지 첨부할 수 있습니다.`); return; }
-    const tooLarge = next.find((file) => file.size > MAX_FILE_BYTES);
-    if (tooLarge) { updateError(`${tooLarge.name}: 파일당 최대 10MB까지 첨부할 수 있습니다.`); return; }
-    setFiles(next); updateError('');
   };
   return <div className={`composer-shell composer-target-${target.toLowerCase()}`}>
     <div className="context-actions" aria-label="Case 빠른 작업">
@@ -91,16 +78,13 @@ export const ConversationComposer: React.FC<Props> = ({ busy, aiBusy, onSend, on
       {target === 'TEAM' && onSelectBankCard && <><span className="context-actions-spacer"/><BankCardMenu value={selectedBankCard} onChange={onSelectBankCard}/></>}
     </div>
     <form onSubmit={(event: FormEvent) => { event.preventDefault(); void submit(); }}>
-      {files.length > 0 && <div className="queued-files">{files.map((file, index) => <span key={`${file.name}-${file.lastModified}-${index}`}><Paperclip size={13}/>{file.name}<button type="button" onClick={() => setFiles((items) => items.filter((_, itemIndex) => itemIndex !== index))} aria-label={`${file.name} 첨부 제거`}><X size={12}/></button></span>)}</div>}
       <div className="composer-input">
-        <input ref={inputRef} type="file" multiple className="sr-only" onChange={(event) => { addFiles(event.target.files); event.currentTarget.value = ''; }}/>
-        <button type="button" className="icon-button" onClick={() => inputRef.current?.click()} disabled={busy} aria-label="파일 또는 사진 첨부"><Paperclip size={18}/></button>
         <textarea rows={2} value={draft} onChange={(event) => updateDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void submit(); } }} placeholder={target === 'CUSTOMER' ? '고객에게 보낼 메시지를 입력하세요.' : '은행 내부 메시지 또는 @AI 요청사항을 입력하세요.'}/>
-        <button className="send-button" type="submit" disabled={sendBlocked || (!draft.trim() && files.length === 0)} aria-label="메시지 전송"><Send size={18}/></button>
+        <button className="send-button" type="submit" disabled={sendBlocked || !draft.trim()} aria-label="메시지 전송"><Send size={18}/></button>
       </div>
       {showInlineError && error && <p className="composer-error">{error}</p>}
       {mentionRequestsAi && !aiBusy && <p className="composer-ai-mention"><Sparkles size={13}/><b>@AI 호출 준비됨</b><span>전송하면 최신 Shared Case와 요청사항을 함께 분석합니다.</span></p>}
-      <p className="composer-help">Enter 전송 · Shift+Enter 줄바꿈 · 이미지·PDF·문서 최대 10개/각 10MB</p>
+      <p className="composer-help">Enter 전송 · Shift+Enter 줄바꿈</p>
     </form>
   </div>;
 };

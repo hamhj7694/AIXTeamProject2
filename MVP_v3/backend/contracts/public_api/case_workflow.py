@@ -298,22 +298,6 @@ class PublicVoiceSessionResponse(PublicWorkflowModel):
     created_at: str
 
 
-class PublicCreateTranscriptRequest(PublicWorkflowModel):
-    speaker: str = Field(min_length=1, max_length=32)
-    content: str = Field(min_length=1, max_length=10_000)
-    started_at: str | None = None
-
-
-class PublicTranscriptResponse(PublicWorkflowModel):
-    segment_id: str
-    session_id: str
-    case_id: str
-    speaker: str
-    content: str
-    started_at: str | None
-    created_at: str
-
-
 class PublicFinalizeReportRequest(PublicWorkflowModel):
     expected_version: int = Field(ge=1)
     note: str = Field(default="", max_length=10_000)

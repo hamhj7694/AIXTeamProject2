@@ -99,43 +99,20 @@ MySQL에 `MYSQL_DATABASE`와 `MYSQL_USER` 계정을 먼저 준비한다. 아래 
 schema 생성·변경·인덱스·외래키·TRIGGER 권한을 부여해야 한다.
 `.env`의 비밀번호를 바꾸는 것만으로 실제 MySQL 계정 비밀번호가 바뀌지는 않는다.
 
-`MVP_v3` 폴더에서 접속한다. 호스트·포트·계정·DB가 다르면 `.env`에 맞춰 바꾼다.
-비밀번호는 프롬프트에 입력한다.
-
-```powershell
-mysql --host=127.0.0.1 --port=3306 --user=ham --password csr
-```
-
-MySQL 프롬프트에서 **최초의 빈 DB에만** 기본 스키마를 적용한다.
-
-```sql
-SOURCE database/01_mysql_csr_schema.sql;
-EXIT;
-```
-
-이 파일은 현재 기본 테이블과 Context Panel V3 컬럼을 만들고 적용한 migration 이름을
-`schema_migrations`에 기록한다. **기본 스키마만으로는 Case Context v2와 Case 번호
-sequence가 완성되지 않는다.** PowerShell로 돌아와 API를 시작하기 전에 아래 명령으로
-적용 이력이 없는 `014_case_context_v2_foundation.sql`과
-`015_case_number_sequence.sql` 등 남은 migration을 파일명 순서대로 적용한다.
+`MVP_v3` 폴더에서 `.env` 설정 후 전체 migration을 파일명 순으로 적용한다.
 
 ```powershell
 ./.venv/Scripts/python.exe backend/scripts/apply_migrations.py
 ```
 
-이미 서비스 중인 DB에는 기본 스키마를 다시 넣지 않는다. DB를 백업하고
-General API를 중지한 뒤 migration을 적용한다. `schema_migrations`에
-정상 이력이 있으면 같은 명령은 이미 적용한 파일을 건너뛴다. 이력이 없는
-오래된 DB는 실제 스키마와 선행 migration을 확인한 후에만 `--only`로
-대상 파일을 지정한다. `013`까지 적용된 기존 DB를 현재 구조로 올릴 때에는 의존성을 검토한 뒤
-최소한 다음 파일을 순서대로 적용한다.
+`database/01_mysql_csr_schema.sql`은 같은 migration에서 자동 생성하는 빈 DB/Docker
+전용 파일이며, 현재 전체 구조와 이력을 포함한다. 기존 DB에는 다시 SOURCE하지 않는다.
+`case_number_sequences`는 현재 코드에서 사용하지 않는다.
 
-```powershell
-./.venv/Scripts/python.exe backend/scripts/apply_migrations.py `
-  --only 014_case_context_v2_foundation.sql `
-  --only 015_case_number_sequence.sql `
-  --only 015_context_panel_v3.sql
-```
+서비스 중인 DB는 백업·복원 검증과 General API 일시 중지 후 변경한다. 과거 적용
+기록이 누락된 DB에 전체 ALTER를 재실행하지 않는다. [DB 운영 안내](database/README.md)의
+검증된 정상화 절차를 따른다. [전체 DB 표](database/DB_CATALOG.md)와
+[엔티티별 migration 목록](backend/migrations/README.md)에서 실제 구조를 확인한다.
 
 ### 3. 서버 실행
 

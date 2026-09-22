@@ -31,7 +31,6 @@ class CollaborationEndpointTest(unittest.TestCase):
         self.repository.list_verifications.return_value = []
         self.repository.list_case_facts.return_value = []
         self.repository.list_actions.return_value = []
-        self.repository.list_attachments.return_value = []
         self.repository.list_messages.return_value = []
         self.repository.list_customer_questions.return_value = []
         self.repository.upsert_member.return_value = {

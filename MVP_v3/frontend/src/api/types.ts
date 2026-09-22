@@ -221,7 +221,6 @@ export interface StoredCase {
   primary_assignee?: string | null;
   victim_transfer_status?: 'UNKNOWN' | 'YES' | 'NO';
   actual_loss_amount_krw?: number | null;
-  input_text: string;
   diagnosis: {
     context?: {
       summary?: string;
@@ -529,7 +528,9 @@ export interface CaseMember {
   updated_at: string;
 }
 
+/** API staff colors are GREEN~GRAY. BLACK is a synthetic local color for the demo/test user only. */
 export type BankStaffColor = 'GREEN' | 'BLUE' | 'YELLOW' | 'ORANGE' | 'RED' | 'PURPLE' | 'GRAY' | 'BLACK';
+/** Directory role OTHER_VIEWER is mapped to Case-member role VIEWER by the General API. */
 export type BankStaffAssignmentRole = 'SUPERVISOR' | 'MONITORING' | 'CONSULTATION' | 'OTHER_VIEWER' | 'HANDOVER_PENDING';
 export interface BankStaff {
   staff_id: string;

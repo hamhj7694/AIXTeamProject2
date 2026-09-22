@@ -51,7 +51,7 @@
 8. 모든 수정 명령은 `expected_version`과 행위자 정보를 사용하고 충돌은 HTTP 409로 처리한다.
 9. 생성 명령은 `client_request_id`로 멱등성을 보장한다.
 10. 내부 코드와 사용자 표시 문구를 분리한다. API의 `semantic_key`나 enum 값은 UI에 직접 출력하지 않는다.
-11. 원문 통화 내용은 저장하거나 검색 캐시에 넣지 않는다. 허용된 구조화 피처와 참조 ID만 사용한다.
+11. 데모 입력 원문은 `case_inputs`에 보관할 수 있지만 검색 캐시·Context Snapshot·Case Copilot 입력에는 넣지 않는다. AI 지원 계층은 허용된 구조화 피처와 참조 ID만 사용한다.
 12. AI 결과는 적용 명령이 아니라 제안 결과다. General API가 정책·권한·중복·revision을 검증한 뒤 저장한다.
 
 ## 4. 핵심 엔터티
