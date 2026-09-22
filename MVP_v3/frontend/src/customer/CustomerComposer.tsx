@@ -1,14 +1,19 @@
 import React, { FormEvent, useRef, useState } from 'react';
-import { Send, Sparkles } from 'lucide-react';
+import { ChevronUp, Send, Sparkles } from 'lucide-react';
 
 interface Props {
   busy: boolean;
   aiBusy: boolean;
   disabled?: boolean;
+  showEmergency?: boolean;
+  emergencyActive?: boolean;
+  guideOpen?: boolean;
+  onEmergency?: () => void;
+  onOpenRecoveryGuide?: () => void;
   onSend: (content: string, requestAi: boolean) => Promise<void>;
 }
 
-export const CustomerComposer: React.FC<Props> = ({ busy, aiBusy, disabled = false, onSend }) => {
+export const CustomerComposer: React.FC<Props> = ({ busy, aiBusy, disabled = false, showEmergency = false, emergencyActive = false, guideOpen = false, onEmergency, onOpenRecoveryGuide, onSend }) => {
   const [draft, setDraft] = useState('');
   const [requestAi, setRequestAi] = useState(true);
   const [error, setError] = useState('');
@@ -25,7 +30,10 @@ export const CustomerComposer: React.FC<Props> = ({ busy, aiBusy, disabled = fal
     finally { submittingRef.current = false; }
   };
   return <div className="customer-composer">
-    <button type="button" className={`customer-ai-request ${requestAi ? 'active' : ''}`} aria-pressed={requestAi} onClick={() => setRequestAi((value) => !value)} disabled={blocked}><Sparkles size={14}/>{requestAi ? 'AI 안전 안내 켜짐' : 'AI 안전 안내 끔'}<span>{requestAi ? '메시지를 보내면 AI가 안내합니다.' : '필요할 때 다시 켤 수 있습니다.'}</span></button>
+    <div className="customer-composer-toolbar">
+      <button type="button" className={`customer-ai-request ${requestAi ? 'active' : ''}`} aria-pressed={requestAi} onClick={() => setRequestAi((value) => !value)} disabled={blocked}><Sparkles size={14}/>{requestAi ? 'AI 안전 안내 켜짐' : 'AI 안전 안내 끔'}<span>{requestAi ? '메시지를 보내면 AI가 안내합니다.' : '필요할 때 다시 켤 수 있습니다.'}</span></button>
+      {showEmergency && (!emergencyActive ? <button type="button" className="customer-emergency-button" disabled={blocked} onClick={onEmergency}>이미 사기 당했어요</button> : <div className="customer-recovery-status" role="status"><span>피해 대응 안내 중</span>{!guideOpen && <button type="button" className="customer-recovery-open-button" disabled={blocked} onClick={onOpenRecoveryGuide} aria-label="구제 안내 열기"><ChevronUp size={14}/></button>}</div>)}
+    </div>
     <form onSubmit={(event: FormEvent) => { event.preventDefault(); void submit(); }}>
       <div className="customer-composer-input">
         <textarea rows={2} value={draft} disabled={disabled} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void submit(); } }} placeholder={disabled ? '종료된 상담입니다.' : '상대방이 요구한 내용이나 현재 상황을 입력하세요.'}/>
