@@ -16,7 +16,7 @@ from typing import Any, Mapping
 
 from contracts.user_text import user_text
 from contracts.ai_internal.case_copilot import (
-    BankCopilotSourceContext, CopilotLegacyFact, CopilotQuestionAnswer,
+    BankCopilotSourceContext, CopilotQuestionAnswer,
     CopilotVerification, CopilotMessage,
 )
 from contracts.question_target import decode_follow_up_target
@@ -115,9 +115,9 @@ SEMANTIC_FIELDS = {
 
 def merge_support_records(resources, facts, actions):
     data = resources.model_dump(mode="json")
-    new_facts = [{"fact_id": f["fact_id"], "field": SEMANTIC_FIELDS[f["semantic_key"]],
+    new_facts = [{"fact_id": f["fact_id"], "field": SEMANTIC_FIELDS.get(f["semantic_key"], f["semantic_key"].removeprefix("legacy.")),
                   "value": f["display_value"], "status": f["status"]}
-                 for f in data["facts"] if f["status"] in {"CONFIRMED", "PROPOSED"} and f["semantic_key"] in SEMANTIC_FIELDS]
+                 for f in data["facts"] if f["status"] in {"CONFIRMED", "PROPOSED"}]
     v2_ids = {f["fact_id"] for f in new_facts}
     confirmed = {f["field"] for f in new_facts if f["status"] == "CONFIRMED"}
     from .repository import normalize_target_field
@@ -199,22 +199,16 @@ def staff_context(records: list[CaseRecord]) -> list[str]:
             for r in [r for r in records if r.kind == kind][-6:]]
 
 
-def bank_source_context(case_id: str, resources, *, facts, questions, verifications, messages, diagnosis: Mapping[str, Any] | None = None) -> BankCopilotSourceContext:
+def bank_source_context(case_id: str, resources, *, questions, verifications, messages, diagnosis: Mapping[str, Any] | None = None) -> BankCopilotSourceContext:
     """Build the latest bank-safe Copilot bundle without exposing raw input text."""
     if resources.case_id != case_id:
         raise ValueError("Case context source mismatch")
     if any(fact.case_id != case_id for fact in resources.facts):
         raise ValueError("Case fact source mismatch")
-    for collection in (facts, questions, verifications, messages):
+    from .repository import normalize_target_field
+    for collection in (questions, verifications, messages):
         if any(item.get("case_id", case_id) != case_id for item in collection):
             raise ValueError("Case context record mismatch")
-    from .repository import normalize_target_field
-    legacy = [CopilotLegacyFact(
-        fact_id=item["fact_id"], case_id=case_id,
-        field=normalize_target_field(item.get("field", item.get("field_name", ""))),
-        value=str(item.get("value", "")), source=item.get("source", ""), status=item["status"],
-        **{key: item.get(key) for key in ("evidence_message_id", "source_question_id", "confirmed_by", "confirmed_at", "created_at")},
-    ) for item in facts[-100:]]
     answers = []
     for item in questions[-50:]:
         target = decode_follow_up_target(normalize_target_field(item["target_field"]))
@@ -237,7 +231,7 @@ def bank_source_context(case_id: str, resources, *, facts, questions, verificati
         ("context_signals", 1000), ("quality_reviews", 10),
     ))
     return BankCopilotSourceContext(
-        facts=resources.facts[-100:], legacy_facts=legacy, questions=answers, verifications=checks,
+        facts=resources.facts[-100:], questions=answers, verifications=checks,
         messages=[CopilotMessage(message_id=item["message_id"], case_id=case_id,
             actor_type=item["actor_type"], actor_user_id=item.get("actor_user_id"),
             actor_display_name=item.get("actor_display_name"), actor_role=item.get("actor_role"),
@@ -252,5 +246,5 @@ def bank_source_context(case_id: str, resources, *, facts, questions, verificati
         quality_reviews=list(current_diagnosis.get("quality_reviews") or [])[:10],
         analysis_revision=int(current_diagnosis.get("model_metadata", {}).get("context_revision", 1) or 1),
         truncated=structured_truncated or any(len(items) > limit for items, limit in (
-            (resources.facts, 100), (facts, 100), (questions, 50), (verifications, 20), (messages, 20))),
+            (resources.facts, 100), (questions, 50), (verifications, 20), (messages, 20))),
     )

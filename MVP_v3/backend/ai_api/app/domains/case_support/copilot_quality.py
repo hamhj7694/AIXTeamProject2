@@ -165,10 +165,6 @@ class CopilotQualityEvaluator:
                 text += f" {fact.value['amount_krw']}원"
             rows.append((fact.semantic_key, text, fact.source_kind, fact.status,
                          bool(fact.confirmed_by and fact.confirmed_at)))
-        for fact in context.legacy_facts:
-            if fact.status not in {"REJECTED", "SUPERSEDED"} and fact.evidence_message_id not in excluded_refs:
-                rows.append((fact.field, fact.value, fact.source, fact.status,
-                             bool(fact.confirmed_by and fact.confirmed_at)))
         for question in context.questions:
             if question.status == "ANSWERED" and question.answer_text and question.answer_message_id not in excluded_refs:
                 rows.append((question.canonical_scope, question.answer_text, "CUSTOMER_STATEMENT", "PROPOSED", False))

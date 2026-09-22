@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { CheckCircle2, ChevronRight, PanelRightClose, PanelRightOpen, Trash2 } from 'lucide-react';
-import type { CaseAction, CaseBundle, CaseFact, CaseSupportSnapshot, CustomerProgressItem, StoredCase, VerificationTask } from '../api/types';
+import type { CaseAction, CaseBundle, CaseSupportSnapshot, CustomerProgressItem, StoredCase, VerificationTask } from '../api/types';
 import { CustomerProgressEditor } from './CustomerProgressEditor';
 import { ContextEditing, EditableContext } from './EditableContext';
 import { ContextWorkspace } from './ContextWorkspace';
@@ -15,7 +15,6 @@ interface Props {
   onOpenParticipants: () => void;
   caseItem: StoredCase;
   bundle: CaseBundle;
-  facts: CaseFact[];
   support: CaseSupportSnapshot | null;
   open: boolean;
   onToggle: () => void;

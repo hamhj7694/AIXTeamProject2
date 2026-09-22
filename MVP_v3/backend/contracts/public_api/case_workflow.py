@@ -162,25 +162,6 @@ def question_option_items(question_id: str, options: list[str]) -> list[dict[str
     ]
 
 
-class PublicCaseFactResponse(PublicWorkflowModel):
-    fact_id: str
-    case_id: str
-    field: str
-    value: str
-    source: Literal["AI_EXTRACTED", "HUMAN_CONFIRMED", "VERIFIED", "UNRESOLVED"]
-    status: Literal["PROPOSED", "CONFIRMED", "UNRESOLVED"]
-    confidence: float = Field(ge=0, le=1)
-    evidence_message_id: str | None = None
-    source_question_id: str | None = None
-    confirmed_by: str | None = None
-    confirmed_at: str | None = None
-    created_at: str
-
-
-class PublicConfirmCaseFactRequest(PublicWorkflowModel):
-    confirmed_by: str = Field(min_length=1, max_length=80)
-
-
 class PublicPersonalNoteCreateRequest(PublicWorkflowModel):
     author_id: str = Field(min_length=1, max_length=80)
     content: str = Field(min_length=1, max_length=10_000)

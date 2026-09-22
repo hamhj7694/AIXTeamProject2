@@ -11,7 +11,7 @@ import json
 
 from general_api.app import main
 from general_api.app.clients.diagnosis_ai import HttpDiagnosisAiClient
-from general_api.app.domains.cases.case_retrieval import collect_records, retrieve_context
+from general_api.app.domains.cases.case_retrieval import collect_records, retrieve_context, merge_support_records
 
 
 async def run(case_id: str, live_ai: bool):
@@ -20,9 +20,11 @@ async def run(case_id: str, live_ai: bool):
         case = await repo.get(case_id)
         if not case:
             raise RuntimeError("Case not found")
+        resources = await main.case_context_v2_repository().list_resources(case_id)
+        facts, _ = merge_support_records(resources, [], [])
         records = collect_records(case_id, messages=await repo.list_messages(case_id),
                                   questions=await repo.list_customer_questions(case_id),
-                                  facts=await repo.list_case_facts(case_id),
+                                  facts=facts,
                                   verifications=await repo.list_verifications(case_id),
                                   staff=await main.read_staff_context_records(case_id))
         context = retrieve_context(case_id, "송금 개인정보 고객 답변 확인 담당자 업무", records)

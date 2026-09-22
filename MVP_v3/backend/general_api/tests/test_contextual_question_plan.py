@@ -84,6 +84,8 @@ class ContextualQuestionFilterTest(unittest.TestCase):
 class ContextualQuestionEndpointTest(unittest.IsolatedAsyncioTestCase):
     async def test_general_api_returns_novel_draft_and_sends_existing_state_to_ai(self) -> None:
         repository = AsyncMock()
+        for name in ("facts", "gaps", "suggestions", "tasks", "decisions", "observations", "requests"):
+            setattr(repository, f"_context_v2_{name}", {})
         repository.get.return_value = {
             "case_id": "CASE-CONTEXT", "initial_brief": "기관을 사칭한 연락을 받음",
             "status": "TRIAGE", "mode": "PREVENT", "fraud_type": "IMPERSONATION",
@@ -140,6 +142,8 @@ class ContextualQuestionEndpointTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_non_question_plan_keeps_original_first_thirty_known_facts(self) -> None:
         repository = AsyncMock()
+        for name in ("facts", "gaps", "suggestions", "tasks", "decisions", "observations", "requests"):
+            setattr(repository, f"_context_v2_{name}", {})
         repository.get.return_value = {
             "case_id": "CASE-FACTS", "initial_brief": "기관을 사칭한 연락을 받음",
             "status": "TRIAGE", "mode": "PREVENT", "fraud_type": "IMPERSONATION",
@@ -149,6 +153,18 @@ class ContextualQuestionEndpointTest(unittest.IsolatedAsyncioTestCase):
             for index in range(35)
         ]
         repository.list_case_facts.return_value = facts
+        repository._context_v2_facts = {
+            ("CASE-FACTS", f"fact-{index}"): {
+                "fact_id": f"fact-{index}", "case_id": "CASE-FACTS",
+                "semantic_key": f"legacy.field_{index}", "display_label": f"field_{index}",
+                "value": {"value": f"value_{index}"}, "display_value": f"value_{index}",
+                "source_kind": "STAFF_OBSERVATION", "status": "CONFIRMED", "confidence": 1.0,
+                "evidence_refs": [], "visibility": "BANK_INTERNAL", "version": 1,
+                "confirmed_by": "staff", "confirmed_at": "2026-01-01T00:00:00Z",
+                "created_at": "2026-01-01T00:00:00Z", "updated_at": "2026-01-01T00:00:00Z",
+            }
+            for index in range(35)
+        }
         repository.list_verifications.return_value = []
         repository.list_actions.return_value = []
         repository.list_messages.return_value = []

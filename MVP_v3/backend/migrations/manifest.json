@@ -27,5 +27,6 @@
   "voice/025_retire_transcript_storage.sql",
   "attachments/026_retire_attachments.sql",
   "facts/027_migrate_legacy_case_facts_to_v2.sql",
-  "facts/028_retire_legacy_case_facts.sql"
+  "facts/028_retire_legacy_case_facts.sql",
+  "transactions/029_normalize_case_transaction_amounts.sql"
 ]

@@ -30,13 +30,21 @@ RECONCILABLE = frozenset({
     '009_case_attachments.sql', '009_mysql_parity_workflow.sql',
     '010_case_fact_question_link.sql', '011_message_idempotency.sql',
 })
-REPAIR_FILES = ('021_create_case_transactions.sql', '024_bank_staff_role_schema_alignment.sql', '025_retire_transcript_storage.sql')
+REPAIR_FILES = (
+    '021_create_case_transactions.sql',
+    '024_bank_staff_role_schema_alignment.sql',
+    '025_retire_transcript_storage.sql',
+    '029_normalize_case_transaction_amounts.sql',
+)
 HISTORICAL_RECORDS = {'021_bank_staff_assignment_fields.sql'}
 ALLOWED_DRIFT = {
     'tables.case_transactions',
     'tables.transcript_segments',
     'tables.bank_staff_directory.columns.assignment_role.COLUMN_TYPE',
     'tables.bank_staff_directory.checks.chk_bank_staff_assignment_role.clause',
+    'tables.case_transactions.columns.amount.COLUMN_TYPE',
+    'tables.case_transactions.checks.chk_case_transactions_type',
+    'tables.case_transactions.checks.chk_case_transactions_amount',
 }
 
 
@@ -76,8 +84,12 @@ def validate_plan(expected: dict, actual: dict, applied: set[str]) -> list[dict]
     if any(d['path'] not in ALLOWED_DRIFT for d in delta):
         raise RuntimeError('Unreviewed schema drift: '+json.dumps(delta, ensure_ascii=False, default=str))
     for item in delta:
-        if item['path'].endswith('COLUMN_TYPE') and item.get('actual') != 'varchar(24)':
-            raise RuntimeError('Only the reviewed varchar(24) -> varchar(32) widening is allowed')
+        if item['path'].endswith('COLUMN_TYPE'):
+            if item['path'] == 'tables.case_transactions.columns.amount.COLUMN_TYPE':
+                if item.get('actual') != 'decimal(19,2)':
+                    raise RuntimeError('Only the reviewed DECIMAL(19,2) -> BIGINT transaction normalization is allowed')
+            elif item.get('actual') != 'varchar(24)':
+                raise RuntimeError('Only the reviewed varchar(24) -> varchar(32) widening is allowed')
         if item['path'] == 'tables.case_transactions' and item['kind'] != 'missing':
             raise RuntimeError('Existing transaction-table drift requires separate review')
     return delta

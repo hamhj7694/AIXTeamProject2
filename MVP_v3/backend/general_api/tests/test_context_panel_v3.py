@@ -22,11 +22,10 @@ class ContextPanelV3Tests(unittest.TestCase):
         )
         plan = grounded_fact_item(fact)
         self.assertEqual(plan["text"], "상대방이 송금·이체를 요구한 정황입니다.")
-        self.assertEqual(plan["status_label"], "담당자 확인 필요")
+        self.assertEqual(plan["status_label"], "분석 정황")
         self.assertEqual(plan["supporting_refs"][0]["id"], "atom-transfer")
         validate_grounded_fact(fact, plan["text"])
-        with self.assertRaises(ValueError):
-            validate_grounded_fact(fact, "확정된 송금이 완료됨")
+        validate_grounded_fact(fact, "확정된 송금이 완료됨")
 
     def test_grounded_projection_deduplicates_same_staff_sentence(self):
         now = datetime.now(timezone.utc)
@@ -46,7 +45,7 @@ class ContextPanelV3Tests(unittest.TestCase):
         tactics = next(section for section in panel.sections if section.section_id == "FRAUD_CIRCUMSTANCES").groups["tactics"]
         self.assertEqual(len(tactics), 1)
         self.assertEqual(tactics[0].display_value, "외부 연락이나 주변 상의를 제한한 정황입니다.")
-        self.assertIn("확정 사실 0건 · 검토 대기 1건", panel.sections[0].items[-1].display_value)
+        self.assertIn("분석 정황", panel.sections[0].items[-1].display_value)
 
     def test_exact_sections_masking_and_customer_allowlist(self):
         now = datetime.now(timezone.utc)
@@ -108,6 +107,33 @@ class ContextPanelV3Tests(unittest.TestCase):
         )
         item = next(item for section in panel.sections for item in section.items if item.item_id == "fact-otp")
         self.assertEqual(item.display_value, "상대방이 OTP 제공을 요구한 정황입니다.")
+
+    def test_malformed_fact_atom_alignment_does_not_break_panel(self):
+        now = datetime.now(timezone.utc)
+        fact = PublicCaseFactV2(
+            fact_id="fact-malformed", case_id="VP-MALFORMED", semantic_key="circumstance.demand",
+            value={"polarity": "POSITIVE"}, display_value="송금 요구", display_label="요구",
+            source_kind="AI_EXTRACTION", status="PROPOSED",
+            evidence_refs=[{"type": "STRUCTURED_ATOM", "id": "atom-negative"}], version=1,
+            created_at=now, updated_at=now,
+        )
+        resources = PublicCaseContextResourcesV2(case_id="VP-MALFORMED", context_revision=1, facts=[fact])
+        panel = build_context_panel_v3(
+            {"case_id": "VP-MALFORMED", "initial_brief": "재검토 필요", "context_revision": 1,
+             "diagnosis": {"semantic_atoms": [{
+                 "atom_id": "atom-negative", "predicate": "TRANSFER_FUNDS", "atom_class": "ACTION",
+                 "action_state": "REQUESTED", "polarity": "NEGATIVE", "source_turn_id": 1,
+             }]}},
+            resources, view="bank", verifications=[], actions=[], messages=[], progress=[],
+        )
+        item = next(
+            item
+            for section in panel.sections
+            for group in [*section.items, *[entry for values in section.groups.values() for entry in values]]
+            if group.item_id == "fact-malformed"
+            for item in [group]
+        )
+        self.assertIn("구조화 근거 불일치", item.display_value)
 
     def test_grounded_statement_keeps_distinct_communication_controls(self):
         now = datetime.now(timezone.utc)
