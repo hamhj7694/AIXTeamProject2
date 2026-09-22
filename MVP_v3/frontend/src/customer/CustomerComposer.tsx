@@ -1,15 +1,17 @@
 import React, { FormEvent, useRef, useState } from 'react';
 import { Send, Sparkles } from 'lucide-react';
+import { usePersistentDraft } from '../draftStorage';
 
 interface Props {
   busy: boolean;
   aiBusy: boolean;
   disabled?: boolean;
   onSend: (content: string, requestAi: boolean) => Promise<void>;
+  draftStorageKey?: string;
 }
 
-export const CustomerComposer: React.FC<Props> = ({ busy, aiBusy, disabled = false, onSend }) => {
-  const [draft, setDraft] = useState('');
+export const CustomerComposer: React.FC<Props> = ({ busy, aiBusy, disabled = false, onSend, draftStorageKey }) => {
+  const [draft, setDraft] = usePersistentDraft(draftStorageKey);
   const [requestAi, setRequestAi] = useState(true);
   const [error, setError] = useState('');
   const submittingRef = useRef(false);

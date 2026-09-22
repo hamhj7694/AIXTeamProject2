@@ -11,7 +11,7 @@ import aiomysql
 from pymysql.err import IntegrityError
 from request_trace import trace_stage
 
-from .repository import CaseCreationConflictError, CaseVersionConflictError, normalize_target_field, answer_receipt
+from .repository import CaseCreationConflictError, CaseVersionConflictError, normalize_target_field, answer_receipt, validate_transaction_record
 from .member_roles import case_role_for_member
 from .legacy_fact_compat import DISPLAY_LABELS, legacy_row_from_v2, semantic_for_legacy_field, v2_payload_from_legacy
 from contracts.question_target import canonical_question_scope, is_follow_up_target, follow_up_registration_allowed
@@ -70,9 +70,10 @@ class MySqlCaseRepository:
         async with pool.acquire() as connection, connection.cursor(aiomysql.DictCursor) as cursor:
             await cursor.execute("SELECT * FROM case_transactions WHERE case_id=%s ORDER BY transaction_at DESC, id DESC", (case_id,))
             rows = await cursor.fetchall()
-        return [{**row, "transaction_at": _utc_iso(row["transaction_at"]), "created_at": _utc_iso(row["created_at"]), "updated_at": _utc_iso(row["updated_at"]), "amount": float(row["amount"])} for row in rows]
+        return [{**row, "transaction_at": _utc_iso(row["transaction_at"]), "created_at": _utc_iso(row["created_at"]), "updated_at": _utc_iso(row["updated_at"]), "amount": int(row["amount"])} for row in rows]
 
     async def create_transaction(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]:
+        validate_transaction_record(record)
         pool = await self._get_pool()
         now = datetime.now(timezone.utc).replace(tzinfo=None)
         async with pool.acquire() as connection:
@@ -90,6 +91,10 @@ class MySqlCaseRepository:
     async def update_transaction(self, case_id: str, transaction_id: int, changes: dict[str, Any]) -> dict[str, Any] | None:
         allowed = ("transaction_type", "transaction_at", "amount", "account_number", "counterparty_name", "counterparty_account", "bank_name", "memo", "source")
         fields = [(key, _utc_naive(changes[key]) if key == "transaction_at" else changes[key]) for key in allowed if key in changes]
+        existing = next((row for row in await self.list_transactions(case_id) if row["id"] == transaction_id), None)
+        if existing is None:
+            return None
+        validate_transaction_record({**existing, **changes})
         pool = await self._get_pool()
         async with pool.acquire() as connection:
             try:

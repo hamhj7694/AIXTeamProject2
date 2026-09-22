@@ -1,4 +1,4 @@
-import type { CaseFact, DiagnosisEvent, StoredCase, VerificationTask } from './api/types';
+import type { DiagnosisEvent, StoredCase, VerificationTask } from './api/types';
 
 export type CaseState = 'LOSS' | 'SUSPECTED' | 'RESOLVED';
 
@@ -94,6 +94,4 @@ export const riskReasons = (item: StoredCase) => unique([
 ]).slice(0, 4);
 export const recommendedSteps = (item: StoredCase) => unique(item.diagnosis.context?.recommended_next_steps ?? []);
 
-export const confirmedFacts = (facts: CaseFact[]) => facts.filter((fact) => fact.status === 'CONFIRMED');
-export const proposedFacts = (facts: CaseFact[]) => facts.filter((fact) => fact.status !== 'CONFIRMED');
 export const activeVerifications = (tasks: VerificationTask[]) => tasks.filter((task) => !['COMPLETED', 'FAILED'].includes(task.status));

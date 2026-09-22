@@ -26,10 +26,13 @@ def legacy_gap_details(action):
     }
 
 
-def build_workspace(resources, facts, actions, questions, gap_history=()):
+def build_workspace(resources, actions, questions, gap_history=()):
     data = resources.model_dump(mode="json")
     reviewed = {s["dedupe_key"] for s in data["ai_suggestions"]}
-    known = {normalize_target_field(f["field"]) for f in facts if f.get("status") == "CONFIRMED"}
+    # Inference-first mode: every active Fact is usable context.  Legacy status
+    # values remain in storage for compatibility but are not a workflow gate.
+    active_facts = [f for f in data["facts"] if f.get("status") not in {"REJECTED", "SUPERSEDED"}]
+    known = {normalize_target_field(f["semantic_key"]) for f in active_facts}
     by_field = {}
     for question in questions:
         by_field.setdefault(normalize_target_field(question.get("target_field") or ""), []).append(question)
@@ -56,11 +59,13 @@ def build_workspace(resources, facts, actions, questions, gap_history=()):
             seen.add(field)
         if f"legacy-checklist:{action['action_id']}" not in reviewed:
             legacy_suggestions.append({"id": action["action_id"], "title": user_text(action.get("note") or "검토가 필요한 확인 항목"), "status": status})
-    legacy_facts = [{"id": f["fact_id"], "title": user_text(f["field"]), "value": user_text(str(f.get("value", ""))), "status": f.get("status"), "confirmed_at": f.get("confirmed_at")} for f in facts]
     return {
         "case_id": data["case_id"], "context_revision": data["context_revision"],
-        "confirmed_facts": [f for f in data["facts"] if f["status"] == "CONFIRMED"],
-        "proposed_facts": [f for f in data["facts"] if f["status"] == "PROPOSED"],
+        # Keep the old response fields for API compatibility. New clients use
+        # context_facts and do not branch on PROPOSED/CONFIRMED.
+        "context_facts": active_facts,
+        "confirmed_facts": [],
+        "proposed_facts": active_facts,
         "open_gaps": [g for g in data["gaps"] if g["status"] not in {"RESOLVED", "DISMISSED"}],
         "archived_gaps": [g for g in data["gaps"] if g["status"] in {"RESOLVED", "DISMISSED"}],
         "gap_history": [{**item, "before": item.get("before").model_dump(mode="json") if hasattr(item.get("before"), "model_dump") else item.get("before"), "after": item.get("after").model_dump(mode="json") if hasattr(item.get("after"), "model_dump") else item.get("after"), "created_at": item.get("created_at").isoformat() if hasattr(item.get("created_at"), "isoformat") else item.get("created_at")} for item in gap_history if item.get("operation") in {"EDIT", "SET_DISMISSED", "SET_RESOLVED"}],
@@ -69,7 +74,7 @@ def build_workspace(resources, facts, actions, questions, gap_history=()):
         "active_tasks": [t for t in data["tasks"] if t["status"] not in {"COMPLETED", "CANCELLED"}],
         "archived_tasks": [t for t in data["tasks"] if t["status"] in {"COMPLETED", "CANCELLED"}],
         "recent_decisions": sorted(data["decisions"], key=lambda d: d["created_at"], reverse=True),
-        "legacy_facts": legacy_facts, "legacy_suggestions": legacy_suggestions,
+        "legacy_suggestions": legacy_suggestions,
         "legacy_gaps": legacy_gaps, "legacy_records": legacy_records,
         "legacy_archived_suggestions": legacy_archived,
     }

@@ -30,6 +30,17 @@ def normalize_target_field(value: str) -> str:
     return _TARGET_FIELD_ALIASES.get(normalized.upper(), normalized.lower())
 
 
+TRANSACTION_TYPES = {"TRANSFER_OUT", "RETURN_IN", "CANCELLED"}
+
+
+def validate_transaction_record(record: dict[str, Any]) -> None:
+    if record.get("transaction_type") not in TRANSACTION_TYPES:
+        raise ValueError("INVALID_TRANSACTION_TYPE")
+    amount = record.get("amount")
+    if isinstance(amount, bool) or not isinstance(amount, int) or amount < 0:
+        raise ValueError("TRANSACTION_AMOUNT_MUST_BE_KRW_INTEGER")
+
+
 class CaseRepository(Protocol):
     async def list_transactions(self, case_id: str) -> list[dict[str, Any]]: ...
     async def create_transaction(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]: ...
@@ -124,6 +135,7 @@ class InMemoryCaseRepository:
         self._bank_staff: list[dict[str, Any]] = []
         self._presence: list[dict[str, Any]] = []
         self._customer_questions: list[dict[str, Any]] = []
+        self._transactions: list[dict[str, Any]] = []
         self._case_facts: list[dict[str, Any]] = []
         # Compatibility mirror only; authoritative fact records live in V2.
         self._context_v2_facts: dict[tuple[str, str], PublicCaseFactV2] = {}
@@ -151,6 +163,7 @@ class InMemoryCaseRepository:
         self._members = [item for item in self._members if item.get("case_id") != case_id]
         self._presence = [item for item in self._presence if item.get("case_id") != case_id]
         self._customer_questions = [item for item in self._customer_questions if item.get("case_id") != case_id]
+        self._transactions = [item for item in self._transactions if item.get("case_id") != case_id]
         self._case_facts = [item for item in self._case_facts if item.get("case_id") != case_id]
         self._context_v2_facts = {key: item for key, item in self._context_v2_facts.items() if key[0] != case_id}
         self._context_v2_requests = {key: item for key, item in self._context_v2_requests.items() if key[0] != case_id}
@@ -510,6 +523,37 @@ class InMemoryCaseRepository:
 
     async def list_actions(self, case_id: str) -> list[dict[str, Any]]:
         return [deepcopy(item) for item in self._actions if item["case_id"] == case_id]
+
+    async def list_transactions(self, case_id: str) -> list[dict[str, Any]]:
+        rows = [item for item in self._transactions if item["case_id"] == case_id]
+        return deepcopy(sorted(rows, key=lambda item: (item["transaction_at"], item["id"]), reverse=True))
+
+    async def create_transaction(self, case_id: str, record: dict[str, Any]) -> dict[str, Any]:
+        async with self._lock:
+            if not any(item["case_id"] == case_id for item in self._records):
+                raise KeyError(case_id)
+            validate_transaction_record(record)
+            now = datetime.now(timezone.utc).isoformat()
+            next_id = max((int(item["id"]) for item in self._transactions), default=0) + 1
+            transaction = {
+                "id": next_id, "case_id": case_id, **record,
+                "created_at": now, "updated_at": now,
+            }
+            self._transactions.append(transaction)
+            self._touch_case(case_id, now, semantic=False)
+            return deepcopy(transaction)
+
+    async def update_transaction(self, case_id: str, transaction_id: int, changes: dict[str, Any]) -> dict[str, Any] | None:
+        async with self._lock:
+            transaction = next((item for item in self._transactions if item["case_id"] == case_id and item["id"] == transaction_id), None)
+            if transaction is None:
+                return None
+            candidate = {**transaction, **changes}
+            validate_transaction_record(candidate)
+            transaction.update(changes)
+            transaction["updated_at"] = datetime.now(timezone.utc).isoformat()
+            self._touch_case(case_id, transaction["updated_at"], semantic=False)
+            return deepcopy(transaction)
 
     async def update_action(self, case_id: str, action_id: str, status: str, updated_by: str, note: str | None = None, *, expected_version: int | None = None, title: str | None = None, visibility: str | None = None) -> dict[str, Any]:
         async with self._lock:

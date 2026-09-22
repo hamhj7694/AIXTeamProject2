@@ -23,7 +23,7 @@ from scripts.migration_manifest import MIGRATIONS_DIR, ordered_migrations, migra
 class SchemaToolUnitTest(unittest.TestCase):
     def test_manifest_preserves_history_order_and_excludes_rollback(self):
         paths = ordered_migrations()
-        self.assertEqual(len(paths), 29)
+        self.assertEqual(len(paths), 30)
         self.assertEqual([p.name for p in paths], sorted(p.name for p in paths))
         self.assertEqual(len({p.name for p in paths}), len(paths))
         self.assertFalse(list(MIGRATIONS_DIR.glob('*.sql')))

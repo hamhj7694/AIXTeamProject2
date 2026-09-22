@@ -65,10 +65,10 @@ const typedValue = (option: FactOption, raw: string): Record<string, unknown> =>
 const formatContextUpdatedAt = (value: string | null | undefined, fallback: string) => {
   const parsed = new Date(value || fallback);
   if (Number.isNaN(parsed.getTime())) return '최종 반영 시각 확인 필요';
-  return `${new Intl.DateTimeFormat('ko-KR', {
+  return `업데이트 : ${new Intl.DateTimeFormat('ko-KR', {
     year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
-    hour12: false, timeZone: 'Asia/Seoul',
-  }).format(parsed)} 최종 반영`;
+    hour12: true, timeZone: 'Asia/Seoul',
+  }).format(parsed)}`;
 };
 
 export const ContextPanelV3: React.FC<Props> = (props) => {
@@ -276,7 +276,7 @@ export const ContextPanelV3: React.FC<Props> = (props) => {
   const taskEditForm = taskEdit && <form className="context-fact-form context-inline-create-form context-task-form" onSubmit={(event) => { event.preventDefault(); void saveTaskEdit(); }}><header><strong>업무 수정</strong><button type="button" onClick={() => { setTaskEdit(null); setTaskFormError(''); }} aria-label="업무 수정 닫기"><X size={14}/></button></header><label>업무 제목<input value={taskEdit.title} maxLength={300} onChange={(event) => { setTaskEdit({ ...taskEdit, title: event.target.value }); setTaskFormError(''); }}/></label><label>업무 내용<textarea value={taskEdit.description} maxLength={3000} rows={3} onChange={(event) => { setTaskEdit({ ...taskEdit, description: event.target.value }); setTaskFormError(''); }}/></label>{taskFormError && <p className="context-inline-form-error" role="alert">{taskFormError}</p>}<footer><button type="button" onClick={() => { setTaskEdit(null); setTaskFormError(''); }}>취소</button><button type="submit" disabled={busy || !taskEdit.title.trim() || !taskEdit.description.trim()}>수정 저장</button></footer></form>;
   const projectionLabel = visibleData?.projection_status === 'CURRENT' ? '최신' : visibleData?.projection_status === 'UPDATING' ? '갱신 중' : visibleData?.projection_status === 'STALE' ? '오래된 정보' : '확인 필요';
   return <aside className={`context-panel context-panel-v3 ${props.open ? 'is-open' : ''}`} aria-label="사건 맥락 V3">
-    <div className="context-header context-v3-sticky-header"><div><p className="eyebrow">사건 정보</p><h2>사건 맥락</h2>{visibleData && <small>{formatContextUpdatedAt(visibleData.updated_at, props.caseItem.updated_at)} · {projectionLabel}</small>}</div><div><button type="button" className="context-open context-header-toggle" onClick={props.onToggle} aria-label="사건 맥락 닫기"><PanelRightClose size={17}/></button></div></div>
+    <div className="context-header context-v3-sticky-header"><div><h2>사건 맥락</h2>{visibleData && <small>{formatContextUpdatedAt(visibleData.updated_at, props.caseItem.updated_at)}</small>}</div><div><button type="button" className="context-open context-header-toggle" onClick={props.onToggle} aria-label="사건 맥락 닫기"><PanelRightClose size={17}/></button></div></div>
     {visibleData && <ContextQuickNav
       sections={normalizedSections} activeSection={activeSection} onNavigate={navigateToSection}
     />}

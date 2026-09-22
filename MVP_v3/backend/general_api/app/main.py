@@ -59,6 +59,7 @@ from contracts.public_api.case_context_v2 import (
     PublicCaseFactV2,
     PublicCaseGapV2,
     PublicCaseTaskV2,
+    PublicContextWorkspaceResponse,
     PublicContextPanelV3,
     PublicCompleteTaskV2Request,
     PublicCreateDecisionV2Request,
@@ -83,8 +84,6 @@ from contracts.public_api.case_activity import (
 from contracts.public_api.case_workflow import (
     PublicActionResponse,
     PublicAnswerCustomerQuestionRequest,
-    PublicCaseFactResponse,
-    PublicConfirmCaseFactRequest,
     PublicPersonalNoteCreateRequest,
     PublicPersonalNoteUpdateRequest,
     PublicPersonalNoteResponse,
@@ -147,6 +146,11 @@ from .domains.cases.mysql_repository import MySqlCaseRepository
 from .domains.cases.context_v3.semantic_keys import ALLOWED_SEMANTIC_KEYS, SEMANTIC_LABELS, proposal_dedupe_key
 from .domains.cases.context_v3.panel import build_context_panel_v3, build_summary_projection
 from .domains.cases.context_v3.atom_fact_projection import project_semantic_atoms_to_fact_candidates
+from .domains.cases.transaction_conflict import (
+    TRANSACTION_AMOUNT_CONFLICT_TARGET,
+    conflict_client_request_id,
+    detect_transfer_amount_conflict,
+)
 from .domains.cases.service import AnalyzeCaseService, InvalidCaseTransitionError, transition_case
 
 
@@ -172,6 +176,7 @@ AUTONOMOUS_P0_QUESTION_FIELDS = {
 BASELINE_QUESTION_FIELDS = AUTONOMOUS_P0_QUESTION_FIELDS | {"claimed_organization", "impersonated_institution"}
 MANUAL_BASIC_QUESTION_FIELDS = AUTONOMOUS_P0_QUESTION_FIELDS | {
     "transfer_purpose", "claimed_organization", "incident_claim",
+    TRANSACTION_AMOUNT_CONFLICT_TARGET,
 }
 AI_CHECKLIST_ACTION_PREFIX = "AI_CHECKLIST:"
 CURRENT_BANK_USER_ID = os.getenv("CURRENT_BANK_USER_ID", "mvp-v3-bank-operator")
@@ -635,7 +640,11 @@ async def seed_initial_context_facts(case_id: str) -> None:
         candidates.append(("transfer.requested.amount", "요구 금액", {"amount_krw": amount, "currency": "KRW"}, f"{amount:,}원 요구"))
     actual_amount = int(float(case.get("actual_loss_amount_krw") or 0))
     if transfer == "YES" and actual_amount > 0:
-        candidates.append(("transfer.actual.amount", "실제 이체 금액", {"amount_krw": actual_amount, "currency": "KRW"}, f"{actual_amount:,}원 이체"))
+        candidates.append((
+            "transfer.actual.amount", "실제 이체 금액",
+            {"amount_krw": actual_amount, "currency": "KRW", "direction": "OUT", "amount_role": "TRANSFER_OUT"},
+            f"{actual_amount:,}원 이체",
+        ))
     requested_codes = {str(code).upper() for code in context_features.get("requested_action_codes", [])}
     requested_action_facts = {
         "REQUEST_AUTH_INFO": ("exposure.authentication_information", "인증정보 노출", {"status": "REQUESTED"}, "인증정보 제공 요구"),
@@ -812,6 +821,42 @@ def build_customer_question_candidates(case: dict, queued: list[dict]) -> list[P
         for target_field, text, reason, customer_explanation, priority, options in fields
         if target_field not in already_handled
     ]
+
+
+def build_transaction_amount_conflict_candidate(
+    conflict: dict,
+) -> PublicQuestionCandidateResponse:
+    """Build a clarification question; it never changes the transaction ledger."""
+    reported = int(conflict["reported_amount_krw"])
+    existing = ", ".join(f"{int(amount):,}원" for amount in conflict["existing_amounts_krw"])
+    same_amount = conflict.get("conflict_kind") == "SAME_AMOUNT_AMBIGUOUS"
+    question_text = (
+        f"기존에 {reported:,}원 송금 기록이 있습니다. 이번 말씀은 기존 송금을 다시 말한 건가요, "
+        f"아니면 같은 금액 {reported:,}원을 추가로 송금한 건가요?"
+        if same_amount else
+        f"앞서 {existing} 송금 기록이 확인됐습니다. 이번에 말씀하신 {reported:,}원은 "
+        "별도로 추가 송금한 금액인가요, 아니면 금액을 잘못 말씀하신 건가요?"
+    )
+    options = (
+        ["기존 송금을 다시 말했어요", "같은 금액을 추가로 송금했어요", "잘 모르겠어요"]
+        if same_amount else
+        ["별도로 추가 송금했어요", "금액을 잘못 말했어요", "잘 모르겠어요"]
+    )
+    return PublicQuestionCandidateResponse(
+        question_id="candidate-transaction-amount-conflict",
+        target_field=TRANSACTION_AMOUNT_CONFLICT_TARGET,
+        question_text=question_text,
+        reason=(
+            "기존 송금과 같은 금액이어서 기존 거래 재진술인지 추가 송금인지 확인이 필요합니다."
+            if same_amount else
+            "기존 송금 기록과 고객 발화의 금액이 달라 추가 확인이 필요합니다."
+        ),
+        customer_explanation="기존 기록을 보존한 채 추가 송금인지 금액 착오인지 확인합니다.",
+        priority="P0",
+        options=options,
+        answer_mode="CHOICE_OR_TEXT",
+        allow_free_text=True,
+    )
 
 
 def build_question_recommendation_context(facts: list[dict], questions: list[dict], case: dict | None = None) -> dict:
@@ -1006,12 +1051,12 @@ async def _read_case_support_source(case_id: str, *, attempts: int = 3) -> tuple
         if case is None:
             raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."})
         before = int(case.get("context_revision", 1))
-        facts, questions, verifications, actions = await asyncio.gather(
-            repository.list_case_facts(case_id), repository.list_customer_questions(case_id),
+        questions, verifications, actions = await asyncio.gather(
+            repository.list_customer_questions(case_id),
             repository.list_verifications(case_id), repository.list_actions(case_id),
         )
         resources = await case_context_v2_repository().list_resources(case_id)
-        facts, actions = merge_support_records(resources, facts, actions)
+        facts, actions = merge_support_records(resources, [], actions)
         latest = await repository.get(case_id)
         if latest is None:
             raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."})
@@ -1098,13 +1143,12 @@ async def get_case_support_snapshot(case_id: str) -> PublicCaseSupportSnapshotRe
     case = await repository.get(case_id)
     if case is None:
         raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."})
-    facts = await repository.list_case_facts(case_id)
     questions = await repository.list_customer_questions(case_id)
     verifications = await repository.list_verifications(case_id)
     actions = await repository.list_actions(case_id)
     try:
         resources = await case_context_v2_repository().list_resources(case_id)
-        facts, actions = merge_support_records(resources, facts, actions)
+        facts, actions = merge_support_records(resources, [], actions)
         payload = await service.ai_client.build_case_support_snapshot(
             _case_support_ai_input(case_id, case, facts, questions, verifications, actions)
         )
@@ -1130,10 +1174,24 @@ async def list_customer_question_candidates(case_id: str) -> list[PublicQuestion
     candidates = list(snapshot.recommended_questions) if snapshot.available else []
     represented = {normalize_target_field(item.target_field) for item in candidates}
     candidates.extend(item for item in fallback_candidates if normalize_target_field(item.target_field) not in represented)
+    # A customer may accidentally report a different amount after a transfer
+    # has already been recorded.  Keep the recorded transaction unchanged and
+    # surface one explicit clarification question instead of guessing.
+    messages = await repository.list_messages(case_id)
+    transactions = await repository.list_transactions(case_id)
+    if not isinstance(messages, list):
+        messages = []
+    if not isinstance(transactions, list):
+        transactions = []
+    conflicts = [
+        conflict for message in messages
+        if (conflict := detect_transfer_amount_conflict(message, transactions)) is not None
+    ]
+    if conflicts and TRANSACTION_AMOUNT_CONFLICT_TARGET not in represented:
+        candidates.append(build_transaction_amount_conflict_candidate(conflicts[-1]))
     # 최신 typed 상태를 B의 공통 정책에 연결한다. General에서 충분성을 재판단하지 않는다.
-    facts = await repository.list_case_facts(case_id)
     resources = await case_context_v2_repository().list_resources(case_id)
-    facts, _ = merge_support_records(resources, facts, [])
+    facts, _ = merge_support_records(resources, [], [])
     adapter = CaseSnapshotAiAdapter()
     eligibility = adapter.question_eligibilities(adapter.adapt(
         _case_support_ai_input(case_id, case, facts, queued, [], [])
@@ -1151,11 +1209,13 @@ async def list_customer_question_candidates(case_id: str) -> list[PublicQuestion
     ):
         filtered = [item for item in filtered if item.target_field != "claimed_organization"]
     stage_order = {
+        TRANSACTION_AMOUNT_CONFLICT_TARGET: 0,
         "transfer_status": 1, "authentication_information_exposure": 1,
         "personal_information_exposure": 1, "remote_control_app": 1,
         "transfer_purpose": 2, "claimed_organization": 3, "incident_claim": 3,
     }
     target_order = {
+        TRANSACTION_AMOUNT_CONFLICT_TARGET: 0,
         "transfer_status": 0, "authentication_information_exposure": 1,
         "personal_information_exposure": 2, "remote_control_app": 3,
         "transfer_purpose": 4, "claimed_organization": 5, "incident_claim": 6,
@@ -1214,7 +1274,8 @@ async def sync_ai_checklist_items(case_id: str, snapshot: PublicCaseSupportSnaps
         (normalize_target_field(item.target_field), item.priority, item.description)
         for item in snapshot.unresolved_items[:12]
     ] if snapshot.available else []
-    facts = await repository.list_case_facts(case_id)
+    resources = await case_context_v2_repository().list_resources(case_id)
+    facts, _ = merge_support_records(resources, [], [])
     candidates.extend(
         (
             normalize_target_field(str(item.get("field", ""))),
@@ -1315,6 +1376,177 @@ async def _persist_structured_answer_fact(question: dict, answered: dict, answer
     )
 
 
+async def _persist_transaction_amount_conflict(case_id: str, message: dict) -> dict | None:
+    """Record a proposed conflict without mutating the confirmed transaction ledger."""
+    try:
+        transactions = await repository.list_transactions(case_id)
+        if not isinstance(transactions, list):
+            transactions = []
+        conflict = detect_transfer_amount_conflict(message, transactions)
+        if conflict is None:
+            return None
+        await case_context_v2_repository().create_fact(case_id, {
+            "client_request_id": conflict_client_request_id(case_id, conflict),
+            "semantic_key": "transfer.amount_conflict",
+            "display_label": "송금 금액 불일치",
+            "value": {
+                "reported_amount_krw": conflict["reported_amount_krw"],
+                "existing_amounts_krw": conflict["existing_amounts_krw"],
+                "conflict_kind": conflict.get("conflict_kind", "DIFFERENT_AMOUNT"),
+                "existing_transaction_ids": conflict["existing_transaction_ids"],
+                "reported_message_id": conflict["reported_message_id"],
+                "reported_at": conflict.get("reported_at"),
+            },
+            "display_value": (
+                f"기존 {', '.join(f'{int(amount):,}원' for amount in conflict['existing_amounts_krw'])} "
+                f"· 새 발화 {int(conflict['reported_amount_krw']):,}원 · "
+                f"{'동일 금액 추가 여부 확인 필요' if conflict.get('conflict_kind') == 'SAME_AMOUNT_AMBIGUOUS' else '금액 차이 확인 필요'}"
+            ),
+            "confidence": None,
+            "evidence_refs": [{"type": "MESSAGE", "id": conflict["reported_message_id"]}],
+            "visibility": "BANK_INTERNAL",
+        }, message.get("actor_user_id") or "transaction-conflict-detector", source_kind="CUSTOMER_STATEMENT")
+        return conflict
+    except Exception:
+        # A proposal is additive.  Message persistence and the authoritative
+        # transaction ledger must remain available if Context V2 is unavailable.
+        logger.exception("Could not persist transaction amount conflict for %s", case_id)
+        return None
+
+
+def _classify_transaction_conflict_answer(answer_text: str) -> str:
+    """Return ADDITIONAL, CORRECTION, or UNCERTAIN; ambiguous text stays open."""
+    compact = re.sub(r"\s+", "", answer_text or "").casefold()
+    # Negation must be evaluated before the positive ``추가/별도`` cues.
+    # Otherwise “추가 송금이 아니에요” could be misclassified as ADDITIONAL.
+    negative_additional = (
+        bool(re.search(r"추가송금(?:이|은|을|건)?(?:아니|아닌|아닙)", compact))
+        or ("추가로보낸게" in compact and "아니" in compact)
+        or bool(re.search(r"별도송금(?:이|은|을|건)?(?:아니|아닌|아닙)", compact))
+        or ("한번더" in compact and "아니" in compact)
+        or ("또보낸게" in compact and "아니" in compact)
+    )
+    correction = (
+        "잘못" in compact or "말실수" in compact or "착각" in compact or "오타" in compact
+        or "기존거래" in compact or "다시말" in compact or "같은거래" in compact
+        or "중복" in compact or "이미말" in compact
+        or negative_additional
+    )
+    additional = (
+        "추가" in compact or "별도" in compact or "두번" in compact or "둘다" in compact
+        or "한번더" in compact or "또보냈" in compact or "추가송금" in compact
+    )
+    if additional and not correction:
+        return "ADDITIONAL"
+    if correction:
+        return "CORRECTION"
+    return "UNCERTAIN"
+
+
+def _confirmed_money_transaction_record(fact: PublicCaseFactV2, transaction_at: str) -> dict | None:
+    """Map a confirmed actual-money fact to the internal Case transaction shape."""
+    if fact.status != "CONFIRMED" or fact.semantic_key != "transfer.actual.amount":
+        return None
+    value = fact.value or {}
+    raw_amount = value.get("amount_krw")
+    if isinstance(raw_amount, bool) or not isinstance(raw_amount, (int, float)):
+        return None
+    amount = int(raw_amount)
+    if amount <= 0 or float(raw_amount) != amount:
+        return None
+    direction = str(value.get("direction") or "").upper()
+    amount_role = str(value.get("amount_role") or "").upper()
+    if direction == "OUT" or amount_role == "TRANSFER_OUT":
+        transaction_type = "TRANSFER_OUT"
+    elif direction == "IN" or amount_role == "REFUND_IN":
+        transaction_type = "RETURN_IN"
+    else:
+        # A requested amount, promised refund, or directionless claim is not
+        # an actual ledger event and must remain a Context V2 fact only.
+        return None
+    record = {
+        "transaction_type": transaction_type,
+        "transaction_at": transaction_at,
+        "amount": amount,
+        "memo": f"Context V2 확인 사실 {fact.fact_id}",
+        "source": "CONTEXT_FACT_CONFIRMED",
+    }
+    for target, source in (
+        ("account_number", "account_number"),
+        ("counterparty_name", "counterparty_name"),
+        ("counterparty_account", "counterparty_account"),
+        ("bank_name", "bank_name"),
+    ):
+        if isinstance(value.get(source), str) and value[source].strip():
+            record[target] = value[source].strip()
+    return record
+
+
+async def _promote_confirmed_money_fact_to_transaction(case_id: str, fact: PublicCaseFactV2) -> dict | None:
+    """Create one internal transaction row for a confirmed actual-money fact."""
+    if fact.status != "CONFIRMED":
+        return None
+    transaction_at = datetime.now(timezone.utc).isoformat()
+    messages = await repository.list_messages(case_id)
+    if not isinstance(messages, list):
+        messages = []
+    for evidence in fact.evidence_refs:
+        if evidence.type == "MESSAGE":
+            message = next((item for item in messages if item.get("message_id") == evidence.id), None)
+            if message and message.get("created_at"):
+                value = message["created_at"]
+                transaction_at = value.isoformat() if hasattr(value, "isoformat") else str(value)
+                break
+    record = _confirmed_money_transaction_record(fact, transaction_at)
+    if record is None:
+        return None
+    transactions = await repository.list_transactions(case_id)
+    if not isinstance(transactions, list):
+        transactions = []
+    if any(item.get("memo") == record["memo"] for item in transactions):
+        return next(item for item in transactions if item.get("memo") == record["memo"])
+    return await repository.create_transaction(case_id, record)
+
+
+async def _resolve_transaction_amount_conflict_after_answer(
+    case_id: str, question: dict | None, answer_text: str, actor_user_id: str,
+) -> None:
+    """Apply only an explicit clarification; otherwise leave the proposal open."""
+    if not question or normalize_target_field(str(question.get("target_field", ""))) != TRANSACTION_AMOUNT_CONFLICT_TARGET:
+        return
+    decision = _classify_transaction_conflict_answer(answer_text)
+    if decision == "UNCERTAIN":
+        return
+    store = case_context_v2_repository()
+    resources = await store.list_resources(case_id)
+    proposals = [item for item in resources.facts
+                 if item.semantic_key == "transfer.amount_conflict" and item.status == "PROPOSED"]
+    if not proposals:
+        return
+    proposal = sorted(proposals, key=lambda item: item.created_at)[-1]
+    value = proposal.value
+    reported_amount = int(value.get("reported_amount_krw") or 0)
+    if reported_amount <= 0:
+        return
+    if decision == "ADDITIONAL":
+        transactions = await repository.list_transactions(case_id)
+        if not isinstance(transactions, list):
+            transactions = []
+        memo = f"고객 재확인: 기존 거래와 별도 송금 ({proposal.fact_id})"
+        if not any(item.get("memo") == memo for item in transactions):
+            await repository.create_transaction(case_id, {
+                "transaction_type": "TRANSFER_OUT",
+                "transaction_at": value.get("reported_at") or datetime.now(timezone.utc).isoformat(),
+                "amount": reported_amount,
+                "memo": memo,
+                "source": "CUSTOMER_CLARIFIED",
+            })
+        reason = "고객이 기존 거래와 별도 추가 송금으로 확인하여 거래 원장에 별도 기록했습니다."
+    else:
+        reason = "고객이 새 금액을 잘못 말한 것으로 확인하여 기존 거래를 유지합니다."
+    await store.review_fact(case_id, proposal.fact_id, proposal.version, "REJECT", reason, actor_user_id)
+
+
 @app.post("/api/cases/{case_id}/customer-questions/{question_id}/answer", response_model=PublicCustomerQuestionResponse)
 async def answer_customer_question(case_id: str, question_id: str, request: PublicAnswerCustomerQuestionRequest, background_tasks: BackgroundTasks) -> PublicCustomerQuestionResponse:
     await require_case(case_id)
@@ -1351,9 +1583,18 @@ async def answer_customer_question(case_id: str, question_id: str, request: Publ
         # The committed customer answer and legacy Fact remain usable if this additive proposal fails.
         logger.exception("Could not persist structured customer answer fact for question %s", question_id)
     try:
+        await _resolve_transaction_amount_conflict_after_answer(
+            case_id, question, answer_text or "", request.actor_user_id,
+        )
+    except Exception:
+        # Never turn a committed customer answer into an API failure.  Leaving
+        # the proposal open is safer than guessing or deleting a transaction.
+        logger.exception("Could not resolve transaction amount conflict for question %s", question_id)
+    try:
         message = next((item for item in await repository.list_messages(case_id) if item.get("message_id") == answered.get("answer_message_id")), None)
         if message:
             await enqueue_context_extraction(message, background_tasks)
+            await _persist_transaction_amount_conflict(case_id, message)
     except Exception:
         logger.exception("Could not enqueue customer answer context extraction")
     if _answer_reports_customer_loss(answered, answer_text or ""):
@@ -1367,19 +1608,26 @@ async def answer_customer_question(case_id: str, question_id: str, request: Publ
     return to_public_customer_question(answered)
 
 
-@app.get("/api/cases/{case_id}/facts", response_model=list[PublicCaseFactResponse])
-async def list_case_facts(case_id: str) -> list[PublicCaseFactResponse]:
-    await require_case(case_id)
-    return [PublicCaseFactResponse.model_validate(item) for item in await repository.list_case_facts(case_id)]
+@app.get("/api/cases/{case_id}/facts", include_in_schema=False)
+async def retired_legacy_case_facts(case_id: str) -> None:
+    """Fail closed for the retired legacy Fact contract.
+
+    Fact reads and reviews must use ``/context-v2/facts``.  Keeping an
+    explicit 410 response gives old clients a deterministic migration signal
+    without exposing a second public fact shape.
+    """
+    raise HTTPException(
+        status_code=410,
+        detail={"code": "LEGACY_FACTS_DISABLED", "message": "기존 facts API가 종료되었습니다. context-v2/facts를 사용해 주세요."},
+    )
 
 
-@app.post("/api/cases/{case_id}/facts/{fact_id}/confirm", response_model=PublicCaseFactResponse)
-async def confirm_case_fact(case_id: str, fact_id: str, request: PublicConfirmCaseFactRequest) -> PublicCaseFactResponse:
-    await require_case(case_id)
-    try:
-        return PublicCaseFactResponse.model_validate(await repository.confirm_case_fact(case_id, fact_id, request.confirmed_by))
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail={"code": "CASE_FACT_NOT_FOUND", "message": "확정할 CaseFact를 찾을 수 없습니다."}) from exc
+@app.post("/api/cases/{case_id}/facts/{fact_id}/confirm", include_in_schema=False)
+async def retired_legacy_case_fact_confirmation(case_id: str, fact_id: str) -> None:
+    raise HTTPException(
+        status_code=410,
+        detail={"code": "LEGACY_FACTS_DISABLED", "message": "기존 facts API가 종료되었습니다. context-v2/facts/{fact_id}/review를 사용해 주세요."},
+    )
 
 
 @app.get("/api/cases/{case_id}/personal-notes", response_model=list[PublicPersonalNoteResponse])
@@ -1553,6 +1801,7 @@ async def create_case_message(case_id: str, request: PublicCreateMessageRequest,
         await enqueue_context_extraction(record, background_tasks)
     except Exception:
         logger.exception("Message was committed but its context extraction could not be queued")
+    await _persist_transaction_amount_conflict(case_id, record)
     if (
         request.actor_type == "CUSTOMER"
         and request.channel == "CUSTOMER"
@@ -1640,9 +1889,8 @@ def build_mvp_copilot_reply(case: dict, verifications: list[dict], prompt: str) 
 
 
 async def _live_question_state(case_id: str, case: dict):
-    facts = await repository.list_case_facts(case_id)
     resources = await case_context_v2_repository().list_resources(case_id)
-    facts, _ = merge_support_records(resources, facts, [])
+    facts, _ = merge_support_records(resources, [], [])
     questions = await repository.list_customer_questions(case_id)
     return CaseSnapshotAiAdapter().adapt(_case_support_ai_input(case_id, case, facts, questions, [], []))
 
@@ -1657,10 +1905,11 @@ async def generate_case_work_card(case_id: str, request: PublicWorkCardGenerateR
             normalize_target_field(draft.target_field)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail={"code": "INVALID_FOLLOW_UP", "message": str(exc)}) from exc
-    facts = await repository.list_case_facts(case_id)
     verifications = await repository.list_verifications(case_id)
     actions = await repository.list_actions(case_id)
     messages = await repository.list_messages(case_id)
+    resources = await case_context_v2_repository().list_resources(case_id)
+    facts, _ = merge_support_records(resources, [], [])
     support = await get_case_support_snapshot(case_id)
     staff = await read_staff_context_records(case_id)
     previous_questions = await repository.list_customer_questions(case_id)
@@ -1740,9 +1989,10 @@ async def invoke_case_copilot(case_id: str, request: PublicAiInvocationRequest) 
     if case is None:
         raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."})
     verifications = await repository.list_verifications(case_id)
-    facts = await repository.list_case_facts(case_id)
     actions = await repository.list_actions(case_id)
     all_messages = await repository.list_messages(case_id)
+    resources = await case_context_v2_repository().list_resources(case_id)
+    facts, _ = merge_support_records(resources, [], actions)
     members = await repository.list_members(case_id)
     requester_member = next(
         (item for item in members if item.get("user_id") == request.requester_user_id and item.get("status") == "ACTIVE"),
@@ -1759,7 +2009,6 @@ async def invoke_case_copilot(case_id: str, request: PublicAiInvocationRequest) 
         "VIEWER": "열람자",
     }
     unresolved = [item.get("claim", "추가 확인 항목") for item in verifications if item.get("status") != "COMPLETED"]
-    resources = await case_context_v2_repository().list_resources(case_id)
     staff = workspace_records(case_id, resources)
     questions = await repository.list_customer_questions(case_id)
     retrieved = retrieve_context(case_id, request.prompt, collect_records(
@@ -1800,7 +2049,7 @@ async def invoke_case_copilot(case_id: str, request: PublicAiInvocationRequest) 
             "attachment_summaries": [],
             "unresolved_verifications": unresolved[:10],
             "assistant_mode": "BANK_INTERNAL",
-            "source_context": bank_source_context(case_id, resources, facts=facts, questions=questions,
+            "source_context": bank_source_context(case_id, resources, questions=questions,
                 verifications=verifications, messages=[item for item in all_messages if item.get("visibility") in {"CUSTOMER", "BANK_INTERNAL"}],
                 diagnosis=case.get("diagnosis") or {}).model_dump(mode="json"),
             "customer_progress": progress_ai_context(build_customer_progress(actions)),
@@ -2251,24 +2500,24 @@ async def read_case_context_v2_resources(case_id: str, actor_user_id: str) -> Pu
         raise_context_v2_error(exc)
 
 
-@app.get("/api/cases/{case_id}/context-v2/workspace")
-async def read_context_workspace(case_id: str, actor_user_id: str):
+@app.get("/api/cases/{case_id}/context-v2/workspace", response_model=PublicContextWorkspaceResponse)
+async def read_context_workspace(case_id: str, actor_user_id: str) -> PublicContextWorkspaceResponse:
     store = await require_context_v2_member(case_id, actor_user_id, access="READ")
     resources = await store.list_resources(case_id)
     actions, questions, members, gap_history = await asyncio.gather(
         repository.list_actions(case_id), repository.list_customer_questions(case_id),
         repository.list_members(case_id), store.list_gap_history(case_id),
     )
-    # Context V2 is now authoritative.  The legacy facts list is retained only
-    # by the compatibility /facts route and is not duplicated in the workspace.
-    result = build_workspace(resources, [], actions, questions, gap_history)
+    # Context V2 is the only public Fact source. Legacy Fact-shaped fields are
+    # not duplicated in the workspace response.
+    result = build_workspace(resources, actions, questions, gap_history)
     role = next((case_role_for_member(m) for m in members if m.get("user_id") == actor_user_id and m.get("status", "ACTIVE") == "ACTIVE"), None)
     allow_all = mvp_context_permissions(actor_user_id)
     result["permissions_mode"] = "MVP_OPEN" if allow_all else "ROLE_BASED"
     result["can_write"] = allow_all or role in {"CASE_OWNER", "CHAT_OPERATOR", "REVIEWER"}
     result["can_review"] = allow_all or role in {"CASE_OWNER", "REVIEWER"}
     result["can_review_suggestions"] = allow_all or role in {"CASE_OWNER", "CHAT_OPERATOR", "REVIEWER"}
-    return result
+    return PublicContextWorkspaceResponse.model_validate(result)
 
 
 @app.post("/api/cases/{case_id}/context-v2/legacy-suggestions/{action_id}/review", response_model=PublicSuggestionReviewResultV2)
@@ -2318,6 +2567,12 @@ async def review_case_context_v2_fact(case_id: str, fact_id: str, actor_user_id:
     try:
         fact = await store.review_fact(case_id, fact_id, request.expected_version, request.decision, request.reason, actor_user_id, request.supersedes_fact_id)
         if fact.status == "CONFIRMED":
+            try:
+                await _promote_confirmed_money_fact_to_transaction(case_id, fact)
+            except Exception:
+                # The fact review remains authoritative.  Keep the failure
+                # visible in logs rather than guessing a transaction row.
+                logger.exception("Could not promote confirmed money fact %s to transaction", fact.fact_id)
             resources = await store.list_resources(case_id)
             for gap in resources.gaps:
                 if gap.semantic_key == fact.semantic_key and gap.status not in {"RESOLVED", "DISMISSED"}:
@@ -2701,9 +2956,8 @@ async def finalize_case_report(case_id: str, request: AdminCaseFinalizeRequest) 
         case = await repository.get(case_id)
         if case is None:
             raise KeyError(case_id)
-        resources, facts, verifications, actions, messages, questions = await asyncio.gather(
+        resources, verifications, actions, messages, questions = await asyncio.gather(
             case_context_v2_repository().list_resources(case_id),
-            repository.list_case_facts(case_id),
             repository.list_verifications(case_id),
             repository.list_actions(case_id),
             repository.list_messages(case_id),
@@ -2716,7 +2970,7 @@ async def finalize_case_report(case_id: str, request: AdminCaseFinalizeRequest) 
             display_records = getattr(repository, "_display_items", {})
             display_items = list(display_records.values()) if isinstance(display_records, dict) else []
         summary = build_summary_projection(case, resources, verifications, actions, display_items)
-        merged_facts, _ = merge_support_records(resources, facts, actions)
+        merged_facts, _ = merge_support_records(resources, [], actions)
         v2_fact_ids = {fact.fact_id for fact in resources.facts}
         v2_fact_fields = {
             SEMANTIC_FIELDS[fact.semantic_key]

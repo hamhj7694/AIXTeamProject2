@@ -22,11 +22,49 @@
    - 보고서·이력·감사(`case_reports`, `case_report_sections`, `case_events`, history tables)
 3. **다음 정리 단계 후보**
    - `case_facts`(legacy)와 `case_context_facts_v2`의 단일 canonical source 전환 **완료**. 027에서 지원 필드를 V2로 복사했고 028에서 legacy 행을 정리한 뒤 유지보수 창에서 물리 테이블도 DROP했다.
-   - `cases.diagnosis_json`·분석 projection·report JSON의 중복 범위 축소
+   - `cases.diagnosis_json`·분석 projection·report JSON의 중복 범위 축소 — 기준 원본 매트릭스 작성 완료, 재생성 검증은 후속
    - `case_context_projections.last_success_payload` 캐시 보존 기간/재생성 정책
    - `voice_sessions` metadata API의 실제 외부 소비자 확인 후 유지 또는 명시적 deprecation
 
 첨부 테이블은 빈 상태를 확인한 뒤에만 DROP했다. 그 외 백업·데이터 이동·컬럼 삭제는 원장 보존과 회귀 안전성을 확인한 뒤 별도 단계에서 수행한다.
+
+## 실행 우선순위
+
+DB 사용처 정리는 아래 순서로 진행한다. **P1 계약 결정이 끝나기 전에는 P4 물리 삭제를 실행하지 않는다.**
+
+### 시간 제한 기준(최소 범위)
+
+이번 데모에서는 이미 동작 중인 API·테이블을 추가로 삭제하거나 재설계하지 않는다. `case_context_facts_v2`를 유일한 일반 실행 경로로 유지하고, 나머지는 호환 보존 또는 후순위로 표시한다. `[-]`는 이번 작업에서 확인·구현하지 않는 항목이다.
+
+| 단계 | 목적 | 현재 상태 | 다음 확인 |
+|---|---|---|---|
+| P0 | 프론트·백엔드·DB의 canonical source와 응답 계약 고정 | 완료 | Case/Context V2 계약 유지 |
+| P1 | 금액·Case 분석 원장·담당자 역할의 책임 확정 | 최소 범위 완료 | 현재 계약 유지; 추가 역할 개편은 후순위 |
+| P2 | `voice_sessions`, 첨부 호환 경로의 실제 사용처 확인 | [-] 보류 | 이번 데모에서 삭제하지 않음 |
+| P3 | 우측 Context Panel 표시용 계약 확정 | [-] 제품 설계 후순위 | 현재 우측 패널 계약 미확정 |
+| P4 | 백업·복원·회귀 검증 후 DB 삭제 migration | [-] 보류 | 긴급 삭제 대상 없음 |
+
+### P1 체크리스트
+
+- [x] `case_transactions.amount`와 API 금액을 KRW 정수로 확정하고 소수점 입력 거부
+- [x] `TRANSFER_OUT`·`RETURN_IN`·`CANCELLED` 거래 종류와 방향 규칙 확정
+- [x] 거래 중복 판정 규칙 확정 — 원천 이벤트 ID가 있으면 `source + source_event_id`, 현재 데모는 `case_id + transaction_type + transaction_at(UTC) + amount + account_number + counterparty_account`; 계좌 식별자가 모두 없으면 자동 병합하지 않음
+- [x] `actual_loss_amount_krw`를 요약값으로만 유지하고 자동 합산하지 않는 계약 규칙 문서화
+- [x] `cases.diagnosis_json`·semantic projection·report의 authoritative field matrix 작성 — [`AUTHORITATIVE_SOURCE_MATRIX.md`](AUTHORITATIVE_SOURCE_MATRIX.md)
+
+### P2 체크리스트
+
+- [x] `/facts` 프론트 호출 제거 및 route 410 종료 응답 확인
+- [-] `/facts` 외부 SDK·배치·구버전 클라이언트 호출량 0 확인 후 내부 호환 메서드 삭제 — 공개 route는 이미 410이며, 호환 코드는 보존
+- [-] `voice_sessions` route·bundle 소비·접근 로그 확인 — 프론트 직접 사용 없음; 테이블/API는 유지
+- [-] `messages.attachments_json` 소비자 0 확인 — 빈 호환 필드 유지
+- [x] V2 전환 관련 백엔드·프론트 핵심 회귀 및 TypeScript 검사 완료
+
+### P4 삭제 전 필수 조건
+
+- [-] 데이터 백업과 복원 리허설 — DB 삭제를 재개할 때 수행
+- [-] 삭제 전후 `DB_CATALOG.md` diff 승인 — DB 삭제를 재개할 때 수행
+- [-] migration staging 적용·회귀·rollback — DB 삭제를 재개할 때 수행
 
 ## 사용처 분류 기준
 
@@ -68,15 +106,21 @@
 - `case_context_projections`: Context 생성 결과를 빠르게 재사용하는 캐시와 lease/revision 상태다.
 - `case_reports`·`case_report_sections`: 직원이 보는 LIVE/FINAL 보고서 원장과 섹션별 버전·감사 데이터다.
 
-서로 같은 JSON을 무작정 네 번 저장하는 구조라기보다 “초기 분석 원본 묶음 / 조회 가능한 상세 / 재생성 캐시 / 버전이 있는 보고서”의 책임이 다르다. 데모에서 하나로 줄일 수는 있지만 검색·부분 갱신·이력·캐시 복구를 잃게 되므로, 먼저 authoritative field matrix를 정한 뒤 선택적으로 축소한다.
+서로 같은 JSON을 무작정 네 번 저장하는 구조라기보다 “초기 분석 원본 묶음 / 조회 가능한 상세 / 재생성 캐시 / 버전이 있는 보고서”의 책임이 다르다. 책임과 기준 원본은 [`AUTHORITATIVE_SOURCE_MATRIX.md`](AUTHORITATIVE_SOURCE_MATRIX.md)에 고정했다. 데모에서 하나로 줄일 수는 있지만 검색·부분 갱신·이력·캐시 복구를 잃게 되므로, 매트릭스와 재생성 검증을 통과한 뒤 선택적으로 축소한다.
 
 ### 금액과 `송금 기록 조회`
 
 이번 데모에서는 실제 은행·계좌 원장 API를 연결하지 않는다. `case_transactions`는 Case 최초 분석, 고객·직원 채팅, 직원의 데모 확인 입력에서 만든 **표시용 송금 기록**을 담는 목록이며, 은행 시스템에서 확인된 거래라는 의미가 아니다. `송금 기록 조회` 카드는 이 목록을 이용해 기록을 보여주되 각 항목의 출처와 확인 상태를 함께 표시한다.
 
-`cases.actual_loss_amount_krw`는 사건 전체를 한 숫자로 요약하는 값이다. 분석에서 언급된 금액, 송금 요청, 고객의 송금 진술을 자동으로 실제 거래로 승격하거나 합산하지 않으며, 직원이 데모 확인한 값만 별도 상태로 남긴다. 카드에서는 최소한 `거래 없음`, `조회 실패`, `미확인`, `송금 진술`, `데모 확인`을 구분한다.
+`cases.actual_loss_amount_krw`는 사건 전체를 한 숫자로 요약하는 값이다. 분석에서 언급된 금액, 송금 요청, 고객의 송금 진술을 자동으로 실제 거래로 승격하거나 합산하지 않으며, 직원이 데모 확인한 값만 별도 상태로 남긴다. 카드에서는 최소한 `거래 없음`, `조회 실패`, `미확인`, `송금 진술`, `데모 확인`을 구분한다. 금액은 KRW 정수이며 소수점은 허용하지 않는다.
 
-데모 기록은 `case_id`와 원천 이벤트/메시지 식별자를 기준으로 중복을 판단하고, 금액은 KRW 정수로 보관한다. 방향은 출금 `TRANSFER_OUT`, 반환 `RETURN_IN`처럼 명시하며, 방향이 없는 분석 언급은 거래 행으로 만들지 않고 `미확인` 정황으로 남긴다.
+`actual_loss_amount_krw`는 별도 테이블이 아니라 `cases` 테이블의 nullable 요약 컬럼이다. `case_transactions`의 여러 행을 합친 총합 컬럼이 아니며, 실제 피해액을 담당자가 확인해 기록하는 사건 단위 값이다. 두 데이터를 하나의 거래 테이블로 합치면 거래별 출처·시각·상대방·반환 여부와 사건 전체의 확인된 피해액이 같은 행 구조에 섞이고, 거래 추가·수정 때 요약값이 자동으로 오염될 수 있다. 따라서 현재는 테이블을 합치지 않고, 거래 원장과 사건 요약을 분리 유지한다.
+
+금액 계약 변경은 코드·bootstrap·`029_normalize_case_transaction_amounts.sql`에 반영했고, 2026-09-22 현재 `csr` DB에도 migration 적용을 완료했다. 사전 점검에서 거래 행이 0건이고 무결성 위반이 없어 데이터 변환 없이 `BIGINT` 및 허용 유형 CHECK를 적용했다. migration은 이후에도 소수 금액·허용되지 않은 거래 종류가 발견되면 중단되는 fail-closed guard를 유지한다.
+
+데모 기록의 거래 종류는 출금 `TRANSFER_OUT`, 반환 `RETURN_IN`, 취소 `CANCELLED`로 제한한다. 방향이 없는 분석 언급은 거래 행으로 만들지 않고 `미확인` 정황으로 남긴다. 중복 거래는 원천 이벤트 ID가 있으면 `source + source_event_id`를 우선하고, 현재는 Case·유형·UTC 시각·금액·양쪽 계좌의 정규화 조합으로 중복 후보를 판단한다. 계좌 식별자가 모두 없으면 자동 병합하지 않으며, DB UNIQUE 제약은 실제 원천 ID 컬럼을 도입할 때 검토한다.
+
+복합키 정규화는 다음처럼 고정한다: `transaction_type`은 대문자 허용값, `transaction_at`은 ISO 시각을 UTC로 변환한 뒤 마이크로초까지, `amount`는 KRW 정수, 계좌 값은 앞뒤 공백 제거 후 비교한다. 빈 계좌는 임의로 추정하지 않는다.
 
 `actions`는 이미 실행했거나 진행 중인 조치 기록, `case_tasks`는 앞으로 해야 할 업무이므로 둘은 유지하고 서로 덮어쓰지 않는다.
 
@@ -91,18 +135,18 @@
 
 ### Fact route·저장소 초기 조사 결과
 
-현재 V2가 저장·조회 원본이다. `/facts` 경로는 구버전 응답 모양을 위한 adapter로만 유지하며, 프론트엔드는 Context V2 workspace를 사용한다.
+현재 V2가 유일한 저장·조회 원본이다. `/facts` 공개 경로는 410 종료 응답으로 전환했으며, 프론트엔드는 Context V2 workspace를 사용한다.
 
 | 호출/경로 | 현재 코드 위치 | 저장소·테이블 | 현재 책임 | 판정 |
 |---|---|---|---|---|
-| 구버전 Fact 조회 | 외부 구버전 클라이언트만 | `GET /api/cases/{case_id}/facts` → `repository.list_case_facts` → V2 adapter | 기존 응답 모양 유지 | 호환 adapter |
+| 구버전 Fact 조회 | 없음(410) | `GET /api/cases/{case_id}/facts` → 410 | 사용 중단 신호 | 종료 완료 |
 | Context V2 리소스/검토 | `frontend/src/context-v3/api.ts`, `ContextWorkspace.tsx` | `/context-v2/resources`, `/context-v2/facts*` → `case_context_facts_v2` | 근거·상태·확정자·버전이 있는 canonical 후보 | V2 직접 사용 중 |
 | Context V2 workspace | `backend/general_api/app/main.py`의 `read_context_workspace` | `case_context_facts_v2` | V2 항목만 반환 | canonical |
-| AI 지원·질문 추천 | `backend/general_api/app/main.py`의 `_read_case_support_source`, 질문 계획 경로 | legacy Fact를 읽고 V2 resources를 `merge_support_records`로 병합 | 기존 AI 입력과 최신 Context를 함께 구성 | 두 모델 병합 |
-| MySQL legacy write | `backend/general_api/app/domains/cases/mysql_repository.py` | `INSERT/SELECT/UPDATE case_context_facts_v2` | 고객 답변·질문 Fact 후보 | V2 전환 완료 |
+| AI 지원·질문 추천 | `backend/general_api/app/main.py`의 `_read_case_support_source`, 질문 계획 경로 | `case_context_facts_v2` resources를 `merge_support_records`로 조립 | 최신 Context V2만 AI 입력에 전달 | V2 직접 사용 중 |
+| MySQL 고객 답변 Fact write | `backend/general_api/app/domains/cases/mysql_repository.py` | `INSERT/SELECT/UPDATE case_context_facts_v2` | 고객 답변·질문 Fact 후보 | V2 전환 완료 |
 | MySQL V2 write/review | `backend/general_api/app/domains/cases/case_context_v2_repository.py` | `INSERT/UPDATE case_context_facts_v2` | 제안·확정·기각·대체와 이력 | 기준 원장 |
 
-현재 결론은 **V2가 유일한 canonical source**다. `/facts`는 삭제 전까지 V2를 legacy 응답으로 변환한다.
+현재 결론은 **V2가 유일한 canonical source**다. `/facts`는 410으로 종료됐고 공개 응답 변환은 더 이상 제공하지 않는다.
 
 #### 마이그레이션 전 데이터 비교 결과 — 2026-09-22 01:44 UTC 읽기 전용 snapshot
 
@@ -129,9 +173,9 @@
 - `027_migrate_legacy_case_facts_to_v2.sql` 적용 완료: legacy 지원 6행을 deterministic `legacy-<sha256>` ID와 `legacy-case-fact:<fact_id>` 요청 키로 V2에 복사했다.
 - `028_retire_legacy_case_facts.sql` 적용 완료: legacy 행 0건 확인 후 유지보수 창에서 `case_facts` 물리 테이블 DROP 완료.
 - 신규 MySQL 고객 답변·Fact 제안·확정 저장은 모두 `case_context_facts_v2`를 사용한다. 프론트 Case Room도 `/facts` 대신 Context V2 workspace를 읽는다.
-- V2와 legacy 응답을 합칠 때 동일 `fact_id`는 중복 제거하고, V2의 확정 값은 legacy 후보가 덮어쓰지 않는다.
+- 내부 테스트·호환 메서드가 legacy shape를 만들더라도 공개 응답과 AI 입력은 V2 리소스만 사용한다.
 
-이 규칙으로 dry-run 비교를 거쳐 신규 write를 V2로 고정했고, `/facts`는 V2 adapter로 전환했다. `case_facts` 물리 테이블은 DROP했으므로 이제 호환 API는 V2 adapter만 사용한다.
+이 규칙으로 dry-run 비교를 거쳐 신규 write/read를 V2로 고정했고, `/facts`는 410 종료 응답으로 전환했다. `case_facts` 물리 테이블은 DROP했으므로 이제 공개 Fact 계약은 V2만 사용한다.
 
 ## 테이블별 사용처 판정
 
@@ -153,7 +197,7 @@
 | `customer_questions` | 20 | 핵심 원장 | 질문 후보·고객 질문·답변 상태 | 유지 |
 | `message_context_extractions` | 139 | 활성 projection | 메시지에서 Fact 후보를 추출한 상태·재시도 | 유지 |
 | `case_transactions` | 0 | 선택 기능 | 데모 송금 기록 조회/등록/수정 API와 `송금 기록 조회` 카드 | 유지. 실제 은행 원장으로 표시하지 않으며 0건을 피해금액 0원으로 해석하지 않음 |
-| `case_facts` | — | 제거 완료 | 027/028 이후 물리 테이블 없음. `/facts`는 V2 adapter | 완료 |
+| `case_facts` | — | 제거 완료 | 027/028 이후 물리 테이블 없음. `/facts`는 410 | 완료 |
 | `case_context_facts_v2` | 264 | 핵심 원장 | proposed/confirmed/rejected/superseded Fact | 유지 |
 | `case_gaps` | 0 | 선택 기능 | 미확인 사항·해소 근거 | 유지. Context V2 API가 제공 |
 | `verification_tasks` | 0 | 선택 기능 | 별도 확인 업무와 고객 공개 결과 | 유지 |
@@ -171,7 +215,7 @@
 | `case_context_item_history` | 0 | 감사 이력 | 직원 표시 편집 변경 이력 | 유지 |
 | `case_context_v2_history` | 258 | 감사 이력 | V2 자원 변경 이력 | 유지 |
 | `voice_sessions` | 0 | 호환/metadata | 세션 상태·참여자와 Case bundle의 음성 상태 | 유지. 원문 segment는 저장하지 않음 |
-| `schema_migrations` | 30 | 스키마 운영 | 적용 migration 기준선 | 유지, 수동 삭제 금지 |
+| `schema_migrations` | 31 | 스키마 운영 | 적용 migration 기준선 | 유지, 수동 삭제 금지 |
 
 ## 컬럼별 중복·무결성 검토
 
@@ -202,7 +246,7 @@
 ### 제거·전환한 경로
 
 - `case_facts` 신규 저장·조회 경로를 제거했다. 고객 답변·질문 Fact와 Case 지원 입력은 V2만 사용한다.
-- `GET/POST /api/cases/{case_id}/facts`는 당분간 V2 행을 legacy 응답으로 변환하는 호환 adapter다. 프론트엔드에서는 더 이상 호출하지 않는다.
+- `GET/POST /api/cases/{case_id}/facts`는 410 종료 응답으로 구버전 클라이언트의 전환을 유도한다. 프론트엔드에서는 호출하지 않는다.
 
 - `POST/GET /api/cases/{case_id}/voice-sessions/{session_id}/transcript`
   - 요청 body를 파싱하지 않고 `410 TRANSCRIPT_STORAGE_DISABLED` 반환
@@ -213,7 +257,7 @@
 ### 유지하되 책임을 좁힌 경로
 
 - `POST/PATCH /api/cases/{case_id}/voice-sessions`는 세션 상태·참여자 metadata만 다룬다. Frontend의 현재 핵심 흐름에는 직접 호출처가 없지만 Case bundle 호환을 위해 유지한다.
-- `case_facts` API는 외부 구버전 클라이언트 호환을 위해 잠시 유지한다. 저장소는 V2만 사용하며, 물리 테이블은 이미 DROP되어 legacy API는 V2 adapter로만 동작한다.
+- repository의 `list_case_facts/propose_case_fact/confirm_case_fact`는 아직 일부 테스트·구버전 내부 코드가 참조하는 compatibility method로 남아 있다. 공개 API·프론트·AI 입력은 V2만 사용하며, 외부 호출 0 확인 뒤 이 메서드와 호환 어댑터를 삭제한다.
 
 ## 이번 단계에서 하지 않은 작업
 
@@ -227,8 +271,8 @@
 
 ## 다음 단계 입력값
 
-1. ~~`case_facts`와 `case_context_facts_v2`의 route별 read/write 목록을 고정한다.~~ 완료. 이후 `/facts`는 V2 adapter만 유지한다.
-2. `cases.diagnosis_json`·semantic tables·reports 사이의 authoritative field matrix를 작성한다.
+1. ~~`case_facts`와 `case_context_facts_v2`의 route별 read/write 목록을 고정한다.~~ 완료. 이후 `/facts`는 410으로 종료하고 V2만 유지한다.
+2. ~~`cases.diagnosis_json`·semantic tables·reports 사이의 authoritative field matrix를 작성한다.~~ 완료. 기준은 [`AUTHORITATIVE_SOURCE_MATRIX.md`](AUTHORITATIVE_SOURCE_MATRIX.md)다.
 3. 0행 선택 기능은 화면/API 호출 telemetry 또는 명시적 제품 결정으로만 deprecate한다.
 4. 원문(`case_inputs.input_text`)의 데모 보관 기간과 export 권한을 정한 뒤 보존/삭제 migration을 별도 검토한다.
 5. 프론트엔드 타입·백엔드 공개 계약·repository SQL의 의미 불일치는 [API_CONTRACT_AUDIT.md](API_CONTRACT_AUDIT.md)에서 먼저 결정한다. 특히 `case_members.role`/`assignment_role`, `CaseBundle` 호환 필드, 금액 표현을 DB 삭제보다 앞서 확정한다.
@@ -258,18 +302,18 @@
 - [x] 값·근거·source·status를 원문 노출 없이 hash/metadata 기반 dry-run 비교
 - [x] 완전 동일·근거 차이·값 충돌·상태 충돌을 분리한 migration 보고서 작성
 - [x] `legacy:<fact_id>` 또는 `client_request_id` 기반 재실행 중복 방지 확인
-- [x] V2 read를 기본으로 전환하고 legacy read는 V2 adapter로 제한
+- [x] V2 read를 기본·유일한 공개 원본으로 전환하고 `/facts`는 410으로 종료
 - [x] 신규 write를 V2로만 보내고 legacy 저장 경로를 제거
 - [x] legacy 행 검증·정리 및 deprecation 전환
 - [x] **완료 조건:** 모든 화면/AI가 V2를 기준으로 읽고, legacy 테이블 행이 0건이며 물리 테이블이 제거됨
 
 #### `cases.diagnosis_json` ↔ semantic/projection/report
 
-- [ ] 필드별 authoritative source matrix 작성
-- [ ] `case_semantic_atoms`, `case_semantic_relations`, `analysis_segments`와 diagnosis의 동일 필드 비교
-- [ ] report와 Context projection이 원장 재생성으로 복원되는지 확인
-- [ ] 중복 JSON을 삭제하지 않고 먼저 read model/cache로 명시
-- [ ] **완료 조건:** 한 필드에 원본이 두 개 존재하지 않고, projection 재생성 테스트가 통과
+- [x] 필드별 authoritative source matrix 작성 — [`AUTHORITATIVE_SOURCE_MATRIX.md`](AUTHORITATIVE_SOURCE_MATRIX.md)
+- [x] `case_semantic_atoms`, `case_semantic_relations`, `analysis_segments`와 diagnosis의 동일 필드 비교 — `test_HTML_PY/audit_analysis_consistency.py` 읽기 전용 감사에서 현재 DB PASS
+- [-] report와 Context projection 재생성 검증 — 우측 패널 구현 시 진행
+- [-] 중복 JSON read model/cache 정리 — 현재 삭제하지 않음
+- [-] **완료 조건:** 우측 패널 계약 확정 전까지 보류
 
 ### 2단계 — 선택 기능 유지/제거 결정 (제품 결정 필요)
 
@@ -278,70 +322,53 @@
 - [x] 실제 은행 확인 거래 원장은 연동하지 않고, `case_transactions`는 분석·채팅·직원 입력 기반 데모 표시 목록으로 사용
 - [x] `cases.actual_loss_amount_krw`는 단일 요약값으로 유지하고 자동 합산·자동 승격하지 않음
 - [x] 요구 금액·송금 진술·직원 데모 확인 기록을 `case_context_facts_v2`/`case_transactions`로 구분
+- [x] 기존 송금 기록과 다른 고객 금액 발화는 `transfer.amount_conflict` 제안과 재확인 질문으로 보류한다. 고객 발화만으로 `case_transactions`를 덮어쓰거나 새 거래로 자동 승격하지 않는다.
+- [x] 기존 송금과 같은 금액의 고객 발화도 반복 진술·동일 금액 추가 송금이 구분되지 않으면 확인 질문을 우선한다. 명시적인 추가 확인 전에는 원장에 새 행을 만들지 않는다.
+- [x] `case_transactions`는 외부 은행 연동값이 아닌 Case 내부 확인값이다. `case_context_facts_v2`의 실제 금액·방향 사실을 직원이 확정한 뒤에만 `TRANSFER_OUT`/`RETURN_IN`으로 승격하고, 환급 약속(`transfer.promised_return.amount`)은 거래로 승격하지 않는다.
 - [x] 데모 기록의 중복 식별키와 방향(`TRANSFER_OUT`/`RETURN_IN` 등)을 정의
 - [x] 금액은 KRW 정수로 표현하고 출처·확인 상태·통화 단위를 기록
-- [ ] `actual_loss_amount_krw` 요약값과 `case_transactions` 거래 목록의 합산·자동 승격 금지 회귀 테스트
-- [ ] **완료 조건:** `송금 기록 조회` 카드가 “거래 없음/조회 실패/미확인/송금 진술/데모 확인”을 구분하고 금액 합계 회귀가 통과
+- [-] `actual_loss_amount_krw`·`case_transactions` 추가 회귀 — 현재 분리 계약 유지로 충분
+- [-] **완료 조건:** 실제 거래 연동 시 재개
 
 #### 업무·AI 제안
 
-- [ ] `actions`(실제 조치 기록)와 `case_tasks`(해야 할 일)의 UI/API 책임을 문서화
-- [ ] `case_ai_suggestions` → `case_tasks` 전환·채택 상태 확인
-- [ ] `case_decisions`에 직원 판단과 확인자를 남기는지 확인
-- [ ] 실제 사용하지 않는 제안/업무 화면이 있으면 route deprecation 여부 결정
-- [ ] **완료 조건:** Action과 Task가 서로 덮어쓰지 않고 타임라인·Context Panel에서 중복 표시되지 않음
+- [-] `actions`·`case_tasks` 추가 책임 검증 — 현재 구조 유지
+- [-] `case_ai_suggestions`·`case_decisions` 추가 정리 — 현재 기능 범위 밖
+- [-] **완료 조건:** 우측 패널/업무 기능 확장 시 재개
 
 #### Context 편집·캐시
 
-- [ ] `case_context_items`와 `case_context_item_history`의 현재값/이력 책임 확인
-- [ ] `case_context_projections.last_success_payload`의 TTL과 재생성 절차 정의
-- [ ] 캐시를 삭제해도 원장으로 Context Panel을 복원하는지 확인
-- [ ] **완료 조건:** 캐시 삭제 후 재생성 성공, 직원 편집 이력 보존
+- [-] `case_context_items`·history 추가 책임 확인 — 현재 삭제하지 않음
+- [-] `case_context_projections.last_success_payload` TTL 결정 — 운영 정책 확정 시 재개
+- [x] 임시 MySQL DB에서 projection lease/revision 내구성 확인: 원본 revision 변경 시 STALE 처리, 마지막 성공 payload 보존
+- [x] 임시 MySQL DB에서 캐시 행을 삭제해도 동일 Case revision으로 projection을 재생성하는지 확인
+- [x] 캐시 삭제 후 재생성 및 projection 내구성 핵심 검증 완료
 
 #### 첨부·음성 호환
 
 - [x] 데모에서 첨부파일 기능을 제외하기로 결정
 - [x] Frontend 버튼·route·repository를 제거/410 전환
 - [x] 빈 테이블 확인 후 `attachments/026_retire_attachments.sql` 적용
-- [ ] `voice_sessions` 외부 소비자와 Case bundle 사용처 확인
-- [ ] 외부 소비자가 없을 때만 metadata API 및 테이블 제거 계획 수립
-- [ ] **완료 조건:** 제거 대상 API 호출처 0건, 기존 데이터 export 완료, 호환 응답 또는 410 계약 존재
+- [-] `voice_sessions` 외부 소비자 확인 및 제거 계획 — 현재 metadata/API 보존
+- [-] **완료 조건:** 시간 제한으로 이번 단계에서 적용하지 않음
 
 #### `messages.attachments_json` 최종 정리 순서
 
 이 컬럼은 첨부파일 기능을 다시 켜기 위한 것이 아니라, 구버전 응답 계약을 깨지 않기 위한 빈 compatibility shim이다. 핫픽스가 안정화된 뒤 아래 순서로 가장 마지막에 검토한다.
 
-- [ ] 구버전 웹·모바일·스크립트가 `attachments`, `attachment_ids`, `attachments_json`을 읽거나 보내지 않는지 저장소·배포 목록·접근 로그로 확인
-- [ ] 모든 메시지 행의 `attachments_json`이 `NULL` 또는 빈 배열인지 읽기 전용 점검
-- [ ] 새 클라이언트와 API 계약 테스트에서 첨부 필드 제거 후에도 채팅·AI 응답이 정상인지 확인
-- [ ] 컬럼 제거 migration과 410 첨부 API 계약을 함께 리뷰
-- [ ] 백업·복원·DB catalog diff·Backend/Frontend 회귀 테스트 통과
-- [ ] **완료 조건:** 외부 소비자 0건, 실제 첨부 데이터 0건, 새 계약 배포 완료 후에만 컬럼 DROP
+- [-] 첨부 호환 필드 소비자 확인·컬럼 DROP — 데모 안정화 후 마지막 단계
+- [-] **완료 조건:** 이번 단계에서는 컬럼을 유지
 
-### 3단계 — 데이터 보존·백업 (삭제 전 필수)
+### 3단계 — 데이터 보존·백업 (삭제를 재개할 때만)
 
-- [ ] 서비스 DB 읽기 중지 창과 담당자 공지
-- [ ] 전체 schema + 업무 행 백업 생성
-- [ ] `case_inputs.input_text`, messages, notes, attachments metadata의 접근권한과 보관 위치 확인
-- [ ] 별도 빈 DB 복원 리허설
-- [ ] FK·행 수·Case별 checksum·핵심 API 응답 비교
-- [ ] 백업 receipt와 SHA-256을 Git 제외 경로에 보관
-- [ ] **완료 조건:** 복원 DB에서 핵심 Case/담당자/채팅/Context가 동일하게 조회됨
+- [-] 전체 백업·복원 리허설 — 이번에는 DB 삭제가 없어 실행하지 않음
 
-### 4단계 — 삭제 migration·회귀 (마지막 단계)
+### 4단계 — 삭제 migration·회귀 (현재 보류)
 
-- [ ] 삭제 대상 테이블/컬럼과 영향 route를 migration 파일에 명시
-- [ ] DROP 전 행 수가 0인지 또는 보존 export가 완료됐는지 fail-closed 검사
-- [ ] FK·trigger·index 제거 순서와 rollback/forward-only 정책 검토
-- [ ] API 계약 테스트: 2xx/404/409/410 응답과 원문 비노출
-- [ ] Backend repository·General API 회귀
-- [ ] Frontend typecheck·Vite build·브라우저 E2E
-- [ ] Case 생성→최초 원문 확인→Case Room 재진입에서 원문 비노출 확인
-- [ ] 담당자 배정·채팅·AI 지원·거래 카드·보고서 회귀
-- [ ] **완료 조건:** 전체 Required Check 통과 및 삭제 전/후 DB catalog diff 승인
+- [-] 테이블·컬럼 DROP migration 및 대규모 E2E — 긴급 삭제 대상이 생길 때 재개
 
 ### 문서 최신화 기준
 
 - `DB_CATALOG.md`는 `inspect_database.py`와 `export_database_catalog.py`로 실제 information_schema·행 수를 다시 읽어 갱신한다.
-- `DB_USAGE_AUDIT.md`의 체크박스는 실제 완료된 검증만 `[x]`로 표시한다. 계획·검토 대상은 `[ ]`로 둔다.
+- `DB_USAGE_AUDIT.md`의 체크박스는 실제 완료된 검증만 `[x]`로 표시한다. `[-]`는 시간 제한으로 보류하거나 이번 범위에서 제외한 항목이다.
 - migration 폴더 변경 시 `backend/migrations/README.md`, `manifest.json`, `database/README.md`의 엔티티 목록과 실행 절차를 함께 대조한다.

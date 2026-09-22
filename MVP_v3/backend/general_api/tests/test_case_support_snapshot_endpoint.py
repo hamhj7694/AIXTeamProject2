@@ -16,6 +16,29 @@ from contracts.public_api.case_workflow import PublicQuestionCandidateResponse
 
 
 class CaseSupportSnapshotEndpointTest(unittest.TestCase):
+    def _set_v2_facts(self, facts: list[dict]) -> None:
+        semantic_by_field = {
+            "authentication_information_exposure": "exposure.authentication_information",
+            "personal_information_exposure": "exposure.personal_information",
+            "transfer_status": "transfer.actual.status",
+            "remote_control_app": "device.remote_control_app",
+        }
+        self.repository._context_v2_facts.clear()
+        for item in facts:
+            field = item.get("field", "")
+            semantic_key = semantic_by_field.get(field, f"legacy.{field}")
+            fact = PublicCaseFactV2(
+                fact_id=item["fact_id"], case_id="CASE-AI-1", semantic_key=semantic_key,
+                display_label=field, value={"value": item.get("value", "")},
+                display_value=item.get("value", ""), source_kind="CUSTOMER_STATEMENT",
+                status=item.get("status", "PROPOSED"), confidence=0.8,
+                evidence_refs=[], visibility="BANK_INTERNAL", version=1,
+                confirmed_by="staff" if item.get("status") == "CONFIRMED" else None,
+                confirmed_at=datetime.now(timezone.utc) if item.get("status") == "CONFIRMED" else None,
+                created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc),
+            )
+            self.repository._context_v2_facts[("CASE-AI-1", fact.fact_id)] = fact
+
     def setUp(self) -> None:
         self.client = TestClient(general_main.app)
         self.original_repository = general_main.repository
@@ -79,6 +102,55 @@ class CaseSupportSnapshotEndpointTest(unittest.TestCase):
         self.assertTrue(response.json())
         self.assertEqual(response.json()[0]["question_id"], "candidate-victim_transfer_status")
 
+    def test_conflicting_customer_transfer_amount_adds_clarification_candidate(self) -> None:
+        self.repository.list_messages.return_value = [{
+            "message_id": "msg-amount-conflict", "actor_type": "CUSTOMER", "message_kind": "CHAT",
+            "content": "아까 300만원 보냈어.", "created_at": "2026-09-22T10:00:00+09:00",
+        }]
+        self.repository.list_transactions.return_value = [{
+            "id": 1, "case_id": "CASE-AI-1", "transaction_type": "TRANSFER_OUT", "amount": 2_000_000,
+        }]
+        general_main.service.ai_client.build_case_support_snapshot = AsyncMock(side_effect=general_main.AiServiceError("AI 서버 연결 실패"))
+
+        response = self.client.get("/api/cases/CASE-AI-1/customer-question-candidates")
+
+        self.assertEqual(response.status_code, 200)
+        conflict = next(item for item in response.json() if item["target_field"] == "transaction_amount_conflict")
+        self.assertIn("2000000원", conflict["question_text"].replace(",", ""))
+        self.assertIn("3000000원", conflict["question_text"].replace(",", ""))
+        self.assertIn("별도로 추가 송금", " ".join(conflict["options"]))
+
+    def test_transaction_conflict_answer_handles_negative_additional_claim(self) -> None:
+        self.assertEqual(general_main._classify_transaction_conflict_answer("추가 송금이 아니에요."), "CORRECTION")
+        self.assertEqual(general_main._classify_transaction_conflict_answer("아니요, 추가 송금했어요."), "ADDITIONAL")
+        self.assertEqual(general_main._classify_transaction_conflict_answer("같은 금액을 한 번 더 보냈어요."), "ADDITIONAL")
+        self.assertEqual(general_main._classify_transaction_conflict_answer("잘 모르겠어요."), "UNCERTAIN")
+
+    def test_confirmed_refund_fact_maps_to_internal_return_transaction(self) -> None:
+        fact = PublicCaseFactV2(
+            fact_id="fact-refund", case_id="CASE-AI-1", semantic_key="transfer.actual.amount",
+            display_label="실제 이체 금액", value={"amount_krw": 500_000, "direction": "IN", "amount_role": "REFUND_IN"},
+            display_value="500,000원 반환", source_kind="CUSTOMER_STATEMENT", status="CONFIRMED",
+            confidence=0.9, evidence_refs=[], visibility="BANK_INTERNAL", confirmed_by="staff",
+            confirmed_at=datetime.now(timezone.utc), version=1, created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+        record = general_main._confirmed_money_transaction_record(fact, "2026-09-22T10:00:00+00:00")
+        self.assertIsNotNone(record)
+        self.assertEqual(record["transaction_type"], "RETURN_IN")
+        self.assertEqual(record["amount"], 500_000)
+
+    def test_promised_refund_fact_does_not_create_transaction(self) -> None:
+        fact = PublicCaseFactV2(
+            fact_id="fact-promised-refund", case_id="CASE-AI-1", semantic_key="transfer.promised_return.amount",
+            display_label="반환 약속 금액", value={"amount_krw": 500_000, "direction": "IN", "amount_role": "REFUND_IN"},
+            display_value="500,000원 반환 약속", source_kind="CUSTOMER_STATEMENT", status="CONFIRMED",
+            confidence=0.9, evidence_refs=[], visibility="BANK_INTERNAL", confirmed_by="staff",
+            confirmed_at=datetime.now(timezone.utc), version=1, created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+        self.assertIsNone(general_main._confirmed_money_transaction_record(fact, "2026-09-22T10:00:00+00:00"))
+
     def test_uncertain_answer_keeps_unresolved_need_without_repeating_basic(self) -> None:
         self.repository.list_customer_questions.return_value = [{
             "question_id": "q-auth", "target_field": "authentication_information_exposure",
@@ -138,7 +210,7 @@ class CaseSupportSnapshotEndpointTest(unittest.TestCase):
                 self.repository.list_customer_questions.return_value = [{"question_id": "q-auth",
                     "target_field": "authentication_information_exposure", "question_text": "OTP를 제공했나요?",
                     "status": status, "answer_text": answer}]
-                self.repository.list_case_facts.return_value = facts
+                self._set_v2_facts(facts)
                 response = self.client.get("/api/cases/CASE-AI-1/customer-question-candidates")
                 self.assertEqual(response.status_code, 200)
                 self.assertNotIn("authentication_information_exposure", {item["target_field"] for item in response.json()})
@@ -176,10 +248,10 @@ class CaseSupportSnapshotEndpointTest(unittest.TestCase):
     def test_transfer_question_requires_statement_or_confirmed_fact_not_proposal(self) -> None:
         for fact_status, expected in (("PROPOSED", True), ("CONFIRMED", False)):
             with self.subTest(fact_status=fact_status):
-                self.repository.list_case_facts.return_value = [{
+                self._set_v2_facts([{
                     "fact_id": "f-transfer", "field": "transfer_status",
                     "value": "송금했어요", "status": fact_status,
-                }]
+                }])
                 response = self.client.get("/api/cases/CASE-AI-1/customer-question-candidates")
                 fields = {general_main.normalize_target_field(item["target_field"]) for item in response.json()}
                 self.assertEqual("transfer_status" in fields, expected)
@@ -193,10 +265,10 @@ class CaseSupportSnapshotEndpointTest(unittest.TestCase):
         self.repository.dispatch_next_customer_question.assert_not_awaited()
 
     def test_confirmed_installation_request_is_not_confirmed_installation(self) -> None:
-        self.repository.list_case_facts.return_value = [{
+        self._set_v2_facts([{
             "fact_id": "f-request", "field": "remote_control_app",
             "value": "원격제어 앱 설치 요구", "status": "CONFIRMED",
-        }]
+        }])
         response = self.client.get("/api/cases/CASE-AI-1/customer-question-candidates")
         self.assertIn("remote_control_app", {item["target_field"] for item in response.json()})
 
@@ -257,10 +329,10 @@ class CaseSupportSnapshotEndpointTest(unittest.TestCase):
             "question_text": "실제 송금하셨나요?", "priority": "P0",
             "status": "ANSWERED", "answer_text": "이미 송금했어요",
         }]
-        self.repository.list_case_facts.return_value = [{
+        self._set_v2_facts([{
             "fact_id": "fact-live", "field": "transfer_status", "value": "이미 송금했어요",
             "status": "PROPOSED",
-        }]
+        }])
         self.repository.list_verifications.return_value = [{
             "verification_task_id": "verification-live", "target": "서울중앙지검",
             "claim": "검찰 사칭 여부", "status": "IN_PROGRESS", "result_summary": None,
@@ -350,10 +422,10 @@ class CaseSupportSnapshotEndpointTest(unittest.TestCase):
             case_id="CASE-AI-1", available=False, warnings=["AI unavailable"],
         )
         self.repository.list_actions.return_value = []
-        self.repository.list_case_facts.return_value = [{
+        self._set_v2_facts([{
             "fact_id": "fact-auth", "field": "authentication_information_exposure",
             "value": "제공했어요", "status": "PROPOSED",
-        }]
+        }])
 
         asyncio.run(general_main.sync_ai_checklist_items("CASE-AI-1", snapshot))
 

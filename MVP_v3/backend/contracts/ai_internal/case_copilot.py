@@ -11,20 +11,6 @@ from contracts.diagnosis import StrictModel
 from contracts.public_api.case_context_v2 import PublicCaseFactV2
 
 
-class CopilotLegacyFact(StrictModel):
-    fact_id: str
-    case_id: str
-    field: str
-    value: str
-    source: str
-    status: str
-    evidence_message_id: str | None = None
-    source_question_id: str | None = None
-    confirmed_by: str | None = None
-    confirmed_at: datetime | None = None
-    created_at: datetime | None = None
-
-
 class CopilotQuestionAnswer(StrictModel):
     question_id: str
     case_id: str
@@ -70,7 +56,6 @@ class CopilotMessage(StrictModel):
 class BankCopilotSourceContext(StrictModel):
     """Latest bank-safe records plus the current structured diagnosis projection."""
     facts: list[PublicCaseFactV2] = Field(default_factory=list, max_length=100)
-    legacy_facts: list[CopilotLegacyFact] = Field(default_factory=list, max_length=100)
     questions: list[CopilotQuestionAnswer] = Field(default_factory=list, max_length=50)
     verifications: list[CopilotVerification] = Field(default_factory=list, max_length=20)
     messages: list[CopilotMessage] = Field(default_factory=list, max_length=20)
@@ -129,8 +114,7 @@ class CaseCopilotInput(StrictModel):
         if self.source_context is not None:
             if self.assistant_mode != "BANK_INTERNAL":
                 raise ValueError("source_context is bank-only")
-            for collection in (self.source_context.facts, self.source_context.legacy_facts,
-                               self.source_context.questions, self.source_context.verifications,
+            for collection in (self.source_context.facts, self.source_context.questions, self.source_context.verifications,
                                self.source_context.messages):
                 if any(item.case_id != self.case_id for item in collection):
                     raise ValueError("source_context Case mismatch")

@@ -32,10 +32,10 @@ ENTITIES = {
         'customer_questions':'고객 질문·선택지·답변·질문 버전',
         'message_context_extractions':'메시지→사실 후보 추출 작업·재시도 상태',
     },
-    '금액·거래': {'case_transactions':'Case에 연결된 개별 거래; 분석 금액을 자동으로 은행 거래로 승격하지 않음'},
+    '금액·거래': {'case_transactions':'외부 은행 원장이 아닌 Case 내부 확인 거래 기록; Context V2 실제 금액 사실을 직원 확인 후 승격'},
     '사실·확인': {
         'case_facts':'기존 사실 모델; 하위 호환 유지',
-        'case_context_facts_v2':'현재 사실 후보·확정·기각·대체 상태와 근거',
+    'case_context_facts_v2':'AI·대화·직원 확인에서 나온 사실 후보·확정·기각·대체 상태와 근거; 거래 승격 전의 기준 원장',
         'case_gaps':'미확인 사항과 해소 근거',
         'verification_tasks':'별도 확인 업무·결과·공개 여부',
         'case_context_observations':'표준 분류에 매핑되지 않은 구조화 관찰',
@@ -80,8 +80,8 @@ COLUMN_NOTES = {
     'payload_json':'해당 자원의 구조화 payload', 'state_json':'표시 편집본 상태',
     'actual_loss_amount_krw':'단일 요약 피해금액(KRW); 개별 송금 목록/자동 합계 아님',
     'victim_transfer_status':'Case 수준의 송금 여부; 개별 거래 완료 상태와 구분',
-    'amount':'개별 거래 금액; DB는 DECIMAL(19,2), 합계 정책은 별도',
-    'transaction_type':'송금/반환 등 거래 유형; 현재 DB는 자유 문자열',
+    'amount':'개별 거래 금액; KRW 정수(BIGINT), 합계 정책은 별도',
+    'transaction_type':'송금/반환 등 거래 유형; TRANSFER_OUT·RETURN_IN·CANCELLED만 허용',
     'transaction_at':'거래 시각; 원문 발화 시각과 구분',
     'input_text':'데모 입력 원문; 최초 분석 결과 화면에서만 일시 확인하며 일반 Case read/list/bundle·지원 AI 입력에는 포함하지 않음', 'segment_text':'분석 구간의 원문 제거 라벨',
     'confirmed_by':'확인 담당자', 'confirmed_at':'확인 시각',
@@ -134,7 +134,7 @@ def catalog(report: dict) -> str:
             lines.append(f"| {group} | [`{name}`](#table-{name}) | {meaning} | {report['counts'][name]} | {pk or '없음'} | {', '.join(parents) or '—'} |")
     lines += ['', '## 금액 저장 위치 구분', '', '| 위치 | 의미 | 합산 시 주의 |', '|---|---|---|',
               '| `cases.actual_loss_amount_krw` | 사건별 단일 요약 피해금액 | 다중 송금 목록이 아님. 현재 자동 동기화 없음 |',
-              '| `case_transactions.amount` | 등록된 개별 거래 | 거래 유형·출처·중복 식별 기준 필요. 현재 실제 금융기관 연동 없음 |',
+              '| `case_transactions.amount` | 직원 확인 후 등록된 Case 내부 개별 거래 | 외부 금융기관 연동값이 아님. 요구·약속·PROPOSED 사실은 자동 승격하지 않음 |',
               '| `case_context_facts_v2.value_json.amount_krw` | 요구/진술/확인 정보 | PROPOSED를 확정 거래 합계에 포함하지 않음 |',
               '| `case_semantic_atoms.payload_json.amount_value_krw` | 분석 정황의 금액 언급 | 반복 언급·예정·요구를 별도 거래로 간주하지 않음 |',
               '| `cases.diagnosis_json` / projection JSON | 분석·화면·AI 입력용 복제/캐시 | 원장과 중복 합산하지 않음 |', '', '## 테이블별 전체 컬럼·인덱스·제약조건', '']
