@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { BadgeCheck, Bookmark, Bot, CheckCircle2, ShieldCheck, UserRound } from 'lucide-react';
+import { AlertTriangle, BadgeCheck, Bookmark, Bot, CheckCircle2, ShieldCheck, UserRound } from 'lucide-react';
 import { CURRENT_CUSTOMER_USER } from '../api/cases';
 import type { CaseBundle, CaseMessage, CustomerQuestion, CustomerVerificationResult, StructuredQuestionAnswer } from '../api/types';
 import { formatClock } from '../presentation';
@@ -65,6 +65,7 @@ export const CustomerConversation: React.FC<Props> = ({ bundle, busy, aiBusy, bo
 
   return <>
     <div ref={scrollRef} className="customer-conversation-scroll" aria-live="polite" onScroll={onScroll}>
+      <section className="customer-top-safety-banner"><AlertTriangle size={18}/><div><strong>지금은 송금·인증정보 제공을 멈춰주세요.</strong><span>상대방이 알려준 연락처가 아닌 공식 채널로만 확인해 주세요.</span></div></section>
       {entries.length > 0 ? entries.map(renderEntry) : !aiBusy ? <div className="customer-conversation-empty"><Bot size={25}/><strong>아직 상담 대화가 없습니다.</strong><span>현재 상황을 알려주시면 필요한 내용을 차례로 확인합니다.</span></div> : null}
       {aiBusy && <AiThinkingBubble detail="현재 상황에 맞는 안전 안내를 준비하고 있습니다."/>}
     </div>
