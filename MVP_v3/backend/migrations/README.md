@@ -1,6 +1,6 @@
 # DB 마이그레이션 — 엔티티별 안내
 
-General API가 소유하는 MySQL 8.0 서비스 DB의 변경 이력이다. **정방향 SQL 29개와 rollback SQL 7개를 엔티티별 하위 폴더로 분류했다.** 실행 순서는 [manifest.json](manifest.json)에 명시한 전역 순서이며, 현재 manifest와 실제 정방향 SQL 수가 일치한다. DB 적용 이력은 경로가 아닌 기존 전체 파일명으로 유지한다. 동일 접두사 `009`의 두 파일도 각각 독립적인 migration이다.
+General API가 소유하는 MySQL 8.0 서비스 DB의 변경 이력이다. **정방향 SQL 30개와 rollback SQL 7개를 엔티티별 하위 폴더로 분류했다.** 실행 순서는 [manifest.json](manifest.json)에 명시한 전역 순서이며, 현재 manifest와 실제 정방향 SQL 수가 일치한다. DB 적용 이력은 경로가 아닌 기존 전체 파일명으로 유지한다. 동일 접두사 `009`의 두 파일도 각각 독립적인 migration이다.
 
 ## 실제 폴더 구조
 
@@ -37,7 +37,7 @@ General API가 소유하는 MySQL 8.0 서비스 DB의 변경 이력이다. **정
 | 구조화 정황 | case_semantic_atoms, case_semantic_relations, case_context_signals, case_context_observations | 017, 019 |
 | 직원·참여자 | bank_staff_directory, case_members, case_presence | 008, 020, 022, 023, 024 |
 | 대화·고객 질문 | messages, customer_questions, message_context_extractions | 004, 008, 009_mysql_parity_workflow, 011, 015 |
-| 거래 | case_transactions | 021_create_case_transactions |
+| 거래 | case_transactions | 021_create_case_transactions, 029_normalize_case_transaction_amounts |
 | 사실·확인 | case_facts(027/028에서 폐기), verification_tasks, case_context_facts_v2, case_gaps | 005, 009_mysql_parity_workflow, 010, 014, 027, 028 |
 | 조치·업무·결정 | actions, case_ai_suggestions, case_tasks, case_decisions | 005, 014, 018 |
 | 화면·캐시 | case_context_items, case_context_projections, personal_notes | 009_mysql_parity_workflow, 012, 013 |
@@ -80,7 +80,7 @@ General API가 소유하는 MySQL 8.0 서비스 DB의 변경 이력이다. **정
 
 | 파일 | 변경 | 보존 원칙 |
 |---|---|---|
-| [021_create_case_transactions.sql](transactions/021_create_case_transactions.sql) | 개별 거래 원장 | 금액 후보를 자동 거래 생성/확정하지 않음. 실제 은행 연동 아님 |
+| [021_create_case_transactions.sql](transactions/021_create_case_transactions.sql)·[029_normalize_case_transaction_amounts.sql](transactions/029_normalize_case_transaction_amounts.sql) | 개별 거래 원장과 KRW 정수·거래 종류 제약 | `TRANSFER_OUT`·`RETURN_IN`·`CANCELLED`만 허용. 금액 후보를 자동 거래 생성/확정하지 않음. 실제 은행 연동 아님 |
 | [005_verification_actions.sql](shared/005_verification_actions.sql) | 확인 업무·조치 저널 | 외부 지급정지/신고 실행과 구분 |
 | [014_case_context_v2_foundation.sql](shared/014_case_context_v2_foundation.sql) | Fact·Gap·Suggestion·Task·Decision·이력 | 확인자·시각, PROPOSED/CONFIRMED 경계 보존 |
 | [027_migrate_legacy_case_facts_to_v2.sql](facts/027_migrate_legacy_case_facts_to_v2.sql) | 지원되는 legacy Fact를 deterministic ID로 V2에 복사 | 값·근거·source/status를 명시적 매핑하고 재실행 가능 |

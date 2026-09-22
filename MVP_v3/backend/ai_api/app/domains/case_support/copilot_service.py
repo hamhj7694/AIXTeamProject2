@@ -276,8 +276,6 @@ class CaseCopilotService:
                 excluded = {ref.id for f in typed.facts if f.status in {"REJECTED", "SUPERSEDED"} for ref in f.evidence_refs}
                 accumulation_records = [f"{f.display_value} ({f.status}) [source={f.source_kind}]" for f in typed.facts
                                         if f.status not in {"REJECTED", "SUPERSEDED"}]
-                accumulation_records.extend(f"{f.value} ({f.status}) [source={f.source}]" for f in typed.legacy_facts
-                    if f.status not in {"REJECTED", "SUPERSEDED"} and f.evidence_message_id not in excluded)
                 accumulation_records.extend(f"고객: {q.answer_text}" for q in typed.questions
                     if q.status == "ANSWERED" and q.answer_text and q.answer_message_id not in excluded)
                 accumulation_records.extend(f"고객: {m.content}" for m in typed.messages

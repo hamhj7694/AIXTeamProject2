@@ -418,6 +418,32 @@ class MySqlCaseRepositoryIntegrationTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(failed['generation_status'], 'STALE')
         self.assertEqual(failed['last_success_payload'], {'value': 'first'})
 
+    async def test_projection_cache_row_can_be_deleted_and_recreated(self) -> None:
+        """A deleted read cache must be rebuilt from the Case revision source."""
+        from general_api.app.domains.cases.context_projection_repository import ContextProjectionRepository
+
+        case_id = f'VP-{uuid4().hex[:12]}'
+        await self.repository.create(await self._record(case_id=case_id, client_request_id=uuid4().hex))
+        self.case_ids.append(case_id)
+        store = ContextProjectionRepository(self.repository)
+
+        first = await store.claim(case_id, 1)
+        self.assertEqual(first.outcome, 'CLAIMED')
+        self.assertTrue(await store.complete(case_id, 1, first.lease_token or '', {'value': 'before-delete'}))
+        self.assertEqual((await store.claim(case_id, 1)).outcome, 'CACHED')
+
+        pool = await self.repository._get_pool()
+        async with pool.acquire() as connection, connection.cursor() as cursor:
+            await cursor.execute('DELETE FROM case_context_projections WHERE case_id=%s', (case_id,))
+            await connection.commit()
+
+        rebuilt = await store.claim(case_id, 1)
+        self.assertEqual(rebuilt.outcome, 'CLAIMED')
+        self.assertIsNone(rebuilt.last_success_payload)
+        self.assertTrue(await store.complete(case_id, 1, rebuilt.lease_token or '', {'value': 'after-recreate'}))
+        current = await store.read(case_id)
+        self.assertEqual(current['last_success_payload'], {'value': 'after-recreate'})
+
     async def test_create_list_get_and_idempotency_lookup(self) -> None:
         case_id = f"A0-{uuid4().hex[:12].upper()}"
         self.case_ids.append(case_id)

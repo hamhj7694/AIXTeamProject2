@@ -1,8 +1,8 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
 
 const STORAGE_KEY = 'csr.bank.context-width.v1';
-const DEFAULT_WIDTH = 400;
-const MIN_WIDTH = 220;
+const DEFAULT_WIDTH = 440;
+const MIN_WIDTH = 440;
 const CHAT_MIN_WIDTH = 480;
 const HANDLE_WIDTH = 8;
 

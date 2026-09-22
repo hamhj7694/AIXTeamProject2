@@ -235,6 +235,38 @@ class PublicCaseContextResourcesV2(CaseContextV2Model):
     unmapped_observations: list[dict[str, Any]] = Field(default_factory=list, max_length=200)
 
 
+class PublicContextWorkspaceResponse(CaseContextV2Model):
+    """Combined workspace contract used by the bank Context V2 screen.
+
+    The V2 resources are strongly typed.  Older Fact-shaped response fields
+    are intentionally absent; all fact reads and reviews use the V2 contract.
+    """
+
+    case_id: str
+    context_revision: int = Field(ge=1)
+    permissions_mode: Literal["MVP_OPEN", "ROLE_BASED"]
+    can_write: bool
+    can_review: bool
+    can_review_suggestions: bool
+    # Inference-first clients consume one stream of active context items and
+    # do not branch on the legacy confirmation status.
+    context_facts: list[PublicCaseFactV2] = Field(default_factory=list)
+    confirmed_facts: list[PublicCaseFactV2] = Field(default_factory=list)
+    proposed_facts: list[PublicCaseFactV2] = Field(default_factory=list)
+    open_gaps: list[PublicCaseGapV2] = Field(default_factory=list)
+    archived_gaps: list[PublicCaseGapV2] = Field(default_factory=list)
+    gap_history: list[dict[str, Any]] = Field(default_factory=list)
+    ai_suggestions: list[PublicAiSuggestionV2] = Field(default_factory=list)
+    reviewed_suggestions: list[PublicAiSuggestionV2] = Field(default_factory=list)
+    active_tasks: list[PublicCaseTaskV2] = Field(default_factory=list)
+    archived_tasks: list[PublicCaseTaskV2] = Field(default_factory=list)
+    recent_decisions: list[PublicDecisionRecordV2] = Field(default_factory=list)
+    legacy_suggestions: list[dict[str, Any]] = Field(default_factory=list)
+    legacy_gaps: list[dict[str, Any]] = Field(default_factory=list)
+    legacy_records: list[dict[str, Any]] = Field(default_factory=list)
+    legacy_archived_suggestions: list[dict[str, Any]] = Field(default_factory=list)
+
+
 class PublicSuggestionReviewResultV2(CaseContextV2Model):
     suggestion: PublicAiSuggestionV2
     created_task: PublicCaseTaskV2 | None = None

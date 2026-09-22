@@ -1,9 +1,9 @@
-"""Compatibility adapter for the retired ``case_facts`` contract.
+"""Internal compatibility adapter for the retired ``case_facts`` contract.
 
-The public ``/facts`` route is kept temporarily for older clients, but its
-storage source is now the V2 context-facts table.  This module is deliberately
-small and fail-closed: only fields and source/status values with an explicit
-mapping are exposed through the legacy shape.
+The public ``/facts`` route is retired with HTTP 410.  These conversion
+helpers remain only for old in-memory fixtures and repository methods during
+the final cleanup window; production reads, writes, AI input, and frontend
+contracts use ``case_context_facts_v2`` directly.
 """
 from __future__ import annotations
 

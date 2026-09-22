@@ -30,8 +30,8 @@ def _item(**values: Any) -> PublicContextPanelItemV3:
 
 def _grounded_display(fact: Any, case: dict[str, Any] | None = None) -> str:
     """Render a persisted Fact and enforce its epistemic status before display."""
-    plan = grounded_fact_item(fact, context=case)
     try:
+        plan = grounded_fact_item(fact, context=case)
         validate_grounded_fact(fact, plan["text"], case)
     except ValueError:
         # A historical or malformed proposal must not take down the entire
@@ -61,7 +61,9 @@ def _canonical_confirmed_facts(facts: list[Any]) -> list[Any]:
     use the newest row for ordinary semantic slots, and retain distinct
     confirmed money events so the UI does not silently lose a real transfer.
     """
-    active = [fact for fact in facts if fact.status == "CONFIRMED"]
+    # Inference-first mode: active facts are useful context regardless of the
+    # legacy confirmation value stored on them.
+    active = [fact for fact in facts if fact.status not in {"REJECTED", "SUPERSEDED"}]
     grouped: dict[str, list[Any]] = {}
     for fact in active:
         grouped.setdefault(str(fact.semantic_key), []).append(fact)
@@ -282,19 +284,18 @@ def _build_summary_lines(
     active_facts = []
     seen_fact_markers: set[tuple[str, str, str | None]] = set()
     for fact in resources.facts:
-        if fact.status not in {"CONFIRMED", "PROPOSED"}:
+        if fact.status in {"REJECTED", "SUPERSEDED"}:
             continue
         marker = _projection_marker(fact, section_for_key(fact.semantic_key), _grounded_display(fact, case))
         if marker in seen_fact_markers:
             continue
         seen_fact_markers.add(marker)
         active_facts.append(fact)
-    confirmed_facts = _canonical_confirmed_facts(active_facts)
-    proposed_count = sum(1 for fact in active_facts if fact.status == "PROPOSED")
-    lines.append(f"확정 사실 {len(confirmed_facts)}건 · 검토 대기 {proposed_count}건")
+    context_facts = _canonical_confirmed_facts(active_facts)
+    lines.append(f"분석 정황 {len(context_facts)}건")
 
     fact_parts: list[str] = []
-    actual_amounts = [fact for fact in confirmed_facts if fact.semantic_key == "transfer.actual.amount"]
+    actual_amounts = [fact for fact in context_facts if fact.semantic_key == "transfer.actual.amount"]
     if actual_amounts:
         values = [
             mask_sensitive_text(fact.display_value) if fact.semantic_key in SENSITIVE_KEYS else fact.display_value
@@ -308,11 +309,11 @@ def _build_summary_lines(
         fact_parts.append(
             f"실제 이체 {len(values)}건 · 합계 {total:,}원: " + ", ".join(values)
         )
-    for fact in [fact for fact in confirmed_facts if fact.semantic_key != "transfer.actual.amount"][:2]:
+    for fact in [fact for fact in context_facts if fact.semantic_key != "transfer.actual.amount"][:2]:
         value = mask_sensitive_text(fact.display_value) if fact.semantic_key in SENSITIVE_KEYS else fact.display_value
         fact_parts.append(f"{fact.display_label}: {value}")
     if fact_parts:
-        lines.append("확인된 사실 · " + " / ".join(fact_parts))
+        lines.append("분석 정황 · " + " / ".join(fact_parts))
 
     completed_verifications = [
         verification for verification in verifications
@@ -419,9 +420,7 @@ def build_context_panel_v3(
             continue
         marker = _projection_marker(fact, section_for_key(fact.semantic_key), _grounded_display(fact, case))
         projected_fact_statuses.setdefault(marker, fact.status)
-    confirmed_count = sum(status == "CONFIRMED" for status in projected_fact_statuses.values())
-    proposed_count = sum(status == "PROPOSED" for status in projected_fact_statuses.values())
-    summary_lines.append(f"확정 사실 {confirmed_count}건 · 검토 대기 {proposed_count}건")
+    summary_lines.append(f"분석 정황 {len(projected_fact_statuses)}건")
     summary_projection = build_summary_projection(case, resources, verifications, actions, display_items)
     revision = summary_projection["source_revision"]
     summary_override = summary_projection["override"]
@@ -543,7 +542,7 @@ def build_context_panel_v3(
 
     shared: list[PublicContextPanelItemV3] = []
     for fact in resources.facts:
-        if fact.status == "CONFIRMED" and fact.visibility == "CUSTOMER_SHARED":
+        if fact.status not in {"REJECTED", "SUPERSEDED"} and fact.visibility == "CUSTOMER_SHARED":
             shared.append(_item(item_id=fact.fact_id, semantic_key=fact.semantic_key, label=fact.display_label,
                                 display_value=_grounded_display(fact, case), value=fact.value, source_kind=fact.source_kind,
                                 status=fact.status, evidence_refs=_enrich_evidence_refs(fact.evidence_refs, case=case, messages=messages, view=view, semantic_key=fact.semantic_key, display_value=fact.display_value), visibility=fact.visibility, version=fact.version))

@@ -205,10 +205,11 @@ export const SharedConversation: React.FC<Props> = ({ bundle, view, channel, com
   const { scrollRef, showJumpToLatest, onScroll, jumpToLatest } = useScrollToLatest(`${latestEntryKey}:${inlineCard ? 'card' : 'no-card'}:${flowCard ? 'flow-card' : 'no-flow-card'}`);
   const channelLabel = channel === 'CUSTOMER' ? '고객 소통용' : '은행 내부 소통용';
   const CollapseIcon = channel === 'CUSTOMER' ? (collapsed ? PanelLeftOpen : PanelLeftClose) : (collapsed ? PanelRightOpen : PanelRightClose);
-  return <section className={`conversation-channel-pane conversation-channel-${channel.toLowerCase()} ${collapsed ? 'is-collapsed' : ''}`} aria-label={channelLabel}>
+  const hasInlineCards = Boolean(inlineCard || flowCard);
+  return <section className={`conversation-channel-pane conversation-channel-${channel.toLowerCase()} ${collapsed ? 'is-collapsed' : ''} ${hasInlineCards ? 'has-inline-cards' : ''}`} aria-label={channelLabel}>
     <header className="conversation-channel-header"><button type="button" className="conversation-channel-toggle" onClick={onToggleCollapse} disabled={collapseDisabled} aria-label={collapsed ? `${channelLabel} 열기` : `${channelLabel} 접기`} title={collapseDisabled ? '다른 채팅창을 먼저 열어 주세요.' : undefined}><CollapseIcon size={15}/></button><strong>{channelLabel}</strong>{!collapsed && <span>{channel === 'CUSTOMER' ? '고객에게 공개되는 대화' : '은행 담당자만 보는 대화'}</span>}</header>
     {collapsed ? <div className="conversation-channel-collapsed"><span>{channel === 'CUSTOMER' ? '고객' : '내부'}</span><small>채팅창 열기</small></div> : <>
-      <div ref={scrollRef} onScroll={onScroll} className={`conversation-scroll${inlineCard || flowCard ? ' has-inline-card' : ''}`} aria-live="polite">
+      <div ref={scrollRef} onScroll={onScroll} className="conversation-scroll" aria-live="polite">
         {entries.length === 0 && !inlineCard && !flowCard && !aiBusy ? (
           <div className="conversation-empty">아직 대화 기록이 없습니다.</div>
         ) : (
@@ -238,19 +239,13 @@ export const SharedConversation: React.FC<Props> = ({ bundle, view, channel, com
           ))
         )}
 
-        {inlineCard && (
-          <div className="bank-timeline-entry bank-card-message">
-            {inlineCard}
-          </div>
-        )}
-        {flowCard && (
-          <div className="bank-timeline-entry bank-card-message">
-            {flowCard}
-          </div>
-        )}
         {aiBusy && <AiThinkingBubble detail="현재 은행 내부 대화와 사건 기록을 확인하고 있습니다."/>}
       </div>
       {showJumpToLatest && <div className="conversation-scroll-action"><button type="button" onClick={jumpToLatest} aria-label="최신 채팅으로 가기" title="최신 채팅으로 가기"><ArrowDown size={14}/>최신 채팅으로 가기</button></div>}
+      {hasInlineCards && <div className="conversation-inline-cards" aria-label="채팅 관련 카드">
+        {inlineCard && <div className="conversation-inline-card">{inlineCard}</div>}
+        {flowCard && <div className="conversation-inline-card">{flowCard}</div>}
+      </div>}
       {composer}
     </>}
   </section>;

@@ -99,12 +99,8 @@ def validate_fact_atom_alignment(fact: Any, context: dict[str, Any] | None = Non
 
 
 def status_label(status: str) -> str:
-    return {
-        "PROPOSED": "담당자 확인 필요",
-        "CONFIRMED": "담당자 확인 완료",
-        "REJECTED": "검토에서 제외됨",
-        "SUPERSEDED": "새 내용으로 대체됨",
-    }.get(status, "담당자 확인 필요")
+    # Status remains a legacy storage field. Product copy is inference-first.
+    return "분석 정황"
 
 
 def _grounded_fact_text_base(
@@ -248,21 +244,17 @@ def grounded_fact_item(fact: Any, context: dict[str, Any] | None = None) -> dict
 
 
 def validate_grounded_fact(fact: Any, text: str, context: dict[str, Any] | None = None) -> None:
-    """Reject empty reconstruction and epistemic status upgrades."""
+    """Reject empty reconstruction, while not using legacy status as a gate."""
     if not _text(text):
         raise ValueError("근거 문장이 비어 있습니다.")
     lowered = text.casefold()
-    if fact.status == "PROPOSED" and any(word in lowered for word in ("확정", "완료됨", "실행됨")):
-        raise ValueError("검토 전 Fact를 확정 또는 완료 사실로 문장화할 수 없습니다.")
-    if fact.status != "CONFIRMED" and any(word in lowered for word in ("완료됐", "완료되었", "제공했습니다", "송금했습니다")):
-        raise ValueError("확인되지 않은 Fact를 완료 사실로 문장화할 수 없습니다.")
     atom = _supporting_atom(fact, context)
     if (
         str(atom.get("action_state") or "").upper() in {"CUSTOMER_REPORTED_COMPLETED", "REPORTED_ACTION", "COMPLETED"}
         and str(atom.get("claim_status") or "").upper() not in {"VERIFIED", "STAFF_REPORTED"}
         and any(word in lowered for word in ("확인된", "검증된", "공식 확인"))
     ):
-        raise ValueError("고객 진술 완료를 공식 확인 완료로 승격할 수 없습니다.")
+        raise ValueError("고객 진술 완료를 공식 확인 결과로 단정할 수 없습니다.")
     validate_grounded_statement_scope(fact, text, context)
     validate_unknown_not_upgraded(fact, text, context)
     validate_semantic_slot_preservation(fact, text, context)

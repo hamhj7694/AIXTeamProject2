@@ -1,7 +1,7 @@
 import { apiUrl, request } from './client';
 import type {
   CustomerProgressItem, ProgressStep, UpdateCustomerProgress,
-  AiInvocationResult, AnalyzeCaseResponse, CaseAction, CaseBundle, CaseFact, CaseMember, CaseMessage, CasePresence, CaseWorkCard, InitialReport,
+  AiInvocationResult, AnalyzeCaseResponse, CaseAction, CaseBundle, CaseMember, CaseMessage, CasePresence, CaseWorkCard, InitialReport,
   CaseSupportSnapshot, CustomerQuestion, MessageChannel, MessageVisibility,
   PersonalNote, QuestionCandidate, StructuredQuestionAnswer, StoredCase, VerificationTask, WorkCardType, BankStaff, CaseTransaction,
 } from './types';
@@ -62,7 +62,6 @@ export const casesApi = {
   bundle: (caseId: string) => request<CaseBundle>(`/api/cases/${encodeURIComponent(caseId)}/bundle?view=bank`),
   customerBundle: (caseId: string) => request<CaseBundle>(`/api/cases/${encodeURIComponent(caseId)}/bundle?view=customer`),
   support: (caseId: string) => request<CaseSupportSnapshot>(`/api/cases/${encodeURIComponent(caseId)}/ai/case-support`),
-  facts: (caseId: string) => request<CaseFact[]>(`/api/cases/${encodeURIComponent(caseId)}/facts`),
   personalNotes: (caseId: string) => request<PersonalNote[]>(`/api/cases/${encodeURIComponent(caseId)}/personal-notes?author_id=${encodeURIComponent(CURRENT_BANK_USER.user_id)}`),
   createPersonalNote: (caseId: string, content: string) => request<PersonalNote>(`/api/cases/${encodeURIComponent(caseId)}/personal-notes`, {
     method: 'POST', body: JSON.stringify({ author_id: CURRENT_BANK_USER.user_id, content }),

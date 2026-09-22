@@ -1,6 +1,7 @@
 import React, { FormEvent, useRef, useState } from 'react';
 import { Bookmark, Bot, Building2, MessageCircleQuestion, Send, ShieldCheck, Sparkles, StickyNote } from 'lucide-react';
 import { hasBankAiMention } from '../bank/aiMention';
+import { usePersistentDraft } from '../draftStorage';
 import { BankCardMenu, type BankCardKind } from './cards/BankCardMenu';
 
 export type ComposerTarget = 'CUSTOMER' | 'TEAM';
@@ -31,11 +32,13 @@ interface Props {
   showInlineError?: boolean;
   onSelectBankCard?: (kind: BankCardKind) => void;
   selectedBankCard?: BankCardKind | null;
+  /** Keep an unfinished message when navigating away and back. */
+  draftStorageKey?: string;
 }
 
-export const ConversationComposer: React.FC<Props> = ({ busy, aiBusy, onSend, onOpenQuestions, onOpenVerification, onOpenAction, onInvokeAi, onOpenNotes, onOpenBookmarks, bookmarkCount, foundationMode = false, fixedTarget, showAi = true, showUtilities = true, showQuestionAction = false, onErrorChange, showInlineError = true, onSelectBankCard, selectedBankCard = null }) => {
+export const ConversationComposer: React.FC<Props> = ({ busy, aiBusy, onSend, onOpenQuestions, onOpenVerification, onOpenAction, onInvokeAi, onOpenNotes, onOpenBookmarks, bookmarkCount, foundationMode = false, fixedTarget, showAi = true, showUtilities = true, showQuestionAction = false, onErrorChange, showInlineError = true, onSelectBankCard, selectedBankCard = null, draftStorageKey }) => {
   const target = fixedTarget ?? 'TEAM';
-  const [draft, setDraft] = useState('');
+  const [draft, setDraft] = usePersistentDraft(draftStorageKey);
   const [requestAi, setRequestAi] = useState(true);
   const [error, setError] = useState('');
   const submittingRef = useRef(false);
@@ -60,7 +63,7 @@ export const ConversationComposer: React.FC<Props> = ({ busy, aiBusy, onSend, on
   };
   return <div className={`composer-shell composer-target-${target.toLowerCase()}`}>
     <div className="context-actions" aria-label="Case 빠른 작업">
-      {showQuestionAction && <button type="button" onClick={onOpenQuestions} disabled={busy}><MessageCircleQuestion size={15}/>고객에게 질문하기</button>}
+      {showQuestionAction && <button type="button" className="customer-question-action" onClick={onOpenQuestions} disabled={busy}><MessageCircleQuestion size={15}/>고객에게 질문하기</button>}
       {!foundationMode && <>
         <button onClick={onOpenQuestions} disabled={busy}><MessageCircleQuestion size={15}/>고객에게 확인 질문</button>
         <button onClick={onOpenVerification} disabled={busy}><Building2 size={15}/>기관 확인 리스트</button>

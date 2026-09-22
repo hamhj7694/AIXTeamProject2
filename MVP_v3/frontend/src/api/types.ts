@@ -1,4 +1,6 @@
 export type RiskLevel = 'NORMAL' | 'LOW' | 'HIGH';
+export type CaseMode = 'PREVENT' | 'RECOVERY' | 'CLOSED';
+export type CaseStatus = 'NEW' | 'TRIAGE' | 'VERIFYING' | 'IN_PROGRESS' | 'CLOSED';
 export type MessageChannel = 'TEAM' | 'CUSTOMER' | 'AI_INTERNAL';
 export type MessageVisibility = 'BANK_INTERNAL' | 'CUSTOMER' | 'AI_PRIVATE';
 
@@ -209,6 +211,63 @@ export interface AnalyzeCaseResponse {
   error?: { code: string; message: string; retryable: boolean } | null;
 }
 
+/**
+ * Case bundle에서 고객·은행·검증 화면이 공통으로 사용하는 안전한 요약 계약입니다.
+ * 진단 원문이나 내부 분석 payload는 포함하지 않습니다.
+ */
+export interface CaseSummary {
+  case_id: string;
+  version: number;
+  case_name: string | null;
+  context_revision: number;
+  risk: RiskLevel;
+  mode: CaseMode;
+  status: CaseStatus;
+  initial_brief: string;
+  primary_assignee: string | null;
+  victim_transfer_status: 'UNKNOWN' | 'YES' | 'NO';
+  actual_loss_amount_krw: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Case read 응답의 진단 payload입니다.
+ * CaseSummary와 분리해, 요약 화면이 내부 분석 구조에 의존하지 않도록 합니다.
+ */
+export interface CaseDiagnosis {
+  context?: {
+    summary?: string;
+    incident_type?: string;
+    claims?: string[];
+    demands?: string[];
+    manipulation_tactics?: string[];
+    customer_statements?: string[];
+    recommended_next_steps?: string[];
+    confidence?: number;
+    feature_narratives?: FeatureNarrative[];
+  };
+  events?: DiagnosisEvent[];
+  evidence?: DiagnosisEvidence[];
+  windows?: DiagnosisWindow[];
+  features?: Record<string, number>;
+  semantic_atoms?: SemanticAtom[];
+  semantic_mentions?: SemanticMention[];
+  unmapped_observations?: UnmappedObservation[];
+  semantic_relations?: SemanticRelation[];
+  context_signals?: ContextSignal[];
+  conversation_episodes?: Array<{ episode_id: string; start_turn: number; end_turn: number; atom_ids: string[]; episode_type: string }>;
+  action_groups?: Array<{ group_id: string; action_predicate: string; atom_ids: string[]; action_states: string[]; target_codes: string[] }>;
+  entity_registry?: Array<{ entity_id: string; entity_code: string; mention_roles: string[]; atom_ids: string[]; source_turn_ids: number[] }>;
+  case_context_features?: {
+    claimed_actor_types: string[]; claim_codes: string[]; requested_action_codes: string[];
+    manipulation_tactic_codes: string[]; exposure_risk_codes: string[];
+    amount_values_krw: number[]; requested_amount_values_krw?: number[]; chronology: string[]; unknown_fields: string[];
+    observations?: Array<{ code: string; turn: number; status: string }>;
+  };
+  warnings?: string[];
+}
+
 export interface StoredCase {
   case_id: string;
   version: number;
@@ -221,38 +280,7 @@ export interface StoredCase {
   primary_assignee?: string | null;
   victim_transfer_status?: 'UNKNOWN' | 'YES' | 'NO';
   actual_loss_amount_krw?: number | null;
-  diagnosis: {
-    context?: {
-      summary?: string;
-      incident_type?: string;
-      claims?: string[];
-      demands?: string[];
-      manipulation_tactics?: string[];
-      customer_statements?: string[];
-      recommended_next_steps?: string[];
-      confidence?: number;
-      feature_narratives?: FeatureNarrative[];
-    };
-    events?: DiagnosisEvent[];
-    evidence?: DiagnosisEvidence[];
-    windows?: DiagnosisWindow[];
-    features?: Record<string, number>;
-    semantic_atoms?: SemanticAtom[];
-    semantic_mentions?: SemanticMention[];
-    unmapped_observations?: UnmappedObservation[];
-    semantic_relations?: SemanticRelation[];
-    context_signals?: ContextSignal[];
-    conversation_episodes?: Array<{ episode_id: string; start_turn: number; end_turn: number; atom_ids: string[]; episode_type: string }>;
-    action_groups?: Array<{ group_id: string; action_predicate: string; atom_ids: string[]; action_states: string[]; target_codes: string[] }>;
-    entity_registry?: Array<{ entity_id: string; entity_code: string; mention_roles: string[]; atom_ids: string[]; source_turn_ids: number[] }>;
-    case_context_features?: {
-      claimed_actor_types: string[]; claim_codes: string[]; requested_action_codes: string[];
-      manipulation_tactic_codes: string[]; exposure_risk_codes: string[];
-      amount_values_krw: number[]; requested_amount_values_krw?: number[]; chronology: string[]; unknown_fields: string[];
-      observations?: Array<{ code: string; turn: number; status: string }>;
-    };
-    warnings?: string[];
-  };
+  diagnosis: CaseDiagnosis;
   initial_report?: InitialReport | null;
   created_at: string;
   updated_at: string;
@@ -263,8 +291,9 @@ export interface StoredCase {
 export interface CaseTransaction {
   id: number;
   case_id: string;
-  transaction_type: string;
+  transaction_type: 'TRANSFER_OUT' | 'RETURN_IN' | 'CANCELLED';
   transaction_at: string;
+  /** KRW integer; fractional amounts are not part of the public contract. */
   amount: number;
   account_number?: string | null;
   counterparty_name?: string | null;
@@ -288,6 +317,20 @@ export interface Attachment {
   visibility: MessageVisibility;
   ai_readable: boolean;
   download_url: string;
+  created_at: string;
+}
+
+/**
+ * Case bundle에 포함되는 통화 세션 metadata입니다.
+ * 원문 transcript를 포함하지 않으며, 현재 화면에서는 직접 표시하지 않습니다.
+ */
+export interface VoiceSession {
+  session_id: string;
+  case_id: string;
+  status: 'REQUESTED' | 'ACTIVE' | 'ENDED' | 'FAILED';
+  participants: string[];
+  started_at: string | null;
+  ended_at: string | null;
   created_at: string;
 }
 
@@ -393,25 +436,14 @@ export interface CustomerVerificationResult {
   published_at?: string | null;
 }
 
-export interface CaseFact {
-  fact_id: string;
-  case_id: string;
-  field: string;
-  value: string;
-  source: 'AI_EXTRACTED' | 'HUMAN_CONFIRMED' | 'VERIFIED' | 'UNRESOLVED';
-  status: 'PROPOSED' | 'CONFIRMED' | 'UNRESOLVED';
-  confidence: number;
-  evidence_message_id?: string | null;
-  source_question_id?: string | null;
-  confirmed_by?: string | null;
-  confirmed_at?: string | null;
-  created_at: string;
-}
-
 export interface CaseBundle {
   customer_progress?: CustomerProgressItem[];
-  case: Record<string, unknown>;
+  case: CaseSummary;
+  /** Initial/live analysis snapshot. It is typed for contract parity only; the UI does not render it directly. */
+  live_report?: InitialReport | null;
   final_report?: InitialReport | null;
+  /** Session metadata only; transcript storage and transcript APIs are disabled. */
+  voice_session?: VoiceSession | null;
   recent_messages: CaseMessage[];
   recent_events: CaseEvent[];
   recent_actions: CaseAction[];

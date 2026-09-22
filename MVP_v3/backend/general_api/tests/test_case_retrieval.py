@@ -1,10 +1,11 @@
 import asyncio
 import unittest
 from unittest.mock import AsyncMock, patch
+from datetime import datetime, timezone
 
 from fastapi.testclient import TestClient
 from contracts.ai_internal.case_copilot import CaseCopilotInput
-from contracts.public_api.case_context_v2 import PublicCaseContextResourcesV2
+from contracts.public_api.case_context_v2 import PublicCaseContextResourcesV2, PublicCaseFactV2
 from general_api.app.domains.cases.case_retrieval import (
     CaseRecord, CaseRetriever, collect_records, merge_support_records,
     retrieve_context, similar_question, workspace_records,
@@ -173,7 +174,7 @@ class RetrievalWiringTest(unittest.TestCase):
             claim='기관 실재', status='COMPLETED', result_summary='기관 사칭 확인', version=2,
             verified_by='staff', evidence_url='https://example.invalid/result', updated_at='2026-09-18T03:00:00Z')]
         resources = asyncio.run(store.list_resources('VP-RAG'))
-        context = bank_source_context('VP-RAG', resources, facts=[], questions=[], messages=[], verifications=self.repo._verifications)
+        context = bank_source_context('VP-RAG', resources, questions=[], messages=[], verifications=self.repo._verifications)
         by_id = {f.fact_id: f for f in context.facts}
         self.assertEqual(by_id[old.fact_id].status, 'SUPERSEDED')
         self.assertEqual(by_id[old.fact_id].supersedes_fact_id, new.fact_id)
@@ -185,12 +186,12 @@ class RetrievalWiringTest(unittest.TestCase):
     def test_cross_case_context_rejected_and_record_limits_are_explicit(self):
         resources = PublicCaseContextResourcesV2(case_id='VP-RAG', context_revision=1)
         messages = [dict(message_id=f'm-{i}', case_id='VP-RAG', actor_type='CUSTOMER', content='송금했어요') for i in range(25)]
-        context = bank_source_context('VP-RAG', resources, facts=[], questions=[], verifications=[], messages=messages)
+        context = bank_source_context('VP-RAG', resources, questions=[], verifications=[], messages=messages)
         self.assertEqual(len(context.messages), 20)
         self.assertTrue(context.truncated)
         messages[0]['case_id'] = 'OTHER'
         with self.assertRaises(ValueError):
-            bank_source_context('VP-RAG', resources, facts=[], questions=[], verifications=[], messages=messages)
+            bank_source_context('VP-RAG', resources, questions=[], verifications=[], messages=messages)
 
     def test_latest_structured_diagnosis_is_attached_to_every_bank_bundle(self):
         resources = PublicCaseContextResourcesV2(case_id='VP-RAG', context_revision=4)
@@ -203,7 +204,7 @@ class RetrievalWiringTest(unittest.TestCase):
             'quality_reviews': [{'status': 'REPAIRED'}],
             'model_metadata': {'context_revision': 4},
         }
-        context = bank_source_context('VP-RAG', resources, facts=[], questions=[], verifications=[], messages=[], diagnosis=diagnosis)
+        context = bank_source_context('VP-RAG', resources, questions=[], verifications=[], messages=[], diagnosis=diagnosis)
         self.assertEqual(context.analysis_context['summary'], '최신 구조화 요약')
         self.assertEqual(context.semantic_atoms[0]['atom_id'], 'ATM-LATEST')
         self.assertEqual(context.semantic_relations[0]['relation_id'], 'REL-LATEST')
@@ -226,7 +227,7 @@ class RetrievalWiringTest(unittest.TestCase):
         )]
 
         context = bank_source_context(
-            'VP-RAG', resources, facts=[], questions=[], verifications=[], messages=messages,
+            'VP-RAG', resources, questions=[], verifications=[], messages=messages,
         )
 
         staff, customer = context.messages
@@ -241,13 +242,15 @@ class RetrievalWiringTest(unittest.TestCase):
         )
         self.assertNotEqual(staff.actor_display_name, '박사칭')
 
-    def test_legacy_fact_provenance_preserved_without_inferred_customer_or_bank_source(self):
-        resources = PublicCaseContextResourcesV2(case_id='VP-RAG', context_revision=1)
-        raw = dict(fact_id='legacy', case_id='VP-RAG', field='transfer_status', value='송금했어요',
-            source='AI_EXTRACTED', status='PROPOSED', evidence_message_id='msg', source_question_id='cq-parent',
-            created_at='2026-09-18T01:00:00Z')
-        context = bank_source_context('VP-RAG', resources, facts=[raw], questions=[], messages=[], verifications=[])
-        self.assertEqual(context.legacy_facts[0].source, 'AI_EXTRACTED')
-        self.assertEqual(context.legacy_facts[0].evidence_message_id, 'msg')
-        self.assertEqual(context.legacy_facts[0].source_question_id, 'cq-parent')
-        self.assertIsNone(context.legacy_facts[0].confirmed_at)
+    def test_v2_fact_provenance_is_the_only_copilot_fact_source(self):
+        fact = PublicCaseFactV2(
+            fact_id='fact-v2', case_id='VP-RAG', semantic_key='transfer.actual.status',
+            display_label='실제 송금 여부', value={'status': 'YES'}, display_value='송금함',
+            source_kind='CUSTOMER_STATEMENT', status='PROPOSED', confidence=0.7,
+            evidence_refs=[{'type': 'MESSAGE', 'id': 'msg'}], visibility='BANK_INTERNAL',
+            version=1, created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc),
+        )
+        resources = PublicCaseContextResourcesV2(case_id='VP-RAG', context_revision=1, facts=[fact])
+        context = bank_source_context('VP-RAG', resources, questions=[], messages=[], verifications=[])
+        self.assertEqual(context.facts[0].semantic_key, 'transfer.actual.status')
+        self.assertEqual(context.facts[0].evidence_refs[0].id, 'msg')

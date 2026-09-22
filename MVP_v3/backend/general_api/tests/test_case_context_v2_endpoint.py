@@ -55,7 +55,8 @@ class CaseContextV2EndpointTest(unittest.TestCase):
         self.assertEqual(data["confirmed_facts"], [])
         self.assertEqual(data["active_tasks"], [])
         self.assertEqual(data["recent_decisions"], [])
-        self.assertEqual(data["legacy_facts"][0]["status"], "PROPOSED")
+        # V2 is the only public Fact source; the old Fact-shaped field is gone.
+        self.assertNotIn("legacy_facts", data)
         self.assertEqual(data["legacy_suggestions"][0]["title"], "개인정보 제공 여부 확인")
         self.assertEqual(len(data["legacy_records"]), 1)
         self.assertTrue(data["can_write"])

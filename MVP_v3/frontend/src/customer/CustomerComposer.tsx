@@ -1,5 +1,9 @@
 import React, { FormEvent, useRef, useState } from 'react';
+
 import { ChevronUp, Send, Sparkles } from 'lucide-react';
+
+import { usePersistentDraft } from '../draftStorage';
+
 
 interface Props {
   busy: boolean;
@@ -11,10 +15,17 @@ interface Props {
   onEmergency?: () => void;
   onOpenRecoveryGuide?: () => void;
   onSend: (content: string, requestAi: boolean) => Promise<void>;
+  draftStorageKey?: string;
 }
+
 
 export const CustomerComposer: React.FC<Props> = ({ busy, aiBusy, disabled = false, showEmergency = false, emergencyActive = false, guideOpen = false, onEmergency, onOpenRecoveryGuide, onSend }) => {
   const [draft, setDraft] = useState('');
+
+  //나중에 형준이랑 얘기해서 통합
+// export const CustomerComposer: React.FC<Props> = ({ busy, aiBusy, disabled = false, onSend, draftStorageKey }) => {
+//   const [draft, setDraft] = usePersistentDraft(draftStorageKey);
+
   const [requestAi, setRequestAi] = useState(true);
   const [error, setError] = useState('');
   const submittingRef = useRef(false);
