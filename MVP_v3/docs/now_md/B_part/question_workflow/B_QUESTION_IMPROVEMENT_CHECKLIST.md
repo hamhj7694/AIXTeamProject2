@@ -216,22 +216,22 @@ AI 답변 이후 담당자가 현재 상황에 맞는 기존 기능으로 빠르
 
 모든 개선 작업이 끝난 뒤 기존 B Part 핵심 기능이 유지되는지 확인합니다.
 
-- [ ] Bank 연속 메시지 batching 정상
-- [ ] Bank in-flight supersede 정상
-- [ ] Customer batching / supersede 정상
-- [ ] stale AI_RESPONSE 저장 방지 정상
+- [x] Bank 연속 메시지 batching 정상
+- [x] Bank in-flight supersede 정상
+- [x] Customer batching / supersede 정상
+- [x] stale AI_RESPONSE 저장 방지 정상
 - [ ] `PENDING → ASKED → ANSWERED` 정상
 - [ ] QUESTION / ANSWER 저장 정상
 - [ ] Customer answer 반영 정상
 - [ ] qf1 parent / target / duplicate 보호 정상
-- [ ] 담당자 승인 전 고객 자동 전송 없음
+- [x] 담당자 승인 전 고객 자동 전송 없음
 - [ ] Case Context provenance 유지
 - [ ] Quality / Grounding 안전 경계 유지
 - [ ] 기존 DB 테이블 / 컬럼 / 관계 구조 변경 없음
 - [ ] 주요 자동 테스트 PASS
 - [ ] 주요 Browser E2E PASS
 
-상태: `TODO`
+상태: `IN_PROGRESS`
 
 ---
 
