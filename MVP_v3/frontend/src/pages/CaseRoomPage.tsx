@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, Bookmark, CheckCircle2, FileSearch, Loader2, RefreshCw, RotateCcw, StickyNote, Trash2, Users, X } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { AlertCircle, Bookmark, CheckCircle2, Loader2, RefreshCw, RotateCcw, StickyNote, Trash2, Users, X } from 'lucide-react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { casesApi, CURRENT_BANK_USER } from '../api/cases';
 import type { AnalyzeCaseResponse, BankStaff, CaseBundle, CaseMember, CaseMessage, CaseSupportSnapshot, StoredCase, CaseTransaction } from '../api/types';
@@ -21,7 +22,6 @@ import { stripBankAiMention } from '../bank/aiMention';
 import { buildConsecutiveAiPrompt, ConsecutiveAiBatcher, type AiBatchControl } from '../bank/consecutiveAiBatch';
 import { generateUuid } from '../uuid';
 import { mergePendingMessages, removeMessage, upsertMessage } from '../api/messageState';
-import { caseState, caseStateTone, incidentTitle, statusLabel } from '../presentation';
 import { BankCardKind } from '../components/cards/BankCardMenu';
 import FdsResultCard from '../components/cards/FdsResultCard';
 import AdditionalLookupCard, { type TransactionItem } from '../components/cards/AdditionalLookupCard';
@@ -557,11 +557,10 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
   const orderedBankCards = openBankCards.filter((kind) => kind === 'fds' || kind === 'additionalLookup');
   const bankCardStack = orderedBankCards.length > 0 ? <BankCardStack cards={orderedBankCards} cardContent={cardContent} collapsedCards={collapsedBankCards} updatedCards={updatedBankCards} highlightedCard={highlightedBankCard} onToggleCollapsed={toggleBankCardCollapsed} onClose={closeBankCard} onViewed={(kind) => setUpdatedBankCards((current) => ({ ...current, [kind]: false }))}/> : undefined;
 
-  return <section className="case-room">
-    <header className="case-room-header case-command-header">
-      <div className="case-heading"><span className={`risk-dot ${caseStateTone(caseState(caseItem))}`}/><div><div className="case-title-line"><span>{caseItem.case_id}</span><h1>{incidentTitle(caseItem)}</h1></div><div className="case-header-meta"><span>{statusLabel(caseItem.status, caseItem.mode)}</span><span>주 담당자 {caseItem.primary_assignee || '미배정'}</span></div></div></div>
-      <div className="room-header-actions"><button className="participant-open" type="button" onClick={() => setParticipantOpen(true)}><Users size={16}/>참여자 <b>{participantCount}</b></button><button type="button" className="header-tool-action header-tool-analysis" onClick={() => setAnalysisResultOpen(true)}><FileSearch size={15}/>초기 분석 결과 보기</button><button type="button" className="header-tool-action header-tool-note" onClick={() => setNoteOpen(true)}><StickyNote size={15}/>개인 메모</button><button type="button" className="header-tool-action header-tool-bookmark" onClick={() => setBookmarkOpen(true)}><Bookmark size={15}/>북마크{bookmarks.length > 0 && <b>{bookmarks.length}</b>}</button><button className="icon-button" onClick={() => void load(true, true)} aria-label="Case와 AI 사건 맥락 새로고침"><RefreshCw size={17} className={refreshing ? 'spin' : ''}/></button><MoreMenu label="Case 관리 메뉴"><>{caseItem.mode === 'CLOSED' ? <button onClick={() => setAdminAction('reopen')}><RotateCcw size={14}/>사건 다시 진행</button> : <button onClick={() => setAdminAction('finalize')}><CheckCircle2 size={14}/>해결 및 종료</button>}<button className="danger" onClick={() => setAdminAction('trash')}><Trash2 size={14}/>휴지통으로 이동</button></></MoreMenu></div>
-    </header>
+  const roomHeaderActions = <div className="room-header-actions"><button className="participant-open" type="button" onClick={() => setParticipantOpen(true)}><Users size={16}/>참여자 <b>{participantCount}</b></button><button type="button" className="header-tool-action header-tool-note" onClick={() => setNoteOpen(true)}><StickyNote size={15}/>개인 메모</button><button type="button" className="header-tool-action header-tool-bookmark" onClick={() => setBookmarkOpen(true)}><Bookmark size={15}/>북마크{bookmarks.length > 0 && <b>{bookmarks.length}</b>}</button><button className="icon-button" onClick={() => void load(true, true)} aria-label="Case와 AI 사건 맥락 새로고침"><RefreshCw size={17} className={refreshing ? 'spin' : ''}/></button><MoreMenu label="Case 관리 메뉴"><>{caseItem.mode === 'CLOSED' ? <button onClick={() => setAdminAction('reopen')}><RotateCcw size={14}/>사건 다시 진행</button> : <button onClick={() => setAdminAction('finalize')}><CheckCircle2 size={14}/>해결 및 종료</button>}<button className="danger" onClick={() => setAdminAction('trash')}><Trash2 size={14}/>휴지통으로 이동</button></></MoreMenu></div>;
+  return <>
+    {typeof document !== 'undefined' && document.getElementById('app-room-header-actions') && createPortal(roomHeaderActions, document.getElementById('app-room-header-actions')!)}
+    <section className="case-room">
     <CaseContextLayout contextOpen={contextOpen}>
       <main className="conversation-column">
         {(partialWarnings.length > 0 || Boolean(error) || composerWarningMessages.length > 0) && <div className="conversation-top-warnings">
@@ -603,5 +602,6 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
     {adminAction === 'reopen' && <AdminCaseDialog title="사건 다시 진행하기" description="종결 직전의 사건 상태로 복구합니다. 관리자 암호를 입력해 주세요." confirmLabel="진행 상태로 복구" onConfirm={(password) => reopenCase(password)} onClose={() => setAdminAction(null)}/>}
     {adminAction === 'trash' && <AdminCaseDialog title="휴지통으로 보내기" description="사건은 휴지통에서 30일 동안 보관되며 그 안에는 복구할 수 있습니다." confirmLabel="휴지통으로 보내기" onConfirm={(password) => trashCase(password)} onClose={() => setAdminAction(null)}/>}
     {assignmentRequired && <CaseAssignmentDialog caseId={caseId} initialRecommendation={true} onAssigned={async () => { markInitialAssignmentHandled(caseId); setAssignmentRequired(false); await load(true, false); onMutated(); }}/>} 
-  </section>;
+  </section>
+  </>;
 };

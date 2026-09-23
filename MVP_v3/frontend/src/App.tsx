@@ -8,6 +8,7 @@ import { CustomerCaseRoomPage } from './pages/CustomerCaseRoomPage';
 import { HomeDashboardPage } from './pages/HomeDashboardPage';
 import { HomePage } from './pages/HomePage';
 import { loadNotifications, notificationEventName, NotificationCenter, type AppNotification } from './components/NotificationCenter';
+import { caseState, caseStateTone, incidentTitle, statusLabel } from './presentation';
 
 const Workspace: React.FC = () => {
   const location = useLocation();
@@ -24,6 +25,7 @@ const Workspace: React.FC = () => {
   const [notifications, setNotifications] = useState<AppNotification[]>(loadNotifications);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const unreadCount = notifications.filter((item) => !item.read).length;
+  const activeCase = selectedCaseId ? cases.find((item) => item.case_id === selectedCaseId) : undefined;
   useEffect(() => { const onNotification = () => setNotifications(loadNotifications()); window.addEventListener(notificationEventName, onNotification); return () => window.removeEventListener(notificationEventName, onNotification); }, []);
   const markNotificationsRead = () => { const next = notifications.map((item) => ({ ...item, read: true })); localStorage.setItem('csr-app-notifications-v1', JSON.stringify(next)); setNotifications(next); };
   const deleteNotification = (id: string) => { const next = notifications.filter((item) => item.id !== id); localStorage.setItem('csr-app-notifications-v1', JSON.stringify(next)); setNotifications(next); };
@@ -59,11 +61,13 @@ const Workspace: React.FC = () => {
   return <div className="app-shell">
     <header className="app-header">
       <Link className={`brand ${analysisBusy ? 'is-disabled' : ''}`} to="/" aria-disabled={analysisBusy || undefined} onClick={(event) => { if (analysisBusy) event.preventDefault(); }}><span><ShieldCheck size={19}/></span><div><b>CSR | Case Share Room</b><small>보이스피싱 양방향 상담·대응 플랫폼</small></div></Link>
+      {activeCase && <div className="app-header-case-heading" aria-label="현재 사건"><span className={`risk-dot ${caseStateTone(caseState(activeCase))}`}/><div><div className="case-title-line"><span>{activeCase.case_id}</span><h1>{incidentTitle(activeCase)}</h1></div><div className="case-header-meta"><span>{statusLabel(activeCase.status, activeCase.mode)}</span><span>주 담당자 {activeCase.primary_assignee || '미배정'}</span></div></div></div>}
       <div className="app-header-actions">
         <div className="notification-header-control"><button type="button" className="notification-button" onClick={() => { setNotificationsOpen((current) => !current); if (!notificationsOpen) markNotificationsRead(); }} aria-label="알림함 열기" aria-expanded={notificationsOpen}><Bell size={17}/>{unreadCount > 0 && <span className="notification-badge">{unreadCount > 9 ? '9+' : unreadCount}</span>}</button>{notificationsOpen && <NotificationCenter items={notifications} onReadAll={markNotificationsRead} onDelete={deleteNotification} onClose={() => setNotificationsOpen(false)}/>}</div>
         {selectedCaseId && <div className="active-case-header-actions">
           <Link className="customer-preview-link" to={`/customer/cases/${encodeURIComponent(selectedCaseId)}`}><strong>고객 화면 체험하기</strong><small> · 고객 화면을 살펴볼 수 있습니다!</small></Link>
         </div>}
+        <div id="app-room-header-actions" className="app-room-header-actions" aria-label="사건 작업 메뉴" />
         <div className="header-status">{location.pathname !== '/' && <Link className="case-board-link" to="/"><List size={14}/>사건 보드</Link>}</div>
       </div>
     </header>

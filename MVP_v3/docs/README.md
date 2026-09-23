@@ -16,5 +16,6 @@
 | [`33_ANALYSIS_ENVELOPE_FREEZE_CONTRACT.md`](33_ANALYSIS_ENVELOPE_FREEZE_CONTRACT.md) | 원문 보관·AI 비접근형 Analysis Envelope와 새 통화 분석 병합 기준선 |
 | [`34_ANALYSIS_ENVELOPE_INTEGRATION_BACKLOG.md`](34_ANALYSIS_ENVELOPE_INTEGRATION_BACKLOG.md) | 실제 외부 연동을 제외한 Envelope 데모 완성·GitHub 보호 후속 순서 |
 | [`35_INFERENCE_FIRST_CONTEXT_MODEL.md`](35_INFERENCE_FIRST_CONTEXT_MODEL.md) | 확정/승격을 필수로 두지 않는 추정·정황 중심 Case Context 운영 모델 |
+| [`AI_CONNECTION_STATUS_CHECKLIST.md`](AI_CONNECTION_STATUS_CHECKLIST.md) | AI 기능별 실제 연결 상태·계약 오류·End-to-End 검증 및 개선 체크리스트 |
 
 구현 전 계획, 회의록, 일회성 감사, 마감 체크리스트, 구현 완료 보고서와 프롬프트 요청서는 현재 상태에 필요한 결론만 흡수한 뒤 유지하지 않는다. 과거 이력이 필요하면 Git history를 사용한다.
