@@ -15,6 +15,8 @@ export interface RecoveryStep {
 
 export const RECOVERY_MESSAGE_PREFIX = '피해구제 단계 확인:';
 
+export const recoveryMessageForStep = (step: RecoveryStep) => `${RECOVERY_MESSAGE_PREFIX} ${step.title}`;
+
 export const recoverySteps: RecoveryStep[] = [
   {
     id: 'CONTACT', icon: Phone, title: '즉시 연락',

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, AlertTriangle, ArrowLeft, Bookmark, ChevronDown, Loader2, RefreshCw, ShieldCheck, Wifi, X } from 'lucide-react';
+import { AlertCircle, AlertTriangle, ArrowLeft, Bookmark, Loader2, RefreshCw, ShieldCheck, Wifi, X } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { casesApi, CURRENT_CUSTOMER_USER } from '../api/cases';
 import { isApiErrorCode } from '../api/client';
@@ -9,7 +9,7 @@ import { CustomerBookmarks } from '../customer/CustomerBookmarks';
 import { CustomerComposer } from '../customer/CustomerComposer';
 import { CustomerConversation } from '../customer/CustomerConversation';
 import { RecoveryNavigator } from '../customer/RecoveryCards';
-import { RECOVERY_MESSAGE_PREFIX, recoveryStepFromMessage, type RecoveryStep, type RecoveryStepId } from '../customer/recovery';
+import { recoveryMessageForStep, type RecoveryStep, type RecoveryStepId } from '../customer/recovery';
 import { buildCustomerTimeline } from '../customer/timeline';
 import { mergePendingMessages, removeMessage, upsertMessage } from '../api/messageState';
 import { generateUuid } from '../uuid';
@@ -261,11 +261,12 @@ export const CustomerCaseRoomPage: React.FC = () => {
   };
 
   const selectRecoveryStep = async (step: RecoveryStep) => {
-    const existing = bundle?.recent_messages.find((message) => message.content === `${RECOVERY_MESSAGE_PREFIX} ${step.title}`);
+    const recoveryMessage = recoveryMessageForStep(step);
+    const existing = bundle?.recent_messages.find((message) => message.content === recoveryMessage);
     if (existing) { setSelectedRecoveryStep(step.id); document.getElementById(`recovery-${existing.message_id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
     setBusy(true); setError('');
     try {
-      const message = await casesApi.sendCustomerMessage(caseId, `${RECOVERY_MESSAGE_PREFIX} ${step.title}`);
+      const message = await casesApi.sendCustomerMessage(caseId, recoveryMessage);
       loadRequestRef.current += 1;
       showMessage(message);
       setSelectedRecoveryStep(step.id);
@@ -312,8 +313,8 @@ export const CustomerCaseRoomPage: React.FC = () => {
         <section className="customer-chat-panel">
           <header><div><h1>보이스피싱 대응 AI 상담</h1><p>필요한 내용을 한 가지씩 확인하고 은행 담당자와 연결합니다.</p></div><span>고객 공개 채널</span></header>
           <div className="customer-conversation-host"><CustomerConversation bundle={bundle} busy={busy} aiBusy={aiPendingCount > 0} bookmarkedIds={new Set(bookmarks.map((item) => item.entryId))} onAnswer={answer} onRecoveryRequest={requestRecoveryHelp} onToggleBookmark={toggleBookmark} onRetryMessage={retryMessage} onDismissMessage={dismissMessage}/><CustomerBookmarks open={bookmarkOpen} items={bookmarks} onClose={() => setBookmarkOpen(false)}/></div>
-          {detailsOpen && <div className="customer-recovery-menu"><div className="customer-recovery-menu-intro"><strong><AlertTriangle size={15} aria-hidden="true"/>보이스피싱 피해 구제 안내</strong><span>피해 발생 시 필요한 대응 단계를 선택해주세요.</span><button type="button" className="customer-recovery-close-button" onClick={() => setDetailsOpen(false)} aria-label="구제 안내 닫기"><ChevronDown size={14}/></button></div><RecoveryNavigator selected={selectedStep} busy={busy} onSelect={selectRecoveryStep}/></div>}
-          <CustomerComposer busy={busy} aiBusy={aiPendingCount > 0} disabled={closed} showEmergency={!closed} emergencyActive={recoveryUiActive} guideOpen={detailsOpen} onEmergency={() => { setDetailsOpen(true); setConfirmRecovery(true); }} onOpenRecoveryGuide={() => setDetailsOpen(true)} onSend={send} draftStorageKey={`csr:composer-draft:${caseId}:customer`}/>
+          {detailsOpen && <div className="customer-recovery-menu"><div className="customer-recovery-menu-intro"><div className="customer-recovery-menu-heading"><strong><AlertTriangle size={15} aria-hidden="true"/>보이스피싱 피해 구제 안내</strong><span>피해 발생 시 필요한 대응 단계를 선택해주세요.</span></div><button type="button" className="customer-recovery-return-button" onClick={() => { setDetailsOpen(false); window.requestAnimationFrame(() => { const conversation = document.querySelector<HTMLElement>('.customer-conversation-scroll'); if (conversation) conversation.scrollTo({ top: conversation.scrollHeight, behavior: 'smooth' }); }); }}>← 일반 상담으로 돌아가기</button></div><RecoveryNavigator selected={selectedStep} busy={busy} onSelect={selectRecoveryStep}/></div>}
+          <CustomerComposer busy={busy} disabled={closed} showEmergency={!closed} emergencyActive={recoveryUiActive} guideOpen={detailsOpen} onEmergency={() => { setDetailsOpen(true); setConfirmRecovery(true); }} onOpenRecoveryGuide={() => setDetailsOpen((current) => !current)} onSend={send} draftStorageKey={`csr:composer-draft:${caseId}:customer`}/>
         </section>
       </div>
     </main>
