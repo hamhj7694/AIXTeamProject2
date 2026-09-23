@@ -42,7 +42,7 @@ export const CustomerConversation: React.FC<Props> = ({ bundle, busy, aiBusy, bo
   const latestEntryKey = latestEntry ? `${latestEntry.id}:${latestEntry.occurredAt}` : 'empty';
   const answeredCount = bundle.questions.filter((question) => question.status === 'ANSWERED').length;
   const totalQuestions = bundle.questions.filter((question) => question.status !== 'SKIPPED').length;
-  const { scrollRef, showJumpToLatest, onScroll, jumpToLatest } = useScrollToLatest(latestEntryKey, 96);
+  const { scrollRef, showJumpToLatest, onScroll, jumpToLatest } = useScrollToLatest(`${latestEntryKey}:${aiBusy ? 'ai-busy' : 'ai-idle'}`, 96);
 
   const renderEntry = (entry: CustomerTimelineEntry) => {
     const active = bookmarkedIds.has(entry.id);

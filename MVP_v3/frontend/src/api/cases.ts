@@ -114,11 +114,11 @@ export const casesApi = {
   createVerification: (caseId: string, claim: string, target: string) => request<VerificationTask>(`/api/cases/${encodeURIComponent(caseId)}/verifications`, {
     method: 'POST', body: JSON.stringify({ claim, target }),
   }),
-  sendReportCard: (caseId: string, payload: Record<string, unknown>, clientRequestId: string = generateUuid()) => request<CaseMessage>(`/api/cases/${encodeURIComponent(caseId)}/messages`, {
+  sendReportCard: (caseId: string, payload: Record<string, unknown>, clientRequestId: string = generateUuid(), channel: 'TEAM' | 'CUSTOMER' = 'TEAM') => request<CaseMessage>(`/api/cases/${encodeURIComponent(caseId)}/messages`, {
     method: 'POST', body: JSON.stringify({
       actor_type: 'BANK_STAFF', actor_user_id: CURRENT_BANK_USER.user_id,
       actor_display_name: CURRENT_BANK_USER.display_name, actor_role: CURRENT_BANK_USER.role,
-      content: JSON.stringify(payload), channel: 'TEAM', audience: 'BANK_INTERNAL',
+      content: JSON.stringify(payload), channel, audience: 'BANK_INTERNAL',
       visibility: 'BANK_INTERNAL', message_kind: 'REPORT_CARD', mentions: [], attachment_ids: [],
       client_request_id: clientRequestId,
     }),

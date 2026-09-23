@@ -12,7 +12,7 @@ from collections import defaultdict, deque
 
 from openai import AsyncOpenAI, AuthenticationError, RateLimitError
 
-from contracts.ai_internal.case_copilot import CaseCopilotInput, CaseCopilotOutput
+from contracts.ai_internal.case_copilot import CaseCopilotInput, CaseCopilotOutput, RecommendedChatAction
 
 from .copilot_quality import CopilotQualityEvaluator
 from .copilot_accumulation import asks_total, review_transfers
@@ -57,6 +57,61 @@ class CustomerSupportCallBudget:
 
 _customer_support_budget = CustomerSupportCallBudget()
 _customer_support_concurrency = asyncio.Semaphore(max(1, int(os.getenv("CUSTOMER_AI_MAX_CONCURRENCY", "2"))))
+
+_RECOMMENDED_ACTION_KEYS = (
+    "CUSTOMER_QUESTION", "TRANSACTION_LOOKUP", "OFFICIAL_VERIFICATION",
+    "RESPONSE_ACTION", "DRAFT_REPLY",
+)
+
+COPILOT_REPLY_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "content": {"type": "string"},
+        "recommended_actions": {
+            "type": "array",
+            "maxItems": 3,
+            "items": {
+                "type": "object",
+                "properties": {
+                    "action_key": {"type": "string", "enum": list(_RECOMMENDED_ACTION_KEYS)},
+                    "kind": {"type": "string", "enum": ["TOOL", "REPLY_DRAFT"]},
+                    "target_channel": {"type": "string", "enum": ["TEAM", "CUSTOMER"]},
+                    "draft_text": {"type": ["string", "null"]},
+                    "reason_code": {"type": ["string", "null"]},
+                },
+                "required": ["action_key", "kind", "target_channel", "draft_text", "reason_code"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["content", "recommended_actions"],
+    "additionalProperties": False,
+}
+
+
+def normalize_recommended_actions(raw: object, assistant_mode: str) -> list[RecommendedChatAction]:
+    """Keep provider metadata within the small, bank-owned action vocabulary."""
+    if assistant_mode != "BANK_INTERNAL" or not isinstance(raw, list):
+        return []
+    normalized: list[RecommendedChatAction] = []
+    seen: set[str] = set()
+    for candidate in raw[:3]:
+        try:
+            action = RecommendedChatAction.model_validate(candidate)
+        except Exception:
+            continue
+        if action.action_key in seen:
+            continue
+        if action.kind == "TOOL" and action.target_channel != "TEAM":
+            continue
+        if action.kind == "REPLY_DRAFT":
+            if action.action_key != "DRAFT_REPLY" or action.target_channel != "CUSTOMER" or not action.draft_text or not action.draft_text.strip():
+                continue
+        elif action.action_key == "DRAFT_REPLY":
+            continue
+        seen.add(action.action_key)
+        normalized.append(action)
+    return normalized
 
 
 def _asks_about_primary_assignee(prompt: str) -> bool:
@@ -337,6 +392,13 @@ class CaseCopilotService:
                 "요청자의 자기소개나 이름을 고객 또는 사칭 상대의 진술로 재분류하지 마세요. "
                 "짧은 직접 질문에는 필요한 답만 먼저 제시하고, 답에 필요하지 않은 사건 요약이나 확인 질문 목록을 자동으로 덧붙이지 마세요. "
             )
+            instructions += (
+                "\n\nReturn the answer as the JSON object required by the response schema. "
+                "recommended_actions must contain at most three directly relevant next actions; use an empty array for a purely explanatory answer. "
+                "Use only CUSTOMER_QUESTION, TRANSACTION_LOOKUP, OFFICIAL_VERIFICATION, RESPONSE_ACTION, or DRAFT_REPLY. "
+                "TOOL actions target TEAM. DRAFT_REPLY targets CUSTOMER and must include a safe editable draft_text; never send it automatically. "
+                "Do not invent facts, institutions, case numbers, contacts, or legal conclusions."
+            )
             if request.response_style == "BRIEF":
                 instructions += (
                     "담당자가 사건 맥락을 빠르게 파악하고 바로 행동할 수 있도록 [상황 판단], [확인된 정보], [미확인 정보], [권장 다음 행동] "
@@ -429,15 +491,25 @@ class CaseCopilotService:
             if request.assistant_mode == "CUSTOMER_SUPPORT":
                 await _customer_support_budget.reserve(request.case_id)
             async with _customer_support_concurrency if request.assistant_mode == "CUSTOMER_SUPPORT" else _null_async_context():
-                response = await client.responses.create(
-                    model=model,
-                    instructions=instructions,
-                    input=provider_input,
-                    max_output_tokens=int(os.getenv(
+                provider_kwargs = {
+                    "model": model,
+                    "instructions": instructions,
+                    "input": provider_input,
+                    "max_output_tokens": int(os.getenv(
                         "OPENAI_CUSTOMER_AI_MAX_OUTPUT_TOKENS" if request.assistant_mode == "CUSTOMER_SUPPORT" else "OPENAI_CASE_COPILOT_MAX_OUTPUT_TOKENS",
                         "250" if request.assistant_mode == "CUSTOMER_SUPPORT" else "400",
                     )),
-                )
+                }
+                if request.assistant_mode == "BANK_INTERNAL":
+                    provider_kwargs["text"] = {
+                        "format": {
+                            "type": "json_schema",
+                            "name": "case_copilot_reply_v1",
+                            "schema": COPILOT_REPLY_SCHEMA,
+                            "strict": True,
+                        }
+                    }
+                response = await client.responses.create(**provider_kwargs)
         except RateLimitError as exc:
             raise CaseCopilotQuotaError(
                 "OpenAI 사용 한도 또는 요청 한도에 도달해 AI 답변을 생성하지 못했습니다."
@@ -457,7 +529,21 @@ class CaseCopilotService:
                 "실제 AI 서버에 연결하지 못해 답변을 생성하지 않았습니다. 잠시 후 다시 시도해 주세요."
             ) from exc
         from contracts.user_text import user_text
-        raw_content = response.output_text.strip()
+        raw_output = response.output_text.strip()
+        recommended_actions: list[RecommendedChatAction] = []
+        if request.assistant_mode == "BANK_INTERNAL":
+            try:
+                structured = json.loads(raw_output)
+                if not isinstance(structured, dict) or not isinstance(structured.get("content"), str):
+                    raise ValueError("invalid copilot response shape")
+                raw_content = structured["content"].strip()
+                recommended_actions = normalize_recommended_actions(structured.get("recommended_actions"), request.assistant_mode)
+            except (TypeError, ValueError, json.JSONDecodeError):
+                # Preserve the answer if a provider ignores the schema, but never expose
+                # unvalidated action metadata to the UI.
+                raw_content = raw_output
+        else:
+            raw_content = raw_output
         content = user_text(raw_content)
         if not content:
             raise CaseCopilotProviderError("AI 서버가 빈 응답을 반환해 답변을 생성하지 않았습니다.")
@@ -510,7 +596,7 @@ class CaseCopilotService:
                 content="현재 확인된 근거만으로는 해당 내용을 확정하기 어렵습니다. 담당자의 추가 확인이나 관련 근거 검토가 필요합니다.",
                 model_mode=model,
             )
-        return CaseCopilotOutput(content=content, model_mode=model)
+        return CaseCopilotOutput(content=content, model_mode=model, recommended_actions=recommended_actions)
 
 
 class _null_async_context:

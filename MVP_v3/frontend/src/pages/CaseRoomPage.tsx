@@ -2,10 +2,10 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertCircle, Bookmark, CheckCircle2, FileSearch, Loader2, RefreshCw, RotateCcw, StickyNote, Trash2, Users, X } from 'lucide-react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { casesApi, CURRENT_BANK_USER } from '../api/cases';
-import type { AnalyzeCaseResponse, BankStaff, CaseBundle, CaseMember, CaseMessage, CaseSupportSnapshot, StoredCase, VerificationTask, CaseTransaction } from '../api/types';
+import type { AnalyzeCaseResponse, BankStaff, CaseBundle, CaseMember, CaseMessage, CaseSupportSnapshot, StoredCase, CaseTransaction } from '../api/types';
 import { loadContextWorkspace, type ContextFact } from '../api/contextWorkspace';
 import { isApiErrorCode } from '../api/client';
-import { ActionDialog, InstitutionVerificationBoardDialog, QuestionDialog, ResponseActionChecklistDialog, VerificationDialog } from '../components/CaseActionDialogs';
+import { ActionDialog, InstitutionVerificationBoardDialog, QuestionDialog, ResponseActionChecklistDialog } from '../components/CaseActionDialogs';
 import { AdminCaseDialog } from '../components/AdminCaseDialog';
 import { ContextPanelFoundation } from '../context-v3/ContextPanelFoundation';
 import { MoreMenu } from '../context-v3/components';
@@ -16,6 +16,7 @@ import { BankBookmarks } from '../components/BankBookmarks';
 import { BankPersonalNotes } from '../components/BankPersonalNotes';
 import { CaseAssignmentDialog } from '../components/CaseAssignmentDialog';
 import { readBankBookmarks, writeBankBookmarks, type BankBookmark } from '../bank/bookmarks';
+import { saveLatestAiRecommendations } from '../bank/aiRecommendations';
 import { stripBankAiMention } from '../bank/aiMention';
 import { buildConsecutiveAiPrompt, ConsecutiveAiBatcher, type AiBatchControl } from '../bank/consecutiveAiBatch';
 import { generateUuid } from '../uuid';
@@ -29,7 +30,7 @@ import { toBankCardData } from '../components/cards/cardData';
 import { hasInitialAssignmentHandled, hasInitialAssignmentPending, markInitialAssignmentHandled, shouldOpenInitialAssignment } from '../assignmentPromptState';
 import { AnalysisResult } from './HomePage';
 
-type DialogState = { type: 'questions' } | { type: 'verification'; task?: VerificationTask; mode?: 'guide' } | { type: 'action'; mode?: 'guide' } | null;
+type DialogState = { type: 'questions' } | { type: 'verification'; mode: 'guide' } | { type: 'action'; mode?: 'guide' } | null;
 type AdminAction = 'finalize' | 'reopen' | 'trash' | null;
 type BankOutboxItem = {
   message: CaseMessage;
@@ -99,6 +100,7 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
   const [customerPaneCollapsed, setCustomerPaneCollapsed] = useState(false);
   const [teamPaneCollapsed, setTeamPaneCollapsed] = useState(false);
   const [customerPaneRatio, setCustomerPaneRatio] = useState(50);
+  const [customerDraftPrefill, setCustomerDraftPrefill] = useState('');
   const [splitDragging, setSplitDragging] = useState(false);
   const lastSupportRevisionRef = useRef('');
   const aiQueueRef = useRef<Promise<void>>(Promise.resolve());
@@ -247,7 +249,9 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
             reply_to_message_id: null,
             attachments: [],
             created_at: reply.created_at,
+            recommended_actions: reply.recommended_actions ?? [],
           });
+          saveLatestAiRecommendations(targetCaseId, reply.message_id, reply.recommended_actions ?? []);
           void load(true, false);
         }
       } catch (reason) {
@@ -279,7 +283,7 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
     loadRequestRef.current += 1;
     pendingMessagesRef.current.clear();
     outboxRef.current.clear();
-    setAiPendingCount(0); setBusy(false);
+    setAiPendingCount(0); setBusy(false); setCustomerDraftPrefill('');
     lastSupportRevisionRef.current = '';
     setCaseItem(null); setBundle(null); setSupport(null); setFacts([]); setDialog(null); setBookmarkOpen(false); setNoteOpen(false); setParticipantOpen(false); setParticipantCount(0); setCaseMembers([]); setBankStaffDirectory([]); setAssignmentRequired(false); setAnalysisResultOpen(false); setAdminAction(null); setBookmarks(readBankBookmarks(caseId)); setError(''); setComposerWarnings({}); setCustomerPaneCollapsed(false); setTeamPaneCollapsed(false); setCustomerPaneRatio(50);
     // Register the existing demo identity before mounting editors that require membership.
@@ -566,9 +570,9 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
           {composerWarningMessages.map((message) => <div className="partial-warning danger" key={message}><AlertCircle size={15}/><span>{message}</span></div>)}
         </div>}
         <div ref={splitRef} className={`conversation-channel-grid ${splitDragging ? 'is-resizing' : ''}`} style={conversationGridStyle}>
-          <SharedConversation bundle={bundle} view="conversation" channel="CUSTOMER" aiBusy={false} inlineCard={dialog?.type === 'questions' ? <QuestionDialog inline caseId={caseId} initial={support?.recommended_questions ?? []} onDone={refreshAfterMutation} onClose={() => setDialog(null)}/> : undefined} collapsed={customerPaneCollapsed} collapseDisabled={false} onToggleCollapse={toggleCustomerPane} composer={<ConversationComposer foundationMode fixedTarget="CUSTOMER" showAi={false} showUtilities={false} showQuestionAction onOpenQuestions={toggleQuestionsDialog} showInlineError={false} onErrorChange={(message) => handleComposerError('CUSTOMER', message)} busy={busy} aiBusy={false} onSend={send} onOpenVerification={() => undefined} onOpenAction={() => undefined} onInvokeAi={() => undefined} onOpenNotes={() => undefined} onOpenBookmarks={() => undefined} bookmarkCount={0} draftStorageKey={`csr:composer-draft:${caseId}:bank-customer`}/>} bookmarkedIds={new Set(bookmarks.map((item) => item.entryId))} onToggleBookmark={toggleBookmark} onRetryMessage={retryMessage} onDismissMessage={dismissMessage}/>
+          <SharedConversation bundle={bundle} view="conversation" channel="CUSTOMER" aiBusy={false} inlineCard={dialog?.type === 'questions' ? <QuestionDialog inline caseId={caseId} initial={support?.recommended_questions ?? []} onDone={refreshAfterMutation} onClose={() => setDialog(null)}/> : undefined} collapsed={customerPaneCollapsed} collapseDisabled={false} onToggleCollapse={toggleCustomerPane} composer={<ConversationComposer foundationMode fixedTarget="CUSTOMER" showAi={false} showUtilities={false} showQuestionAction onOpenQuestions={toggleQuestionsDialog} showInlineError={false} onErrorChange={(message) => handleComposerError('CUSTOMER', message)} busy={busy} aiBusy={false} onSend={send} onOpenVerification={() => undefined} onOpenAction={() => undefined} onInvokeAi={() => undefined} onOpenNotes={() => undefined} onOpenBookmarks={() => undefined} bookmarkCount={0} draftStorageKey={`csr:composer-draft:${caseId}:bank-customer`} draftPrefill={customerDraftPrefill}/>} bookmarkedIds={new Set(bookmarks.map((item) => item.entryId))} onToggleBookmark={toggleBookmark} onRetryMessage={retryMessage} onDismissMessage={dismissMessage}/>
           <button type="button" className="conversation-split-handle" onPointerDown={(event) => { if (customerPaneCollapsed || teamPaneCollapsed) return; event.preventDefault(); setSplitDragging(true); }} onDoubleClick={() => { if (!customerPaneCollapsed && !teamPaneCollapsed) setCustomerPaneRatio(50); }} onKeyDown={(event) => { if (event.key === 'Home') { event.preventDefault(); setCustomerPaneRatio(50); return; } if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return; event.preventDefault(); setCustomerPaneRatio((value) => Math.min(75, Math.max(25, value + (event.key === 'ArrowLeft' ? -5 : 5)))); }} aria-label="고객 소통과 은행 내부 소통 채팅창 너비 조절, 더블클릭하면 1대1로 맞춤" title="드래그하여 폭 조절 · 더블클릭하여 1:1 맞춤" aria-valuemin={25} aria-valuemax={75} aria-valuenow={Math.round(customerPaneRatio)} role="separator"><span/></button>
-          <SharedConversation bundle={bundle} view="conversation" channel="TEAM" inlineCard={bankCardStack} collapsed={teamPaneCollapsed} collapseDisabled={customerPaneCollapsed} onToggleCollapse={toggleTeamPane} onEditVerification={(task) => setDialog({ type: 'verification', task })} composer={<ConversationComposer foundationMode fixedTarget="TEAM" showAi showUtilities={false} showInlineError={false} selectedBankCard={selectedBankCard} onSelectBankCard={toggleBankCard} onErrorChange={(message) => handleComposerError('TEAM', message)} busy={busy} aiBusy={aiPendingCount > 0} onSend={send} onOpenQuestions={toggleQuestionsDialog} onOpenVerification={toggleVerificationDialog} onOpenAction={toggleActionDialog} onInvokeAi={() => void invokeAi()} onOpenNotes={() => setNoteOpen(true)} onOpenBookmarks={() => setBookmarkOpen(true)} bookmarkCount={bookmarks.length} draftStorageKey={`csr:composer-draft:${caseId}:bank-team`}/>} bookmarkedIds={new Set(bookmarks.map((item) => item.entryId))} onToggleBookmark={toggleBookmark} onRetryMessage={retryMessage} onDismissMessage={dismissMessage}/>
+          <SharedConversation bundle={bundle} view="conversation" channel="TEAM" aiBusy={aiPendingCount > 0} inlineCard={bankCardStack} collapsed={teamPaneCollapsed} collapseDisabled={customerPaneCollapsed} onToggleCollapse={toggleTeamPane} onOpenQuestions={toggleQuestionsDialog} onOpenTransactionLookup={toggleTransactionLookup} onOpenVerification={toggleVerificationDialog} onOpenAction={toggleActionDialog} onUseAiDraft={setCustomerDraftPrefill} composer={<ConversationComposer foundationMode fixedTarget="TEAM" showAi showUtilities={false} showInlineError={false} selectedBankCard={selectedBankCard} onSelectBankCard={toggleBankCard} onErrorChange={(message) => handleComposerError('TEAM', message)} busy={busy} aiBusy={aiPendingCount > 0} onSend={send} onOpenQuestions={toggleQuestionsDialog} onOpenVerification={toggleVerificationDialog} onOpenAnalysis={() => setAnalysisResultOpen(true)} onOpenAction={toggleActionDialog} onInvokeAi={() => void invokeAi()} onOpenNotes={() => setNoteOpen(true)} onOpenBookmarks={() => setBookmarkOpen(true)} bookmarkCount={bookmarks.length} draftStorageKey={`csr:composer-draft:${caseId}:bank-team`}/>} bookmarkedIds={new Set(bookmarks.map((item) => item.entryId))} onToggleBookmark={toggleBookmark} onRetryMessage={retryMessage} onDismissMessage={dismissMessage}/>
         </div>
       </main>
       <ContextPanelFoundation
@@ -589,7 +593,7 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
         }))}
       />
     </CaseContextLayout>
-    {dialog?.type === 'verification' && (dialog.mode === 'guide' ? <InstitutionVerificationBoardDialog caseId={caseId} verificationTasks={bundle.verification_tasks ?? []} onDone={refreshAfterMutation} onClose={() => setDialog(null)}/> : <VerificationDialog caseId={caseId} task={dialog.task} onDone={refreshAfterMutation} onClose={() => setDialog(null)}/>)}
+    {dialog?.type === 'verification' && <InstitutionVerificationBoardDialog caseId={caseId} verificationTasks={bundle.verification_tasks ?? []} onDone={refreshAfterMutation} onClose={() => setDialog(null)}/>}
     {dialog?.type === 'action' && (dialog.mode === 'guide' ? <ResponseActionChecklistDialog caseId={caseId} actions={bundle.recent_actions ?? []} onDone={refreshAfterMutation} onClose={() => setDialog(null)}/> : <ActionDialog caseId={caseId} recovery={caseItem.mode === 'RECOVERY'} onDone={refreshAfterMutation} onClose={() => setDialog(null)}/>)}
     <BankBookmarks open={bookmarkOpen} items={bookmarks} onClose={() => setBookmarkOpen(false)} onUpdate={updateBookmark} onDelete={deleteBookmark}/>
     <BankPersonalNotes caseId={caseId} open={noteOpen} onClose={() => setNoteOpen(false)}/>

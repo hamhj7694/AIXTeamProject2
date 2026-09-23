@@ -121,6 +121,18 @@ class CaseCopilotInput(StrictModel):
         return self
 
 
+class RecommendedChatAction(StrictModel):
+    action_key: Literal[
+        "CUSTOMER_QUESTION", "TRANSACTION_LOOKUP", "OFFICIAL_VERIFICATION",
+        "RESPONSE_ACTION", "DRAFT_REPLY",
+    ]
+    kind: Literal["TOOL", "REPLY_DRAFT"]
+    target_channel: Literal["TEAM", "CUSTOMER"]
+    draft_text: str | None = Field(default=None, max_length=2_000)
+    reason_code: str | None = Field(default=None, max_length=120)
+
+
 class CaseCopilotOutput(StrictModel):
     content: str = Field(min_length=1, max_length=5_000)
     model_mode: str = Field(min_length=1, max_length=100)
+    recommended_actions: list[RecommendedChatAction] = Field(default_factory=list, max_length=3)

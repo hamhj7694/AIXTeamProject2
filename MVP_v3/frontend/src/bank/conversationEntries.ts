@@ -7,7 +7,11 @@ export const buildConversationEntries = (
   channel: 'CUSTOMER' | 'TEAM',
 ): TimelineEntry[] => {
   const entries = buildTimeline(bundle, view === 'timeline').filter((entry) => {
-    if (entry.kind === 'QUESTION' || entry.kind === 'ANSWER') return channel === 'CUSTOMER';
+    // In the live conversation, the individual question cards duplicate the
+    // grouped CUSTOMER_QUESTION_DISPATCH report card shown in the TEAM pane.
+    // Keep question entries available to the dedicated timeline view.
+    if (entry.kind === 'QUESTION') return view !== 'conversation' && channel === 'CUSTOMER';
+    if (entry.kind === 'ANSWER') return channel === 'CUSTOMER';
     if (entry.kind !== 'MESSAGE') return false;
     const message = entry.data as CaseMessage;
     return channel === 'CUSTOMER' ? message.channel === 'CUSTOMER' : message.channel !== 'CUSTOMER';
@@ -15,7 +19,7 @@ export const buildConversationEntries = (
 
   // asked_at이 없는 PENDING도 은행 ROOM에는 Queue 카드로 보여 주되,
   // 고객에게 전달된 질문처럼 보이지 않도록 별도 상태와 빈 시각을 유지한다.
-  if (channel === 'CUSTOMER') {
+  if (channel === 'CUSTOMER' && view !== 'conversation') {
     const pendingEntries = (bundle.questions ?? [])
       .filter((question) => question.status === 'PENDING')
       .sort((left, right) => left.sequence - right.sequence)

@@ -355,6 +355,8 @@ export interface CaseMessage {
   /** Frontend-only delivery state. API responses omit this field. */
   delivery_state?: 'SENDING' | 'FAILED';
   delivery_error?: string | null;
+  /** Structured next actions returned with the latest internal AI response. */
+  recommended_actions?: RecommendedChatAction[];
 }
 
 export interface CaseEvent {
@@ -515,6 +517,22 @@ export interface AiInvocationResult {
   content: string;
   model_mode: string;
   created_at: string;
+  recommended_actions?: RecommendedChatAction[];
+}
+
+export type RecommendedActionKey =
+  | 'CUSTOMER_QUESTION'
+  | 'TRANSACTION_LOOKUP'
+  | 'OFFICIAL_VERIFICATION'
+  | 'RESPONSE_ACTION'
+  | 'DRAFT_REPLY';
+
+export interface RecommendedChatAction {
+  action_key: RecommendedActionKey;
+  kind: 'TOOL' | 'REPLY_DRAFT';
+  target_channel: 'TEAM' | 'CUSTOMER';
+  draft_text?: string | null;
+  reason_code?: string | null;
 }
 
 export type WorkCardType = 'FACT_REVIEW' | 'QUESTION_PLAN' | 'VERIFICATION_REQUEST' | 'BANK_ACTION' | 'CUSTOMER_NOTICE' | 'CASE_TRANSITION';
