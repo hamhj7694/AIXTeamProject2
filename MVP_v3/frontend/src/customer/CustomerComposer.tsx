@@ -1,13 +1,12 @@
 import React, { FormEvent, useRef, useState } from 'react';
 
-import { ChevronUp, Send, Sparkles } from 'lucide-react';
+import { ChevronDown, ChevronUp, Send, Sparkles } from 'lucide-react';
 
 import { usePersistentDraft } from '../draftStorage';
 
 
 interface Props {
   busy: boolean;
-  aiBusy: boolean;
   disabled?: boolean;
   showEmergency?: boolean;
   emergencyActive?: boolean;
@@ -19,12 +18,8 @@ interface Props {
 }
 
 
-export const CustomerComposer: React.FC<Props> = ({ busy, aiBusy, disabled = false, showEmergency = false, emergencyActive = false, guideOpen = false, onEmergency, onOpenRecoveryGuide, onSend, draftStorageKey }) => {
+export const CustomerComposer: React.FC<Props> = ({ busy, disabled = false, showEmergency = false, emergencyActive = false, guideOpen = false, onEmergency, onOpenRecoveryGuide, onSend, draftStorageKey }) => {
   const [draft, setDraft] = usePersistentDraft(draftStorageKey);
-
-  //나중에 형준이랑 얘기해서 통합
-// export const CustomerComposer: React.FC<Props> = ({ busy, aiBusy, disabled = false, onSend, draftStorageKey }) => {
-//   const [draft, setDraft] = usePersistentDraft(draftStorageKey);
 
   const [requestAi, setRequestAi] = useState(true);
   const [error, setError] = useState('');
@@ -43,7 +38,7 @@ export const CustomerComposer: React.FC<Props> = ({ busy, aiBusy, disabled = fal
   return <div className="customer-composer">
     <div className="customer-composer-toolbar">
       <button type="button" className={`customer-ai-request ${requestAi ? 'active' : ''}`} aria-pressed={requestAi} onClick={() => setRequestAi((value) => !value)} disabled={blocked}><Sparkles size={14}/>{requestAi ? 'AI 안전 안내 켜짐' : 'AI 안전 안내 끔'}<span>{requestAi ? '메시지를 보내면 AI가 안내합니다.' : '필요할 때 다시 켤 수 있습니다.'}</span></button>
-      {showEmergency && (!emergencyActive ? <button type="button" className="customer-emergency-button" disabled={blocked} onClick={onEmergency}>이미 사기 당했어요</button> : <div className="customer-recovery-status" role="status"><span>피해 대응 안내 중</span>{!guideOpen && <button type="button" className="customer-recovery-open-button" disabled={blocked} onClick={onOpenRecoveryGuide} aria-label="구제 안내 열기"><ChevronUp size={14}/></button>}</div>)}
+      {showEmergency && (!emergencyActive ? <button type="button" className="customer-emergency-button" disabled={blocked} onClick={onEmergency}>이미 사기 당했어요</button> : <button type="button" className="customer-recovery-status" aria-expanded={guideOpen} disabled={blocked} onClick={onOpenRecoveryGuide}><span>피해 대응 안내 중</span>{guideOpen ? <ChevronDown size={14} aria-hidden="true"/> : <ChevronUp size={14} aria-hidden="true"/>}</button>)}
     </div>
     <form onSubmit={(event: FormEvent) => { event.preventDefault(); void submit(); }}>
       <div className="customer-composer-input">
