@@ -2,10 +2,10 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertCircle, Bookmark, CheckCircle2, FileSearch, Loader2, RefreshCw, RotateCcw, StickyNote, Trash2, Users, X } from 'lucide-react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { casesApi, CURRENT_BANK_USER } from '../api/cases';
-import type { AnalyzeCaseResponse, CaseBundle, CaseMessage, CaseSupportSnapshot, StoredCase, VerificationTask, CaseTransaction } from '../api/types';
+import type { AnalyzeCaseResponse, BankStaff, CaseBundle, CaseMember, CaseMessage, CaseSupportSnapshot, StoredCase, VerificationTask, CaseTransaction } from '../api/types';
 import { loadContextWorkspace, type ContextFact } from '../api/contextWorkspace';
 import { isApiErrorCode } from '../api/client';
-import { ActionDialog, QuestionDialog, VerificationDialog } from '../components/CaseActionDialogs';
+import { ActionDialog, InstitutionVerificationBoardDialog, QuestionDialog, ResponseActionChecklistDialog, VerificationDialog } from '../components/CaseActionDialogs';
 import { AdminCaseDialog } from '../components/AdminCaseDialog';
 import { ContextPanelFoundation } from '../context-v3/ContextPanelFoundation';
 import { MoreMenu } from '../context-v3/components';
@@ -29,7 +29,7 @@ import { toBankCardData } from '../components/cards/cardData';
 import { hasInitialAssignmentHandled, hasInitialAssignmentPending, markInitialAssignmentHandled, shouldOpenInitialAssignment } from '../assignmentPromptState';
 import { AnalysisResult } from './HomePage';
 
-type DialogState = { type: 'questions' } | { type: 'verification'; task?: VerificationTask } | { type: 'action' } | null;
+type DialogState = { type: 'questions' } | { type: 'verification'; task?: VerificationTask; mode?: 'guide' } | { type: 'action'; mode?: 'guide' } | null;
 type AdminAction = 'finalize' | 'reopen' | 'trash' | null;
 type BankOutboxItem = {
   message: CaseMessage;
@@ -89,6 +89,8 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
   const [noteOpen, setNoteOpen] = useState(false);
   const [participantOpen, setParticipantOpen] = useState(false);
   const [participantCount, setParticipantCount] = useState(0);
+  const [caseMembers, setCaseMembers] = useState<CaseMember[]>([]);
+  const [bankStaffDirectory, setBankStaffDirectory] = useState<BankStaff[]>([]);
   const [assignmentRequired, setAssignmentRequired] = useState(false);
   const [analysisResultOpen, setAnalysisResultOpen] = useState(false);
   const [adminAction, setAdminAction] = useState<AdminAction>(null);
@@ -149,8 +151,8 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
     const requestId = ++loadRequestRef.current;
     const generation = aiGenerationRef.current;
     if (quiet) setRefreshing(true); else setLoading(true);
-    const [caseResult, bundleResult, contextResult, membersResult, transactionsResult] = await Promise.allSettled([
-      casesApi.get(caseId), casesApi.bundle(caseId), loadContextWorkspace(caseId), casesApi.members(caseId), casesApi.transactions(caseId),
+    const [caseResult, bundleResult, contextResult, membersResult, transactionsResult, staffResult] = await Promise.allSettled([
+      casesApi.get(caseId), casesApi.bundle(caseId), loadContextWorkspace(caseId), casesApi.members(caseId), casesApi.transactions(caseId), casesApi.listBankStaff(),
     ]);
     if (requestId !== loadRequestRef.current || generation !== aiGenerationRef.current) return;
     if (caseResult.status === 'rejected') {
@@ -158,7 +160,8 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
       setLoading(false); setRefreshing(false); return;
     }
     setCaseItem(caseResult.value); if (!quiet) setError('');
-    if (membersResult.status === 'fulfilled') setParticipantCount(membersResult.value.length);
+    if (membersResult.status === 'fulfilled') { setCaseMembers(membersResult.value); setParticipantCount(membersResult.value.length); }
+    if (staffResult.status === 'fulfilled') setBankStaffDirectory(staffResult.value);
     const assignmentPending = hasInitialAssignmentPending(caseId);
     const assignmentHandled = hasInitialAssignmentHandled(caseId);
     if (caseResult.value.primary_assignee) {
@@ -278,17 +281,17 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
     outboxRef.current.clear();
     setAiPendingCount(0); setBusy(false);
     lastSupportRevisionRef.current = '';
-    setCaseItem(null); setBundle(null); setSupport(null); setFacts([]); setDialog(null); setBookmarkOpen(false); setNoteOpen(false); setParticipantOpen(false); setParticipantCount(0); setAssignmentRequired(false); setAnalysisResultOpen(false); setAdminAction(null); setBookmarks(readBankBookmarks(caseId)); setError(''); setComposerWarnings({}); setCustomerPaneCollapsed(false); setTeamPaneCollapsed(false); setCustomerPaneRatio(50);
+    setCaseItem(null); setBundle(null); setSupport(null); setFacts([]); setDialog(null); setBookmarkOpen(false); setNoteOpen(false); setParticipantOpen(false); setParticipantCount(0); setCaseMembers([]); setBankStaffDirectory([]); setAssignmentRequired(false); setAnalysisResultOpen(false); setAdminAction(null); setBookmarks(readBankBookmarks(caseId)); setError(''); setComposerWarnings({}); setCustomerPaneCollapsed(false); setTeamPaneCollapsed(false); setCustomerPaneRatio(50);
     // Register the existing demo identity before mounting editors that require membership.
     let active = true;
     void (async () => {
       try {
         const items = await casesApi.members(caseId);
-        if (active) setParticipantCount(items.length);
+        if (active) { setCaseMembers(items); setParticipantCount(items.length); }
         if (!items.some((item) => item.user_id === CURRENT_BANK_USER.user_id)) {
           await casesApi.upsertMember(caseId, { user_id: CURRENT_BANK_USER.user_id, display_name: CURRENT_BANK_USER.display_name, assignment_role: 'HANDOVER_PENDING' });
           const updatedItems = await casesApi.members(caseId);
-          if (active) setParticipantCount(updatedItems.length);
+          if (active) { setCaseMembers(updatedItems); setParticipantCount(updatedItems.length); }
         }
       } catch {
         if (active) setError('사건 참여 정보를 확인하지 못했습니다. 참여자 관리에서 다시 확인해 주세요.');
@@ -424,10 +427,12 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
     navigate('/', { replace: true });
   };
   const composerWarningMessages = Object.values(composerWarnings).filter(Boolean);
-  const openQuestionsFromBankAi = () => {
+  const toggleQuestionsDialog = () => {
     setCustomerPaneCollapsed(false);
-    setDialog({ type: 'questions' });
+    setDialog((current) => current?.type === 'questions' ? null : { type: 'questions' });
   };
+  const toggleVerificationDialog = () => setDialog((current) => current?.type === 'verification' ? null : { type: 'verification', mode: 'guide' });
+  const toggleActionDialog = () => setDialog((current) => current?.type === 'action' ? null : { type: 'action', mode: 'guide' });
   const toggleCustomerPane = () => {
     if (teamPaneCollapsed) {
       setTeamPaneCollapsed(false);
@@ -520,6 +525,20 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
     setOpenBankCards((current) => current.filter((item) => item !== kind));
     setSelectedBankCard((current) => current === kind ? null : current);
   };
+  const toggleBankCard = (kind: BankCardKind) => {
+    if (openBankCards.includes(kind)) {
+      closeBankCard(kind);
+      return;
+    }
+    selectBankCard(kind);
+  };
+  const toggleTransactionLookup = () => {
+    if (openBankCards.includes('additionalLookup')) {
+      closeBankCard('additionalLookup');
+      return;
+    }
+    selectBankCard('additionalLookup');
+  };
   const toggleBankCardCollapsed = (kind: BankCardKind) => {
     const willExpand = Boolean(collapsedBankCards[kind]);
     setCollapsedBankCards((current) => ({ ...current, [kind]: !current[kind] }));
@@ -547,9 +566,9 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
           {composerWarningMessages.map((message) => <div className="partial-warning danger" key={message}><AlertCircle size={15}/><span>{message}</span></div>)}
         </div>}
         <div ref={splitRef} className={`conversation-channel-grid ${splitDragging ? 'is-resizing' : ''}`} style={conversationGridStyle}>
-          <SharedConversation bundle={bundle} view="conversation" channel="CUSTOMER" aiBusy={false} inlineCard={dialog?.type === 'questions' ? <QuestionDialog inline caseId={caseId} initial={support?.recommended_questions ?? []} onDone={refreshAfterMutation} onClose={() => setDialog(null)}/> : undefined} collapsed={customerPaneCollapsed} collapseDisabled={false} onToggleCollapse={toggleCustomerPane} onOpenQuestions={() => setDialog({ type: 'questions' })} composer={<ConversationComposer foundationMode fixedTarget="CUSTOMER" showAi={false} showUtilities={false} showQuestionAction onOpenQuestions={() => setDialog({ type: 'questions' })} showInlineError={false} onErrorChange={(message) => handleComposerError('CUSTOMER', message)} busy={busy} aiBusy={false} onSend={send} onOpenVerification={() => undefined} onOpenAction={() => undefined} onInvokeAi={() => undefined} onOpenNotes={() => undefined} onOpenBookmarks={() => undefined} bookmarkCount={0} draftStorageKey={`csr:composer-draft:${caseId}:bank-customer`}/>} bookmarkedIds={new Set(bookmarks.map((item) => item.entryId))} onToggleBookmark={toggleBookmark} onRetryMessage={retryMessage} onDismissMessage={dismissMessage}/>
+          <SharedConversation bundle={bundle} view="conversation" channel="CUSTOMER" aiBusy={false} inlineCard={dialog?.type === 'questions' ? <QuestionDialog inline caseId={caseId} initial={support?.recommended_questions ?? []} onDone={refreshAfterMutation} onClose={() => setDialog(null)}/> : undefined} collapsed={customerPaneCollapsed} collapseDisabled={false} onToggleCollapse={toggleCustomerPane} composer={<ConversationComposer foundationMode fixedTarget="CUSTOMER" showAi={false} showUtilities={false} showQuestionAction onOpenQuestions={toggleQuestionsDialog} showInlineError={false} onErrorChange={(message) => handleComposerError('CUSTOMER', message)} busy={busy} aiBusy={false} onSend={send} onOpenVerification={() => undefined} onOpenAction={() => undefined} onInvokeAi={() => undefined} onOpenNotes={() => undefined} onOpenBookmarks={() => undefined} bookmarkCount={0} draftStorageKey={`csr:composer-draft:${caseId}:bank-customer`}/>} bookmarkedIds={new Set(bookmarks.map((item) => item.entryId))} onToggleBookmark={toggleBookmark} onRetryMessage={retryMessage} onDismissMessage={dismissMessage}/>
           <button type="button" className="conversation-split-handle" onPointerDown={(event) => { if (customerPaneCollapsed || teamPaneCollapsed) return; event.preventDefault(); setSplitDragging(true); }} onDoubleClick={() => { if (!customerPaneCollapsed && !teamPaneCollapsed) setCustomerPaneRatio(50); }} onKeyDown={(event) => { if (event.key === 'Home') { event.preventDefault(); setCustomerPaneRatio(50); return; } if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return; event.preventDefault(); setCustomerPaneRatio((value) => Math.min(75, Math.max(25, value + (event.key === 'ArrowLeft' ? -5 : 5)))); }} aria-label="고객 소통과 은행 내부 소통 채팅창 너비 조절, 더블클릭하면 1대1로 맞춤" title="드래그하여 폭 조절 · 더블클릭하여 1:1 맞춤" aria-valuemin={25} aria-valuemax={75} aria-valuenow={Math.round(customerPaneRatio)} role="separator"><span/></button>
-          <SharedConversation bundle={bundle} view="conversation" channel="TEAM" inlineCard={bankCardStack} collapsed={teamPaneCollapsed} collapseDisabled={customerPaneCollapsed} onToggleCollapse={toggleTeamPane} onOpenQuestions={openQuestionsFromBankAi} onEditVerification={(task) => setDialog({ type: 'verification', task })} composer={<ConversationComposer foundationMode fixedTarget="TEAM" showAi showUtilities={false} showInlineError={false} selectedBankCard={selectedBankCard} onSelectBankCard={selectBankCard} onErrorChange={(message) => handleComposerError('TEAM', message)} busy={busy} aiBusy={aiPendingCount > 0} onSend={send} onOpenQuestions={() => undefined} onOpenVerification={() => undefined} onOpenAction={() => undefined} onInvokeAi={() => void invokeAi()} onOpenNotes={() => setNoteOpen(true)} onOpenBookmarks={() => setBookmarkOpen(true)} bookmarkCount={bookmarks.length} draftStorageKey={`csr:composer-draft:${caseId}:bank-team`}/>} bookmarkedIds={new Set(bookmarks.map((item) => item.entryId))} onToggleBookmark={toggleBookmark} onRetryMessage={retryMessage} onDismissMessage={dismissMessage}/>
+          <SharedConversation bundle={bundle} view="conversation" channel="TEAM" inlineCard={bankCardStack} collapsed={teamPaneCollapsed} collapseDisabled={customerPaneCollapsed} onToggleCollapse={toggleTeamPane} onEditVerification={(task) => setDialog({ type: 'verification', task })} composer={<ConversationComposer foundationMode fixedTarget="TEAM" showAi showUtilities={false} showInlineError={false} selectedBankCard={selectedBankCard} onSelectBankCard={toggleBankCard} onErrorChange={(message) => handleComposerError('TEAM', message)} busy={busy} aiBusy={aiPendingCount > 0} onSend={send} onOpenQuestions={toggleQuestionsDialog} onOpenVerification={toggleVerificationDialog} onOpenAction={toggleActionDialog} onInvokeAi={() => void invokeAi()} onOpenNotes={() => setNoteOpen(true)} onOpenBookmarks={() => setBookmarkOpen(true)} bookmarkCount={bookmarks.length} draftStorageKey={`csr:composer-draft:${caseId}:bank-team`}/>} bookmarkedIds={new Set(bookmarks.map((item) => item.entryId))} onToggleBookmark={toggleBookmark} onRetryMessage={retryMessage} onDismissMessage={dismissMessage}/>
         </div>
       </main>
       <ContextPanelFoundation
@@ -558,15 +577,23 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
         caseItem={caseItem}
         bundle={bundle}
         support={support}
-        onOpenQuestions={() => { setCustomerPaneCollapsed(false); setDialog({ type: 'questions' }); }}
-        onOpenTransactionLookup={() => selectBankCard('additionalLookup')}
+        onOpenQuestions={toggleQuestionsDialog}
+        onOpenTransactionLookup={toggleTransactionLookup}
+        onOpenVerification={toggleVerificationDialog}
+        onOpenAction={toggleActionDialog}
+        assigneeOptions={caseMembers.map((member) => ({
+          name: member.display_name,
+          role: ({ SUPERVISOR: '사건 총괄', MONITORING: '모니터링', CONSULTATION: '상담·대응', VIEWER: '기타 열람', HANDOVER_PENDING: '인수인계 대기' } as Record<CaseMember['assignment_role'], string>)[member.assignment_role],
+          displayRole: bankStaffDirectory.find((staff) => staff.linked_user_id === member.user_id || staff.staff_id === member.user_id)?.role_label,
+          positionTitle: bankStaffDirectory.find((staff) => staff.linked_user_id === member.user_id || staff.staff_id === member.user_id)?.position_title,
+        }))}
       />
     </CaseContextLayout>
-    {dialog?.type === 'verification' && <VerificationDialog caseId={caseId} task={dialog.task} onDone={refreshAfterMutation} onClose={() => setDialog(null)}/>} 
-    {dialog?.type === 'action' && <ActionDialog caseId={caseId} recovery={caseItem.mode === 'RECOVERY'} onDone={refreshAfterMutation} onClose={() => setDialog(null)}/>} 
+    {dialog?.type === 'verification' && (dialog.mode === 'guide' ? <InstitutionVerificationBoardDialog caseId={caseId} verificationTasks={bundle.verification_tasks ?? []} onDone={refreshAfterMutation} onClose={() => setDialog(null)}/> : <VerificationDialog caseId={caseId} task={dialog.task} onDone={refreshAfterMutation} onClose={() => setDialog(null)}/>)}
+    {dialog?.type === 'action' && (dialog.mode === 'guide' ? <ResponseActionChecklistDialog caseId={caseId} actions={bundle.recent_actions ?? []} onDone={refreshAfterMutation} onClose={() => setDialog(null)}/> : <ActionDialog caseId={caseId} recovery={caseItem.mode === 'RECOVERY'} onDone={refreshAfterMutation} onClose={() => setDialog(null)}/>)}
     <BankBookmarks open={bookmarkOpen} items={bookmarks} onClose={() => setBookmarkOpen(false)} onUpdate={updateBookmark} onDelete={deleteBookmark}/>
     <BankPersonalNotes caseId={caseId} open={noteOpen} onClose={() => setNoteOpen(false)}/>
-    {participantOpen && <CaseAssignmentDialog caseId={caseId} mode="edit" onClose={() => setParticipantOpen(false)} onSaved={async () => { setParticipantOpen(false); setAccessRevision((value) => value + 1); const members = await casesApi.members(caseId); setParticipantCount(members.length); await refreshAfterMutation(); }}/>}
+    {participantOpen && <CaseAssignmentDialog caseId={caseId} mode="edit" onClose={() => setParticipantOpen(false)} onSaved={async () => { setParticipantOpen(false); setAccessRevision((value) => value + 1); const members = await casesApi.members(caseId); setCaseMembers(members); setParticipantCount(members.length); await refreshAfterMutation(); }}/>}
     {analysisResultOpen && <div className="case-analysis-result-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setAnalysisResultOpen(false); }}><section className="case-analysis-result-dialog" role="dialog" aria-modal="true" aria-labelledby="case-analysis-result-title"><header><div><p className="eyebrow">ANALYSIS RESULT</p><h2 id="case-analysis-result-title">초기 분석 결과</h2><small>Case 생성 당시의 구조화 분석 결과를 다시 확인합니다.</small></div><button type="button" className="icon-button" onClick={() => setAnalysisResultOpen(false)} aria-label="초기 분석 결과 닫기"><X size={18}/></button></header><AnalysisResult result={analysisResult} caseItem={caseItem} sourceText="" onOpenCase={() => setAnalysisResultOpen(false)} onRestart={() => setAnalysisResultOpen(false)} showActions={false}/></section></div>}
     {adminAction === 'finalize' && <AdminCaseDialog title="해결 및 종료 처리" description="사건을 해결 상태로 종결합니다. 관리자 암호를 입력해 주세요." confirmLabel="해결 및 종료" noteLabel="종결 메모 (선택)" notePlaceholder="처리 결과나 인계 사항을 기록하세요." onConfirm={finalizeCase} onClose={() => setAdminAction(null)}/>}
     {adminAction === 'reopen' && <AdminCaseDialog title="사건 다시 진행하기" description="종결 직전의 사건 상태로 복구합니다. 관리자 암호를 입력해 주세요." confirmLabel="진행 상태로 복구" onConfirm={(password) => reopenCase(password)} onClose={() => setAdminAction(null)}/>}

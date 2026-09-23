@@ -114,6 +114,15 @@ export const casesApi = {
   createVerification: (caseId: string, claim: string, target: string) => request<VerificationTask>(`/api/cases/${encodeURIComponent(caseId)}/verifications`, {
     method: 'POST', body: JSON.stringify({ claim, target }),
   }),
+  sendReportCard: (caseId: string, payload: Record<string, unknown>, clientRequestId: string = generateUuid()) => request<CaseMessage>(`/api/cases/${encodeURIComponent(caseId)}/messages`, {
+    method: 'POST', body: JSON.stringify({
+      actor_type: 'BANK_STAFF', actor_user_id: CURRENT_BANK_USER.user_id,
+      actor_display_name: CURRENT_BANK_USER.display_name, actor_role: CURRENT_BANK_USER.role,
+      content: JSON.stringify(payload), channel: 'TEAM', audience: 'BANK_INTERNAL',
+      visibility: 'BANK_INTERNAL', message_kind: 'REPORT_CARD', mentions: [], attachment_ids: [],
+      client_request_id: clientRequestId,
+    }),
+  }),
   updateVerification: (caseId: string, task: VerificationTask, values: Partial<VerificationTask>) => request<VerificationTask>(`/api/cases/${encodeURIComponent(caseId)}/verifications/${encodeURIComponent(task.verification_task_id)}`, {
     method: 'PATCH',
     body: JSON.stringify({
@@ -136,7 +145,7 @@ export const casesApi = {
       ? versionOrValues
       : (await request<CaseAction[]>(`/api/cases/${encodeURIComponent(caseId)}/actions?actor_user_id=${encodeURIComponent(CURRENT_BANK_USER.user_id)}`)).find((item) => item.action_id === actionId)?.version;
     if (!version) throw new Error('Action 최신 버전을 확인하지 못했습니다. 최신 Case 정보를 다시 불러와 주세요.');
-    return request<CaseAction>(`/api/cases/${encodeURIComponent(caseId)}/actions/${encodeURIComponent(actionId)}`, {
+    return request<CaseAction>(`/api/cases/${encodeURIComponent(caseId)}/actions/${encodeURIComponent(actionId)}?actor_user_id=${encodeURIComponent(CURRENT_BANK_USER.user_id)}`, {
       method: 'PATCH', body: JSON.stringify({ ...values, expected_version: version, updated_by: CURRENT_BANK_USER.display_name }),
     });
   },

@@ -25,6 +25,38 @@ class WorkCardQuestion(StrictModel):
     allow_free_text: bool = True
 
 
+class VerificationMessageDraft(StrictModel):
+    """One institution-specific verification message proposal.
+
+    This is an AI response contract only; it is not persisted as a new table.
+    """
+
+    institution: str = Field(default="", max_length=200)
+    target: str = Field(default="", max_length=500)
+    claim: str = Field(default="", max_length=4_000)
+    message: str = Field(default="", max_length=5_000)
+    reason_codes: list[str] = Field(default_factory=list, max_length=8)
+
+
+class SuggestedResponseAction(StrictModel):
+    """One deduplicatable response checklist item proposed by the AI."""
+
+    dedupe_key: str = Field(default="", max_length=160)
+    category: str = Field(default="금융 보호", max_length=80)
+    priority: Literal["P0", "P1", "P2"] = "P1"
+    title: str = Field(default="", max_length=300)
+    note: str = Field(default="", max_length=3_000)
+    reason_codes: list[str] = Field(default_factory=list, max_length=8)
+    steps: list[SuggestedResponseStep] = Field(default_factory=list, max_length=8)
+
+
+class SuggestedResponseStep(StrictModel):
+    dedupe_key: str = Field(default="", max_length=160)
+    title: str = Field(default="", max_length=300)
+    note: str = Field(default="", max_length=3_000)
+    reason_codes: list[str] = Field(default_factory=list, max_length=8)
+
+
 class CaseWorkCardInput(StrictModel):
     case_id: str
     card_type: WorkCardType
@@ -54,8 +86,10 @@ class CaseWorkCardOutput(StrictModel):
     questions: list[WorkCardQuestion] = Field(default_factory=list, max_length=10)
     suggested_claim: str | None = None
     suggested_target: str | None = None
+    verification_messages: list[VerificationMessageDraft] = Field(default_factory=list, max_length=10)
     suggested_action_type: str | None = None
     suggested_action_note: str | None = None
+    suggested_actions: list[SuggestedResponseAction] = Field(default_factory=list, max_length=12)
     suggested_notice: str | None = None
     suggested_transition: str | None = None
     warnings: list[str] = Field(default_factory=list, max_length=8)

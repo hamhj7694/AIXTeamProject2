@@ -519,6 +519,14 @@ export interface AiInvocationResult {
 
 export type WorkCardType = 'FACT_REVIEW' | 'QUESTION_PLAN' | 'VERIFICATION_REQUEST' | 'BANK_ACTION' | 'CUSTOMER_NOTICE' | 'CASE_TRANSITION';
 
+export interface VerificationMessageDraft {
+  institution: string;
+  target: string;
+  claim: string;
+  message: string;
+  reason_codes: string[];
+}
+
 export interface CaseWorkCard {
   card_type: WorkCardType;
   title: string;
@@ -529,12 +537,31 @@ export interface CaseWorkCard {
   questions: QuestionCandidate[];
   suggested_claim?: string | null;
   suggested_target?: string | null;
+  verification_messages?: VerificationMessageDraft[];
   suggested_action_type?: string | null;
   suggested_action_note?: string | null;
+  suggested_actions?: SuggestedResponseAction[];
   suggested_notice?: string | null;
   suggested_transition?: string | null;
   warnings: string[];
   model_mode: string;
+}
+
+export interface SuggestedResponseAction {
+  dedupe_key: string;
+  category: string;
+  priority: 'P0' | 'P1' | 'P2';
+  title: string;
+  note: string;
+  reason_codes: string[];
+  steps?: SuggestedResponseStep[];
+}
+
+export interface SuggestedResponseStep {
+  dedupe_key: string;
+  title: string;
+  note: string;
+  reason_codes: string[];
 }
 
 export interface PersonalNote {

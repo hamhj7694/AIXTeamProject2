@@ -115,10 +115,10 @@ class DiagnosisFailureTest(unittest.IsolatedAsyncioTestCase):
             {"DIAGNOSIS_EXTRACTOR_MODE": "openai", "OPENAI_API_KEY": "test-key"},
             clear=False,
         ):
-            with self.assertRaisesRegex(RuntimeError, "모든 문장의 이벤트 추출"):
+            with self.assertRaisesRegex(RuntimeError, "AI 이벤트 추출 결과"):
                 await extract_events("첫 번째 문장.")
 
-    async def test_all_turn_extraction_failures_fall_back_for_strong_phishing_signals(self) -> None:
+    async def test_all_turn_extraction_failures_do_not_fall_back_for_strong_phishing_signals(self) -> None:
         client = Mock()
         client.responses.create = AsyncMock(return_value=SimpleNamespace(output_text="not-json"))
         source = "서울지검 수사관입니다. 오늘 안에 안전계좌로 이체하세요. 가족에게 알리지 마세요."
@@ -129,14 +129,10 @@ class DiagnosisFailureTest(unittest.IsolatedAsyncioTestCase):
             {"DIAGNOSIS_EXTRACTOR_MODE": "openai", "OPENAI_API_KEY": "test-key"},
             clear=False,
         ):
-            extraction = await extract_events(source)
+            with self.assertRaisesRegex(RuntimeError, "AI 이벤트 추출 결과"):
+                await extract_events(source)
 
-        self.assertEqual(extraction.extractor_model, "local-safety-fallback-v1")
-        self.assertEqual(extraction.successful_turn_ids, [1, 2, 3])
-        self.assertTrue(any(event.event_family == "IMPERSONATION" for event in extraction.events))
-        self.assertTrue(any(event.event_family == "MONEY_MOVEMENT" for event in extraction.events))
-
-    async def test_openai_timeout_keeps_successful_turn_and_uses_configured_timeout(self) -> None:
+    async def test_openai_timeout_fails_closed_and_uses_configured_timeout(self) -> None:
         client = Mock()
         client.responses.create = AsyncMock(side_effect=[
             asyncio.TimeoutError(),
@@ -153,10 +149,8 @@ class DiagnosisFailureTest(unittest.IsolatedAsyncioTestCase):
             },
             clear=False,
         ):
-            extraction = await extract_events("첫 번째 문장. 두 번째 문장.")
-
-        self.assertEqual(extraction.successful_turn_ids, [2])
-        self.assertTrue(any("TimeoutError" in warning for warning in extraction.warnings))
+            with self.assertRaises(RuntimeError):
+                await extract_events("첫 번째 문장. 두 번째 문장.")
         self.assertEqual(openai_client.call_args.kwargs["timeout"], 12.5)
 
     async def test_full_context_invalid_json_raises_validation_error(self) -> None:

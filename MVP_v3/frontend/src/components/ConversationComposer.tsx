@@ -78,7 +78,7 @@ export const ConversationComposer: React.FC<Props> = ({ busy, aiBusy, onSend, on
         <button className="personal-note-open" type="button" onClick={onOpenNotes}><StickyNote size={15}/>개인 메모</button>
         <button className="bookmark-list-open" type="button" onClick={onOpenBookmarks}><Bookmark size={15}/>북마크{bookmarkCount > 0 && <b>{bookmarkCount}</b>}</button>
       </>}
-      {target === 'TEAM' && onSelectBankCard && <><span className="context-actions-spacer"/><BankCardMenu value={selectedBankCard} onChange={onSelectBankCard}/></>}
+      {target === 'TEAM' && onSelectBankCard && <><span className="context-actions-spacer"/><BankCardMenu value={selectedBankCard} onChange={onSelectBankCard} onOpenVerification={onOpenVerification} onOpenAction={onOpenAction}/></>}
     </div>
     <form onSubmit={(event: FormEvent) => { event.preventDefault(); void submit(); }}>
       <div className="composer-input">
