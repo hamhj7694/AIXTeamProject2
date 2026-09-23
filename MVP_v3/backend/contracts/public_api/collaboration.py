@@ -69,6 +69,17 @@ class PublicAiInvocationRequest(PublicCollaborationModel):
     source_message_ids: list[str] = Field(default_factory=list, max_length=100)
 
 
+class PublicRecommendedChatAction(PublicCollaborationModel):
+    action_key: Literal[
+        "CUSTOMER_QUESTION", "TRANSACTION_LOOKUP", "OFFICIAL_VERIFICATION",
+        "RESPONSE_ACTION", "DRAFT_REPLY",
+    ]
+    kind: Literal["TOOL", "REPLY_DRAFT"]
+    target_channel: Literal["TEAM", "CUSTOMER"]
+    draft_text: str | None = Field(default=None, max_length=2_000)
+    reason_code: str | None = Field(default=None, max_length=120)
+
+
 class PublicAiInvocationResponse(PublicCollaborationModel):
     invocation_id: str
     message_id: str
@@ -78,6 +89,7 @@ class PublicAiInvocationResponse(PublicCollaborationModel):
     # The UI displays the provider/model for traceability.
     model_mode: str = Field(min_length=1, max_length=100)
     created_at: str
+    recommended_actions: list[PublicRecommendedChatAction] = Field(default_factory=list, max_length=3)
 
 
 class PublicAiShareRequest(PublicCollaborationModel):

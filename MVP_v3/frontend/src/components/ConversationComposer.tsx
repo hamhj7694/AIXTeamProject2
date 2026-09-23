@@ -1,5 +1,6 @@
 import React, { FormEvent, useRef, useState } from 'react';
 import { Bookmark, Bot, Building2, MessageCircleQuestion, Send, ShieldCheck, Sparkles, StickyNote } from 'lucide-react';
+import { useEffect } from 'react';
 import { hasBankAiMention } from '../bank/aiMention';
 import { usePersistentDraft } from '../draftStorage';
 import { BankCardMenu, type BankCardKind } from './cards/BankCardMenu';
@@ -11,6 +12,7 @@ interface Props {
   onSend: (content: string, target: ComposerTarget, requestAi: boolean) => Promise<void>;
   onOpenQuestions: () => void;
   onOpenVerification: () => void;
+  onOpenAnalysis?: () => void;
   onOpenAction: () => void;
   onInvokeAi: () => void;
   onOpenNotes: () => void;
@@ -34,11 +36,16 @@ interface Props {
   selectedBankCard?: BankCardKind | null;
   /** Keep an unfinished message when navigating away and back. */
   draftStorageKey?: string;
+  /** Prefill an editable customer draft from an internal AI recommendation. */
+  draftPrefill?: string | null;
 }
 
-export const ConversationComposer: React.FC<Props> = ({ busy, aiBusy, onSend, onOpenQuestions, onOpenVerification, onOpenAction, onInvokeAi, onOpenNotes, onOpenBookmarks, bookmarkCount, foundationMode = false, fixedTarget, showAi = true, showUtilities = true, showQuestionAction = false, onErrorChange, showInlineError = true, onSelectBankCard, selectedBankCard = null, draftStorageKey }) => {
+export const ConversationComposer: React.FC<Props> = ({ busy, aiBusy, onSend, onOpenQuestions, onOpenVerification, onOpenAnalysis = () => undefined, onOpenAction, onInvokeAi, onOpenNotes, onOpenBookmarks, bookmarkCount, foundationMode = false, fixedTarget, showAi = true, showUtilities = true, showQuestionAction = false, onErrorChange, showInlineError = true, onSelectBankCard, selectedBankCard = null, draftStorageKey, draftPrefill }) => {
   const target = fixedTarget ?? 'TEAM';
   const [draft, setDraft] = usePersistentDraft(draftStorageKey);
+  useEffect(() => {
+    if (draftPrefill?.trim()) setDraft(draftPrefill);
+  }, [draftPrefill, setDraft]);
   const [requestAi, setRequestAi] = useState(true);
   const [error, setError] = useState('');
   const submittingRef = useRef(false);
@@ -78,7 +85,7 @@ export const ConversationComposer: React.FC<Props> = ({ busy, aiBusy, onSend, on
         <button className="personal-note-open" type="button" onClick={onOpenNotes}><StickyNote size={15}/>개인 메모</button>
         <button className="bookmark-list-open" type="button" onClick={onOpenBookmarks}><Bookmark size={15}/>북마크{bookmarkCount > 0 && <b>{bookmarkCount}</b>}</button>
       </>}
-      {target === 'TEAM' && onSelectBankCard && <><span className="context-actions-spacer"/><BankCardMenu value={selectedBankCard} onChange={onSelectBankCard}/></>}
+      {target === 'TEAM' && onSelectBankCard && <><span className="context-actions-spacer"/><BankCardMenu value={selectedBankCard} onChange={onSelectBankCard} onOpenVerification={onOpenVerification} onOpenAnalysis={onOpenAnalysis} onOpenAction={onOpenAction}/></>}
     </div>
     <form onSubmit={(event: FormEvent) => { event.preventDefault(); void submit(); }}>
       <div className="composer-input">

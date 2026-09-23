@@ -108,7 +108,8 @@ Envelope가 제공한 다음 정보는 generic label로 덮어쓰지 않는다.
 - 역할·턴·Atom ID·Relation은 Envelope가 소유한다.
 - LLM은 제공된 metadata를 수정하거나 새 화자·기관·금액·행동을 만들 수 없다.
 - LLM은 검증된 구조를 직원용 문장과 요약으로 표현하는 역할만 맡는다.
-- LLM 결과가 누락·실패해도 구조화 데이터와 deterministic fallback으로 Case 생성을 유지한다.
+- 핵심 LLM 결과가 누락·실패하면 구조화 fallback으로 Case를 생성하지 않고 명시적 분석 실패로 종료한다.
+- deterministic fallback은 Case 생성 경로 밖의 보조 후보에만 허용하며, 초기 분석의 `CASE_CREATED` 응답에 포함하지 않는다.
 - 고객 진술과 의심 인물의 주장을 확인 사실로 승격하지 않는다.
 
 ### 2.6 Frontend 정보 보존

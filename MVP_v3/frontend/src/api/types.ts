@@ -355,6 +355,8 @@ export interface CaseMessage {
   /** Frontend-only delivery state. API responses omit this field. */
   delivery_state?: 'SENDING' | 'FAILED';
   delivery_error?: string | null;
+  /** Structured next actions returned with the latest internal AI response. */
+  recommended_actions?: RecommendedChatAction[];
 }
 
 export interface CaseEvent {
@@ -515,9 +517,33 @@ export interface AiInvocationResult {
   content: string;
   model_mode: string;
   created_at: string;
+  recommended_actions?: RecommendedChatAction[];
+}
+
+export type RecommendedActionKey =
+  | 'CUSTOMER_QUESTION'
+  | 'TRANSACTION_LOOKUP'
+  | 'OFFICIAL_VERIFICATION'
+  | 'RESPONSE_ACTION'
+  | 'DRAFT_REPLY';
+
+export interface RecommendedChatAction {
+  action_key: RecommendedActionKey;
+  kind: 'TOOL' | 'REPLY_DRAFT';
+  target_channel: 'TEAM' | 'CUSTOMER';
+  draft_text?: string | null;
+  reason_code?: string | null;
 }
 
 export type WorkCardType = 'FACT_REVIEW' | 'QUESTION_PLAN' | 'VERIFICATION_REQUEST' | 'BANK_ACTION' | 'CUSTOMER_NOTICE' | 'CASE_TRANSITION';
+
+export interface VerificationMessageDraft {
+  institution: string;
+  target: string;
+  claim: string;
+  message: string;
+  reason_codes: string[];
+}
 
 export interface CaseWorkCard {
   card_type: WorkCardType;
@@ -529,12 +555,31 @@ export interface CaseWorkCard {
   questions: QuestionCandidate[];
   suggested_claim?: string | null;
   suggested_target?: string | null;
+  verification_messages?: VerificationMessageDraft[];
   suggested_action_type?: string | null;
   suggested_action_note?: string | null;
+  suggested_actions?: SuggestedResponseAction[];
   suggested_notice?: string | null;
   suggested_transition?: string | null;
   warnings: string[];
   model_mode: string;
+}
+
+export interface SuggestedResponseAction {
+  dedupe_key: string;
+  category: string;
+  priority: 'P0' | 'P1' | 'P2';
+  title: string;
+  note: string;
+  reason_codes: string[];
+  steps?: SuggestedResponseStep[];
+}
+
+export interface SuggestedResponseStep {
+  dedupe_key: string;
+  title: string;
+  note: string;
+  reason_codes: string[];
 }
 
 export interface PersonalNote {

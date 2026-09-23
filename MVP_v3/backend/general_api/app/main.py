@@ -117,6 +117,7 @@ from contracts.public_api.collaboration import (
     MessageChannel,
     PublicAiInvocationRequest,
     PublicAiInvocationResponse,
+    PublicRecommendedChatAction,
     PublicAiShareRequest,
     PublicCustomerAiReplyRequest,
     PublicCaseMemberResponse,
@@ -151,6 +152,31 @@ from .domains.cases.transaction_conflict import (
     conflict_client_request_id,
     detect_transfer_amount_conflict,
 )
+
+
+def normalize_public_recommended_actions(raw: object, channel: str) -> list[PublicRecommendedChatAction]:
+    """Expose only bank-internal, allowlisted action metadata to the frontend."""
+    if channel != "TEAM" or not isinstance(raw, list):
+        return []
+    result: list[PublicRecommendedChatAction] = []
+    seen: set[str] = set()
+    for candidate in raw[:3]:
+        try:
+            action = PublicRecommendedChatAction.model_validate(candidate)
+        except Exception:
+            continue
+        if action.action_key in seen:
+            continue
+        if action.kind == "TOOL" and action.target_channel != "TEAM":
+            continue
+        if action.kind == "REPLY_DRAFT":
+            if action.action_key != "DRAFT_REPLY" or action.target_channel != "CUSTOMER" or not action.draft_text or not action.draft_text.strip():
+                continue
+        elif action.action_key == "DRAFT_REPLY":
+            continue
+        seen.add(action.action_key)
+        result.append(action)
+    return result
 from .domains.cases.service import AnalyzeCaseService, InvalidCaseTransitionError, transition_case
 
 
@@ -2083,6 +2109,7 @@ async def invoke_case_copilot(case_id: str, request: PublicAiInvocationRequest) 
     return PublicAiInvocationResponse(
         invocation_id=f"ai-{uuid4().hex}", message_id=message["message_id"], case_id=case_id,
         channel="TEAM" if is_team_request else "AI_INTERNAL", content=content, model_mode=ai_reply["model_mode"], created_at=message["created_at"],
+        recommended_actions=normalize_public_recommended_actions(ai_reply.get("recommended_actions"), request.channel),
     )
 
 

@@ -31,7 +31,7 @@
 - 동일 `client_request_id`의 Case 생성 멱등성
 - 데모 Case 입력 원문 보관과 지원 AI의 privacy-safe projection
 - 화자·행위자·대상자·보고자, 기관·인물·관계·시간 metadata 보존
-- GPT 기반 정황 문장·사건 초기 요약과 결정적 fallback
+- GPT 기반 정황 문장·사건 초기 요약과 실패 시 명시적 중단
 - 주요 정황 카드와 `추가 구조화 정보` 상세 영역
 - Atom, Relation, Episode, Action Group, Entity, Mention, 미매핑 Observation 표시
 - Case별·공개 범위별 TF-IDF 검색과 구조화 데이터 우선 원칙
@@ -63,7 +63,7 @@
 - 결과 패널에서 주요 카드와 추가 구조화 정보가 모두 표시되는지 확인
 - 40개 narrative와 다수 구조화 객체에서도 결과 패널 내부만 스크롤되는지 확인
 - 정상 통화는 `NO_CASE`이며 사건 목록에 저장되지 않는지 확인
-- GPT 장애 시 구조화 fallback으로 전체 흐름이 유지되는지 확인
+- GPT 장애 시 HTTP 실패 응답이 반환되고 Case가 생성되지 않는지 확인
 
 ### P0-3. 역할·시간 fixture 확대
 

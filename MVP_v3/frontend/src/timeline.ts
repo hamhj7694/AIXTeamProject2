@@ -27,7 +27,11 @@ export const buildTimeline = (bundle: CaseBundle, includeTechnicalEvents: boolea
     // AI 요청·응답을 대화 흐름에서 확인할 수 있어야 한다.
     const privateAiMessageForAnotherUser = message.visibility === 'AI_PRIVATE'
       && message.private_owner_user_id !== CURRENT_BANK_USER.user_id;
-    const canonicalFinalReportAvailable = message.message_kind === 'REPORT_CARD' && Boolean(bundle.final_report);
+    // Keep institution-dispatch report cards visible even when the Case also has
+    // a canonical final report. Only the legacy/final-report card is suppressed.
+    const canonicalFinalReportAvailable = message.message_kind === 'REPORT_CARD'
+      && Boolean(bundle.final_report)
+      && (message.content.includes('report_id') || message.content.includes('report_card'));
     if (duplicatedQuestion || duplicatedAnswer || privateAiMessageForAnotherUser || canonicalFinalReportAvailable) continue;
     entries.push({ id: `message-${message.message_id}`, kind: 'MESSAGE', occurredAt: message.created_at, sequence: sequence++, data: message });
   }

@@ -81,7 +81,30 @@ export const relativeTime = (value: string) => {
 
 const unique = (items: Array<string | null | undefined>) => Array.from(new Set(items.map((item) => item?.trim()).filter((item): item is string => Boolean(item))));
 
-export const incidentTitle = (item: StoredCase) => item.case_name?.trim() || item.diagnosis.context?.incident_type || '보이스피싱 의심 사건';
+const fallbackIncidentType = (item: StoredCase) => {
+  const features = item.diagnosis.case_context_features;
+  const actors = new Set(features?.claimed_actor_types ?? []);
+  const actions = new Set(features?.requested_action_codes ?? []);
+  const hasTransfer = [...actions].some((value) => value.includes('TRANSFER'));
+  const hasAuth = [...actions].some((value) => value.includes('AUTH'));
+  if (actors.has('FAMILY') && hasTransfer) return '가족 사칭 및 송금 유도 의심';
+  if (actors.has('FAMILY')) return '가족 사칭 의심';
+  if (actors.has('PUBLIC_AGENCY')) return hasTransfer ? '공공기관 사칭 및 송금 요구 의심' : '공공기관 사칭 의심';
+  if (actors.has('FINANCIAL_INSTITUTION')) return hasTransfer ? '금융기관 사칭 및 송금 요구 의심' : '금융기관 사칭 의심';
+  if (hasAuth) return '인증정보 요구 의심';
+  if (hasTransfer) return '송금·이체 요구 의심';
+  return '보이스피싱 의심';
+};
+
+export const incidentTitle = (item: StoredCase) => {
+  const storedName = item.case_name?.trim();
+  if (storedName && storedName !== '유형 확인 필요') return storedName;
+  const diagnosisType = item.diagnosis.context?.incident_type?.trim();
+  if (diagnosisType && diagnosisType !== '유형 확인 필요') return diagnosisType;
+  return storedName === '유형 확인 필요' || diagnosisType === '유형 확인 필요'
+    ? fallbackIncidentType(item)
+    : '보이스피싱 의심 사건';
+};
 export const caseSummary = (item: StoredCase, latestSummary?: string | null) => latestSummary?.trim() || item.diagnosis.context?.summary || item.initial_brief;
 export const caseClaims = (item: StoredCase) => unique(item.diagnosis.context?.claims ?? []);
 export const caseDemands = (item: StoredCase) => unique((item.diagnosis.events ?? [])

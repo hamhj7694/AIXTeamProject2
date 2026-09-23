@@ -8,7 +8,7 @@ import unicodedata
 from dataclasses import dataclass, field
 from typing import Any
 
-from openai import AsyncOpenAI, AuthenticationError, RateLimitError
+from openai import APIConnectionError, AsyncOpenAI, AuthenticationError, RateLimitError
 
 from contracts.diagnosis import CaseContextFeatures, ContextNarrative, ContextResult, ExtractedEvent, SemanticAtom
 
@@ -222,6 +222,15 @@ def _openai_timeout_seconds() -> float:
     except ValueError:
         return 20.0
     return timeout if timeout > 0 else 20.0
+
+
+def _openai_max_retries() -> int:
+    """Retry transient provider failures, but never synthesize a diagnosis."""
+    try:
+        retries = int(os.getenv("OPENAI_MAX_RETRIES", "2"))
+    except ValueError:
+        retries = 2
+    return max(0, min(retries, 5))
 
 
 def parse_turns(text: str) -> list[str]:
@@ -504,13 +513,11 @@ async def extract_events(text: str) -> EventExtraction:
 
     client = AsyncOpenAI(
         api_key=os.environ["OPENAI_API_KEY"], timeout=_openai_timeout_seconds(),
+        max_retries=_openai_max_retries(),
     )
     events: list[ExtractedEvent] = []
     successful: list[int] = []
-    warnings: list[str] = []
     semantic_atoms: list[SemanticAtom] = []
-    failures: list[Exception] = []
-    failed_turn_ids: set[int] = set()
     max_output_tokens = int(os.getenv("OPENAI_EVENT_MAX_OUTPUT_TOKENS", "1800"))
     for turn_id, target in enumerate(turns, start=1):
         # Keep attribution context local to the target turn so a long demo
@@ -552,32 +559,16 @@ async def extract_events(text: str) -> EventExtraction:
             semantic_atoms.extend(turn_atoms)
             successful.append(turn_id)
         except Exception as exc:
-            failures.append(exc)
-            failed_turn_ids.add(turn_id)
-            warnings.append(f"Turn {turn_id} 이벤트 추출 실패: {type(exc).__name__}")
-    if not successful:
-        fallback_events = _local_safety_events(turns)
-        if fallback_events:
-            warnings.append("외부 AI 이벤트 추출이 실패하여 강한 위험 신호를 로컬 안전 추출로 이어서 분석했습니다.")
-            return EventExtraction(
-                turns,
-                _dedupe_events(fallback_events),
-                list(range(1, len(turns) + 1)),
-                "local-safety-fallback-v1",
-                warnings,
-                [],
-            )
-        if any(isinstance(error, RateLimitError) for error in failures):
-            raise AiProviderQuotaError("OpenAI API 크레딧 또는 호출 한도가 부족합니다. 결제·사용 한도를 확인한 뒤 다시 시도해 주세요.")
-        if any(isinstance(error, AuthenticationError) for error in failures):
-            raise AiProviderAuthenticationError("OpenAI API 키를 확인해 주세요.")
-        raise RuntimeError("모든 문장의 이벤트 추출에 실패했습니다.")
-
-    if failed_turn_ids:
-        fallback_events = _local_safety_events(turns, only_turn_ids=failed_turn_ids)
-        if fallback_events:
-            events.extend(fallback_events)
-            warnings.append("일부 문장은 외부 AI 대신 로컬 안전 신호로 보완했습니다.")
+            if isinstance(exc, RateLimitError):
+                raise AiProviderQuotaError("OpenAI API 크레딧 또는 호출 한도가 부족합니다. 결제·사용 한도를 확인한 뒤 다시 시도해 주세요.") from exc
+            if isinstance(exc, AuthenticationError):
+                raise AiProviderAuthenticationError("OpenAI API 키를 확인해 주세요.") from exc
+            if isinstance(exc, APIConnectionError):
+                raise
+            # A diagnosis with even one unprocessed turn is not complete.
+            # Convert malformed provider output to a server-side failure rather
+            # than allowing it to become a client-input error or fallback Case.
+            raise RuntimeError("AI 이벤트 추출 결과를 완성하지 못했습니다.") from exc
     # Family/device-broken calls are frequently supplied without speaker
     # labels. Keep a deterministic, privacy-safe family impersonation cue when
     # the event model misses the cue, so the downstream narrative has a grounded
@@ -586,7 +577,10 @@ async def extract_events(text: str) -> EventExtraction:
         event for event in _local_safety_events(turns)
         if event.event_family == "IMPERSONATION" and event.impersonation_group == "FAMILY"
     ]
-    return EventExtraction(turns, _dedupe_events([*events, *family_safety_events]), successful, model_name, warnings, semantic_atoms)
+    return EventExtraction(
+        turns, _dedupe_events([*events, *family_safety_events]), successful, model_name,
+        semantic_atoms=semantic_atoms,
+    )
 
 
 def build_context_from_events(events: list[ExtractedEvent]) -> ContextResult:
@@ -618,17 +612,226 @@ def build_context_from_events(events: list[ExtractedEvent]) -> ContextResult:
     )
 
 
+def _format_fallback_amount(value: Any) -> str | None:
+    try:
+        amount = float(value)
+    except (TypeError, ValueError):
+        return None
+    if amount <= 0:
+        return None
+    if amount.is_integer() and amount >= 10_000:
+        value = int(amount)
+        man, remainder = divmod(value, 10_000)
+        if remainder == 0:
+            return f"{man:,}만 원"
+    return f"{int(amount):,}원" if amount.is_integer() else f"{amount:,.0f}원"
+
+
+def _fallback_actor(atom: dict[str, Any]) -> str:
+    actor_role = str(atom.get("actor_role") or "").upper()
+    reported_by_role = str(atom.get("reported_by_role") or "").upper()
+    if actor_role == "CUSTOMER" or reported_by_role == "CUSTOMER":
+        return "고객"
+    return "보이스피싱 의심 인물"
+
+
+def _fallback_claim_subject(atom: dict[str, Any]) -> str:
+    relationship = str(atom.get("claimed_relationship") or "").upper()
+    if relationship in {"CHILD", "FAMILY_MEMBER", "SON", "DAUGHTER"}:
+        return "고객의 자녀"
+    return str(
+        atom.get("claimed_person_name")
+        or atom.get("claimed_role_name")
+        or atom.get("claimed_role")
+        or atom.get("claimed_relationship")
+        or "특정 인물·기관"
+    )
+
+
+def _fallback_atom_sentence(atom: dict[str, Any]) -> tuple[str, str]:
+    """Render a grounded, privacy-safe sentence for provider-offline fallback.
+
+    This intentionally consumes only normalized semantic atoms. It must not use
+    evidence_text, source utterances, or any newly inferred account/person data.
+    The returned category is used to populate the same context buckets as the
+    context LLM (claim, demand, customer, or tactic).
+    """
+    predicate = str(atom.get("predicate") or "OTHER").upper()
+    actor = _fallback_actor(atom)
+    amount = _format_fallback_amount(atom.get("amount_value_krw"))
+    destination = str(atom.get("destination") or "").upper()
+    action_state = str(atom.get("action_state") or "").upper()
+    customer_action = actor == "고객"
+
+    if predicate in {"CLAIMS_IDENTITY", "CLAIMS_ROLE", "CLAIMS_ORGANIZATION", "CLAIMS_ACCOUNT_INVOLVEMENT", "CLAIMS_CRIME_INVOLVEMENT"}:
+        subject = _fallback_claim_subject(atom)
+        if predicate == "CLAIMS_CRIME_INVOLVEMENT":
+            return f"{actor}가 고객 계좌·명의가 범죄에 연루됐다고 주장함.", "claim"
+        if predicate == "CLAIMS_ACCOUNT_INVOLVEMENT":
+            return f"{actor}가 고객 계좌와 관련된 문제가 있다고 주장함.", "claim"
+        particle = "라고" if subject.endswith(("자녀", "아들", "딸")) else "이라고"
+        return f"{actor}가 {subject}{particle} 주장함.", "claim"
+
+    if predicate == "TRANSFER_FUNDS":
+        if customer_action:
+            if action_state in {"COMPLETED", "REPORTED_ACTION"}:
+                suffix = " 실제 거래 완료 여부는 은행 내부 채널에서 별도 확인 필요."
+                return f"고객이 {amount + '을 ' if amount else ''}송금했다고 진술함.{suffix}", "customer"
+            if action_state == "DENIED":
+                return f"고객이 {amount + '을 ' if amount else ''}송금하지 않았다고 진술함.", "customer"
+            if action_state in {"PLANNED", "ATTEMPTED"}:
+                return f"고객이 {amount + '을 ' if amount else ''}송금할 계획이라고 진술함.", "customer"
+        destination_text = "외부 계좌로 " if destination in {"EXTERNAL_ACCOUNT", "CLAIMED_SAFE_ACCOUNT"} else ""
+        amount_text = f"{amount}을 " if amount else ""
+        return f"보이스피싱 의심 인물이 고객에게 {destination_text}{amount_text}이체하라고 요구함.", "demand"
+
+    if predicate == "MAINTAIN_CALL":
+        if customer_action:
+            return "고객이 통화를 계속 유지했다고 진술함.", "customer"
+        return "보이스피싱 의심 인물이 고객에게 통화를 계속 유지하라고 요구함.", "demand"
+    if predicate == "KEEP_SECRET":
+        return "고객에게 관련 내용을 비밀로 하라고 요구함.", "demand"
+    if predicate == "AVOID_EXTERNAL_CONTACT":
+        return "고객에게 은행 등 외부 기관에 연락하지 말라고 요구함.", "demand"
+    if predicate == "AVOID_REPORTING":
+        return "고객에게 관련 내용을 은행이나 관계 기관에 알리지 말라고 요구함.", "demand"
+    if predicate in {"THREATEN_ARREST", "THREATEN_ASSET_FREEZE"}:
+        return "보이스피싱 의심 인물이 처벌이나 재산상 피해가 발생할 수 있다는 불안을 조성함.", "tactic"
+    if predicate == "PROMISE_RETURN":
+        return "보이스피싱 의심 인물이 송금하면 돈을 돌려주겠다고 주장함. 해당 반환 약속은 확인되지 않은 주장임.", "claim"
+
+    communication_control = str(atom.get("communication_control") or "").upper()
+    if communication_control in {"NO_END_CALL", "NO_EXTERNAL_CONTACT", "NO_BANK_CONTACT", "NO_REPORTING", "KEEP_SECRET"}:
+        return "보이스피싱 의심 인물이 고객의 외부 연락이나 사실 확인을 제한한 정황이 확인됨.", "tactic"
+    if str(atom.get("urgency") or "").upper() in {"TODAY", "IMMEDIATE", "WITHIN_30_MINUTES", "BEFORE_CALL_END"}:
+        return "보이스피싱 의심 인물이 고객에게 즉시 또는 오늘 안에 처리하라고 재촉한 정황이 확인됨.", "demand"
+    return "구조화 분석에서 추가 정황이 확인되었으며 세부 사실은 담당자 확인이 필요함.", "tactic"
+
+
+def _fallback_incident_type(payload: dict[str, Any], labels: list[str]) -> str:
+    signals = [item for item in payload.get("signals", []) if isinstance(item, dict)]
+    groups = {str(item.get("impersonation_group") or "").upper() for item in signals}
+    context_features = payload.get("case_context_features") or {}
+    groups.update(str(item).upper() for item in context_features.get("claimed_actor_types", []) if item)
+    requested = {str(item).upper() for item in context_features.get("requested_action_codes", []) if item}
+    label_text = " ".join(labels)
+    has_transfer = any("TRANSFER" in item for item in requested) or "송금" in label_text or "이체" in label_text
+    has_auth = any("AUTH" in item for item in requested) or "인증" in label_text
+    if "FAMILY" in groups:
+        return "가족 사칭 및 송금 유도 의심" if has_transfer else "가족 사칭 의심"
+    if "PUBLIC_AGENCY" in groups:
+        return "공공기관 사칭 및 송금 요구 의심" if has_transfer else "공공기관 사칭 의심"
+    if "FINANCIAL_INSTITUTION" in groups:
+        return "금융기관 사칭 및 송금 요구 의심" if has_transfer else "금융기관 사칭 의심"
+    if has_auth:
+        return "인증정보 요구 의심"
+    if has_transfer:
+        return "송금·이체 요구 의심"
+    if "긴급" in label_text or "압박" in label_text:
+        return "긴급 처리 압박 의심"
+    return "보이스피싱 의심" if labels else "유형 확인 필요"
+
+
+def _fallback_context_from_atoms(payload: dict[str, Any], labels: list[str]) -> ContextResult:
+    atoms = [item for item in payload.get("semantic_atoms", []) if isinstance(item, dict)]
+    narratives: list[ContextNarrative] = []
+    claims: list[str] = []
+    demands: list[str] = []
+    customer_statements: list[str] = []
+    tactics: list[str] = []
+
+    for index, atom in enumerate(atoms):
+        sentence, category = _fallback_atom_sentence(atom)
+        if sentence in {item.sentence for item in narratives}:
+            continue
+        predicate = str(atom.get("predicate") or "EXTRACTED_CONTEXT").upper()
+        code = {
+            "CLAIMS_IDENTITY": "CLAIMED_ORGANIZATION",
+            "CLAIMS_ORGANIZATION": "CLAIMED_ORGANIZATION",
+            "CLAIMS_ROLE": "ROLE_FAMILY" if str(atom.get("claimed_relationship") or "").upper() in {"CHILD", "FAMILY_MEMBER"} else "CLAIMED_ORGANIZATION",
+            "TRANSFER_FUNDS": "CUSTOMER_TRANSFERRED" if category == "customer" else "REQUEST_TRANSFER",
+            "MAINTAIN_CALL": "REQUEST_KEEP_CALL",
+            "KEEP_SECRET": "REQUEST_SECRECY",
+            "AVOID_EXTERNAL_CONTACT": "TACTIC_ISOLATION",
+            "AVOID_REPORTING": "TACTIC_ISOLATION",
+            "THREATEN_ARREST": "TACTIC_FEAR",
+            "THREATEN_ASSET_FREEZE": "TACTIC_FEAR",
+            "PROMISE_RETURN": "PURPOSE_REFUND",
+        }.get(predicate, "EXTRACTED_CONTEXT")
+        status = "REPORTED" if category == "customer" else "REQUESTED" if category == "demand" else "CLAIMED"
+        narrative = ContextNarrative(
+            code=code,
+            sentence=sentence,
+            status=status,
+            source_turns=[int(atom["source_turn_id"])] if atom.get("source_turn_id") else [],
+            atom_ids=[str(atom["atom_id"])] if atom.get("atom_id") else [],
+            speaker_role=str(atom.get("speaker_role") or "UNKNOWN"),
+            actor_role=str(atom.get("actor_role") or "UNKNOWN"),
+            target_role=str(atom.get("target_role") or "UNKNOWN"),
+            reported_by_role=str(atom.get("reported_by_role") or "UNKNOWN"),
+            detail_items=[str(item) for item in atom.get("lexical_cues", []) if item],
+            entity_names=[str(item) for item in (
+                atom.get("claimed_organization_name"), atom.get("claimed_role_name"),
+                atom.get("claimed_relationship"), atom.get("claimed_person_name"),
+            ) if item],
+            deadline_at=atom.get("deadline_at"),
+            relative_deadline_minutes=atom.get("relative_deadline_minutes"),
+            occurrence_count=int(atom.get("occurrence_count") or 1),
+            confidence=float(atom.get("attribution_confidence") or 0.65),
+        )
+        narratives.append(narrative)
+        if category == "claim":
+            claims.append(sentence)
+        elif category == "demand":
+            demands.append(sentence)
+        elif category == "customer":
+            customer_statements.append(sentence)
+        else:
+            tactics.append(sentence)
+
+    if not narratives:
+        claims = [label for label in dict.fromkeys(labels) if "사칭" in label]
+        demands = [label for label in dict.fromkeys(labels) if any(token in label for token in ("요구", "송금", "정보"))]
+
+    predicates = {str(item.get("predicate") or "").upper() for item in atoms}
+    has_transfer = "TRANSFER_FUNDS" in predicates or any("송금" in label or "이체" in label for label in labels)
+    has_sensitive = bool(predicates & {"DISCLOSE_OTP", "DISCLOSE_PASSWORD", "PROVIDE_CARD_INFO", "INSTALL_APP", "OPEN_URL", "SHARE_SCREEN"})
+    recommended = [
+        "고객의 현재 통화를 안전하게 종료하고, 보이스피싱 의심 인물이 제공한 연락처가 아닌 은행 공식 채널로 즉시 거래 및 사고 여부를 확인함.",
+    ]
+    if has_transfer:
+        recommended.append("고객이 송금했다고 진술한 금액의 실제 이체 완료 여부, 처리 시각, 상대 계좌 정보와 지급정지 가능성을 은행 내부 절차로 확인함.")
+    if has_sensitive:
+        recommended.append("추가 송금, 인증서·비밀번호 제공, 원격제어 앱 설치가 없었는지 확인하고 관련 정보가 노출됐다면 은행의 공식 보안 절차를 진행함.")
+    recommended.extend([
+        "통화기록, 문자, 계좌 이체 화면 등 관련 자료를 보존하고 필요 시 공식 수사기관 또는 금융기관 신고 절차를 안내함.",
+        "확인되지 않은 반환 약속이나 안전계좌라는 취지의 설명은 검증 전 사실로 취급하지 않음.",
+    ])
+    summary_parts = [item.sentence for item in narratives[:12]]
+    summary = " ".join(summary_parts) if summary_parts else (
+        "위험 신호가 감지되지 않았습니다." if not labels else f"{', '.join(dict.fromkeys(labels))} 정황이 확인되어 추가 검증이 필요함."
+    )
+    return ContextResult(
+        summary=summary,
+        incident_type=_fallback_incident_type(payload, labels) if labels or narratives else "유형 확인 필요",
+        claims=list(dict.fromkeys(claims)),
+        demands=list(dict.fromkeys(demands)),
+        manipulation_tactics=list(dict.fromkeys(tactics)),
+        customer_statements=list(dict.fromkeys(customer_statements)),
+        recommended_next_steps=list(dict.fromkeys(recommended)),
+        feature_narratives=narratives[:40],
+        confidence=0.9 if labels or narratives else 0.65,
+    )
+
+
 def build_context_from_signal_payload(payload: dict[str, Any]) -> ContextResult:
     """Build a safe context from real structured signals if the LLM is unavailable."""
     signals = payload.get("signals", [])
     labels = [str(item.get("signal", "")) for item in signals if isinstance(item, dict)]
-    groups = {item.get("impersonation_group") for item in signals if isinstance(item, dict)}
-    if "PUBLIC_AGENCY" in groups:
-        incident_type = "공공기관 사칭 의심"
-    elif "FINANCIAL_INSTITUTION" in groups:
-        incident_type = "금융기관 사칭 의심"
-    else:
-        incident_type = "유형 확인 필요"
+    atom_context = _fallback_context_from_atoms(payload, labels)
+    if atom_context.feature_narratives:
+        return atom_context
+    incident_type = _fallback_incident_type(payload, labels)
     summary = "위험 신호가 감지되지 않았습니다." if not labels else f"{', '.join(dict.fromkeys(labels))} 신호가 확인되어 추가 검증이 필요합니다."
     claims = [label for label in dict.fromkeys(labels) if "사칭" in label]
     return ContextResult(
@@ -1040,6 +1243,7 @@ async def extract_full_context(text: str) -> ContextResult:
     reservation = budget.reserve(input_text=text, max_output_tokens=max_output_tokens)
     client = AsyncOpenAI(
         api_key=os.environ["OPENAI_API_KEY"], timeout=_openai_timeout_seconds(),
+        max_retries=_openai_max_retries(),
     )
     response = await client.responses.create(
         model=os.getenv("OPENAI_CONTEXT_MODEL", os.getenv("OPENAI_EVENT_MODEL", "gpt-5.6-luna")),
@@ -1079,6 +1283,7 @@ async def extract_context_from_signal_payload(
     reservation = budget.reserve(input_text=input_text, max_output_tokens=max_output_tokens)
     client = AsyncOpenAI(
         api_key=os.environ["OPENAI_API_KEY"], timeout=_openai_timeout_seconds(),
+        max_retries=_openai_max_retries(),
     )
     response = await client.responses.create(
         model=os.getenv("OPENAI_CONTEXT_MODEL", os.getenv("OPENAI_EVENT_MODEL", "gpt-5.6-luna")),

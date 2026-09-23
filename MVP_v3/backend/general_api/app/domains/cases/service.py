@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from contracts.diagnosis import AnalyzeCaseResponse, AnalyzeTextRequest, RiskLevel
-from general_api.app.clients.diagnosis_ai import DiagnosisAiClient
+from general_api.app.clients.diagnosis_ai import AiServiceError, DiagnosisAiClient
 from request_trace import trace_stage
 
 from .repository import CaseCreationConflictError, CasePersistenceError, CaseRepository
@@ -30,6 +30,15 @@ class AnalyzeCaseService:
 
         with trace_stage("case.ai_analysis"):
             diagnosis = await self.ai_client.analyze(request.model_copy(update={"text": text}))
+        if diagnosis.partial_failure:
+            # A partial diagnosis is never sufficient to create a CaseRoom.
+            # Keep this guard even if a future AI adapter accidentally returns
+            # a 200 response with fallback/partial metadata.
+            raise AiServiceError(
+                "AI 분석이 완전히 끝나지 않아 Case를 생성하지 않았습니다.",
+                code="AI_ANALYSIS_FAILED",
+                retryable=True,
+            )
         # The demo keeps the submitted transcript as a replayable Case input,
         # but the diagnosis projection below removes source text/evidence from
         # every structured payload that is sent to CSR/Context AI.

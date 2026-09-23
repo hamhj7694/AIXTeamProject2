@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import json
 import unittest
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from ai_api.app.domains.diagnosis import DiagnosisService
 from ai_api.app.domains.diagnosis.extractor import EventExtraction, _local_safety_events, parse_turns
 from contracts.diagnosis import AnalyzeTextRequest, CaseContextFeatures, ContextResult
+from general_api.app.clients.diagnosis_ai import AiServiceError
 from general_api.app.domains.cases.repository import CaseCreationConflictError, CasePersistenceError, InMemoryCaseRepository
 from general_api.app.domains.cases.service import AnalyzeCaseService
 
@@ -141,6 +143,18 @@ class AnalyzeCaseServiceTest(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(CasePersistenceError):
                 await self.service.analyze(AnalyzeTextRequest(text=source))
         self.assertEqual(await self.repository.list(), [])
+
+    async def test_partial_diagnosis_never_creates_case(self) -> None:
+        repository = InMemoryCaseRepository()
+        ai_client = AsyncMock()
+        ai_client.analyze.return_value = SimpleNamespace(partial_failure=True)
+        service = AnalyzeCaseService(ai_client, repository)
+
+        with self.assertRaises(AiServiceError):
+            await service.analyze(AnalyzeTextRequest(text="검증용 분석"))
+
+        self.assertEqual(await repository.list(), [])
+        ai_client.analyze.assert_awaited_once()
 
     async def test_new_case_never_reads_case_id_before_it_creates_the_case(self) -> None:
         repository = RecordingCaseRepository()

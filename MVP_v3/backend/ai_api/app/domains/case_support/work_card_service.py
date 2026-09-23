@@ -42,11 +42,39 @@ WORK_CARD_SCHEMA = {
             "required": ["question_id", "target_field", "question_text", "reason", "priority", "options", "customer_explanation", "answer_mode", "allow_free_text"],
         }},
         "suggested_claim": {"type": ["string", "null"]}, "suggested_target": {"type": ["string", "null"]},
+        "verification_messages": {"type": "array", "maxItems": 10, "items": {
+            "type": "object", "additionalProperties": False,
+            "properties": {
+                "institution": {"type": "string"}, "target": {"type": "string"},
+                "claim": {"type": "string"}, "message": {"type": "string"},
+                "reason_codes": {"type": "array", "items": {"type": "string"}, "maxItems": 8},
+            },
+            "required": ["institution", "target", "claim", "message", "reason_codes"],
+        }},
         "suggested_action_type": {"type": ["string", "null"]}, "suggested_action_note": {"type": ["string", "null"]},
+        "suggested_actions": {"type": "array", "maxItems": 12, "items": {
+            "type": "object", "additionalProperties": False,
+            "properties": {
+                "dedupe_key": {"type": "string"}, "category": {"type": "string"},
+                "priority": {"type": "string", "enum": ["P0", "P1", "P2"]},
+                "title": {"type": "string"}, "note": {"type": "string"},
+                "reason_codes": {"type": "array", "items": {"type": "string"}, "maxItems": 8},
+                "steps": {"type": "array", "maxItems": 8, "items": {
+                    "type": "object", "additionalProperties": False,
+                    "properties": {
+                        "dedupe_key": {"type": "string"}, "title": {"type": "string"},
+                        "note": {"type": "string"},
+                        "reason_codes": {"type": "array", "items": {"type": "string"}, "maxItems": 8},
+                    },
+                    "required": ["dedupe_key", "title", "note", "reason_codes"],
+                }},
+            },
+            "required": ["dedupe_key", "category", "priority", "title", "note", "reason_codes", "steps"],
+        }},
         "suggested_notice": {"type": ["string", "null"]}, "suggested_transition": {"type": ["string", "null"]},
         "warnings": {"type": "array", "items": {"type": "string"}, "maxItems": 8},
     },
-    "required": ["card_type", "title", "summary", "context_sources", "rationale", "next_action", "questions", "suggested_claim", "suggested_target", "suggested_action_type", "suggested_action_note", "suggested_notice", "suggested_transition", "warnings"],
+    "required": ["card_type", "title", "summary", "context_sources", "rationale", "next_action", "questions", "suggested_claim", "suggested_target", "verification_messages", "suggested_action_type", "suggested_action_note", "suggested_actions", "suggested_notice", "suggested_transition", "warnings"],
 }
 
 
@@ -77,6 +105,47 @@ def _verification_seed(request: CaseWorkCardInput) -> tuple[str, str]:
         f"상대방이 {fraud_label} 관계자라고 주장했습니다. 공식 기관의 실제 안내인지 확인이 필요합니다.",
         "사칭 기관명·발신 연락처·사건번호의 공식 등록 여부",
     )
+
+
+def _fallback_response_actions(recovery: bool) -> list[dict]:
+    return [
+        {
+            "dedupe_key": "customer-safety-communication",
+            "category": "고객 소통",
+            "priority": "P0" if recovery else "P1",
+            "title": "고객에게 추가 송금·인증정보 제공 중단 안내",
+            "note": "고객에게 추가 송금과 인증번호·비밀번호 제공을 중단하도록 안내하고 공식 상담 채널로 연결합니다.",
+            "reason_codes": ["CUSTOMER_SAFETY"],
+            "steps": [
+                {"dedupe_key": "stop-additional-transfer", "title": "추가 송금 및 인증정보 제공 중단 안내", "note": "고객에게 추가 송금과 인증정보 제공을 즉시 중단하도록 안내합니다.", "reason_codes": ["CUSTOMER_SAFETY"]},
+                {"dedupe_key": "connect-official-channel", "title": "공식 상담 채널 연결", "note": "고객을 은행 공식 상담·신고 채널로 연결합니다.", "reason_codes": ["CUSTOMER_SAFETY"]},
+            ],
+        },
+        {
+            "dedupe_key": "transfer-status-review",
+            "category": "금융 보호",
+            "priority": "P0" if recovery else "P1",
+            "title": "실제 송금 여부 및 금융 조치 가능성 확인",
+            "note": "Case에 기록된 송금 정황과 데모 거래 기록을 확인하고 필요한 금융 보호 절차를 검토합니다.",
+            "reason_codes": ["TRANSFER_REVIEW"],
+            "steps": [
+                {"dedupe_key": "review-transfer-record", "title": "실제 송금 기록 확인", "note": "Case에 저장된 거래 기록과 고객 진술을 대조합니다.", "reason_codes": ["TRANSFER_REVIEW"]},
+                {"dedupe_key": "review-payment-protection", "title": "지급정지·이체 취소 가능 여부 검토", "note": "확인된 거래 상태를 바탕으로 가능한 금융 보호 조치를 검토합니다.", "reason_codes": ["TRANSFER_REVIEW"]},
+            ],
+        },
+        {
+            "dedupe_key": "evidence-preservation",
+            "category": "증빙·기록",
+            "priority": "P1",
+            "title": "통화·메시지·거래 관련 증빙 보존",
+            "note": "고객이 제공한 통화, 문자, 이체 관련 자료를 삭제하지 않도록 안내하고 Case 기록에 남깁니다.",
+            "reason_codes": ["EVIDENCE_PRESERVATION"],
+            "steps": [
+                {"dedupe_key": "collect-call-message-evidence", "title": "통화·메시지 증빙 정리", "note": "통화와 메시지 등 관련 자료를 Case 기록에 정리합니다.", "reason_codes": ["EVIDENCE_PRESERVATION"]},
+                {"dedupe_key": "preserve-evidence", "title": "증빙자료 보존 상태 기록", "note": "자료가 변경·삭제되지 않도록 보존 상태를 기록합니다.", "reason_codes": ["EVIDENCE_PRESERVATION"]},
+            ],
+        },
+    ]
 
 
 def _build_context_card(request: CaseWorkCardInput, model_mode: str) -> CaseWorkCardOutput:
@@ -120,11 +189,22 @@ def _build_context_card(request: CaseWorkCardInput, model_mode: str) -> CaseWork
             questions=[],
         )
     if request.card_type == "VERIFICATION_REQUEST":
+        institution = target.split(" ", 1)[0].strip() if target else ""
+        verification_messages = []
+        if institution and institution not in {"확인", "공식", "관련"}:
+            verification_messages = [{
+                "institution": institution,
+                "target": target,
+                "claim": claim,
+                "message": f"{institution} 관련 주장과 소속 여부를 공식 채널에서 확인해 주세요.\n확인 대상: {claim}",
+                "reason_codes": ["IMPERSONATION_CLAIM"],
+            }]
         return CaseWorkCardOutput(
             **common, title="기관·사칭 주장 확인 초안",
             summary=f"‘{target}’ 관련 주장을 공식 채널에서 확인할 수 있도록 검증 대상과 내용을 채웠습니다.",
             next_action="사칭 주장과 확인 대상을 검토한 뒤 기관 검증 업무로 등록하세요.",
             suggested_claim=claim, suggested_target=target,
+            verification_messages=verification_messages,
         )
     if request.card_type == "BANK_ACTION":
         action_type = "PAYMENT_HOLD_REVIEW" if recovery else "CUSTOMER_CALLBACK"
@@ -137,7 +217,7 @@ def _build_context_card(request: CaseWorkCardInput, model_mode: str) -> CaseWork
             **common, title="은행 보호조치 검토",
             summary="현재 Case 상태에 맞는 보호조치 유형과 담당자 업무 내용을 채웠습니다.",
             next_action="실제 거래 상태를 확인하고 권한 있는 담당자의 승인 절차에 따라 보호조치 업무를 등록하세요.",
-            suggested_action_type=action_type, suggested_action_note=action_note,
+            suggested_action_type=action_type, suggested_action_note=action_note, suggested_actions=_fallback_response_actions(recovery),
         )
     if request.card_type == "CUSTOMER_NOTICE":
         notice = (
@@ -175,8 +255,8 @@ def _fill_empty_proposal(payload: dict, fallback: CaseWorkCardOutput) -> dict:
         if not payload.get(key):
             payload[key] = fallback_payload[key]
     relevant = {
-        "VERIFICATION_REQUEST": ("suggested_claim", "suggested_target"),
-        "BANK_ACTION": ("suggested_action_type", "suggested_action_note"),
+        "VERIFICATION_REQUEST": ("suggested_claim", "suggested_target", "verification_messages"),
+        "BANK_ACTION": ("suggested_action_type", "suggested_action_note", "suggested_actions"),
         "CUSTOMER_NOTICE": ("suggested_notice",),
         "CASE_TRANSITION": ("suggested_transition",),
     }
@@ -237,6 +317,7 @@ class CaseWorkCardService:
                     "고객 안내는 내부 위험점수나 근거를 노출하지 마세요. 지급정지, 상태 변경, 기관 요청, 고객 전송은 반드시 사람 검토가 필요합니다. "
                     "context_sources에는 실제 입력에 포함된 통화·신고 맥락, 고객 응답·확인 정보, 은행 Case 상태, 기관 검증 현황만 표시하세요. "
                     "suggested_action_type은 PAYMENT_HOLD_REVIEW, ACCOUNT_REPORT_GUIDANCE, EVIDENCE_PRESERVATION, DEVICE_SECURITY_GUIDANCE, CUSTOMER_CALLBACK, OTHER 중 하나만 사용하세요."
+                    " BANK_ACTION에서는 suggested_actions를 최대 12개까지 반환하고 각 항목의 steps를 최대 8개까지 반환하세요. steps는 최상위 조치를 수행하기 위한 순서가 있는 하위 단계이며 2단계보다 깊게 중첩하지 마세요. category는 금융 보호, 고객 소통, 증빙·기록, 계정·기기 보안, 기관 확인·신고 중 하나를 사용하고 priority는 P0/P1/P2만 사용하세요. 각 항목과 단계는 은행 직원이 수행할 수 있는 조치의 명령형 제목과 설명으로 작성하고, 고객에게 물어볼 질문·질문 후보·답변 초안·확정 여부 판단 문장은 suggested_actions에 넣지 마세요. 피해 구제 절차, 지급정지 검토, 경찰 신고, 증빙 보존처럼 Case 근거가 있는 실제 업무를 우선 제안하세요. dedupe_key는 안정적인 키로 만들고 근거 없는 사실이나 기관을 만들지 마세요. 기존 단일 필드도 하위 호환을 위해 유지하세요."
                 ),
                 input=json.dumps({
                     "case_id": request.case_id, "card_type": "QUESTION_PLAN",

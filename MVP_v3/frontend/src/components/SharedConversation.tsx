@@ -1,18 +1,17 @@
-import React, { useMemo } from 'react';
-import { ArrowDown, Bookmark, Bot, CheckCircle2, CircleDot, Download, FileText, Landmark, MessageCircleQuestion, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, ShieldCheck, UserRound } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { ArrowDown, Bookmark, Bot, CheckCircle2, CircleDot, Download, FileText, Landmark, MessageCircleQuestion, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, ShieldCheck, Sparkles, UserRound } from 'lucide-react';
 import { casesApi, CURRENT_BANK_USER } from '../api/cases';
-import type { CaseAction, CaseEvent, CaseMessage, CustomerQuestion, InitialReport, InitialReportSection, VerificationTask } from '../api/types';
+import type { CaseAction, CaseEvent, CaseMessage, CustomerQuestion, InitialReport, InitialReportSection, RecommendedChatAction, VerificationTask } from '../api/types';
 import { actionLabel, formatClock, verificationStatusLabel } from '../presentation';
 import type { TimelineEntry } from '../timeline';
 import type { CaseBundle } from '../api/types';
 import type { BankBookmark } from '../bank/bookmarks';
 import { eventLabel, userText, questionAnswerLabel } from '../userText';
 import { buildConversationEntries } from '../bank/conversationEntries';
-import { bankAiSummary } from '../bank/aiSummary';
-import { reviewableVerifications } from '../bank/aiNextActions';
 import { SafeMarkdown } from './SafeMarkdown';
 import { AiThinkingBubble } from './AiThinkingBubble';
 import { useScrollToLatest } from '../useScrollToLatest';
+import { readLatestAiRecommendations } from '../bank/aiRecommendations';
 
 interface Props {
   bundle: CaseBundle;
@@ -23,15 +22,58 @@ interface Props {
   onToggleBookmark: (bookmark: BankBookmark) => void;
   onRetryMessage: (message: CaseMessage) => void;
   onDismissMessage: (message: CaseMessage) => void;
-  onOpenQuestions?: () => void;
-  onEditVerification?: (task: VerificationTask) => void;
   collapsed?: boolean;
   collapseDisabled?: boolean;
   onToggleCollapse?: () => void;
   inlineCard?: React.ReactNode;
   aiBusy?: boolean;
   flowCard?: React.ReactNode;
+  onOpenQuestions?: () => void;
+  onOpenTransactionLookup?: () => void;
+  onOpenVerification?: () => void;
+  onOpenAction?: () => void;
+  onUseAiDraft?: (draft: string) => void;
 }
+
+const recommendationLabels: Record<RecommendedChatAction['action_key'], string> = {
+  CUSTOMER_QUESTION: '질문 열기',
+  TRANSACTION_LOOKUP: '송금 기록 조회',
+  OFFICIAL_VERIFICATION: '기관 확인',
+  RESPONSE_ACTION: '대응 조치 검토',
+  DRAFT_REPLY: '답변 초안 사용',
+};
+
+const AiRecommendationTray: React.FC<{
+  actions: RecommendedChatAction[];
+  onOpenQuestions?: () => void;
+  onOpenTransactionLookup?: () => void;
+  onOpenVerification?: () => void;
+  onOpenAction?: () => void;
+  onUseAiDraft?: (draft: string) => void;
+}> = ({ actions, onOpenQuestions, onOpenTransactionLookup, onOpenVerification, onOpenAction, onUseAiDraft }) => {
+  const unique = actions
+    .filter((action) => action.action_key !== 'DRAFT_REPLY' || Boolean(action.draft_text?.trim()))
+    .filter((action, index, all) => all.findIndex((candidate) => candidate.action_key === action.action_key) === index)
+    .slice(0, 3);
+  const invoke = (action: RecommendedChatAction) => {
+    if (action.action_key === 'DRAFT_REPLY') {
+      if (action.draft_text?.trim()) onUseAiDraft?.(action.draft_text);
+      return;
+    }
+    ({
+      CUSTOMER_QUESTION: onOpenQuestions,
+      TRANSACTION_LOOKUP: onOpenTransactionLookup,
+      OFFICIAL_VERIFICATION: onOpenVerification,
+      RESPONSE_ACTION: onOpenAction,
+    } as Partial<Record<RecommendedChatAction['action_key'], (() => void) | undefined>>)[action.action_key]?.();
+  };
+  if (unique.length === 0) return null;
+  const includesOfficialVerification = unique.some((action) => action.action_key === 'OFFICIAL_VERIFICATION');
+  return <div className={`ai-recommendation-tray ${includesOfficialVerification ? 'has-official-verification' : ''}`} aria-label="AI 추천 다음 작업">
+    <span className="ai-recommendation-tray-label"><Sparkles size={12}/>추천 작업</span>
+    {unique.map((action) => <button key={action.action_key} type="button" onClick={() => invoke(action)}>{recommendationLabels[action.action_key]}</button>)}
+  </div>;
+};
 
 const actionTimelineTitle = (action: CaseAction): string => action.title?.trim() || actionLabel(action.action_type);
 
@@ -150,11 +192,45 @@ const EntryBookmark: React.FC<{ entry: TimelineEntry; targetId: string; active: 
   return <button type="button" className={`bank-entry-bookmark ${active ? 'active' : ''}`} aria-label={active ? '북마크 해제' : '북마크 추가'} aria-pressed={active} onClick={() => onToggle({ entryId: targetId, ...details, createdAt: entry.occurredAt })}><Bookmark size={14} fill={active ? 'currentColor' : 'none'}/></button>;
 };
 
-const MessageEntry: React.FC<{ message: CaseMessage; bookmark: React.ReactNode; onRetry: Props['onRetryMessage']; onDismiss: Props['onDismissMessage']; onOpenQuestions?: () => void; verificationTasks: VerificationTask[]; onEditVerification: (task: VerificationTask) => void }> = ({ message, bookmark, onRetry, onDismiss, onOpenQuestions, verificationTasks, onEditVerification }) => {
+type VerificationDispatchPayload = { card_type?: string; title?: string; created_at?: string; external_send?: boolean; items?: Array<{ institution?: string; target?: string; claim?: string; message?: string; status?: string }> };
+const parseVerificationDispatch = (content: string): VerificationDispatchPayload | null => { try { const value = JSON.parse(content) as VerificationDispatchPayload; return value.card_type === 'VERIFICATION_DISPATCH' && Array.isArray(value.items) ? value : null; } catch { return null; } };
+const VerificationDispatchCard: React.FC<{ message: CaseMessage; bookmark: React.ReactNode }> = ({ message, bookmark }) => {
+  const [expanded, setExpanded] = useState(false);
+  const payload = parseVerificationDispatch(message.content);
+  if (!payload) return null;
+  const items = payload.items ?? [];
+  const dispatchMeta = `${items.length}개 기관 · 외부 전송 시뮬레이션(데모)`;
+  return <article className="timeline-card verification-dispatch-card"><header className="verification-dispatch-header"><button type="button" className="verification-dispatch-toggle" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded}><Landmark size={17}/><span><b>기관 확인 요청 발송</b><small>{dispatchMeta}</small></span><time>{formatClock(message.created_at)}</time><span className="verification-dispatch-chevron">{expanded ? '접기' : '펼치기'}</span></button>{bookmark}</header>{expanded && <div className="verification-dispatch-items">{items.map((item, index) => <section key={`${item.institution}-${index}`}><div><b>{item.institution || item.target || `기관 ${index + 1}`}</b><span>{item.status === 'SIMULATED_SENT' ? '시뮬레이션 발송 완료' : '초안'}</span></div><small>확인 대상: {item.target || '미지정'}</small><p>{item.message || item.claim || '메시지 없음'}</p></section>)}</div>}</article>;
+};
+
+const VerificationDispatchCardV2: React.FC<{ message: CaseMessage; bookmark: React.ReactNode }> = ({ message, bookmark }) => {
+  const [expanded, setExpanded] = useState(false);
+  const payload = parseVerificationDispatch(message.content);
+  if (!payload) return null;
+  const items = payload.items ?? [];
+  return <article className="timeline-card verification-dispatch-card"><header className="verification-dispatch-header"><button type="button" className="verification-dispatch-toggle" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded}><Landmark size={17}/><span><b>기관 확인 요청 발송</b><small>{items.length}개 기관 · 외부 전송 시뮬레이션(데모)</small></span><time>{formatClock(message.created_at)}</time><span className="verification-dispatch-chevron">{expanded ? '접기' : '펼치기'}</span></button>{bookmark}</header>{expanded && <div className="verification-dispatch-items">{items.map((item, index) => <section key={`${item.institution}-${index}`}><div><b>{item.institution || item.target || `기관 ${index + 1}`}</b></div><small>{item.target || '상세 부서 및 담당자'}</small><p>{item.message || item.claim || '메시지 없음'}</p></section>)}</div>}</article>;
+};
+
+type CustomerQuestionDispatchPayload = { card_type?: string; title?: string; created_at?: string; external_send?: boolean; items?: Array<{ question_id?: string; question_text?: string; sequence?: number; status?: string; asked_at?: string | null }> };
+const parseCustomerQuestionDispatch = (content: string): CustomerQuestionDispatchPayload | null => { try { const value = JSON.parse(content) as CustomerQuestionDispatchPayload; return value.card_type === 'CUSTOMER_QUESTION_DISPATCH' && Array.isArray(value.items) ? value : null; } catch { return null; } };
+const customerQuestionDispatchStatus = (status?: string) => status === 'ASKED' ? '고객에게 표시 중' : status === 'ANSWERED' ? '답변 수신' : status === 'SKIPPED' ? '건너뜀' : '';
+const CustomerQuestionDispatchCard: React.FC<{ message: CaseMessage; bookmark: React.ReactNode }> = ({ message, bookmark }) => {
+  const [expanded, setExpanded] = useState(false);
+  const payload = parseCustomerQuestionDispatch(message.content);
+  if (!payload) return null;
+  const items = payload.items ?? [];
+  return <article className="timeline-card verification-dispatch-card customer-question-dispatch-card"><header className="verification-dispatch-header"><button type="button" className="verification-dispatch-toggle" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded}><MessageCircleQuestion size={17}/><span><b>고객 확인 질문 발송</b><small>{items.length}개 질문 · 고객 채널 발송</small></span><time>{formatClock(message.created_at)}</time><span className="verification-dispatch-chevron">{expanded ? '접기' : '펼치기'}</span></button>{bookmark}</header>{expanded && <div className="verification-dispatch-items">{items.map((item, index) => { const status = customerQuestionDispatchStatus(item.status); return <section key={item.question_id || `${item.question_text}-${index}`}><div><b>{item.sequence ? `${item.sequence}번 질문` : `질문 ${index + 1}`}</b>{status && <span>{status}</span>}</div><p>{item.question_text || '질문 내용 없음'}</p></section>; })}</div>}</article>;
+};
+
+const MessageEntry: React.FC<{ message: CaseMessage; bookmark: React.ReactNode; onRetry: Props['onRetryMessage']; onDismiss: Props['onDismissMessage'] }> = ({ message, bookmark, onRetry, onDismiss }) => {
   if (message.message_kind === 'REPORT_CARD') {
-    // The frontend foundation intentionally omits report/question/action cards.
-    // The underlying message remains in the bundle for the future View Model.
-    return null;
+    if (message.visibility !== 'BANK_INTERNAL') return null;
+    if (parseCustomerQuestionDispatch(message.content)) {
+      if (message.channel !== 'CUSTOMER' && message.channel !== 'TEAM') return null;
+      return <CustomerQuestionDispatchCard message={message} bookmark={bookmark}/>;
+    }
+    if (message.channel !== 'TEAM') return null;
+    return <VerificationDispatchCardV2 message={message} bookmark={bookmark}/>;
   }
   const mine = message.actor_user_id === CURRENT_BANK_USER.user_id;
   const system = message.message_kind === 'SYSTEM_EVENT';
@@ -163,12 +239,12 @@ const MessageEntry: React.FC<{ message: CaseMessage; bookmark: React.ReactNode; 
   const scope = message.channel === 'CUSTOMER' ? 'customer-message' : 'internal-message';
   return <article className={`message-row ${mine ? 'mine' : ''} ${scope}`}>
     <span className={`avatar ${message.actor_type.toLowerCase()}`}>{message.actor_type === 'BANK_AGENT' || message.actor_type === 'CUSTOMER_AGENT' ? <Bot size={16}/> : message.actor_type === 'CUSTOMER' ? <UserRound size={16}/> : <ShieldCheck size={16}/>}</span>
-    <div className="message-wrap"><div className="entry-meta"><b>{mine ? '나' : message.actor_display_name}</b><span>{message.channel === 'CUSTOMER' ? '고객에게' : '은행 내부'}</span>{bookmark}</div><div className="message-bubble">{bankAiResponse && <div className="bank-ai-summary"><strong>핵심 정리</strong><p>{bankAiSummary(message.content)}</p><small>AI 응답에서 발췌 · 사실 확정 아님</small></div>}<SafeMarkdown content={message.content}/>{bankAiResponse && onOpenQuestions && <button type="button" className="bank-ai-question-link" onClick={onOpenQuestions} title="AI 문장을 자동 변환하지 않고 현재 Case의 추천 질문을 불러옵니다.">고객 확인 질문으로 가져오기</button>}{bankAiResponse && verificationTasks.length > 0 && <div className="bank-ai-next-actions">{verificationTasks.map((task) => <button key={task.verification_task_id} type="button" onClick={() => onEditVerification(task)} title="기존 기관 확인 항목을 엽니다. 결과는 담당자가 저장할 때만 변경됩니다.">Verification 확인 · {task.target}</button>)}</div>}</div>{message.delivery_state === 'FAILED' && <div className="message-delivery-error"><span>전송되지 않았습니다.</span><button type="button" onClick={() => onRetry(message)}>다시 전송</button><button type="button" onClick={() => onDismiss(message)}>지우기</button></div>}<time className={`message-time${message.delivery_state ? ` ${message.delivery_state.toLowerCase()}` : ''}`}>{message.delivery_state === 'SENDING' ? '전송 중…' : message.delivery_state === 'FAILED' ? '전송 실패' : formatClock(message.created_at)}</time></div>
+    <div className="message-wrap"><div className="entry-meta"><b>{mine ? '나' : message.actor_display_name}</b><span>{message.channel === 'CUSTOMER' ? '고객에게' : '은행 내부'}</span>{bookmark}</div><div className="message-bubble"><SafeMarkdown content={message.content}/></div>{message.delivery_state === 'FAILED' && <div className="message-delivery-error"><span>전송되지 않았습니다.</span><button type="button" onClick={() => onRetry(message)}>다시 전송</button><button type="button" onClick={() => onDismiss(message)}>지우기</button></div>}<time className={`message-time${message.delivery_state ? ` ${message.delivery_state.toLowerCase()}` : ''}`}>{message.delivery_state === 'SENDING' ? '전송 중…' : message.delivery_state === 'FAILED' ? '전송 실패' : formatClock(message.created_at)}</time></div>
   </article>;
 };
 
-const EntryCard: React.FC<{ entry: TimelineEntry; bookmark: React.ReactNode; onEditVerification: (task: VerificationTask) => void; onRetryMessage: Props['onRetryMessage']; onDismissMessage: Props['onDismissMessage']; onOpenQuestions?: () => void; verificationTasks: VerificationTask[] }> = ({ entry, bookmark, onEditVerification, onRetryMessage, onDismissMessage, onOpenQuestions, verificationTasks }) => {
-  if (entry.kind === 'MESSAGE') return <MessageEntry message={entry.data as CaseMessage} bookmark={bookmark} onRetry={onRetryMessage} onDismiss={onDismissMessage} onOpenQuestions={onOpenQuestions} verificationTasks={verificationTasks} onEditVerification={onEditVerification}/>;
+const EntryCard: React.FC<{ entry: TimelineEntry; bookmark: React.ReactNode; onRetryMessage: Props['onRetryMessage']; onDismissMessage: Props['onDismissMessage']; recommendedActions: RecommendedChatAction[]; onOpenQuestions?: Props['onOpenQuestions']; onOpenTransactionLookup?: Props['onOpenTransactionLookup']; onOpenVerification?: Props['onOpenVerification']; onOpenAction?: Props['onOpenAction']; onUseAiDraft?: Props['onUseAiDraft'] }> = ({ entry, bookmark, onRetryMessage, onDismissMessage, recommendedActions, onOpenQuestions, onOpenTransactionLookup, onOpenVerification, onOpenAction, onUseAiDraft }) => {
+  if (entry.kind === 'MESSAGE') return <><MessageEntry message={entry.data as CaseMessage} bookmark={bookmark} onRetry={onRetryMessage} onDismiss={onDismissMessage}/><AiRecommendationTray actions={recommendedActions} onOpenQuestions={onOpenQuestions} onOpenTransactionLookup={onOpenTransactionLookup} onOpenVerification={onOpenVerification} onOpenAction={onOpenAction} onUseAiDraft={onUseAiDraft}/></>;
   if (entry.kind === 'QUESTION' || entry.kind === 'ANSWER') {
     const question = entry.data as CustomerQuestion;
     if (entry.kind === 'QUESTION') {
@@ -185,7 +261,7 @@ const EntryCard: React.FC<{ entry: TimelineEntry; bookmark: React.ReactNode; onE
   if (entry.kind === 'VERIFICATION_REQUEST' || entry.kind === 'VERIFICATION_RESULT') {
     const task = entry.data as VerificationTask;
     const result = entry.kind === 'VERIFICATION_RESULT';
-    return <article className={`timeline-card verification-card ${result && task.status === 'COMPLETED' ? 'is-complete' : ''}`}><div className="timeline-card-icon"><Landmark size={17}/></div><div><div className="entry-meta"><b>{result ? '기관 확인 업데이트' : '기관 확인 요청'}</b>{bookmark}<time>{formatClock(entry.occurredAt)}</time></div><p className="timeline-title">{task.target}</p><p>{result && task.result_summary ? task.result_summary : task.claim}</p><div className="entry-actions"><span className="status-chip">{verificationStatusLabel(task.status)}</span><button onClick={() => onEditVerification(task)}>결과 확인·수정</button></div></div></article>;
+    return <article className={`timeline-card verification-card ${result && task.status === 'COMPLETED' ? 'is-complete' : ''}`}><div className="timeline-card-icon"><Landmark size={17}/></div><div><div className="entry-meta"><b>{result ? '기관 확인 업데이트' : '기관 확인 요청'}</b>{bookmark}<time>{formatClock(entry.occurredAt)}</time></div><p className="timeline-title">{task.target}</p><p>{result && task.result_summary ? task.result_summary : task.claim}</p><div className="entry-actions"><span className="status-chip">{verificationStatusLabel(task.status)}</span></div></div></article>;
   }
   if (entry.kind === 'ACTION') {
     const action = entry.data as CaseAction;
@@ -196,52 +272,61 @@ const EntryCard: React.FC<{ entry: TimelineEntry; bookmark: React.ReactNode; onE
   return <article className="timeline-event"><CircleDot size={13}/><span>{eventLabel(event.event_type)}</span>{bookmark}<time>{formatClock(event.occurred_at)}</time></article>;
 };
 
-export const SharedConversation: React.FC<Props> = ({ bundle, view, channel, composer, inlineCard, flowCard, aiBusy = false, bookmarkedIds, onToggleBookmark, onRetryMessage, onDismissMessage, onOpenQuestions, onEditVerification, collapsed = false, collapseDisabled = false, onToggleCollapse }) => {
+export const SharedConversation: React.FC<Props> = ({ bundle, view, channel, composer, inlineCard, flowCard, aiBusy = false, bookmarkedIds, onToggleBookmark, onRetryMessage, onDismissMessage, collapsed = false, collapseDisabled = false, onToggleCollapse, onOpenQuestions, onOpenTransactionLookup, onOpenVerification, onOpenAction, onUseAiDraft }) => {
   const entries = useMemo(() => buildConversationEntries(bundle, view, channel), [bundle, channel, view]);
   const latestBankAiEntry = [...entries].reverse().find((entry) => entry.kind === 'MESSAGE' && (entry.data as CaseMessage).message_kind === 'AI_RESPONSE' && (entry.data as CaseMessage).actor_type === 'BANK_AGENT' && (entry.data as CaseMessage).channel === 'TEAM');
-  const verificationTasks = channel === 'TEAM' && onEditVerification ? reviewableVerifications(bundle.verification_tasks ?? []) : [];
+  const latestRecommendedActions = latestBankAiEntry
+    ? (((latestBankAiEntry.data as CaseMessage).recommended_actions?.length
+      ? (latestBankAiEntry.data as CaseMessage).recommended_actions
+      : readLatestAiRecommendations(bundle.case.case_id, (latestBankAiEntry.data as CaseMessage).message_id)) ?? [])
+    : [];
   const latestEntry = entries[entries.length - 1];
   const latestEntryKey = latestEntry ? `${latestEntry.id}:${latestEntry.occurredAt}` : 'empty';
-  const { scrollRef, showJumpToLatest, onScroll, jumpToLatest } = useScrollToLatest(`${latestEntryKey}:${inlineCard ? 'card' : 'no-card'}:${flowCard ? 'flow-card' : 'no-flow-card'}`);
+  const { scrollRef, showJumpToLatest, onScroll, jumpToLatest } = useScrollToLatest(`${latestEntryKey}:${inlineCard ? 'card' : 'no-card'}:${flowCard ? 'flow-card' : 'no-flow-card'}:${aiBusy ? 'ai-busy' : 'ai-idle'}`);
   const channelLabel = channel === 'CUSTOMER' ? '고객 소통용' : '은행 내부 소통용';
   const CollapseIcon = channel === 'CUSTOMER' ? (collapsed ? PanelLeftOpen : PanelLeftClose) : (collapsed ? PanelRightOpen : PanelRightClose);
   const hasInlineCards = Boolean(inlineCard || flowCard);
   return <section className={`conversation-channel-pane conversation-channel-${channel.toLowerCase()} ${collapsed ? 'is-collapsed' : ''} ${hasInlineCards ? 'has-inline-cards' : ''}`} aria-label={channelLabel}>
     <header className="conversation-channel-header"><button type="button" className="conversation-channel-toggle" onClick={onToggleCollapse} disabled={collapseDisabled} aria-label={collapsed ? `${channelLabel} 열기` : `${channelLabel} 접기`} title={collapseDisabled ? '다른 채팅창을 먼저 열어 주세요.' : undefined}><CollapseIcon size={15}/></button><strong>{channelLabel}</strong>{!collapsed && <span>{channel === 'CUSTOMER' ? '고객에게 공개되는 대화' : '은행 담당자만 보는 대화'}</span>}</header>
     {collapsed ? <div className="conversation-channel-collapsed"><span>{channel === 'CUSTOMER' ? '고객' : '내부'}</span><small>채팅창 열기</small></div> : <>
-      <div ref={scrollRef} onScroll={onScroll} className="conversation-scroll" aria-live="polite">
-        {entries.length === 0 && !inlineCard && !flowCard && !aiBusy ? (
-          <div className="conversation-empty">아직 대화 기록이 없습니다.</div>
-        ) : (
-          entries.map((entry) => (
-            <div
-              id={`${channel.toLowerCase()}-${entry.id}`}
-              className="bank-timeline-entry"
-              key={entry.id}
-            >
-              <EntryCard
-                entry={entry}
-                bookmark={
-                  <EntryBookmark
-                    entry={entry}
-                    targetId={`${channel.toLowerCase()}-${entry.id}`}
-                    active={bookmarkedIds.has(`${channel.toLowerCase()}-${entry.id}`) || bookmarkedIds.has(entry.id)}
-                    onToggle={onToggleBookmark}
-                  />
-                }
-                onEditVerification={onEditVerification ?? (() => undefined)}
-                onRetryMessage={onRetryMessage}
-                onDismissMessage={onDismissMessage}
-                onOpenQuestions={onOpenQuestions}
-                verificationTasks={entry.id === latestBankAiEntry?.id ? verificationTasks : []}
-              />
-            </div>
-          ))
-        )}
+      <div className={`conversation-scroll-shell ${showJumpToLatest ? 'has-jump-to-latest' : ''}`}>
+        <div ref={scrollRef} onScroll={onScroll} className="conversation-scroll" aria-live="polite">
+          {entries.length === 0 && !inlineCard && !flowCard && !aiBusy ? (
+            <div className="conversation-empty">아직 대화 기록이 없습니다.</div>
+          ) : (
+            entries.map((entry) => (
+              <div
+                id={`${channel.toLowerCase()}-${entry.id}`}
+                className="bank-timeline-entry"
+                key={entry.id}
+              >
+                <EntryCard
+                  entry={entry}
+                  bookmark={
+                    <EntryBookmark
+                      entry={entry}
+                      targetId={`${channel.toLowerCase()}-${entry.id}`}
+                      active={bookmarkedIds.has(`${channel.toLowerCase()}-${entry.id}`) || bookmarkedIds.has(entry.id)}
+                      onToggle={onToggleBookmark}
+                    />
+                  }
+                  onRetryMessage={onRetryMessage}
+                  onDismissMessage={onDismissMessage}
+                  recommendedActions={entry.id === latestBankAiEntry?.id ? latestRecommendedActions : []}
+                  onOpenQuestions={onOpenQuestions}
+                  onOpenTransactionLookup={onOpenTransactionLookup}
+                  onOpenVerification={onOpenVerification}
+                  onOpenAction={onOpenAction}
+                  onUseAiDraft={onUseAiDraft}
+                />
+              </div>
+            ))
+          )}
 
-        {aiBusy && <AiThinkingBubble detail="현재 은행 내부 대화와 사건 기록을 확인하고 있습니다."/>}
+          {aiBusy && <AiThinkingBubble detail="현재 은행 내부 대화와 사건 기록을 확인하고 있습니다."/>}
+        </div>
+        {showJumpToLatest && <div className="conversation-scroll-action"><button type="button" onClick={jumpToLatest} aria-label="최신 채팅으로 가기" title="최신 채팅으로 가기"><ArrowDown size={14}/>최신 채팅으로 가기</button></div>}
       </div>
-      {showJumpToLatest && <div className="conversation-scroll-action"><button type="button" onClick={jumpToLatest} aria-label="최신 채팅으로 가기" title="최신 채팅으로 가기"><ArrowDown size={14}/>최신 채팅으로 가기</button></div>}
       {hasInlineCards && <div className="conversation-inline-cards" aria-label="채팅 관련 카드">
         {inlineCard && <div className="conversation-inline-card">{inlineCard}</div>}
         {flowCard && <div className="conversation-inline-card">{flowCard}</div>}

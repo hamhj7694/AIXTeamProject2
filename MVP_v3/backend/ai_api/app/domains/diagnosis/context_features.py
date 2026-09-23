@@ -13,6 +13,22 @@ from .budget import active_diagnosis_budget
 from .extractor import parse_turns
 
 
+def _openai_max_retries() -> int:
+    try:
+        retries = int(os.getenv("OPENAI_MAX_RETRIES", "2"))
+    except ValueError:
+        retries = 2
+    return max(0, min(retries, 5))
+
+
+def _openai_timeout_seconds() -> float:
+    try:
+        timeout = float(os.getenv("OPENAI_TIMEOUT_SECONDS", "20"))
+    except ValueError:
+        timeout = 20.0
+    return timeout if timeout > 0 else 20.0
+
+
 class ContextObservation(StrictModel):
     code: Literal[
         "ROLE_PROSECUTION", "ROLE_POLICE", "ROLE_BANK", "ROLE_FAMILY", "ROLE_SUPPORT",
@@ -61,7 +77,10 @@ async def extract_case_context_features(text: str) -> CaseContextFeatures:
     input_text = json.dumps([{"turn": i, "text": value} for i, value in enumerate(turns, 1)], ensure_ascii=False)
     tokens = 1800
     reservation = budget.reserve(input_text=instructions + input_text, max_output_tokens=tokens)
-    async with AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"], timeout=20, max_retries=0) as client:
+    async with AsyncOpenAI(
+        api_key=os.environ["OPENAI_API_KEY"], timeout=_openai_timeout_seconds(),
+        max_retries=_openai_max_retries(),
+    ) as client:
         response = await client.responses.create(
             model=os.getenv("OPENAI_CONTEXT_MODEL", "gpt-5.6-luna"),
             instructions=instructions, input=input_text, max_output_tokens=tokens,
