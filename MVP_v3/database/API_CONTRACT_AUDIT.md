@@ -51,6 +51,7 @@
 | 영역 | 프론트엔드 | 백엔드 | DB | 판정 | 다음 조치 |
 |---|---|---|---|---|---|
 | Case 읽기 | `StoredCase`가 분석 상세를 타입으로 가짐 | `GET /cases/{id}`는 `diagnosis: dict`로 반환 | `cases.diagnosis_json`·semantic 테이블·report가 병존 | 기준 원본 문서화 완료 | [`AUTHORITATIVE_SOURCE_MATRIX.md`](AUTHORITATIVE_SOURCE_MATRIX.md) 기준으로 projection/cache 재생성 검증 |
+| 대용량 통화 분석 | `background_completion`으로 긴 입력의 후속 분석 요청, `analysis_status` 표시 | 발췌본으로 Case를 먼저 만들고 전체 원문은 비동기 분석 후 같은 Case를 갱신 | migration 030의 `cases.analysis_status`; 원문은 기존 `case_inputs.input_text` 보존 정책 적용 | 잠정 Case·최종 분석 결과를 같은 ID로 보존; 최종 `NO_CASE`도 기록 유지 | 재시작 시 `IN_PROGRESS` 재개, 실패는 `FAILED` 상태로 기록; 운영 DB에는 migration 030 적용 필요 |
 | Case bundle | `CaseBundle.case`를 공개 `CaseSummary`로 구체화했고 `live_report`·`voice_session`은 optional 타입으로 보강 | bundle은 `case`, `live_report`, `final_report`, `voice_session`을 반환 | summary/projection/report/session을 함께 조립 | 타입 정합성 보강 완료 | 화면 표시 계약은 별도로 확정 |
 | Legacy Fact | 구버전 응답 타입 제거 완료 | `/facts`는 410 종료 응답만 제공 | `case_context_facts_v2` | 없음(내부 호환 메서드는 정리 대기) | V2 canonical, 외부 소비자 0 확인 후 호환 메서드 삭제 |
 | Context V2 | `contextWorkspace.ts`가 V2 리소스 전체 필드, `context-v3/api.ts`가 명령 계약 사용 | `/context-v2/*`는 V2 리소스 강타입과 `PublicContextWorkspaceResponse`를 사용 | `case_context_facts_v2`, gaps, suggestions, tasks, decisions | 프론트·백엔드 workspace 계약 정합 | V2 canonical 유지, legacy fallback만 허용 |

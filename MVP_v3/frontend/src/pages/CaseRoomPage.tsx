@@ -557,7 +557,7 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
   const orderedBankCards = openBankCards.filter((kind) => kind === 'fds' || kind === 'additionalLookup');
   const bankCardStack = orderedBankCards.length > 0 ? <BankCardStack cards={orderedBankCards} cardContent={cardContent} collapsedCards={collapsedBankCards} updatedCards={updatedBankCards} highlightedCard={highlightedBankCard} onToggleCollapsed={toggleBankCardCollapsed} onClose={closeBankCard} onViewed={(kind) => setUpdatedBankCards((current) => ({ ...current, [kind]: false }))}/> : undefined;
 
-  const roomHeaderActions = <div className="room-header-actions"><button className="participant-open" type="button" onClick={() => setParticipantOpen(true)}><Users size={16}/>참여자 <b>{participantCount}</b></button><button type="button" className="header-tool-action header-tool-note" onClick={() => setNoteOpen(true)}><StickyNote size={15}/>개인 메모</button><button type="button" className="header-tool-action header-tool-bookmark" onClick={() => setBookmarkOpen(true)}><Bookmark size={15}/>북마크{bookmarks.length > 0 && <b>{bookmarks.length}</b>}</button><button className="icon-button" onClick={() => void load(true, true)} aria-label="Case와 AI 사건 맥락 새로고침"><RefreshCw size={17} className={refreshing ? 'spin' : ''}/></button><MoreMenu label="Case 관리 메뉴"><>{caseItem.mode === 'CLOSED' ? <button onClick={() => setAdminAction('reopen')}><RotateCcw size={14}/>사건 다시 진행</button> : <button onClick={() => setAdminAction('finalize')}><CheckCircle2 size={14}/>해결 및 종료</button>}<button className="danger" onClick={() => setAdminAction('trash')}><Trash2 size={14}/>휴지통으로 이동</button></></MoreMenu></div>;
+  const roomHeaderActions = <div className="room-header-actions"><button className="participant-open" type="button" onClick={() => setParticipantOpen(true)}><Users size={16}/>참여자 <b>{participantCount}</b></button><button type="button" className="header-tool-action header-tool-note" onClick={() => setNoteOpen(true)}><StickyNote size={15}/>메모장</button><button type="button" className="header-tool-action header-tool-bookmark" onClick={() => setBookmarkOpen(true)}><Bookmark size={15}/>북마크{bookmarks.length > 0 && <b>{bookmarks.length}</b>}</button><MoreMenu label="Case 관리 메뉴" secondaryTriggerLabel="관리" showMoreTrigger={false}><>{caseItem.mode === 'CLOSED' ? <button onClick={() => setAdminAction('reopen')}><RotateCcw size={14}/>사건 다시 진행</button> : <button onClick={() => setAdminAction('finalize')}><CheckCircle2 size={14}/>해결 및 종료</button>}<button className="danger" onClick={() => setAdminAction('trash')}><Trash2 size={14}/>휴지통으로 이동</button></></MoreMenu><button className="icon-button" onClick={() => void load(true, true)} aria-label="Case와 AI 사건 맥락 새로고침"><RefreshCw size={17} className={refreshing ? 'spin' : ''}/></button></div>;
   return <>
     {typeof document !== 'undefined' && document.getElementById('app-room-header-actions') && createPortal(roomHeaderActions, document.getElementById('app-room-header-actions')!)}
     <section className="case-room">
@@ -584,12 +584,6 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
         onOpenTransactionLookup={toggleTransactionLookup}
         onOpenVerification={toggleVerificationDialog}
         onOpenAction={toggleActionDialog}
-        assigneeOptions={caseMembers.map((member) => ({
-          name: member.display_name,
-          role: ({ SUPERVISOR: '사건 총괄', MONITORING: '모니터링', CONSULTATION: '상담·대응', VIEWER: '기타 열람', HANDOVER_PENDING: '인수인계 대기' } as Record<CaseMember['assignment_role'], string>)[member.assignment_role],
-          displayRole: bankStaffDirectory.find((staff) => staff.linked_user_id === member.user_id || staff.staff_id === member.user_id)?.role_label,
-          positionTitle: bankStaffDirectory.find((staff) => staff.linked_user_id === member.user_id || staff.staff_id === member.user_id)?.position_title,
-        }))}
       />
     </CaseContextLayout>
     {dialog?.type === 'verification' && <InstitutionVerificationBoardDialog caseId={caseId} verificationTasks={bundle.verification_tasks ?? []} onDone={refreshAfterMutation} onClose={() => setDialog(null)}/>}

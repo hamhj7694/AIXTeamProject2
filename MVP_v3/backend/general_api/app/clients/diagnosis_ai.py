@@ -47,10 +47,33 @@ class AiServiceTimeoutError(AiServiceError):
     code = "AI_PROVIDER_TIMEOUT"
 
 
+def _response_error_detail(response: httpx.Response) -> tuple[str, str | None, bool | None]:
+    """Read the shared AI error envelope without assuming a JSON shape."""
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = None
+    detail = payload.get("detail") if isinstance(payload, dict) else None
+    if not isinstance(detail, dict):
+        detail = payload.get("error") if isinstance(payload, dict) else None
+    if not isinstance(detail, dict):
+        detail = {}
+    message = detail.get("message")
+    if not isinstance(message, str) or not message.strip():
+        message = "AI analysis service could not process the request."
+    code = detail.get("code")
+    if not isinstance(code, str) or not code.strip():
+        code = None
+    retryable = detail.get("retryable")
+    if not isinstance(retryable, bool):
+        retryable = None
+    return message, code, retryable
+
+
 class HttpDiagnosisAiClient:
     def __init__(self, base_url: str | None = None, timeout_seconds: float | None = None) -> None:
         self.base_url = (base_url or os.getenv("AI_API_BASE_URL", "http://127.0.0.1:8101")).rstrip("/")
-        self.timeout_seconds = timeout_seconds or float(os.getenv("AI_API_TIMEOUT_SECONDS", "120"))
+        self.timeout_seconds = timeout_seconds or float(os.getenv("AI_API_TIMEOUT_SECONDS", "1800"))
 
     async def analyze(self, request: AnalyzeTextRequest) -> DiagnosisResult:
         try:
@@ -66,7 +89,8 @@ class HttpDiagnosisAiClient:
                 )
                 if not response.is_success:
                     payload = response.json()
-                    detail = payload.get("detail", {})
+                    detail = payload.get("detail", {}) if isinstance(payload, dict) else {}
+                    provider_message, provider_code, provider_retryable = _response_error_detail(response)
                     message = detail.get("message", "AI 분석 서버가 요청을 처리하지 못했습니다.")
                     if response.status_code == 429 and detail.get("code") == "AI_BUDGET_LIMIT_REACHED":
                         raise AiServiceBudgetError(message)
@@ -74,7 +98,11 @@ class HttpDiagnosisAiClient:
                         raise AiServiceQuotaError(message)
                     if response.status_code == 401:
                         raise AiServiceAuthenticationError(message)
-                    raise AiServiceError(message)
+                    raise AiServiceError(
+                        provider_message if provider_code else message,
+                        code=provider_code,
+                        retryable=provider_retryable,
+                    )
                 return DiagnosisResult.model_validate(response.json())
         except httpx.TimeoutException as exc:
             raise AiServiceTimeoutError(f"AI 분석 제한시간({self.timeout_seconds:.0f}초)을 초과했습니다. 다시 시도해 주세요.") from exc
@@ -105,11 +133,14 @@ class HttpDiagnosisAiClient:
                 if not response.is_success:
                     detail = response.json().get("detail", {})
                     message = detail.get("message", "CaseCopilot 응답을 만들지 못했습니다.")
+                    provider_message, provider_code, provider_retryable = _response_error_detail(response)
+                    if provider_code:
+                        message = provider_message
                     if response.status_code == 429:
-                        raise AiServiceQuotaError(message)
+                        raise AiServiceQuotaError(message, code=provider_code, retryable=provider_retryable)
                     if response.status_code == 401:
-                        raise AiServiceAuthenticationError(message)
-                    raise AiServiceError(message)
+                        raise AiServiceAuthenticationError(message, code=provider_code, retryable=provider_retryable)
+                    raise AiServiceError(message, code=provider_code, retryable=provider_retryable)
                 return response.json()
         except httpx.TimeoutException as exc:
             raise AiServiceError(f"CaseCopilot 응답 시간이 {self.timeout_seconds:.0f}초를 초과했습니다.") from exc
@@ -136,14 +167,20 @@ class HttpDiagnosisAiClient:
                 if not response.is_success:
                     # FastAPI request-validation errors use a list for detail. Treat that
                     # as an AI service error instead of raising AttributeError in General.
-                    response_payload = response.json()
+                    try:
+                        response_payload = response.json()
+                    except ValueError:
+                        response_payload = None
                     detail = response_payload.get("detail", {}) if isinstance(response_payload, dict) else {}
                     message = detail.get("message", "AI 업무 카드를 만들지 못했습니다.") if isinstance(detail, dict) else "AI 업무 카드 요청 형식이 올바르지 않습니다."
+                    provider_message, provider_code, provider_retryable = _response_error_detail(response)
+                    if provider_code:
+                        message = provider_message
                     if response.status_code == 429:
-                        raise AiServiceQuotaError(message)
+                        raise AiServiceQuotaError(message, code=provider_code, retryable=provider_retryable)
                     if response.status_code == 401:
-                        raise AiServiceAuthenticationError(message)
-                    raise AiServiceError(message)
+                        raise AiServiceAuthenticationError(message, code=provider_code, retryable=provider_retryable)
+                    raise AiServiceError(message, code=provider_code, retryable=provider_retryable)
                 return response.json()
         except httpx.TimeoutException as exc:
             raise AiServiceError(f"AI 업무 카드 생성 시간이 {self.timeout_seconds:.0f}초를 초과했습니다.") from exc

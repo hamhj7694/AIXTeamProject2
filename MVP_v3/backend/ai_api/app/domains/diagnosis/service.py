@@ -12,6 +12,7 @@ from .risk_fusion import DiagnosisFusion
 from .window_ai import WindowAiAdapter
 from .context_features import extract_case_context_features
 from .semantic_atoms import merge_semantic_atoms
+from .entity_resolution import apply_person_name_aliases_to_mentions, resolve_person_name_aliases
 from .audit import audit_semantic_result
 from .lexical_cues import attach_context_observation_lineage
 from .relations import build_context_signals, build_semantic_relations
@@ -57,6 +58,7 @@ class DiagnosisService:
             "requested_amount_values_krw": event_context_features.requested_amount_values_krw,
         })
         semantic_atoms = merge_semantic_atoms(window_result.semantic_atoms, window_result.events)
+        semantic_atoms, _ = resolve_person_name_aliases(semantic_atoms)
         window_result = window_result.model_copy(update={"semantic_atoms": semantic_atoms})
         source_reference = "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
         return envelope_from_extraction(
@@ -73,7 +75,13 @@ class DiagnosisService:
         context_features = attach_context_observation_lineage(
             envelope.context_features, window_result.semantic_atoms,
         )
-        semantic_atoms = window_result.semantic_atoms
+        semantic_atoms, aliases = resolve_person_name_aliases(window_result.semantic_atoms)
+        resolved_alias_count = len(aliases)
+        envelope = envelope.model_copy(update={
+            "semantic_atoms": semantic_atoms,
+            "semantic_mentions": apply_person_name_aliases_to_mentions(envelope.semantic_mentions, aliases),
+        })
+        window_result = window_result.model_copy(update={"semantic_atoms": semantic_atoms})
         additional_warnings: list[str] = []
         quality_reviews: list[QualityReview] = []
         quality_loop_count = 0
@@ -107,7 +115,12 @@ class DiagnosisService:
                     recovered = await targeted_reextract_turns(turn_map, extraction_review.source_turns)
                     if recovered:
                         semantic_atoms = merge_semantic_atoms(semantic_atoms, recovered)
-                        envelope = envelope.model_copy(update={"semantic_atoms": semantic_atoms})
+                        semantic_atoms, aliases = resolve_person_name_aliases(semantic_atoms)
+                        resolved_alias_count += len(aliases)
+                        envelope = envelope.model_copy(update={
+                            "semantic_atoms": semantic_atoms,
+                            "semantic_mentions": apply_person_name_aliases_to_mentions(envelope.semantic_mentions, aliases),
+                        })
                         window_result = window_result.model_copy(update={"semantic_atoms": semantic_atoms})
                         context_features = attach_context_observation_lineage(envelope.context_features, semantic_atoms)
                         semantic_relations, context_signals, conversation_episodes, action_groups, entity_registry, deterministic_audit = rebuild_structured_views()
@@ -150,6 +163,8 @@ class DiagnosisService:
                 "analysis_envelope_version": envelope.schema_version,
                 "analysis_source": envelope.source,
                 "source_text_retention": "NONE",
+                "person_name_resolution": "CONTEXTUAL_STT_ALIAS_MERGE",
+                "person_name_alias_count": resolved_alias_count,
             },
         }
         if window_result.events or semantic_atoms:

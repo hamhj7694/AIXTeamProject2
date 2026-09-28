@@ -53,6 +53,8 @@ class CaseRepository(Protocol):
     async def find_by_client_request_id(self, client_request_id: str) -> dict[str, Any] | None: ...
     async def get(self, case_id: str) -> dict[str, Any] | None: ...
     async def create(self, record: dict[str, Any]) -> dict[str, Any]: ...
+    async def update_analysis(self, case_id: str, changes: dict[str, Any], initial_report: dict[str, Any]) -> dict[str, Any]: ...
+    async def list_pending_analyses(self) -> list[dict[str, Any]]: ...
     async def list(self) -> list[dict[str, Any]]: ...
     async def delete_case(self, case_id: str) -> None: ...
     async def list_trashed_cases(self) -> list[dict[str, Any]]: ...
@@ -217,6 +219,7 @@ class InMemoryCaseRepository:
             stored.setdefault("case_id", f"VP-{len(self._records) + 1}")
             stored.setdefault("version", 1)
             stored.setdefault("context_revision", 1)
+            stored.setdefault("analysis_status", "COMPLETED")
             self._records.append(stored)
             self._events.append({
                 "event_id": len(self._events) + 1, "case_id": stored["case_id"], "event_type": "CASE_CREATED",
@@ -224,6 +227,27 @@ class InMemoryCaseRepository:
                 "occurred_at": stored["created_at"],
             })
             return deepcopy(stored)
+
+    async def update_analysis(self, case_id: str, changes: dict[str, Any], initial_report: dict[str, Any]) -> dict[str, Any]:
+        async with self._lock:
+            item = next((row for row in self._records if row.get("case_id") == case_id and not row.get("deleted_at")), None)
+            if item is None:
+                raise KeyError(case_id)
+            item.update(deepcopy(changes))
+            item["initial_report"] = deepcopy(initial_report)
+            item["version"] = int(item.get("version", 1)) + 1
+            item["context_revision"] = int(item.get("context_revision", 1)) + 1
+            item["updated_at"] = datetime.now(timezone.utc).isoformat()
+            self._events.append({
+                "event_id": len(self._events) + 1, "case_id": case_id,
+                "event_type": "CASE_ANALYSIS_UPDATED", "actor_type": "SYSTEM",
+                "payload": {"analysis_status": item["analysis_status"], "version": item["version"]},
+                "occurred_at": item["updated_at"],
+            })
+            return deepcopy(item)
+
+    async def list_pending_analyses(self) -> list[dict[str, Any]]:
+        return [deepcopy(row) for row in self._records if row.get("analysis_status") == "IN_PROGRESS" and not row.get("deleted_at")]
 
     async def update_case(self, case_id: str, expected_version: int, changes: dict[str, Any]) -> dict[str, Any]:
         async with self._lock:

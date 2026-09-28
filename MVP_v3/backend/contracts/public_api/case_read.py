@@ -10,7 +10,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
-from .case_enums import CaseMode, CaseRisk, CaseStatus
+from .case_enums import CaseAnalysisStatus, CaseMode, CaseRisk, CaseStatus
 
 
 class PublicCaseReadModel(BaseModel):
@@ -31,6 +31,7 @@ class PublicCaseReadResponse(PublicCaseReadModel):
     risk_score: float
     mode: CaseMode
     status: CaseStatus
+    analysis_status: CaseAnalysisStatus = "COMPLETED"
     initial_brief: str
     diagnosis: dict[str, Any]
     initial_report: dict[str, Any] | None
@@ -52,6 +53,7 @@ class PublicCaseSummaryResponse(PublicCaseReadModel):
     risk: CaseRisk
     mode: CaseMode
     status: CaseStatus
+    analysis_status: CaseAnalysisStatus = "COMPLETED"
     initial_brief: str
     primary_assignee: str | None = None
     victim_transfer_status: str = "UNKNOWN"
@@ -71,6 +73,7 @@ def to_public_case_read_response(record: dict[str, Any]) -> PublicCaseReadRespon
         "risk_score": record["risk_score"],
         "mode": record["mode"],
         "status": record["status"],
+        "analysis_status": record.get("analysis_status", "COMPLETED"),
         "initial_brief": record["initial_brief"],
         "diagnosis": record["diagnosis"],
         "initial_report": record.get("initial_report"),
@@ -90,6 +93,7 @@ def to_public_case_summary_response(record: dict[str, Any]) -> PublicCaseSummary
         "case_id": record["case_id"], "version": record.get("version", 1), "case_name": record.get("case_name"),
         "context_revision": record.get("context_revision", 1),
         "risk": record["risk"], "mode": record["mode"], "status": record["status"],
+        "analysis_status": record.get("analysis_status", "COMPLETED"),
         "initial_brief": record["initial_brief"], "primary_assignee": record.get("primary_assignee"),
         "victim_transfer_status": record.get("victim_transfer_status", "UNKNOWN"),
         "actual_loss_amount_krw": record.get("actual_loss_amount_krw"),

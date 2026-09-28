@@ -325,7 +325,7 @@ export const SharedConversation: React.FC<Props> = ({ bundle, view, channel, com
 
           {aiBusy && <AiThinkingBubble detail="현재 은행 내부 대화와 사건 기록을 확인하고 있습니다."/>}
         </div>
-        {showJumpToLatest && <div className="conversation-scroll-action"><button type="button" onClick={jumpToLatest} aria-label="최신 채팅으로 가기" title="최신 채팅으로 가기"><ArrowDown size={14}/>최신 채팅으로 가기</button></div>}
+        {showJumpToLatest && <div className="conversation-scroll-action"><button type="button" onClick={jumpToLatest} aria-label="최신 채팅으로 가기" title="최신 채팅으로 가기"><ArrowDown size={16}/></button></div>}
       </div>
       {hasInlineCards && <div className="conversation-inline-cards" aria-label="채팅 관련 카드">
         {inlineCard && <div className="conversation-inline-card">{inlineCard}</div>}

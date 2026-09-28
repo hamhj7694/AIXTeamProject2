@@ -478,6 +478,7 @@ class AnalyzeCaseResponse(StrictModel):
     mode: Literal["PREVENT"] | None = None
     status: Literal["TRIAGE"] | None = None
     initial_brief: str | None = None
+    analysis_status: Literal["IN_PROGRESS", "COMPLETED", "NO_CASE"] | None = "COMPLETED"
     diagnosis: DiagnosisResult | None = None
     initial_report: InitialReport | None = None
     error: AiError | None = None

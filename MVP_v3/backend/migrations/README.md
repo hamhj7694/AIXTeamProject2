@@ -1,12 +1,12 @@
 # DB 마이그레이션 — 엔티티별 안내
 
-General API가 소유하는 MySQL 8.0 서비스 DB의 변경 이력이다. **정방향 SQL 30개와 rollback SQL 7개를 엔티티별 하위 폴더로 분류했다.** 실행 순서는 [manifest.json](manifest.json)에 명시한 전역 순서이며, 현재 manifest와 실제 정방향 SQL 수가 일치한다. DB 적용 이력은 경로가 아닌 기존 전체 파일명으로 유지한다. 동일 접두사 `009`의 두 파일도 각각 독립적인 migration이다.
+General API가 소유하는 MySQL 8.0 서비스 DB의 변경 이력이다. **정방향 SQL 31개와 rollback SQL 7개를 엔티티별 하위 폴더로 분류했다.** 실행 순서는 [manifest.json](manifest.json)에 명시한 전역 순서이며, 현재 manifest와 실제 정방향 SQL 수가 일치한다. DB 적용 이력은 경로가 아닌 기존 전체 파일명으로 유지한다. 동일 접두사 `009`의 두 파일도 각각 독립적인 migration이다.
 
 ## 실제 폴더 구조
 
 | 폴더 | 담당 엔티티 / 범위 |
 |---|---|
-| `cases/` | 사건 이름·버전 |
+| `cases/` | 사건 이름·버전·분석 상태 |
 | `analysis/` | Atom·Relation·Signal·Observation |
 | `staff/` | 은행 직원 명부·데모 직원·역할 제약 |
 | `members/` | 사건 참여자의 배정 역할 |
@@ -33,7 +33,7 @@ General API가 소유하는 MySQL 8.0 서비스 DB의 변경 이력이다. **정
 
 | 엔티티 | 테이블 | 관련 migration |
 |---|---|---|
-| 사건·분석 | cases, case_inputs, analysis_segments, context_features | 001, 003, 006, 009_mysql_parity_workflow, 013, 016 |
+| 사건·분석 | cases, case_inputs, analysis_segments, context_features | 001, 003, 006, 009_mysql_parity_workflow, 013, 016, 030 |
 | 구조화 정황 | case_semantic_atoms, case_semantic_relations, case_context_signals, case_context_observations | 017, 019 |
 | 직원·참여자 | bank_staff_directory, case_members, case_presence | 008, 020, 022, 023, 024 |
 | 대화·고객 질문 | messages, customer_questions, message_context_extractions | 004, 008, 009_mysql_parity_workflow, 011, 015 |

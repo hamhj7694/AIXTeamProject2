@@ -232,6 +232,11 @@ Preserve exact non-sensitive names and labels in their dedicated fields:
 claimed_organization_name, claimed_branch_name, claimed_person_name and
 claimed_role_name. Do not generalize 서울지검, a named bank branch, police
 station, court, prosecutor's office, or a stated person name when it is present.
+When CONVERSATION_CONTEXT contains a previously observed person name and the
+target appears to refer to the same person with an STT spelling variation,
+reuse the exact previously observed spelling. Only merge when role,
+relationship, institution, speaker, or nearby conversational context supports
+the identity; if uncertain, preserve both names rather than inventing one.
 Record claimed_relationship and vocative_target separately. In a sentence like
 "엄마, 나 스마트폰 고장 났어", 엄마 is the addressee/vocative_target;
 the speaker remains SUSPECTED_PARTY and the claimed relationship is CHILD.

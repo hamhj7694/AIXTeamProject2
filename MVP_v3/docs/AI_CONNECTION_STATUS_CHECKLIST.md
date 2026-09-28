@@ -23,6 +23,7 @@
 
 | 기능 | 호출 경로 | 현재 판정 | 확인 메모 |
 |---|---|---|---|
+| 새 통화 음성 파일 전사 | `POST /api/audio/transcriptions` → `/ai/audio/transcriptions/stream` → OpenAI Audio Transcriptions | `부분 연결` | GPT 화자 분리 SSE 이벤트를 textarea에 반영. 업로드 검증 테스트는 통과했으나 실제 Provider·오디오 파일 검증은 미실행 |
 | 새 통화 분석·Case 생성 | `POST /api/cases/analyze` → `/ai/analyze/text` | `부분 연결` | 경로는 연결되어 있으나 Provider·실제 입력으로 재검증 필요 |
 | 사건 지원 스냅샷·우측 패널 | `GET /api/cases/{id}/ai/case-support` → `/ai/case-support/snapshot` | `부분 연결` | 정상 응답하지만 `CaseSnapshotAiAdapter` 기반 결정적 projection이며 생성형 LLM 결과가 아님 |
 | 새 메시지 정황·Fact 추출 | 백그라운드 → `/ai/context/facts/extract` | `부분 연결` | 저장·재시도 worker와 함께 확인 필요 |
@@ -66,6 +67,17 @@ Invoke-RestMethod http://127.0.0.1:8101/readiness
 - [ ] 구버전 서버가 남아 있지 않다. Frontend만 HMR로 갱신된 상태를 정상으로 간주하지 않는다.
 
 ## 4. 기능별 End-to-End 체크리스트
+
+### 4.0 새 통화 음성 파일 전사
+
+- [x] Frontend가 지원 확장자와 25MB 업로드 제한을 사전 확인한다.
+- [x] General API와 AI API가 파일명·Content-Type·실제 크기·빈 파일을 검증한다.
+- [x] AI API만 OpenAI API key를 사용하고, General API는 SSE 스트림을 그대로 중계한다.
+- [x] 화자 분리 전사 완료 이벤트마다 textarea에 발화 단위 텍스트를 추가한다.
+- [ ] 실제 OpenAI key와 허가된 테스트 녹음으로 한국어 전사·화자 변경·취소를 확인한다.
+- [ ] 음성 파일 원본이 Case 첨부에 남지 않고 전사 텍스트가 의도대로 분석 입력에 반영되는지 실행 서버에서 확인한다.
+
+완료 기준: [음성 파일 분석하기] 실행 후 전사된 화자별 발화가 순차적으로 입력되고, 사용자가 확인 후 통화 분석을 제출할 수 있다.
 
 ### 4.1 새 통화 분석·Case 생성
 

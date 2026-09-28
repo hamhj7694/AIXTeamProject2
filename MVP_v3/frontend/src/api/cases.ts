@@ -52,8 +52,8 @@ export const casesApi = {
     method: 'POST', body: JSON.stringify({ expected_version: expectedVersion, password }),
   }),
   finalReportDownloadUrl: (caseId: string, format: 'pdf' | 'docx') => apiUrl(`/api/cases/${encodeURIComponent(caseId)}/reports/final/export?format=${format}`),
-  analyze: (text: string, clientRequestId: string) => request<AnalyzeCaseResponse>('/api/cases/analyze', {
-    method: 'POST', body: JSON.stringify({ text, client_request_id: clientRequestId }),
+  analyze: (text: string, clientRequestId: string, backgroundCompletion = false) => request<AnalyzeCaseResponse>('/api/cases/analyze', {
+    method: 'POST', body: JSON.stringify({ text, client_request_id: clientRequestId, background_completion: backgroundCompletion }),
   }),
   get: (caseId: string) => request<StoredCase>(`/api/cases/${encodeURIComponent(caseId)}`),
   transactions: (caseId: string) => request<CaseTransaction[]>(`/api/cases/${encodeURIComponent(caseId)}/transactions`),

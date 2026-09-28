@@ -113,6 +113,34 @@ class AnalyzeCaseServiceTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.disposition, "NO_CASE")
         self.assertEqual(await self.repository.list(), [])
 
+    async def test_provisional_case_is_retained_and_updated_by_full_background_analysis(self) -> None:
+        preview = "예금 만기일은 다음 달 15일입니다."
+        full_text = preview + "\n검찰청 수사관입니다. 지금 안전계좌로 500만원을 송금하세요."
+        with patch(
+            "ai_api.app.domains.diagnosis.window_ai.service.extract_events",
+            new=AsyncMock(side_effect=lambda text: self._extraction(text)),
+        ):
+            first = await self.service.analyze(
+                AnalyzeTextRequest(text=preview, client_request_id="provisional-case-01"),
+                source_text=full_text,
+                provisional=True,
+            )
+            self.assertEqual(first.disposition, "CASE_CREATED")
+            self.assertEqual(first.analysis_status, "IN_PROGRESS")
+            case_id = first.case_id or ""
+            stored_preview = await self.repository.get(case_id)
+            self.assertEqual(stored_preview["input_text"], full_text)
+            self.assertEqual(stored_preview["analysis_status"], "IN_PROGRESS")
+
+            final = await self.service.complete_background_analysis(case_id, full_text)
+
+        self.assertEqual(final.case_id, case_id)
+        self.assertEqual(final.analysis_status, "COMPLETED")
+        self.assertEqual(len(await self.repository.list()), 1)
+        stored_final = await self.repository.get(case_id)
+        self.assertEqual(stored_final["analysis_status"], "COMPLETED")
+        self.assertEqual(stored_final["risk"], final.risk.value)
+
     async def test_insert_collision_retries_storage_without_repeating_ai(self) -> None:
         source = "검찰청입니다. 지금 안전계좌로 500만원을 송금하세요."
         original_create = self.repository.create

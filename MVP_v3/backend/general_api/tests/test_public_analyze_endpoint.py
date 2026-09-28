@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import unittest
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
 
@@ -52,6 +52,7 @@ class PublicAnalyzeEndpointTest(unittest.TestCase):
             "mode": "PREVENT",
             "status": "TRIAGE",
             "initial_brief": "기관 사칭과 송금 요구 정황이 확인되었습니다.",
+            "analysis_status": "COMPLETED",
             "initial_report": {
                 "report_id": "RPT-PUBLIC01",
                 "case_id": "VP-PUBLIC01",
@@ -76,6 +77,29 @@ class PublicAnalyzeEndpointTest(unittest.TestCase):
         self.assertEqual(response.json()["risk"], "NORMAL")
         self.assertNotIn("diagnosis", response.json())
         self.assertIsNone(response.json()["initial_report"])
+        self.assertEqual(response.json()["analysis_status"], "NO_CASE")
+
+    def test_background_completion_returns_provisional_case_and_schedules_full_analysis(self) -> None:
+        self.service.analyze.return_value = AnalyzeCaseResponse(
+            disposition="CASE_CREATED", case_id="VP-PENDING01", risk=RiskLevel.NORMAL,
+            mode="PREVENT", status="TRIAGE", initial_brief="초기 분석",
+            analysis_status="IN_PROGRESS",
+            initial_report=InitialReport(report_id="RPT-PENDING01", case_id="VP-PENDING01", sections=[], created_at="2026-09-01T00:00:00+00:00"),
+        )
+        with patch("general_api.app.main.schedule_background_case_analysis") as schedule:
+            response = self.client.post("/api/cases/analyze", json={
+                "text": "앞부분\n" + "긴 통화 내용 " * 1500,
+                "client_request_id": "background-request-01",
+                "background_completion": True,
+            })
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["case_id"], "VP-PENDING01")
+        self.assertEqual(response.json()["analysis_status"], "IN_PROGRESS")
+        schedule.assert_called_once_with("VP-PENDING01")
+        forwarded = self.service.analyze.await_args.args[0]
+        self.assertLess(len(forwarded.text), 5000)
+        self.assertTrue(self.service.analyze.await_args.kwargs["provisional"])
 
     def test_invalid_input_uses_public_failed_error(self) -> None:
         response = self.client.post("/api/cases/analyze", json={"text": ""})
@@ -89,6 +113,7 @@ class PublicAnalyzeEndpointTest(unittest.TestCase):
             "mode": None,
             "status": None,
             "initial_brief": None,
+            "analysis_status": None,
             "initial_report": None,
             "error": {
                 "code": "INVALID_INPUT",
@@ -132,6 +157,16 @@ class PublicAnalyzeEndpointTest(unittest.TestCase):
                 self.assertEqual(response.status_code, status)
                 self.assertEqual(response.json()["error"]["code"], code)
                 self.assertEqual(response.headers["X-Request-ID"], "trace-test")
+
+
+    def test_provider_unavailable_code_is_preserved(self) -> None:
+        self.service.analyze.side_effect = AiServiceError("provider offline", code="AI_PROVIDER_UNAVAILABLE")
+
+        response = self.client.post("/api/cases/analyze", json={"text": "analysis"})
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json()["error"]["code"], "AI_PROVIDER_UNAVAILABLE")
+        self.assertTrue(response.json()["error"]["retryable"])
 
 
 if __name__ == "__main__":

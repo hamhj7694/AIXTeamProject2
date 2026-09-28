@@ -218,10 +218,10 @@ def signal_context_payload(
 def _openai_timeout_seconds() -> float:
     """OpenAI 호출이 데모 흐름 전체를 대기시키지 않도록 유효한 timeout만 사용한다."""
     try:
-        timeout = float(os.getenv("OPENAI_TIMEOUT_SECONDS", "20"))
+        timeout = float(os.getenv("OPENAI_TIMEOUT_SECONDS", "180"))
     except ValueError:
-        return 20.0
-    return timeout if timeout > 0 else 20.0
+        return 180.0
+    return timeout if timeout > 0 else 180.0
 
 
 def _openai_max_retries() -> int:
@@ -518,7 +518,7 @@ async def extract_events(text: str) -> EventExtraction:
     events: list[ExtractedEvent] = []
     successful: list[int] = []
     semantic_atoms: list[SemanticAtom] = []
-    max_output_tokens = int(os.getenv("OPENAI_EVENT_MAX_OUTPUT_TOKENS", "1800"))
+    max_output_tokens = int(os.getenv("OPENAI_EVENT_MAX_OUTPUT_TOKENS", "3200"))
     for turn_id, target in enumerate(turns, start=1):
         # Keep attribution context local to the target turn so a long demo
         # input does not multiply the full transcript into every model call.
@@ -1239,7 +1239,7 @@ async def extract_full_context(text: str) -> ContextResult:
         raise RuntimeError("OPENAI_API_KEY가 없습니다.")
     budget = active_diagnosis_budget()
     budget.validate_input(text=text, turn_count=len(parse_turns(text)))
-    max_output_tokens = int(os.getenv("OPENAI_CONTEXT_MAX_OUTPUT_TOKENS", "2400"))
+    max_output_tokens = int(os.getenv("OPENAI_CONTEXT_MAX_OUTPUT_TOKENS", "16000"))
     reservation = budget.reserve(input_text=text, max_output_tokens=max_output_tokens)
     client = AsyncOpenAI(
         api_key=os.environ["OPENAI_API_KEY"], timeout=_openai_timeout_seconds(),
@@ -1279,7 +1279,7 @@ async def extract_context_from_signal_payload(
     input_text = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
     budget = active_diagnosis_budget()
     budget.validate_input(text=input_text, turn_count=max(1, int(payload.get("signal_count", 0))))
-    max_output_tokens = int(os.getenv("OPENAI_CONTEXT_MAX_OUTPUT_TOKENS", "2400"))
+    max_output_tokens = int(os.getenv("OPENAI_CONTEXT_MAX_OUTPUT_TOKENS", "16000"))
     reservation = budget.reserve(input_text=input_text, max_output_tokens=max_output_tokens)
     client = AsyncOpenAI(
         api_key=os.environ["OPENAI_API_KEY"], timeout=_openai_timeout_seconds(),

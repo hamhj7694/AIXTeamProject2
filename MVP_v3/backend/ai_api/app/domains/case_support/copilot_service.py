@@ -32,6 +32,18 @@ class CaseCopilotProviderError(RuntimeError):
     pass
 
 
+class CaseCopilotProviderUnavailableError(CaseCopilotProviderError):
+    """The upstream model provider could not be reached."""
+
+    pass
+
+
+class CaseCopilotResponseError(CaseCopilotProviderError):
+    """The provider returned data that did not satisfy our contract."""
+
+    pass
+
+
 class CustomerSupportCallBudget:
     """Per-process hard stop; production also needs a shared Redis/DB quota."""
 

@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Literal
 
 from dotenv import load_dotenv
+import httpx
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
@@ -35,6 +36,7 @@ from contracts.question_target import canonical_question_scope, is_follow_up_tar
 from contracts.public_api.customer_progress import CustomerProgressItem, ProgressStep, UpdateCustomerProgress
 from .domains.cases.customer_progress import PREFIX as PROGRESS_PREFIX, ProgressConflict, progress_items as build_customer_progress, progress_ai_context, actions_for_ai
 from request_trace import install_request_trace
+from audio_upload import MAX_AUDIO_BYTES, read_audio_upload
 from contracts.ai_internal.work_card import CaseWorkCardOutput, WorkCardType
 from contracts.user_text import user_text
 from .domains.cases.context_workspace import build_workspace, legacy_gap_details
@@ -269,6 +271,54 @@ repository = build_repository()
 
 ATTACHMENTS_DISABLED_MESSAGE = "데모에서는 메시지 첨부파일을 지원하지 않습니다. 텍스트로 입력해 주세요."
 service = AnalyzeCaseService(HttpDiagnosisAiClient(), repository)
+BACKGROUND_ANALYSIS_THRESHOLD = 12_000
+BACKGROUND_ANALYSIS_PREVIEW_CHARS = 4_500
+_background_analysis_tasks: dict[str, asyncio.Task] = {}
+
+
+def initial_analysis_excerpt(text: str) -> str:
+    """Keep the first pass small, but end on a turn/sentence boundary when possible."""
+    if len(text) <= BACKGROUND_ANALYSIS_PREVIEW_CHARS:
+        return text
+    excerpt = text[:BACKGROUND_ANALYSIS_PREVIEW_CHARS]
+    newline = excerpt.rfind("\n")
+    punctuation = max(excerpt.rfind("."), excerpt.rfind("?"), excerpt.rfind("!"), excerpt.rfind("다."))
+    boundary = max(newline, punctuation)
+    if boundary >= BACKGROUND_ANALYSIS_PREVIEW_CHARS // 2:
+        excerpt = excerpt[:boundary + 1]
+    return excerpt.strip()
+
+
+async def _run_background_case_analysis(case_id: str) -> None:
+    try:
+        record = await repository.get(case_id)
+        if not record or record.get("analysis_status") != "IN_PROGRESS":
+            return
+        await seed_initial_context_facts(case_id)
+        source_text = str(record.get("input_text") or "").strip()
+        if not source_text:
+            raise ValueError("전체 분석 원문이 없어 후속 분석을 진행할 수 없습니다.")
+        result = await service.complete_background_analysis(case_id, source_text)
+        if result.analysis_status in {"COMPLETED", "NO_CASE"}:
+            await seed_initial_context_facts(case_id)
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        logger.exception("Background Case analysis failed", extra={"case_id": case_id})
+        current = await repository.get(case_id)
+        if current and current.get("analysis_status") == "IN_PROGRESS":
+            try:
+                await repository.update_case(case_id, int(current.get("version", 1)), {"analysis_status": "FAILED"})
+            except Exception:
+                logger.exception("Could not persist failed analysis status", extra={"case_id": case_id})
+    finally:
+        _background_analysis_tasks.pop(case_id, None)
+
+
+def schedule_background_case_analysis(case_id: str) -> None:
+    if case_id in _background_analysis_tasks:
+        return
+    _background_analysis_tasks[case_id] = asyncio.create_task(_run_background_case_analysis(case_id))
 
 
 @app.middleware("http")
@@ -282,6 +332,7 @@ async def request_id_middleware(request: Request, call_next):
 def public_failed_response(code: str, message: str, *, retryable: bool) -> PublicAnalyzeCaseResponse:
     return PublicAnalyzeCaseResponse(
         disposition="FAILED",
+        analysis_status=None,
         error=PublicAnalyzeError(code=code, message=message, retryable=retryable),
     )
 
@@ -300,6 +351,7 @@ def to_public_analyze_response(result) -> PublicAnalyzeCaseResponse:
             disposition="NO_CASE",
             risk="NORMAL",
             initial_brief=result.initial_brief,
+            analysis_status="NO_CASE",
         )
 
     report = result.initial_report
@@ -310,6 +362,7 @@ def to_public_analyze_response(result) -> PublicAnalyzeCaseResponse:
         mode=result.mode,
         status=result.status,
         initial_brief=result.initial_brief,
+        analysis_status=result.analysis_status or "COMPLETED",
         initial_report=PublicInitialReportReference(
             report_id=report.report_id,
             case_id=report.case_id,
@@ -339,6 +392,66 @@ async def health() -> dict[str, str]:
     return {"status": "ok", "database": repository_type}
 
 
+@app.post("/api/audio/transcriptions")
+async def proxy_audio_transcription(request: Request) -> StreamingResponse:
+    try:
+        upload = await read_audio_upload(request)
+    except ValueError as exc:
+        code = str(exc)
+        messages = {
+            "AUDIO_FILE_TOO_LARGE": f"음성 파일은 {MAX_AUDIO_BYTES // (1024 * 1024)}MB 이하만 분석할 수 있습니다.",
+            "AUDIO_FILE_TYPE_UNSUPPORTED": "FLAC, MP3, MP4, MPEG, M4A, OGG, WAV, WEBM 음성 파일을 선택해 주세요.",
+            "AUDIO_FILE_EMPTY": "선택한 음성 파일이 비어 있습니다.",
+            "AUDIO_REQUEST_INVALID": "음성 파일 요청을 읽을 수 없습니다.",
+        }
+        raise HTTPException(status_code=413 if code == "AUDIO_FILE_TOO_LARGE" else 400,
+                            detail={"code": code, "message": messages.get(code, "음성 파일을 확인해 주세요.")}) from exc
+
+    ai_base_url = os.getenv("AI_API_BASE_URL", "http://127.0.0.1:8101").rstrip("/")
+    client = httpx.AsyncClient(timeout=httpx.Timeout(300.0, connect=15.0))
+    try:
+        outbound = client.build_request(
+            "POST",
+            f"{ai_base_url}/ai/audio/transcriptions/stream",
+            content=upload.content,
+            headers={
+                "Content-Type": upload.content_type,
+                "Content-Length": str(len(upload.content)),
+                "X-Audio-Filename": request.headers.get("X-Audio-Filename", ""),
+            },
+        )
+        upstream = await client.send(outbound, stream=True)
+    except httpx.TimeoutException as exc:
+        await client.aclose()
+        raise HTTPException(status_code=504, detail={"code": "AI_PROVIDER_TIMEOUT", "message": "음성 전사 서버 응답 시간이 초과되었습니다."}) from exc
+    except httpx.HTTPError as exc:
+        await client.aclose()
+        raise HTTPException(status_code=503, detail={"code": "AI_PROVIDER_UNAVAILABLE", "message": "AI 음성 전사 서버에 연결할 수 없습니다."}) from exc
+
+    if upstream.is_error:
+        body = await upstream.aread()
+        await upstream.aclose()
+        await client.aclose()
+        try:
+            detail = json.loads(body.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            detail = {"code": "AI_PROVIDER_UNAVAILABLE", "message": "음성 전사를 처리하지 못했습니다."}
+        raise HTTPException(status_code=upstream.status_code, detail=detail.get("detail", detail))
+
+    async def events():
+        try:
+            async for chunk in upstream.aiter_raw():
+                yield chunk
+        finally:
+            await upstream.aclose()
+            await client.aclose()
+
+    return StreamingResponse(events(), status_code=upstream.status_code, media_type="text/event-stream", headers={
+        "Cache-Control": "no-cache, no-transform",
+        "X-Accel-Buffering": "no",
+    })
+
+
 @app.exception_handler(RequestValidationError)
 async def public_analyze_validation_error(request: Request, exc: RequestValidationError):
     if request.url.path == "/api/cases/analyze":
@@ -349,14 +462,24 @@ async def public_analyze_validation_error(request: Request, exc: RequestValidati
 
 @app.post("/api/cases/analyze", response_model=PublicAnalyzeCaseResponse, status_code=201)
 async def analyze_case(request: PublicAnalyzeCaseRequest) -> PublicAnalyzeCaseResponse | JSONResponse:
-    internal_request = AnalyzeTextRequest.model_validate(request.model_dump())
+    full_text = request.text.strip()
+    use_background_completion = request.background_completion and len(full_text) >= BACKGROUND_ANALYSIS_THRESHOLD
+    first_pass_text = initial_analysis_excerpt(full_text) if use_background_completion else full_text
+    internal_request = AnalyzeTextRequest(text=first_pass_text, client_request_id=request.client_request_id)
     try:
-        result = await service.analyze(internal_request)
+        result = await service.analyze(
+            internal_request,
+            source_text=full_text,
+            provisional=use_background_completion,
+        )
         if result.disposition == "CASE_CREATED" and result.case_id:
-            try:
-                await seed_initial_context_facts(result.case_id)
-            except Exception:
-                logger.exception("Case was committed but initial Context V3 facts could not be seeded")
+            if result.analysis_status == "IN_PROGRESS":
+                schedule_background_case_analysis(result.case_id)
+            else:
+                try:
+                    await seed_initial_context_facts(result.case_id)
+                except Exception:
+                    logger.exception("Case was committed but initial Context V3 facts could not be seeded")
         return to_public_analyze_response(result)
     except ValueError as exc:
         failure = public_failed_response("INVALID_INPUT", str(exc), retryable=False)
@@ -371,7 +494,12 @@ async def analyze_case(request: PublicAnalyzeCaseRequest) -> PublicAnalyzeCaseRe
         failure = public_failed_response("OPENAI_AUTHENTICATION_FAILED", str(exc), retryable=False)
         return JSONResponse(status_code=401, content=failure.model_dump(mode="json"))
     except AiServiceError as exc:
-        failure = public_failed_response("AI_ANALYSIS_FAILED", str(exc), retryable=True)
+        # Preserve the AI API's actionable runtime code when it is part of
+        # the public analyze contract. Unknown/legacy client errors keep the
+        # existing generic code for backwards compatibility.
+        public_codes = {"AI_PROVIDER_UNAVAILABLE", "AI_PROVIDER_TIMEOUT"}
+        code = exc.code if exc.code in public_codes else "AI_ANALYSIS_FAILED"
+        failure = public_failed_response(code, str(exc), retryable=exc.retryable)
         return JSONResponse(status_code=503, content=failure.model_dump(mode="json"))
     except CasePersistenceError:
         failure = public_failed_response("CASE_SAVE_FAILED", "AI 분석 후 사건 저장을 완료하지 못했습니다.", retryable=True)
@@ -924,6 +1052,27 @@ def question_fields_answered_by_messages(messages: list[dict]) -> set[str]:
     return answered
 
 
+def question_fields_covered_by_case(facts: list[dict], messages: list[dict]) -> set[str]:
+    """Return canonical question scopes already covered by facts or human messages.
+
+    This is intentionally limited to baseline question fields.  A contextual AI
+    question still has to pass the prompt and text-level duplicate guards, while
+    canonical questions are suppressed as soon as the case already contains a
+    confirmed/proposed fact or an explicit human answer.
+    """
+    covered = question_fields_answered_by_messages(messages)
+    for fact in facts:
+        if fact.get("status") not in {"CONFIRMED", "PROPOSED"}:
+            continue
+        try:
+            field = normalize_target_field(str(fact.get("field", "")))
+        except ValueError:
+            continue
+        if field in BASELINE_QUESTION_FIELDS:
+            covered.add(field)
+    return covered
+
+
 def normalize_question_text(value: str) -> str:
     """Whitespace/case differences must not bypass the duplicate-question guard."""
     return " ".join(value.split()).casefold()
@@ -959,9 +1108,11 @@ def filter_contextual_questions(
     persisted: list[dict],
     drafts: list[PublicQuestionCandidateResponse],
     follow_up_parents: dict | None = None,
+    covered_fields: set[str] | None = None,
 ) -> list:
     """Keep only safe, novel QUESTION_PLAN drafts and assign non-canonical fields."""
     baseline_fields = BASELINE_QUESTION_FIELDS | {normalize_target_field(item.target_field) for item in baseline}
+    baseline_fields.update(covered_fields or set())
     covered = [*baseline, *drafts]
     covered.extend(
         PublicQuestionCandidateResponse(
@@ -1021,15 +1172,18 @@ def filter_contextual_questions(
 
 
 def exclude_handled_question_candidates(
-    candidates: list[PublicQuestionCandidateResponse], questions: list[dict]
+    candidates: list[PublicQuestionCandidateResponse], questions: list[dict],
+    covered_fields: set[str] | None = None,
 ) -> list[PublicQuestionCandidateResponse]:
     handled = [item for item in questions if item.get("status") in {"PENDING", "ASKED", "ANSWERED"}]
     active_fields = {normalize_target_field(str(item.get("target_field", ""))) for item in handled
                      if item.get("status") in {"PENDING", "ASKED"}}
     handled_texts = {normalize_question_text(str(item.get("question_text", ""))) for item in handled}
+    covered_fields = covered_fields or set()
     return [
         candidate for candidate in candidates
         if normalize_target_field(candidate.target_field) not in active_fields
+        and normalize_target_field(candidate.target_field) not in covered_fields
         and normalize_question_text(candidate.question_text) not in handled_texts
         and not any(similar_question(candidate.question_text, str(q.get("question_text", ""))) for q in handled
                     if not q.get("target_field") or normalize_target_field(q["target_field"]) == normalize_target_field(candidate.target_field))
@@ -1222,7 +1376,8 @@ async def list_customer_question_candidates(case_id: str) -> list[PublicQuestion
     eligibility = adapter.question_eligibilities(adapter.adapt(
         _case_support_ai_input(case_id, case, facts, queued, [], [])
     ))
-    filtered = [candidate for candidate in exclude_handled_question_candidates(candidates, queued)
+    covered_fields = question_fields_covered_by_case(facts, messages)
+    filtered = [candidate for candidate in exclude_handled_question_candidates(candidates, queued, covered_fields)
                 if normalize_target_field(candidate.target_field) in MANUAL_BASIC_QUESTION_FIELDS
                 and ((policy := eligibility.get(normalize_target_field(candidate.target_field))) is None
                      or policy.allow_basic_question)]
@@ -1950,6 +2105,7 @@ async def generate_case_work_card(case_id: str, request: PublicWorkCardGenerateR
         ]
         if request.card_type == "QUESTION_PLAN":
             case_context = support.case_context.model_dump(mode="python") if support.case_context else {}
+            covered_question_fields = question_fields_covered_by_case(facts, messages)
             contextual_facts = [
                 f"사건 맥락 {key}: {value}"
                 for key, value in case_context.items()
@@ -1964,7 +2120,11 @@ async def generate_case_work_card(case_id: str, request: PublicWorkCardGenerateR
                 f"현재 미발송 직원 검토 초안 {item.target_field}: {item.question_text}"
                 for item in request.question_drafts[:10]
             ]
-            known_facts = (known_facts[:15] + contextual_facts + question_state + draft_state)[:30]
+            covered_state = [
+                f"이미 확인된 질문 범위: {field}"
+                for field in sorted(covered_question_fields)
+            ]
+            known_facts = (known_facts[:15] + contextual_facts + covered_state + question_state + draft_state)[:30]
         payload = await service.ai_client.generate_work_card({
             "case_id": case_id,
             "card_type": request.card_type,
@@ -1999,6 +2159,7 @@ async def generate_case_work_card(case_id: str, request: PublicWorkCardGenerateR
             card.questions = filter_contextual_questions(
                 card.questions, candidates, [q.model_dump() for q in live_state.questions], request.question_drafts,
                 CaseSnapshotAiAdapter.follow_up_parents(live_state),
+                question_fields_covered_by_case(facts, messages),
             )
         return card
     except AiServiceQuotaError as exc:
@@ -2006,7 +2167,11 @@ async def generate_case_work_card(case_id: str, request: PublicWorkCardGenerateR
     except AiServiceAuthenticationError as exc:
         raise HTTPException(status_code=401, detail={"code": "OPENAI_AUTHENTICATION_FAILED", "message": str(exc)}) from exc
     except AiServiceError as exc:
-        raise HTTPException(status_code=503, detail={"code": "AI_WORK_CARD_FAILED", "message": str(exc)}) from exc
+        raise HTTPException(status_code=503, detail={
+            "code": exc.code or "AI_WORK_CARD_FAILED",
+            "message": str(exc),
+            "retryable": exc.retryable,
+        }) from exc
 
 
 @app.post("/api/cases/{case_id}/ai/invocations", response_model=PublicAiInvocationResponse, status_code=201)
@@ -2253,6 +2418,8 @@ async def start_proactive_case_worker() -> None:
     ping = getattr(repository, "ping", None)
     if callable(ping):
         await ping()
+    for pending_case in await repository.list_pending_analyses():
+        schedule_background_case_analysis(str(pending_case["case_id"]))
     if os.getenv("PROACTIVE_QUESTION_AUTOMATION", "1").lower() not in {"0", "false", "off"}:
         _proactive_worker_task = asyncio.create_task(proactive_case_worker())
 
@@ -2267,6 +2434,11 @@ async def stop_proactive_case_worker() -> None:
         except asyncio.CancelledError:
             pass
         _proactive_worker_task = None
+    for task in list(_background_analysis_tasks.values()):
+        task.cancel()
+    if _background_analysis_tasks:
+        await asyncio.gather(*_background_analysis_tasks.values(), return_exceptions=True)
+    _background_analysis_tasks.clear()
     close = getattr(repository, "close", None)
     if callable(close):
         await close()
@@ -2682,7 +2854,7 @@ async def update_case_context_v2_task(case_id: str, task_id: str, actor_user_id:
 
 @app.post("/api/cases/{case_id}/context-v2/tasks/{task_id}/complete", response_model=PublicCaseTaskV2)
 async def complete_case_context_v2_task(case_id: str, task_id: str, actor_user_id: str, request: PublicCompleteTaskV2Request) -> PublicCaseTaskV2:
-    store = await require_context_v2_member(case_id, actor_user_id, access="REVIEW")
+    store = await require_context_v2_member(case_id, actor_user_id, access="WRITE")
     try:
         return await store.complete_task(case_id, task_id, request.model_dump(mode="json"), actor_user_id)
     except (KeyError, ContextV2TransitionError, ContextV2ConflictError) as exc:

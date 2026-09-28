@@ -1,5 +1,5 @@
 import React, { FormEvent, useEffect, useRef, useState } from 'react';
-import { AlertCircle, ArrowLeftRight, BrainCircuit, CheckCircle2, ChevronRight, FileSearch, Loader2, MessageSquareText, Play, ShieldAlert, ShieldCheck, Sparkles, X } from 'lucide-react';
+import { AlertCircle, ArrowLeftRight, BrainCircuit, CheckCircle2, ChevronRight, FileAudio, FileSearch, Loader2, MessageSquareText, Play, ShieldAlert, ShieldCheck, Sparkles, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { casesApi } from '../api/cases';
 import type { AnalyzeCaseResponse, StoredCase } from '../api/types';
@@ -15,6 +15,8 @@ import { generateUuid } from '../uuid';
 import { markInitialAssignmentPending } from '../assignmentPromptState';
 import { startBackgroundAnalysis } from '../analysisQueue';
 import { markNewCase } from '../newCaseState';
+import { transcribeAudioFile } from '../api/audioTranscription';
+import { buildInitialSummary } from '../analysisInitialSummary';
 
 type AnalysisState = 'INPUT' | 'ANALYZING' | 'CREATED' | 'NO_CASE' | 'ERROR';
 type SampleType = 'PHISHING' | 'FINANCE' | 'DAILY';
@@ -560,6 +562,7 @@ const fallbackIncidentType = (diagnosis: StoredCase['diagnosis']) => {
 };
 
 export const AnalysisResult: React.FC<{ result: AnalyzeCaseResponse; caseItem?: StoredCase; sourceText: string; onOpenCase: () => void; onRestart: () => void; showActions?: boolean }> = ({ result, caseItem, sourceText, onOpenCase, onRestart, showActions = true }) => {
+  const [expandedInitialSections, setExpandedInitialSections] = useState<Record<string, boolean>>({});
   if (result.disposition === 'NO_CASE') return <section className="analysis-result no-case">
     <div className="analysis-result-heading"><span><CheckCircle2 size={21}/></span><div><p>분석 완료</p><h2>현재는 보이스피싱 Case 생성 기준에 해당하지 않습니다.</h2></div></div>
     <p className="analysis-brief">{staffFacingCopy(result.initial_brief || '')}</p>
@@ -576,18 +579,26 @@ export const AnalysisResult: React.FC<{ result: AnalyzeCaseResponse; caseItem?: 
   const storedSourceText = sourceText.trim();
   const structuredSignals = caseItem.diagnosis.context_signals ?? [];
   const staffFeatures = buildStaffFeatures(caseItem.diagnosis);
-  const claims = (context.claims ?? []).map(normalizeStaffClaimLine);
-  const demands = (context.demands ?? []).map(normalizeStaffClaimLine);
-  const tactics = (context.manipulation_tactics ?? []).map(normalizeStaffClaimLine);
-  const customerStatements = (context.customer_statements ?? []).map(normalizeStaffCustomerStatement).filter(Boolean);
-  const recommended = context.recommended_next_steps ?? [];
-  const unresolved = valueList(caseItem.initial_report, 'unresolved_items');
-  const nextChecks = valueList(caseItem.initial_report, 'next_checks');
+  const inferredInitialItems = staffFeatures.reduce<Record<'claims' | 'demands' | 'tactics' | 'customer', string[]>>((groups, feature) => {
+    const id = feature.id.toUpperCase();
+    const key = id.includes('CUSTOMER')
+      ? 'customer'
+      : id.includes('TACTIC') || id.includes('DEADLINE')
+        ? 'tactics'
+        : id.includes('REQUEST') || id.includes('PURPOSE') || id.includes('AMOUNT')
+          ? 'demands'
+          : id.includes('CLAIM') || id.includes('ROLE')
+            ? 'claims'
+            : null;
+    if (key) groups[key].push(feature.description || feature.title);
+    return groups;
+  }, { claims: [], demands: [], tactics: [], customer: [] });
+  const initialSummary = buildInitialSummary(context, caseItem.initial_report, inferredInitialItems);
   return <section className="analysis-result created">
     <div className="analysis-result-heading"><span className={caseStateTone(caseState(caseItem))}><ShieldAlert size={21}/></span><div><p>Shared Case 생성 완료 · {caseItem.case_id}</p><h2>{staffFacingCopy(context.incident_type || '통화 맥락 분석을 완료했습니다.')}</h2><small>{staffFacingCopy(normalizeStaffSummary(caseItem.initial_brief))}</small></div>{showActions && <div className="analysis-result-actions"><button type="button" onClick={onRestart}>새 통화 분석하기</button><button type="button" className="primary" onClick={onOpenCase}>생성된 Case 열기<ChevronRight size={16}/></button></div>}</div>
     <div className="analysis-result-grid">
       <section><header><BrainCircuit size={16}/><div><b>통화에서 확인된 주요 정황</b><span>AI가 확인한 주장·요구·압박 수법을 기관명·인물·관계·시간 정보와 함께 표시합니다.</span></div></header><div className="analysis-window-list">{structuredSignals.length > 0 && <div className="analysis-composite-summary"><b>종합 정황</b>{structuredSignals.map((signal) => <p key={signal.signal_id}>{structuredSignalLabel(signal.signal_code)}</p>)}</div>}{staffFeatures.length > 0 ? <ul className="analysis-feature-list">{staffFeatures.map((feature) => <li key={feature.id} className={`analysis-feature-item ${feature.tone}`}><div className="analysis-feature-heading"><b>{feature.title}</b>{featureCategoryLabel(feature) && <span>{featureCategoryLabel(feature)}</span>}</div><p>{feature.description}</p>{feature.metadata.length > 0 && <div className="analysis-feature-metadata">{feature.metadata.map((item) => <span key={item} data-warning={item.includes('확인 필요') || undefined}>{item}</span>)}</div>}{feature.details.length > 0 && <ul className="analysis-feature-details">{feature.details.map((item) => <li key={item}>{item}</li>)}</ul>}{featureStatusLabel(feature.status) && <small data-kind={featureStatusKind(feature.status)}>{featureStatusLabel(feature.status)}</small>}</li>)}</ul> : <p className="analysis-empty-signal">확인된 주요 정황이 없습니다. 분석 결과를 다시 확인해 주세요.</p>}<StructuredEnvelopeDetails diagnosis={caseItem.diagnosis}/></div></section>
-      <section><header><Sparkles size={16}/><div><b>사건 초기 정리</b><span>검증된 분석 정보를 바탕으로 역할과 사실 상태를 구분해 정리했습니다.</span></div></header><div className="analysis-case-summary"><p>{staffFacingCopy(normalizeStaffSummary(context.summary || caseItem.initial_brief))}</p><div><b>보이스피싱 의심 인물의 주장</b><ul>{claims.length ? claims.map((claim) => <li key={claim}>{staffFacingCopy(compactSummaryLine(claim))}</li>) : <li>확인된 주장이 없습니다.</li>}</ul></div>{demands.length > 0 && <div><b>보이스피싱 의심 인물의 요구</b><ul>{demands.map((item) => <li key={item}>{staffFacingCopy(compactSummaryLine(item))}</li>)}</ul></div>}{tactics.length > 0 && <div><b>압박·통제 정황</b><ul>{tactics.map((item) => <li key={item}>{staffFacingCopy(compactSummaryLine(item))}</li>)}</ul></div>}{customerStatements.length > 0 && <div><b>고객의 진술·행동</b><ul>{customerStatements.map((item) => <li key={item}>{staffFacingCopy(item)}</li>)}</ul></div>}<div><b>우선 권장 조치</b><ul>{recommended.length ? recommended.map((item) => <li key={item}>{staffFacingCopy(item)}</li>) : nextChecks.map((item) => <li key={item}>{staffFacingCopy(item)}</li>)}</ul></div>{unresolved.length > 0 && <div><b>아직 확인할 정보</b><ul>{unresolved.map((item) => <li key={item}>{staffFacingCopy(item)}</li>)}</ul></div>}</div></section>
+      <section className="analysis-initial-summary-panel"><header><Sparkles size={16}/><div><b>사건 초기 정리</b><span>주장·요구·압박·고객 상태와 확인 필요 항목을 간결하게 정리했습니다.</span></div></header><div className="analysis-initial-summary"><div className="analysis-initial-summary-headline"><b>사건 요약</b><p>{staffFacingCopy(initialSummary.headline || normalizeStaffSummary(caseItem.initial_brief))}</p></div>{initialSummary.sections.map((summarySection) => { const expanded = Boolean(expandedInitialSections[summarySection.key]); const visibleItems = expanded ? summarySection.items : summarySection.items.slice(0, 3); return <div className={`analysis-initial-summary-section analysis-initial-summary-${summarySection.key}`} key={summarySection.key}><div className="analysis-initial-summary-section-header"><b>{summarySection.title}</b><span>{summarySection.items.length}건</span></div><ul className="analysis-initial-summary-list">{visibleItems.map((item) => <li key={item}>{staffFacingCopy(item)}</li>)}</ul>{summarySection.hiddenCount > 0 && <button type="button" className="analysis-initial-summary-more" onClick={() => setExpandedInitialSections((current) => ({ ...current, [summarySection.key]: !expanded }))}>{expanded ? '접기' : `외 ${summarySection.hiddenCount}건 더보기`}</button>}</div>; })}</div></section>
     </div>
     {storedSourceText && <details className="analysis-original-transcript">
       <summary>데모 입력 원문 확인</summary>
@@ -615,6 +626,10 @@ export const HomePage: React.FC<HomePageProps> = ({ embedded = false, onCloseEmb
   const [error, setError] = useState('');
   const [lastSample, setLastSample] = useState<Partial<Record<SampleType, number>>>({});
   const analysisRequestRef = useRef<AnalysisRequest | null>(null);
+  const audioInputRef = useRef<HTMLInputElement | null>(null);
+  const audioAbortRef = useRef<AbortController | null>(null);
+  const [transcribing, setTranscribing] = useState(false);
+  const [transcriptionProgress, setTranscriptionProgress] = useState('');
   useEffect(() => {
     onAnalysisBusyChange?.(state === 'ANALYZING');
     return () => onAnalysisBusyChange?.(false);
@@ -628,8 +643,43 @@ export const HomePage: React.FC<HomePageProps> = ({ embedded = false, onCloseEmb
     analysisRequestRef.current = null;
     setText(samples[index]); setError(''); setState('INPUT');
   };
-  const reset = () => { analysisRequestRef.current = null; setText(''); setSourceText(''); setResult(null); setCaseItem(undefined); setError(''); setState('INPUT'); setOpen(true); };
-  const close = () => { if (embedded && onCloseEmbedded) onCloseEmbedded(); else setOpen(embedded); setSourceText(''); setError(''); };
+  const reset = () => { audioAbortRef.current?.abort(); audioAbortRef.current = null; analysisRequestRef.current = null; setText(''); setSourceText(''); setResult(null); setCaseItem(undefined); setError(''); setTranscribing(false); setTranscriptionProgress(''); setState('INPUT'); setOpen(true); };
+  const close = () => { audioAbortRef.current?.abort(); audioAbortRef.current = null; setTranscribing(false); setTranscriptionProgress(''); if (embedded && onCloseEmbedded) onCloseEmbedded(); else setOpen(embedded); setSourceText(''); setError(''); };
+  const transcribeAudio = async (file?: File) => {
+    if (!file) return;
+    if (file.size > 25 * 1024 * 1024) {
+      setError('음성 파일은 25MB 이하만 분석할 수 있습니다.');
+      return;
+    }
+    const supported = /\.(flac|mp3|mp4|mpeg|mpga|m4a|ogg|wav|webm)$/i.test(file.name);
+    if (!supported) {
+      setError('FLAC, MP3, MP4, MPEG, M4A, OGG, WAV, WEBM 음성 파일을 선택해 주세요.');
+      return;
+    }
+    const controller = new AbortController();
+    audioAbortRef.current = controller;
+    analysisRequestRef.current = null;
+    setError('');
+    setText('');
+    setTranscribing(true);
+    setTranscriptionProgress('음성 전사 중…');
+    let segmentCount = 0;
+    try {
+      await transcribeAudioFile(file, controller.signal, ({ text: segmentText }) => {
+        segmentCount += 1;
+        setText((current) => `${current.trimEnd()}${current.trim() ? '\n' : ''}${segmentText}`);
+        setTranscriptionProgress(`${segmentCount}개 문장 전사 완료 · 음성 분석 중`);
+      });
+      setTranscriptionProgress(segmentCount ? `음성 전사 완료 · ${segmentCount}개 문장을 입력했습니다.` : '한국어 전사 내용을 찾지 못했습니다.');
+    } catch (reason) {
+      if (!(reason instanceof Error && reason.name === 'AbortError')) {
+        setError(reason instanceof Error ? reason.message : '음성 파일을 분석하지 못했습니다.');
+      }
+    } finally {
+      if (audioAbortRef.current === controller) audioAbortRef.current = null;
+      setTranscribing(false);
+    }
+  };
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const submittedText = text.trim();
@@ -642,7 +692,7 @@ export const HomePage: React.FC<HomePageProps> = ({ embedded = false, onCloseEmb
     analysisRequestRef.current = analysisRequest;
     setState('ANALYZING'); setError(''); setResult(null); setCaseItem(undefined);
     try {
-      const response = await startBackgroundAnalysis(submittedText, analysisRequest.requestId);
+      const response = await startBackgroundAnalysis(submittedText, analysisRequest.requestId, submittedText.length >= 12000);
       analysisRequestRef.current = null;
       // Keep the input transient in the editor; the Case read API owns demo retention.
       setSourceText(submittedText);
@@ -666,6 +716,6 @@ export const HomePage: React.FC<HomePageProps> = ({ embedded = false, onCloseEmb
   return <section className={embedded ? `home-analysis-embed${resultOpen ? ' analysis-result-open' : ''}` : `home-empty ${open ? 'analysis-open' : ''}`}>
     {!open ? <><div className="home-mark"><ShieldCheck size={26}/></div><p className="eyebrow">CSR | Case Share Room</p><h1>대응할 사건을 선택하세요.</h1><p>통화 맥락, 고객 대화, 기관 확인과 대응 업무를 하나의 Shared Case에서 이어서 확인할 수 있습니다.</p><div className="home-principles"><span><MessageSquareText size={17}/>대화와 업무 기록을 한 흐름으로</span><span><ArrowLeftRight size={17}/>고객 응답과 Case 맥락을 양방향으로</span></div><button className="start-analysis-button" type="button" onClick={() => setOpen(true)}><FileSearch size={17}/>새 통화 분석하기</button><a className="judge-guide-link" href="/judge/index.html">프로젝트 먼저 살펴보기 →</a></> : <div className={`home-analysis-panel${resultOpen ? ' has-analysis-result' : ''}`}>
       <header><div><p className="eyebrow">NEW SHARED CASE · DEMO ADAPTER</p><h1>새 통화 분석하기</h1><span>AI가 통화 내용을 분석한 뒤, 확인된 정보와 데모 원문을 분리해 Case로 정리합니다.</span></div><button type="button" onClick={close} aria-label="새 통화 분석 닫기"><X size={19}/></button></header>
-      {state === 'INPUT' || state === 'ANALYZING' || state === 'ERROR' ? <form onSubmit={submit}><label htmlFor="call-transcript">온디바이스 분석 데모 입력</label><div className="analysis-sample-row"><span>샘플 입력</span><button type="button" disabled={state === 'ANALYZING'} onClick={() => applySample('PHISHING')}>보이스피싱 사례 샘플</button><button type="button" disabled={state === 'ANALYZING'} onClick={() => applySample('FINANCE')}>정상 금융 상담 샘플</button><button type="button" disabled={state === 'ANALYZING'} onClick={() => applySample('DAILY')}>일상 통화 샘플</button></div><textarea id="call-transcript" value={text} disabled={state === 'ANALYZING'} onChange={(event) => { const nextText = event.target.value; if (analysisRequestRef.current?.submittedText !== nextText.trim()) analysisRequestRef.current = null; setText(nextText); }} placeholder={'데모용 통화 원문을 화자 라벨 없이 붙여 넣으세요. AI가 대화 흐름과 표현을 바탕으로 발화자를 구분합니다.\n분석 후 원문은 담당자용 Case 확인 영역에 보관되며, 지원 AI에는 전달되지 않습니다.'}/><div className="analysis-input-meta"><span>데모 입력 최대 50,000자</span></div><p className="analysis-privacy-note">이 입력은 외부 온디바이스 분석 계층을 모사하기 위한 데모입니다. 원문은 Case 입력으로 보관하고, 역할·관계·명칭·시간·행동·신뢰도 같은 구조화 정보만 Case Copilot과 Context AI에 전달합니다.</p>{state === 'ANALYZING' && <div className="analysis-progress" role="status" aria-live="polite"><span className="analysis-progress-icon"><Loader2 size={20} className="spin"/></span><div><strong>AI가 통화 내용을 분석하고 있습니다</strong><span>AI가 대화 흐름에서 화자·행위자·대상자를 구분한 뒤, CSR은 확인된 정보와 정황을 검토합니다.</span></div><div className="analysis-progress-track" aria-hidden="true"><span/></div></div>}{error && <p className="analysis-error"><AlertCircle size={15}/>{error}</p>}<footer><button type="button" onClick={close} disabled={state === 'ANALYZING'}>취소</button><button type="submit" className="primary" disabled={!text.trim() || state === 'ANALYZING'}>{state === 'ANALYZING' ? <><Loader2 size={16} className="spin"/>AI 분석·Case 생성 중</> : <><Play size={16}/>데모 분석하고 Case 만들기</>}</button></footer></form> : result && <AnalysisResult result={result} caseItem={caseItem} sourceText={sourceText} onOpenCase={() => result.case_id && navigate(`/cases/${encodeURIComponent(result.case_id)}`, { state: { initialAssignmentRecommendation: true } })} onRestart={reset}/>}</div>}
+      {state === 'INPUT' || state === 'ANALYZING' || state === 'ERROR' ? <form onSubmit={submit}><label htmlFor="call-transcript">통화 원문 입력</label><div className="analysis-sample-row"><span>샘플 입력</span><button type="button" disabled={state === 'ANALYZING' || transcribing} onClick={() => applySample('PHISHING')}>보이스피싱 사례 샘플</button><button type="button" disabled={state === 'ANALYZING' || transcribing} onClick={() => applySample('FINANCE')}>정상 금융 상담 샘플</button><button type="button" disabled={state === 'ANALYZING' || transcribing} onClick={() => applySample('DAILY')}>일상 통화 샘플</button></div><textarea id="call-transcript" value={text} disabled={state === 'ANALYZING' || transcribing} onChange={(event) => { const nextText = event.target.value; if (analysisRequestRef.current?.submittedText !== nextText.trim()) analysisRequestRef.current = null; setText(nextText); }} placeholder={'데모용 통화 원문을 붙여 넣거나 [음성 파일 분석하기]로 음성을 턴 단위로 전사할 수 있습니다.\n분석 후 원문은 담당자용 Case 확인 영역에 보관됩니다.'}/><div className="analysis-input-meta"><span>입력 {Array.from(text).length.toLocaleString()}자 · 최대 50,000자</span></div>{transcribing && <div className="analysis-progress audio-transcription-analysis-progress" role="status" aria-live="polite"><span className="analysis-progress-icon"><Loader2 size={20} className="spin"/></span><div><strong>AI가 음성 파일을 전사하고 있습니다</strong><span>{transcriptionProgress || "전사된 문장이 도착하는 대로 통화 원문에 추가됩니다."}</span></div><div className="analysis-progress-track" aria-hidden="true"><span/></div></div>}{!transcribing && transcriptionProgress && <p className="audio-transcription-progress" role="status" aria-live="polite">{transcriptionProgress}</p>}<p className="analysis-privacy-note">음성 파일은 OpenAI 음성 전사 서비스로 전송되어 통화 원문으로 변환됩니다. 원본 오디오는 Case에 첨부되지 않으며, 전사된 텍스트는 통화 분석을 제출할 때 Case 입력으로 저장됩니다.</p>{state === 'ANALYZING' && <div className="analysis-progress" role="status" aria-live="polite"><span className="analysis-progress-icon"><Loader2 size={20} className="spin"/></span><div><strong>AI가 통화 내용을 분석하고 있습니다</strong><span>AI가 대화 흐름에서 화자·행위자·대상자를 구분한 뒤, CSR은 확인된 정보와 정황을 검토합니다.</span></div><div className="analysis-progress-track" aria-hidden="true"><span/></div></div>}{error && <p className="analysis-error"><AlertCircle size={15}/>{error}</p>}<input ref={audioInputRef} type="file" accept=".flac,.mp3,.mp4,.mpeg,.mpga,.m4a,.ogg,.wav,.webm,audio/*" hidden disabled={state === 'ANALYZING' || transcribing} onChange={(event) => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ''; void transcribeAudio(file); }}/><footer><button type="button" onClick={close} disabled={state === 'ANALYZING'}>취소</button><button type="button" className="audio-transcription-button" onClick={() => audioInputRef.current?.click()} disabled={state === 'ANALYZING' || transcribing}>{transcribing ? <><Loader2 size={15} className="spin"/>전사 중</> : <><FileAudio size={15}/>음성 파일 분석하기</>}</button><button type="submit" className="primary" disabled={!text.trim() || state === 'ANALYZING' || transcribing}>{state === 'ANALYZING' ? <><Loader2 size={16} className="spin"/>AI 분석·Case 생성 중</> : <><Play size={16}/>데모 분석하고 Case 만들기</>}</button></footer></form> : result && <AnalysisResult result={result} caseItem={caseItem} sourceText={sourceText} onOpenCase={() => result.case_id && navigate(`/cases/${encodeURIComponent(result.case_id)}`, { state: { initialAssignmentRecommendation: true } })} onRestart={reset}/>}</div>}
   </section>;
 };

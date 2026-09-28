@@ -277,8 +277,10 @@ class CaseSnapshotAiAdapter:
         다시 투영해 읽는 사람이 지금 상황만 빠르게 파악하게 한다.
         """
         # Rebuild from current structured fields, never carry a historical brief log.
-        claims = [CaseSnapshotAiAdapter._short(value, 55) for value in brief.claims[:2]]
-        sentences = [f"사건: {CaseSnapshotAiAdapter._short(brief.incident_type, 55)}" + (f" · {' / '.join(claims)}" if claims else '')]
+        # Keep the first sentence as the diagnosis' natural description instead of
+        # exposing internal labels or joining fields with punctuation.
+        base = CaseSnapshotAiAdapter._base_summary(brief)
+        sentences = [" ".join(base.split())]
 
         field_values = CaseSnapshotAiAdapter._current_field_values(ai_input)
 
@@ -295,14 +297,19 @@ class CaseSnapshotAiAdapter:
             if (value := field_values.get(field)) is not None
             if (statement := CaseSnapshotAiAdapter._field_statement(field, *value))
         ]
-        if state_parts:
-            sentences.append("고객 상태: " + " ".join(state_parts[:3]))
-
-        work_parts: list[str] = []
         completed_verifications = [
             item for item in ai_input.verifications
             if item.status == "COMPLETED" and item.result_summary and item.result_summary.strip()
         ]
+        if state_parts or completed_verifications:
+            current_parts = list(state_parts[:3])
+            current_parts.extend(
+                f"{item.target} 확인 결과 {' '.join(item.result_summary.split())}."
+                for item in completed_verifications[-2:]
+            )
+            sentences.append(" ".join(current_parts))
+
+        work_parts: list[str] = []
         active_verifications = [
             item.target for item in ai_input.verifications
             if item.status not in {"COMPLETED", "FAILED", "ON_HOLD"}
@@ -314,22 +321,20 @@ class CaseSnapshotAiAdapter:
             and item.action_type not in {"AI_CHECKLIST_REVIEW", "STAFF_JUDGMENT"}
             and not item.action_type.startswith("AI_CHECKLIST:")
         ]
-        if completed_verifications:
-            item = completed_verifications[-1]
-            work_parts.append(f"{item.target} 확인 결과 {CaseSnapshotAiAdapter._short(item.result_summary)}")
-        elif active_verifications:
-            work_parts.append(f"{CaseSnapshotAiAdapter._join_labels(active_verifications[:2])} 기관 확인 진행 중")
+        if active_verifications:
+            work_parts.append(f"{CaseSnapshotAiAdapter._join_labels(active_verifications[:2])} 공식 확인이 진행 중입니다")
         if active_actions:
-            work_parts.append(f"{CaseSnapshotAiAdapter._short(active_actions[-1], 65)} 업무 기록 확인 필요")
-        if work_parts:
-            sentences.append(f"진행 업무: {' / '.join(work_parts)}")
+            work_parts.append(f"{' '.join(active_actions[-1].split())} 대응 업무가 진행 중입니다")
 
         if unresolved:
             labels = [CaseSnapshotAiAdapter._field_label(item.target_field.value) for item in unresolved]
-            sentences.append(f"다음으로 {CaseSnapshotAiAdapter._join_labels(labels[:2])} 확인이 필요합니다.")
+            work_parts.append(f"{CaseSnapshotAiAdapter._join_labels(labels[:2])} 여부는 아직 확인되지 않았습니다")
+        if work_parts:
+            sentences.append(" ".join(work_parts[:3]) + ".")
 
-        # Preserve section boundaries; never cut a statement in the middle.
-        return "\n".join(filter(None, sentences)).strip()
+        # Return one readable paragraph for the Context Panel. Each sentence is
+        # generated from current structured state; no history is appended.
+        return " ".join(filter(None, sentences)).strip()
 
     @staticmethod
     def _build_case_context(brief, ai_input: CaseSnapshotAiInput) -> CaseContextProjection:
@@ -530,7 +535,13 @@ class CaseSnapshotAiAdapter:
     def _base_summary(brief) -> str:
         summary = brief.summary.strip()
         if summary:
-            return summary if summary.endswith((".", "!", "?")) else f"{summary}."
+            normalized = " ".join(summary.split())
+            # A stored diagnosis summary can contain an accidentally repeated
+            # history block. Do not copy that block into the current snapshot.
+            if len(normalized) > 360:
+                incident_type = " ".join((brief.incident_type or "현재 사건").split())
+                return f"{incident_type} 관련 사건으로 현재 상황을 확인하고 있습니다."
+            return normalized if normalized.endswith((".", "!", "?")) else f"{normalized}."
         return f"{brief.incident_type} 사건의 현재 맥락을 확인하고 있습니다."
 
     @staticmethod
@@ -547,7 +558,7 @@ class CaseSnapshotAiAdapter:
         if field in labels and polarity is not None:
             return f"{authority} {labels[field][0 if polarity else 1]}입니다."
 
-        short_value = CaseSnapshotAiAdapter._short(value)
+        short_value = " ".join(value.split())
         templates = {
             "transfer_status": f"{authority} 송금 여부는 ‘{short_value}’입니다.",
             "personal_information_exposure": f"{authority} 개인정보 제공 여부는 ‘{short_value}’입니다.",

@@ -1171,3 +1171,11 @@ ALTER TABLE case_transactions
     ADD CONSTRAINT chk_case_transactions_amount CHECK (amount >= 0);
 
 INSERT INTO schema_migrations (migration_name) VALUES ('029_normalize_case_transaction_amounts.sql');
+
+
+-- Migration: 030_incremental_case_analysis.sql
+ALTER TABLE cases
+    ADD COLUMN analysis_status ENUM('IN_PROGRESS', 'COMPLETED', 'NO_CASE', 'FAILED') NOT NULL DEFAULT 'COMPLETED'
+    AFTER status;
+
+INSERT INTO schema_migrations (migration_name) VALUES ('030_incremental_case_analysis.sql');

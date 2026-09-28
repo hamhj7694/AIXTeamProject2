@@ -444,7 +444,7 @@ class CaseContextV2EndpointTest(unittest.TestCase):
         self.assertEqual(forbidden.status_code, 403)
         self.assertFalse(self.client.get(f"{self.base}/workspace?actor_user_id=operator").json()["can_review"])
 
-    def test_task_completion_requires_result_and_reviewer(self):
+    def test_task_completion_requires_result_and_records_writable_staff(self):
         created = self.client.post(f"{self.base}/tasks?actor_user_id=operator", json={
             "client_request_id": "request-task-001",
             "task_type": "CUSTOMER_CONTACT",
@@ -454,18 +454,13 @@ class CaseContextV2EndpointTest(unittest.TestCase):
         })
         self.assertEqual(created.status_code, 201, created.text)
         task_id = created.json()["task_id"]
-        forbidden = self.client.post(
+        completed = self.client.post(
             f"{self.base}/tasks/{task_id}/complete?actor_user_id=operator",
             json={"expected_version": 1, "result_summary": "고객 확인 완료"},
         )
-        self.assertEqual(forbidden.status_code, 403)
-        completed = self.client.post(
-            f"{self.base}/tasks/{task_id}/complete?actor_user_id=owner",
-            json={"expected_version": 1, "result_summary": "고객이 송금 사실을 확인함"},
-        )
         self.assertEqual(completed.status_code, 200, completed.text)
         self.assertEqual(completed.json()["status"], "COMPLETED")
-        self.assertEqual(completed.json()["completed_by"], "owner")
+        self.assertEqual(completed.json()["completed_by"], "operator")
 
     def test_viewer_can_read_but_unrelated_user_cannot(self):
         self.assertEqual(self.client.get(f"{self.base}/resources?actor_user_id=outsider").status_code, 403)

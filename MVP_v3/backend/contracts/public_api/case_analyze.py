@@ -28,6 +28,7 @@ class PublicStrictModel(BaseModel):
 
 class PublicAnalyzeCaseRequest(PublicStrictModel):
     text: str = Field(min_length=1, max_length=50_000)
+    background_completion: bool = False
     # 현재 Frontend는 매 요청마다 UUID를 생성한다. 빈 문자열은 기존 구현과
     # 동일하게 "미제공"으로 취급하며, 멱등성 키로 사용하지 않는다.
     client_request_id: str | None = Field(default=None, max_length=100)
@@ -53,13 +54,14 @@ class PublicAnalyzeCaseResponse(PublicStrictModel):
     mode: InitialCaseMode | None = None
     status: InitialCaseStatus | None = None
     initial_brief: str | None = None
+    analysis_status: Literal["IN_PROGRESS", "COMPLETED", "NO_CASE"] | None = None
     initial_report: PublicInitialReportReference | None = None
     error: PublicAnalyzeError | None = None
 
     @model_validator(mode="after")
     def validate_disposition_fields(self) -> "PublicAnalyzeCaseResponse":
         if self.disposition == "CASE_CREATED":
-            if not all((self.case_id, self.risk, self.mode, self.status, self.initial_brief, self.initial_report)):
+            if not all((self.case_id, self.risk, self.mode, self.status, self.initial_brief, self.initial_report, self.analysis_status)):
                 raise ValueError("CASE_CREATED requires case summary fields and an initial_report reference.")
             if self.error is not None:
                 raise ValueError("CASE_CREATED must not include error.")
@@ -69,7 +71,7 @@ class PublicAnalyzeCaseResponse(PublicStrictModel):
             if self.risk != "NORMAL" or not self.initial_brief or self.error is not None:
                 raise ValueError("NO_CASE requires NORMAL risk and initial_brief without error.")
         else:
-            if any((self.case_id, self.risk, self.mode, self.status, self.initial_brief, self.initial_report)):
+            if any((self.case_id, self.risk, self.mode, self.status, self.initial_brief, self.initial_report, self.analysis_status)):
                 raise ValueError("FAILED must not include analysis or Case fields.")
             if self.error is None:
                 raise ValueError("FAILED requires error.")

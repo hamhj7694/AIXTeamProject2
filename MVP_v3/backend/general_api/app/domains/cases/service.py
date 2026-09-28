@@ -18,7 +18,7 @@ class AnalyzeCaseService:
         self.repository = repository
         self.report_builder = report_builder or InitialReportBuilder()
 
-    async def analyze(self, request: AnalyzeTextRequest) -> AnalyzeCaseResponse:
+    async def analyze(self, request: AnalyzeTextRequest, *, source_text: str | None = None, provisional: bool = False) -> AnalyzeCaseResponse:
         text = request.text.strip()
         if not text:
             raise ValueError("통화 내용을 입력하세요.")
@@ -43,11 +43,11 @@ class AnalyzeCaseService:
         # but the diagnosis projection below removes source text/evidence from
         # every structured payload that is sent to CSR/Context AI.
         diagnosis = project_diagnosis_for_case(diagnosis)
-        if diagnosis.risk_level is RiskLevel.NORMAL:
+        if diagnosis.risk_level is RiskLevel.NORMAL and not provisional:
             return AnalyzeCaseResponse(
                 disposition="NO_CASE", risk=RiskLevel.NORMAL,
                 initial_brief="현재 모델 판정 기준 미만입니다. 안전 확정을 의미하지 않으므로 의심 상황은 공식 채널로 확인하세요.",
-                diagnosis=diagnosis,
+                diagnosis=diagnosis, analysis_status="NO_CASE",
             )
 
         # Retry only a rolled-back Case INSERT collision, never repeat paid analysis.
@@ -65,12 +65,13 @@ class AnalyzeCaseService:
                         # Demo-only retention: this is the original input shown
                         # to an authorized Case reader.  It is never included
                         # in the AI support/snapshot contract.
-                        "input_text": text,
+                        "input_text": source_text or text,
                         "risk": diagnosis.risk_level.value,
                         "risk_score": diagnosis.risk_score,
                         "mode": "PREVENT", "status": "TRIAGE",
                         "case_name": diagnosis.context.incident_type or "보이스피싱 의심 사건",
                         "initial_brief": diagnosis.context.summary,
+                        "analysis_status": "IN_PROGRESS" if provisional else "COMPLETED",
                         "diagnosis": diagnosis.model_dump(mode="json"),
                         "initial_report": initial_report.model_dump(mode="json"),
                         "victim_transfer_status": "UNKNOWN",
@@ -88,6 +89,28 @@ class AnalyzeCaseService:
             except Exception as exc:
                 raise CasePersistenceError() from exc
 
+    async def complete_background_analysis(self, case_id: str, text: str) -> AnalyzeCaseResponse:
+        """Replace the provisional diagnosis in place; never create a second Case."""
+        current = await self.repository.get(case_id)
+        if current is None:
+            raise KeyError(case_id)
+        if current.get("analysis_status") != "IN_PROGRESS":
+            return self._created_response(current)
+        diagnosis = await self.ai_client.analyze(AnalyzeTextRequest(text=text.strip()))
+        if diagnosis.partial_failure:
+            raise AiServiceError("전체 통화 분석이 끝나지 않았습니다.", code="AI_ANALYSIS_FAILED", retryable=True)
+        diagnosis = project_diagnosis_for_case(diagnosis).model_copy(update={"case_id": case_id})
+        final_no_case = diagnosis.risk_level is RiskLevel.NORMAL
+        initial_report = self.report_builder.build(case_id, diagnosis)
+        updated = await self.repository.update_analysis(case_id, {
+            "risk": diagnosis.risk_level.value,
+            "risk_score": diagnosis.risk_score,
+            "initial_brief": "최종 분석 결과 Case 기준에 해당하지 않았습니다. 분석 기록은 보존됩니다." if final_no_case else diagnosis.context.summary,
+            "diagnosis": diagnosis.model_dump(mode="json"),
+            "analysis_status": "NO_CASE" if final_no_case else "COMPLETED",
+        }, initial_report.model_dump(mode="json"))
+        return self._created_response(updated)
+
     @staticmethod
     def _created_response(record: dict) -> AnalyzeCaseResponse:
         diagnosis = record["diagnosis"]
@@ -97,6 +120,7 @@ class AnalyzeCaseService:
             mode="PREVENT", status="TRIAGE", initial_brief=record["initial_brief"],
             diagnosis=diagnosis,
             initial_report=record["initial_report"],
+            analysis_status=record.get("analysis_status", "COMPLETED"),
         )
 
 

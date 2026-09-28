@@ -65,7 +65,7 @@ export const evidenceSummaries = (refs: ContextPanelItemV3['evidence_refs']): st
 export const SourceBadge: React.FC<{ source: string }> = ({ source }) => <span className="context-source-badge">{sourceLabels[source] ?? '기타 출처'}</span>;
 export const StatusBadge: React.FC<{ status: string }> = ({ status }) => <span className={`context-status-badge tone-${statusLabels[status] ? status.toLowerCase() : 'unknown'}`}>{statusLabels[status] ?? '상태 확인 필요'}</span>;
 
-export const MoreMenu: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => {
+export const MoreMenu: React.FC<{ label: string; children: React.ReactNode; secondaryTriggerLabel?: string; showMoreTrigger?: boolean }> = ({ label, children, secondaryTriggerLabel, showMoreTrigger = true }) => {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -82,8 +82,9 @@ export const MoreMenu: React.FC<{ label: string; children: React.ReactNode }> = 
     window.addEventListener('mousedown', close); window.addEventListener('keydown', close);
     return () => { window.removeEventListener('mousedown', close); window.removeEventListener('keydown', close); };
   }, [open]);
-  return <div className="context-more-menu" ref={root}>
-    <button ref={trigger} type="button" className="context-more-trigger" aria-label={label} aria-expanded={open} aria-controls={popoverId} onClick={() => setOpen((value) => !value)}><MoreHorizontal size={15}/></button>
+  return <div className={`context-more-menu ${secondaryTriggerLabel ? 'has-secondary-trigger' : ''}`} ref={root}>
+    {showMoreTrigger && <button ref={trigger} type="button" className="context-more-trigger" aria-label={label} aria-expanded={open} aria-controls={popoverId} onClick={() => setOpen((value) => !value)}><MoreHorizontal size={15}/></button>}
+    {secondaryTriggerLabel && <button ref={!showMoreTrigger ? trigger : undefined} type="button" className="context-more-secondary-trigger" aria-label={label} aria-expanded={open} aria-controls={popoverId} onClick={() => setOpen((value) => !value)}>{secondaryTriggerLabel}</button>}
     {open && <div id={popoverId} className="context-more-popover" role="group" aria-label={label} onClick={(event) => { if ((event.target as HTMLElement).closest('button:not(:disabled)')) setOpen(false); }}>{children}</div>}
   </div>;
 };

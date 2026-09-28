@@ -36,6 +36,8 @@ export const CaseListPane: React.FC<Props> = ({ cases, selectedCaseId, loading, 
   React.useEffect(() => { setNewCaseIds(new Set(cases.filter((item) => isNewCase(item.case_id)).map((item) => item.case_id))); }, [cases]);
   React.useEffect(() => { const sync = () => setNewCaseIds(new Set(cases.filter((item) => isNewCase(item.case_id)).map((item) => item.case_id))); window.addEventListener(newCaseStateEventName, sync); return () => window.removeEventListener(newCaseStateEventName, sync); }, [cases]);
   const [pendingAnalysisCount, setPendingAnalysisCount] = useState(getPendingAnalysisCount);
+  const persistedAnalysisCount = cases.filter((item) => item.analysis_status === 'IN_PROGRESS').length;
+  const visiblePendingAnalysisCount = Math.max(pendingAnalysisCount, persistedAnalysisCount);
   useEffect(() => {
     const syncPendingAnalysis = () => setPendingAnalysisCount(getPendingAnalysisCount());
     window.addEventListener(analysisPendingEventName, syncPendingAnalysis);
@@ -85,7 +87,7 @@ export const CaseListPane: React.FC<Props> = ({ cases, selectedCaseId, loading, 
         {renameError && <span className="case-item-rename-error" role="alert">{renameError}</span>}
         <span className="case-item-rename-actions"><button type="button" onClick={cancelRename} disabled={renameBusy}>취소</button><button type="submit" disabled={renameBusy || !renameValue.trim()}>저장</button></span>
       </form> : <>
-        <span className="case-item-top"><button type="button" className="case-item-id-open" onClick={() => openCase(item.case_id)}><b>{item.case_id}</b></button><span className="case-item-top-actions"><span className={`risk-pill ${caseStateTone(caseState(item))}`}>{caseStateLabel(caseState(item))}</span><button type="button" className="case-item-edit" onClick={() => startRename(item)} aria-label={`${incidentTitle(item)} 사건 이름 수정`} title="사건 이름 수정"><Pencil size={14}/></button></span></span>
+        <span className="case-item-top"><button type="button" className="case-item-id-open" onClick={() => openCase(item.case_id)}><b>{item.case_id}</b></button><span className="case-item-top-actions"><span className={`risk-pill ${caseStateTone(caseState(item))}`}>{item.analysis_status === 'NO_CASE' ? '최종 분석 기록' : item.analysis_status === 'FAILED' ? '후속 분석 실패' : caseStateLabel(caseState(item))}</span><button type="button" className="case-item-edit" onClick={() => startRename(item)} aria-label={`${incidentTitle(item)} 사건 이름 수정`} title="사건 이름 수정"><Pencil size={14}/></button></span></span>
         <button type="button" className="case-list-item-open" onClick={() => openCase(item.case_id)}>{caseContent}</button>{newCaseIds.has(item.case_id) && <span className="case-new-badge">새 Case</span>}
       </>}
     </div>;
@@ -104,7 +106,7 @@ export const CaseListPane: React.FC<Props> = ({ cases, selectedCaseId, loading, 
     </div>
     <div className="case-list-scroll">
       <div className="case-list-table-header" aria-hidden="true"><span>사건 ID</span><span>사건</span><span>업무 상태</span><span>최초 생성</span><span>최근 업데이트</span><span>상태·편집</span></div>
-      {pendingAnalysisCount > 0 && <div className="case-analysis-pending-notice" role="status" aria-live="polite"><Loader2 size={16} className="spin"/><span><strong>분석 중인 케이스가 있습니다.</strong><small>{pendingAnalysisCount}건의 분석이 진행 중이며, 분석 결과에 따라 Case Room이 생성되거나 생성되지 않습니다.</small></span></div>}
+      {visiblePendingAnalysisCount > 0 && <div className="case-analysis-pending-notice" role="status" aria-live="polite"><Loader2 size={16} className="spin"/><span><strong>전체 통화 분석이 진행 중입니다.</strong><small>{visiblePendingAnalysisCount}건의 잠정 Case에 분석 결과를 이어서 반영하고 있습니다.</small></span></div>}
       {loading && Array.from({ length: 5 }).map((_, index) => <div className="case-skeleton" key={index}/>) }
       {!loading && error && <div className="pane-state error"><AlertCircle size={20}/><strong>사건을 불러오지 못했습니다.</strong><span>{error}</span><button onClick={onRetry}>다시 시도</button></div>}
       {!loading && !error && rows.length === 0 && <div className="pane-state"><strong>현재 대응 중인 사건이 없습니다.</strong><span>위험 이벤트가 Case로 생성되면 여기에 표시됩니다.</span></div>}

@@ -207,6 +207,7 @@ export interface AnalyzeCaseResponse {
   mode?: 'PREVENT' | 'RECOVERY' | null;
   status?: string | null;
   initial_brief?: string | null;
+  analysis_status?: 'IN_PROGRESS' | 'COMPLETED' | 'NO_CASE' | null;
   initial_report?: { report_id: string; case_id: string; report_version: number } | null;
   error?: { code: string; message: string; retryable: boolean } | null;
 }
@@ -223,6 +224,7 @@ export interface CaseSummary {
   risk: RiskLevel;
   mode: CaseMode;
   status: CaseStatus;
+  analysis_status: 'IN_PROGRESS' | 'COMPLETED' | 'NO_CASE' | 'FAILED';
   initial_brief: string;
   primary_assignee: string | null;
   victim_transfer_status: 'UNKNOWN' | 'YES' | 'NO';
@@ -276,6 +278,7 @@ export interface StoredCase {
   risk_score: number;
   mode: 'PREVENT' | 'RECOVERY' | 'CLOSED';
   status: string;
+  analysis_status: 'IN_PROGRESS' | 'COMPLETED' | 'NO_CASE' | 'FAILED';
   initial_brief: string;
   primary_assignee?: string | null;
   victim_transfer_status?: 'UNKNOWN' | 'YES' | 'NO';

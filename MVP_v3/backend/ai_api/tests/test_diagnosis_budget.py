@@ -28,8 +28,18 @@ class DiagnosisBudgetTest(unittest.TestCase):
             "OPENAI_MAX_TOTAL_TOKENS_PER_DIAGNOSIS": "invalid",
         }, clear=False):
             budget = DiagnosisLlmBudget.from_environment()
-        self.assertEqual(budget.max_calls, 256)
-        self.assertEqual(budget.max_total_tokens, 512_000)
+        self.assertEqual(budget.max_calls, 1_024)
+        self.assertEqual(budget.max_total_tokens, 2_000_000)
+        self.assertEqual(budget.max_turns, 1_000)
+        self.assertEqual(budget.max_input_chars, 500_000)
+        self.assertEqual(budget.max_duration_seconds, 1_800.0)
+
+    def test_deadline_stops_runaway_analysis(self) -> None:
+        import time
+
+        budget = DiagnosisLlmBudget(9, 16_000, 8, 6_000, max_duration_seconds=1, started_at=time.monotonic() - 2)
+        with self.assertRaisesRegex(DiagnosisBudgetExceededError, "안전 시간"):
+            budget.reserve(input_text="짧은 입력", max_output_tokens=100)
 
 
 if __name__ == "__main__":

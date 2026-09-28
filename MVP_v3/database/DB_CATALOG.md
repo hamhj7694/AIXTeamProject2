@@ -87,6 +87,7 @@ Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 17행
 | `risk_score` | decimal(9,6) | NO | — |  | — |
 | `mode` | enum('PREVENT','RECOVERY','CLOSED') | NO | PREVENT |  | — |
 | `status` | enum('NEW','TRIAGE','VERIFYING','IN_PROGRESS','CLOSED') | NO | TRIAGE |  | 자원별 처리 상태 |
+| `analysis_status` | enum('IN_PROGRESS','COMPLETED','NO_CASE','FAILED') | NO | COMPLETED | migration 030 | 전체 통화 후속 분석 상태. `NO_CASE`도 분석 기록으로 보존 |
 | `version` | int | NO | 1 |  | 낙관적 잠금/수정 버전 |
 | `context_revision` | bigint | NO | 1 |  | 의미 데이터 변경 revision |
 | `initial_brief` | text | NO | — |  | — |

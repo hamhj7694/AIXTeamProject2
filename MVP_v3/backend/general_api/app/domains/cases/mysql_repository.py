@@ -199,6 +199,7 @@ class MySqlCaseRepository:
             "case_id": case_row["case_id"], "version": case_row.get("version", 1), "case_name": case_row.get("case_name"), "context_revision": int(case_row.get("context_revision", 1)), "client_request_id": case_row["client_request_id"],
             "input_text": case_row["input_text"], "risk": case_row["risk_level"],
             "risk_score": float(case_row["risk_score"]), "mode": case_row["mode"], "status": case_row["status"],
+            "analysis_status": case_row.get("analysis_status", "COMPLETED"),
             "initial_brief": case_row["initial_brief"], "diagnosis": self._json(case_row["diagnosis_json"]),
             "victim_transfer_status": case_row.get("victim_transfer_status") or "UNKNOWN",
             "actual_loss_amount_krw": case_row.get("actual_loss_amount_krw"),
@@ -224,10 +225,10 @@ class MySqlCaseRepository:
                 async with connection.cursor() as cursor:
                     await cursor.execute(
                         """INSERT INTO cases
-                           (case_id, case_name, client_request_id, risk_level, risk_score, mode, status, version, initial_brief, diagnosis_json, created_at, updated_at)
-                           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                           (case_id, case_name, client_request_id, risk_level, risk_score, mode, status, analysis_status, version, initial_brief, diagnosis_json, created_at, updated_at)
+                           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                         (record["case_id"], record.get("case_name"), record.get("client_request_id"), record["risk"], record["risk_score"],
-                         record["mode"], record["status"], record.get("version", 1), record["initial_brief"], json.dumps(diagnosis, ensure_ascii=False),
+                         record["mode"], record["status"], record.get("analysis_status", "COMPLETED"), record.get("version", 1), record["initial_brief"], json.dumps(diagnosis, ensure_ascii=False),
                          created_at, updated_at),
                     )
                     case_inserted = True
@@ -294,6 +295,94 @@ class MySqlCaseRepository:
                     raise CaseCreationConflictError() from exc
                 raise
         return deepcopy(record)
+
+    async def update_analysis(self, case_id: str, changes: dict[str, Any], initial_report: dict[str, Any]) -> dict[str, Any]:
+        pool = await self._get_pool()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        report_id = initial_report["report_id"]
+        async with pool.acquire() as connection:
+            try:
+                async with connection.cursor(aiomysql.DictCursor) as cursor:
+                    await cursor.execute("SELECT version,context_revision FROM cases WHERE case_id=%s AND deleted_at IS NULL FOR UPDATE", (case_id,))
+                    case_row = await cursor.fetchone()
+                    if not case_row:
+                        raise KeyError(case_id)
+                    next_version = int(case_row["version"]) + 1
+                    source_revision = int(case_row.get("context_revision", 1)) + 1
+                    await cursor.execute(
+                        """UPDATE cases SET risk_level=%s,risk_score=%s,initial_brief=%s,diagnosis_json=%s,
+                           analysis_status=%s,context_revision=context_revision+1,version=%s,updated_at=%s WHERE case_id=%s""",
+                        (changes["risk"], changes["risk_score"], changes["initial_brief"],
+                         json.dumps(changes["diagnosis"], ensure_ascii=False), changes["analysis_status"],
+                         next_version, now, case_id),
+                    )
+                    diagnosis = changes["diagnosis"]
+                    for table in ("case_context_signals", "case_semantic_relations", "case_semantic_atoms", "context_features", "analysis_segments"):
+                        await cursor.execute(f"DELETE FROM {table} WHERE case_id=%s", (case_id,))
+                    for window in diagnosis.get("windows", []):
+                        await cursor.execute(
+                            """INSERT INTO analysis_segments
+                               (segment_id,case_id,start_turn,end_turn,segment_text,risk_score,model_label,evidence_json,created_at)
+                               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                            (f"{case_id}-{window['segment_id']}", case_id, window["start_turn"], window["end_turn"],
+                             window["text"], window["final_risk_score"], window["label"],
+                             json.dumps(diagnosis.get("evidence", []), ensure_ascii=False), now),
+                        )
+                    for key, value in diagnosis.get("features", {}).items():
+                        await cursor.execute(
+                            "INSERT INTO context_features (case_id,segment_id,feature_key,feature_value,source,created_at) VALUES (%s,NULL,%s,%s,'DIAGNOSIS_FUSION',%s)",
+                            (case_id, key, float(value), now),
+                        )
+                    for atom in diagnosis.get("semantic_atoms", []):
+                        await cursor.execute(
+                            """INSERT INTO case_semantic_atoms
+                               (case_id,atom_id,atom_class,predicate,source_turn_id,semantic_fingerprint,payload_json,source_revision,created_at)
+                               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                            (case_id, atom["atom_id"], atom["atom_class"], atom["predicate"], atom["source_turn_id"],
+                             atom["semantic_fingerprint"], json.dumps(atom, ensure_ascii=False), source_revision, now),
+                        )
+                    for relation in diagnosis.get("semantic_relations", []):
+                        await cursor.execute(
+                            """INSERT INTO case_semantic_relations
+                               (case_id,relation_id,relation_type,source_atom_id,target_atom_id,confidence,payload_json,source_revision,created_at)
+                               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                            (case_id, relation["relation_id"], relation["relation_type"], relation["source_atom_id"],
+                             relation["target_atom_id"], relation["confidence"], json.dumps(relation, ensure_ascii=False), source_revision, now),
+                        )
+                    for signal in diagnosis.get("context_signals", []):
+                        await cursor.execute(
+                            """INSERT INTO case_context_signals
+                               (case_id,signal_id,signal_code,severity,confidence,claim_status,visibility,payload_json,source_revision,created_at)
+                               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                            (case_id, signal["signal_id"], signal["signal_code"], signal["severity"], signal["confidence"],
+                             signal["claim_status"], signal["visibility"], json.dumps(signal, ensure_ascii=False), source_revision, now),
+                        )
+                    await cursor.execute("SELECT report_version FROM case_reports WHERE case_id=%s AND report_type='LIVE' FOR UPDATE", (case_id,))
+                    report_row = await cursor.fetchone()
+                    next_report_version = int(report_row["report_version"]) + 1 if report_row else 1
+                    if report_row:
+                        await cursor.execute("DELETE FROM case_report_sections WHERE report_id=%s", (report_id,))
+                        await cursor.execute("UPDATE case_reports SET report_version=%s,updated_at=%s WHERE report_id=%s", (next_report_version, now, report_id))
+                    else:
+                        await cursor.execute("INSERT INTO case_reports (report_id,case_id,report_type,report_version,created_at,updated_at) VALUES (%s,%s,'LIVE',%s,%s,%s)", (report_id, case_id, next_report_version, now, now))
+                    for section in initial_report["sections"]:
+                        await cursor.execute("INSERT INTO case_report_sections (report_id,section_key,content_json,section_version,updated_at) VALUES (%s,%s,%s,%s,%s)", (report_id, section["section_key"], json.dumps(section["content"], ensure_ascii=False), next_report_version, now))
+                    await cursor.execute("INSERT INTO case_events (case_id,event_type,actor_type,payload_json,occurred_at) VALUES (%s,'CASE_ANALYSIS_UPDATED','SYSTEM',%s,%s)", (case_id, json.dumps({"analysis_status": changes["analysis_status"], "version": next_version}, ensure_ascii=False), now))
+                await connection.commit()
+            except Exception:
+                await connection.rollback()
+                raise
+        updated = await self.get(case_id)
+        if updated is None:
+            raise KeyError(case_id)
+        return updated
+
+    async def list_pending_analyses(self) -> list[dict[str, Any]]:
+        pool = await self._get_pool()
+        async with pool.acquire() as connection, connection.cursor() as cursor:
+            await cursor.execute("SELECT case_id FROM cases WHERE analysis_status='IN_PROGRESS' AND deleted_at IS NULL ORDER BY created_at")
+            case_ids = [row[0] for row in await cursor.fetchall()]
+        return [record for case_id in case_ids if (record := await self.get(case_id)) is not None]
 
     async def update_case(self, case_id: str, expected_version: int, changes: dict[str, Any]) -> dict[str, Any]:
         pool = await self._get_pool()
