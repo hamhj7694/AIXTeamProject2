@@ -61,6 +61,41 @@ class PublicCaseContextProjection(PublicWorkflowModel):
     projection_revision: int | None = Field(default=None, ge=1)
 
 
+class PublicRightPanelItem(PublicWorkflowModel):
+    """One bank-facing, source-attributed row in the current case snapshot."""
+    item_id: str = Field(min_length=1, max_length=160)
+    section: Literal["EXPOSURE", "CONTACT", "SIGNAL", "VERIFICATION", "WORK", "ACTIVITY"]
+    semantic_key: str = Field(min_length=1, max_length=160)
+    title: str = Field(min_length=1, max_length=500)
+    detail: str = Field(default="", max_length=1200)
+    source_badge: Literal["상대방 주장", "상대방 요구", "고객 진술", "고객 부인", "미확인", "공식 확인", "직원 기록", "분석 정황"] | None = None
+    origin: Literal["AI_ANALYSIS", "CUSTOMER_ANSWER", "VERIFICATION", "STAFF_ACTION", "STAFF_ADDED", "TASK"] = "AI_ANALYSIS"
+    status: str | None = Field(default=None, max_length=40)
+    occurred_at: str | None = Field(default=None, max_length=64)
+    evidence_refs: list[str] = Field(default_factory=list, max_length=20)
+    actor_id: str | None = Field(default=None, max_length=64)
+    version: int | None = Field(default=None, ge=1)
+
+
+class PublicRightPanelCategory(PublicWorkflowModel):
+    key: str = Field(min_length=1, max_length=64)
+    label: str = Field(min_length=1, max_length=80)
+    items: list[PublicRightPanelItem] = Field(default_factory=list, max_length=100)
+
+
+class PublicRightPanelProjection(PublicWorkflowModel):
+    schema_version: Literal["right-panel.v1"] = "right-panel.v1"
+    current_case_summary: str = ""
+    exposure: list[PublicRightPanelItem] = Field(default_factory=list, max_length=100)
+    contact_information: list[PublicRightPanelItem] = Field(default_factory=list, max_length=100)
+    fraud_signals: list[PublicRightPanelCategory] = Field(default_factory=list, max_length=20)
+    verification: list[PublicRightPanelItem] = Field(default_factory=list, max_length=100)
+    incomplete_work: list[PublicRightPanelItem] = Field(default_factory=list, max_length=100)
+    completed_work: list[PublicRightPanelItem] = Field(default_factory=list, max_length=100)
+    activity: list[PublicRightPanelItem] = Field(default_factory=list, max_length=100)
+    source_revision: int | None = Field(default=None, ge=1)
+
+
 class PublicUnresolvedItemResponse(PublicWorkflowModel):
     target_field: str
     description: str
@@ -73,6 +108,7 @@ class PublicCaseSupportSnapshotResponse(PublicWorkflowModel):
     available: bool
     case_brief: PublicCaseSupportBrief | None = None
     case_context: PublicCaseContextProjection | None = None
+    right_panel: PublicRightPanelProjection | None = None
     recommended_questions: list[PublicQuestionCandidateResponse] = Field(default_factory=list)
     unresolved_items: list[PublicUnresolvedItemResponse] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)

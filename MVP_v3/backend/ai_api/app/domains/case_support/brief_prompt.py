@@ -10,7 +10,7 @@ from contracts.ai_internal.mvp_workflow import CaseBrief
 from contracts.diagnosis import DiagnosisResult
 
 
-CASE_BRIEF_PROMPT_VERSION = "current_case_snapshot_v2"
+CASE_BRIEF_PROMPT_VERSION = "current_case_snapshot_v3"
 
 CASE_BRIEF_OUTPUT_SCHEMA = {
     "type": "object",
@@ -34,9 +34,10 @@ def build_case_brief_prompt(diagnosis: DiagnosisResult, brief: CaseBrief) -> tup
 4. 가장 중요한 미확인 사항 또는 다음 확인 포인트는 사건 대응에 필요한 것만 최대 1~2개 언급합니다.
 
 [사실 상태 표현]
-- CONFIRMED/OBSERVED는 확인된 사실로 서술합니다.
-- CLAIMED/REPORTED는 '상대방은 ~라고 주장했습니다', '고객은 ~라고 설명했습니다'처럼 출처를 보존합니다.
-- PROPOSED/UNKNOWN/MISSING은 사실처럼 단정하지 말고 필요한 경우 '~여부는 아직 확인되지 않았습니다'로 표현합니다.
+- 고객 답변은 '고객은 ~라고 답했습니다'처럼 출처를 보존합니다.
+- 상대방의 주장은 상대방의 주장으로, 직원 메모는 직원 기록으로 표현합니다.
+- 레거시 Fact 상태값만으로 내용을 사실이나 공식 확인으로 표현하지 않습니다.
+- 공식 확인은 실제 근거 출처가 입력된 경우에만 표시합니다.
 - REQUESTED/INSTRUCTED는 '요구했다', '지시했다', '유도했다'로 표현하며 고객이 실제 수행한 것으로 바꾸지 않습니다.
 - COMPLETED는 실제 완료 근거가 있을 때만 '송금했다', '제공했다', '설치했다'라고 씁니다.
 

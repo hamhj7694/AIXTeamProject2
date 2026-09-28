@@ -11,7 +11,7 @@ import aiomysql
 
 
 ClaimOutcome = Literal['CLAIMED', 'CACHED', 'IN_PROGRESS', 'STALE']
-CASE_SUPPORT_SCHEMA_VERSION = 'case-support.v3'
+CASE_SUPPORT_SCHEMA_VERSION = 'case-support.v5'
 
 
 @dataclass(frozen=True)

@@ -34,13 +34,18 @@ class CustomerAnswerStructuringTest(unittest.TestCase):
         self.assertFalse(result.unresolved)
 
     def test_ambiguous_answer_is_preserved_as_unresolved(self) -> None:
-        raw_answer = "아마 아직 안 했던 것 같아요"
-        result = self.service.structure_answer(TargetField.TRANSFER_STATUS, raw_answer)
-        self.assertTrue(result.unresolved)
-        self.assertIsNone(result.structured_value)
-        self.assertEqual(result.raw_answer, raw_answer)
-        self.assertGreaterEqual(result.confidence, 0)
-        self.assertLessEqual(result.confidence, 1)
+        for target, raw_answer in (
+            (TargetField.TRANSFER_STATUS, "아마 아직 안 했던 것 같아요"),
+            (TargetField.AUTHENTICATION_INFORMATION_EXPOSURE, "OTP를 제공했는지 기억이 안 나요"),
+            (TargetField.AUTHENTICATION_INFORMATION_EXPOSURE, "인증번호를 보냈는지 기억이 나지 않아요"),
+        ):
+            with self.subTest(target=target, raw_answer=raw_answer):
+                result = self.service.structure_answer(target, raw_answer)
+                self.assertTrue(result.unresolved)
+                self.assertIsNone(result.structured_value)
+                self.assertEqual(result.raw_answer, raw_answer)
+                self.assertGreaterEqual(result.confidence, 0)
+                self.assertLessEqual(result.confidence, 1)
 
     def test_remote_app_installation_is_distinct_from_installation_request(self) -> None:
         for answer, expected in (("설치했어요", "INSTALLED"),

@@ -22,8 +22,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, model_validator
-from .domains.cases.context_items import Section, ContextItemChange, ContextItemConflictError
+from .domains.cases.context_items import (
+    Section, RightPanelSection, ContextItem, ContextItemChange, ContextItemConflictError,
+)
 from .domains.cases.context_item_repository import ContextItemRepository, InMemoryContextItemRepository
+from .domains.cases.right_panel_projection import build_right_panel_projection
 from .core.actor_context import normalize_legacy_actor
 
 from contracts.diagnosis import AnalyzeTextRequest
@@ -103,6 +106,7 @@ from contracts.public_api.case_workflow import (
     PublicCustomerVerificationResult,
     PublicQuestionCandidateResponse,
     PublicCaseContextProjection,
+    PublicRightPanelProjection,
     PublicCaseSupportBrief,
     PublicCaseSupportSnapshotResponse,
     PublicUnresolvedItemResponse,
@@ -1030,23 +1034,35 @@ def build_question_recommendation_context(facts: list[dict], questions: list[dic
 
 
 def question_fields_answered_by_messages(messages: list[dict]) -> set[str]:
-    """Conservative pre-extraction guard against asking for an answer already stated by a human."""
+    """Suppress a basic question only when a human message contains a clear answer.
+
+    Keyword overlap is not enough: e.g. ``송금했는지 모르겠어요`` contains the
+    same verb as a completed transfer, but is explicitly unresolved. Reuse the
+    case-support answer parser so this guard follows the same conservative
+    polarity/uncertainty rules as the typed question policy.
+    """
     answered: set[str] = set()
+    answerable_targets = {
+        "transfer_status": TargetField.TRANSFER_STATUS,
+        "remote_control_app": TargetField.REMOTE_CONTROL_APP,
+        "authentication_information_exposure": TargetField.AUTHENTICATION_INFORMATION_EXPOSURE,
+        "personal_information_exposure": TargetField.PERSONAL_INFORMATION_EXPOSURE,
+    }
+    target_markers = {
+        "transfer_status": ("송금", "이체", "입금", "돈을보"),
+        "remote_control_app": ("원격제어", "원격앱", "애니데스크", "팀뷰어", "화면공유", "원격지원"),
+        "authentication_information_exposure": ("otp", "인증번호", "인증정보", "비밀번호", "보안코드"),
+        "personal_information_exposure": ("주민등록번호", "계좌번호", "개인정보", "민감정보"),
+    }
     for message in messages:
         if message.get("actor_type") not in {"CUSTOMER", "BANK_STAFF"} or message.get("message_kind", "CHAT") != "CHAT":
             continue
         text = re.sub(r"\s+", "", str(message.get("content", ""))).casefold()
-        asserted = any(term in text for term in ("했", "보냈", "알려", "제공", "설치", "깔았", "안했", "않았", "없어요", "없습니다"))
-        if not asserted:
-            continue
-        if any(term in text for term in ("송금", "이체", "입금", "돈을보")):
-            answered.add("transfer_status")
-        if any(term in text for term in ("원격제어", "원격앱", "애니데스크", "팀뷰어")):
-            answered.add("remote_control_app")
-        if any(term in text for term in ("otp", "인증번호", "비밀번호", "보안코드")):
-            answered.add("authentication_information_exposure")
-        if any(term in text for term in ("주민등록번호", "계좌번호", "개인정보")):
-            answered.add("personal_information_exposure")
+        for field, target in answerable_targets.items():
+            if not any(term in text for term in target_markers[field]):
+                continue
+            if CaseSnapshotAiAdapter.is_clear_customer_answer(field, text):
+                answered.add(field)
         if any(term in text for term in ("검찰", "경찰", "금감원", "금융감독원", "은행직원")) and any(term in text for term in ("사칭", "이라고", "라며", "전화")):
             answered.add("claimed_organization")
     return answered
@@ -1057,19 +1073,27 @@ def question_fields_covered_by_case(facts: list[dict], messages: list[dict]) -> 
 
     This is intentionally limited to baseline question fields.  A contextual AI
     question still has to pass the prompt and text-level duplicate guards, while
-    canonical questions are suppressed as soon as the case already contains a
-    confirmed/proposed fact or an explicit human answer.
+    canonical questions are suppressed only by a clear human answer or a
+    confirmed, semantically sufficient fact. PROPOSED facts are leads, not
+    answers, and a confirmed request to install an app is not proof of install.
     """
     covered = question_fields_answered_by_messages(messages)
     for fact in facts:
-        if fact.get("status") not in {"CONFIRMED", "PROPOSED"}:
+        if fact.get("status") != "CONFIRMED":
             continue
         try:
             field = normalize_target_field(str(fact.get("field", "")))
         except ValueError:
             continue
-        if field in BASELINE_QUESTION_FIELDS:
-            covered.add(field)
+        if field not in BASELINE_QUESTION_FIELDS:
+            continue
+        if field in AUTONOMOUS_P0_QUESTION_FIELDS:
+            # Status confirms the recorded statement, not automatically the
+            # underlying event. Parse its display value to distinguish an
+            # actual answer (including a clear negative) from a demand/request.
+            if not CaseSnapshotAiAdapter.is_clear_customer_answer(field, str(fact.get("value", ""))):
+                continue
+        covered.add(field)
     return covered
 
 
@@ -1193,6 +1217,9 @@ def exclude_handled_question_candidates(
 def to_public_case_support_snapshot(
     case_id: str, payload: dict, *, available: bool, source_revision: int | None = None,
     projection_revision: int | None = None, projection_status: str = "UNCACHED",
+    case: dict | None = None, questions: list[dict] | None = None,
+    verifications: list[dict] | None = None, actions: list[dict] | None = None,
+    tasks: list[dict] | None = None, include_right_panel: bool = False,
 ) -> PublicCaseSupportSnapshotResponse:
     brief = payload.get("case_brief") or None
     context = payload.get("case_context") or None
@@ -1203,6 +1230,10 @@ def to_public_case_support_snapshot(
             risk_level=brief["risk_level"], risk_score=brief["risk_score"], next_checks=brief.get("next_checks", []),
         ) if brief else None,
         case_context=PublicCaseContextProjection.model_validate(context) if context else None,
+        right_panel=PublicRightPanelProjection.model_validate(build_right_panel_projection(
+            case=case, case_context=context, questions=questions, verifications=verifications,
+            actions=actions, tasks=tasks, source_revision=source_revision,
+        )) if include_right_panel and case is not None else None,
         recommended_questions=[PublicQuestionCandidateResponse(
             question_id=item["question_id"], target_field=item["target_field"],
             question_text=item["question"], reason=item["reason"], priority=item["priority"],
@@ -1224,7 +1255,7 @@ def to_public_case_support_snapshot(
     )
 
 
-async def _read_case_support_source(case_id: str, *, attempts: int = 3) -> tuple[int, dict, list[dict], list[dict], list[dict], list[dict]]:
+async def _read_case_support_source(case_id: str, *, attempts: int = 3) -> tuple[int, dict, list[dict], list[dict], list[dict], list[dict], list[dict]]:
     """Read a source set whose semantic revision did not change mid-read."""
     for _ in range(attempts):
         case = await repository.get(case_id)
@@ -1242,7 +1273,9 @@ async def _read_case_support_source(case_id: str, *, attempts: int = 3) -> tuple
             raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."})
         after = int(latest.get("context_revision", 1))
         if before == after:
-            return after, latest, facts, questions, verifications, actions
+            task_rows = [task.model_dump(mode="json") if hasattr(task, "model_dump") else dict(task)
+                         for task in getattr(resources, "tasks", [])]
+            return after, latest, facts, questions, verifications, actions, task_rows
     raise RuntimeError("CASE_CONTEXT_SOURCE_CHANGED")
 
 
@@ -1265,7 +1298,8 @@ def _case_support_ai_input(case_id: str, case: dict, facts: list[dict], question
         "verifications": [{
             "verification_task_id": item["verification_task_id"], "target": item.get("target", ""),
             "claim": item.get("claim", ""), "status": item.get("status", "PENDING"),
-            "result_summary": item.get("result_summary"),
+            "result_summary": item.get("result_summary"), "evidence_url": item.get("evidence_url"),
+            "rag_source": item.get("rag_source"),
         } for item in verifications],
         "actions": [{
             "action_id": item["action_id"], "action_type": item.get("action_type", "OTHER"),
@@ -1274,14 +1308,14 @@ def _case_support_ai_input(case_id: str, case: dict, facts: list[dict], question
     }
 
 
-async def get_case_support_snapshot(case_id: str) -> PublicCaseSupportSnapshotResponse:
+async def get_case_support_snapshot(case_id: str, *, include_right_panel: bool = False) -> PublicCaseSupportSnapshotResponse:
     # Mock/in-memory repositories keep the original uncached path. Production
     # MySQL uses durable revision + DB lease so multiple workers share one result.
     if isinstance(repository, MySqlCaseRepository):
         projections = ContextProjectionRepository(repository)
         for _ in range(3):
             try:
-                revision, case, facts, questions, verifications, actions = await _read_case_support_source(case_id)
+                revision, case, facts, questions, verifications, actions, tasks = await _read_case_support_source(case_id)
             except RuntimeError:
                 continue
             claim = await projections.claim(case_id, revision)
@@ -1289,16 +1323,22 @@ async def get_case_support_snapshot(case_id: str) -> PublicCaseSupportSnapshotRe
                 continue
             if claim.outcome == "CACHED":
                 return to_public_case_support_snapshot(case_id, claim.last_success_payload or {}, available=True,
-                    source_revision=revision, projection_revision=claim.last_success_revision, projection_status="CURRENT")
+                    source_revision=revision, projection_revision=claim.last_success_revision, projection_status="CURRENT",
+                    case=case, questions=questions, verifications=verifications, actions=actions, tasks=tasks,
+                    include_right_panel=include_right_panel)
             if claim.outcome == "IN_PROGRESS":
                 if claim.last_success_payload is not None:
                     cached = {**claim.last_success_payload, "warnings": [
                         *claim.last_success_payload.get("warnings", []), "최신 변경사항을 반영 중이며 직전 정상 사건 맥락을 표시합니다.",
                     ]}
                     return to_public_case_support_snapshot(case_id, cached, available=True,
-                        source_revision=revision, projection_revision=claim.last_success_revision, projection_status="UPDATING")
-                return PublicCaseSupportSnapshotResponse(case_id=case_id, available=False,
-                    warnings=["사건 맥락을 처음 정리하고 있습니다."], source_revision=revision, projection_status="UPDATING")
+                        source_revision=revision, projection_revision=claim.last_success_revision, projection_status="UPDATING",
+                        case=case, questions=questions, verifications=verifications, actions=actions, tasks=tasks,
+                        include_right_panel=include_right_panel)
+                return to_public_case_support_snapshot(case_id, {}, available=False,
+                    source_revision=revision, projection_status="UPDATING", case=case,
+                    questions=questions, verifications=verifications, actions=actions, tasks=tasks,
+                    include_right_panel=include_right_panel)
             try:
                 payload = await service.ai_client.build_case_support_snapshot(
                     _case_support_ai_input(case_id, case, facts, questions, verifications, actions)
@@ -1310,12 +1350,18 @@ async def get_case_support_snapshot(case_id: str) -> PublicCaseSupportSnapshotRe
                         *claim.last_success_payload.get("warnings", []), str(exc), "최신 반영에 실패해 직전 정상 사건 맥락을 표시합니다.",
                     ]}
                     return to_public_case_support_snapshot(case_id, cached, available=True,
-                        source_revision=revision, projection_revision=claim.last_success_revision, projection_status="STALE")
-                return PublicCaseSupportSnapshotResponse(case_id=case_id, available=False, warnings=[str(exc)],
-                    source_revision=revision, projection_status="FAILED")
+                        source_revision=revision, projection_revision=claim.last_success_revision, projection_status="STALE",
+                        case=case, questions=questions, verifications=verifications, actions=actions, tasks=tasks,
+                        include_right_panel=include_right_panel)
+                return to_public_case_support_snapshot(case_id, {}, available=False,
+                    source_revision=revision, projection_status="FAILED", case=case,
+                    questions=questions, verifications=verifications, actions=actions, tasks=tasks,
+                    include_right_panel=include_right_panel)
             if await projections.complete(case_id, revision, claim.lease_token or "", payload):
                 return to_public_case_support_snapshot(case_id, payload, available=True,
-                    source_revision=revision, projection_revision=revision, projection_status="CURRENT")
+                    source_revision=revision, projection_revision=revision, projection_status="CURRENT",
+                    case=case, questions=questions, verifications=verifications, actions=actions, tasks=tasks,
+                    include_right_panel=include_right_panel)
             # Data changed during generation; never publish this obsolete result.
         return PublicCaseSupportSnapshotResponse(case_id=case_id, available=False,
             warnings=["사건 정보가 연속으로 변경되어 최신 맥락 반영을 다시 시도합니다."], projection_status="UPDATING")
@@ -1326,20 +1372,31 @@ async def get_case_support_snapshot(case_id: str) -> PublicCaseSupportSnapshotRe
     questions = await repository.list_customer_questions(case_id)
     verifications = await repository.list_verifications(case_id)
     actions = await repository.list_actions(case_id)
+    task_rows: list[dict] = []
     try:
         resources = await case_context_v2_repository().list_resources(case_id)
         facts, actions = merge_support_records(resources, [], actions)
+        task_rows = [task.model_dump(mode="json") if hasattr(task, "model_dump") else dict(task)
+                     for task in getattr(resources, "tasks", [])]
         payload = await service.ai_client.build_case_support_snapshot(
             _case_support_ai_input(case_id, case, facts, questions, verifications, actions)
         )
-        return to_public_case_support_snapshot(case_id, payload, available=True)
+        return to_public_case_support_snapshot(case_id, payload, available=True,
+            source_revision=int(case.get("context_revision", 1)), case=case, questions=questions,
+            verifications=verifications, actions=actions, tasks=task_rows,
+            include_right_panel=include_right_panel)
     except AiServiceError as exc:
-        return PublicCaseSupportSnapshotResponse(case_id=case_id, available=False, warnings=[str(exc)])
+        return to_public_case_support_snapshot(case_id, {}, available=False,
+            source_revision=int(case.get("context_revision", 1)), projection_status="FAILED",
+            case=case, questions=questions, verifications=verifications, actions=actions,
+            tasks=task_rows, include_right_panel=include_right_panel)
 
 
 @app.get("/api/cases/{case_id}/ai/case-support", response_model=PublicCaseSupportSnapshotResponse)
-async def read_case_support_snapshot(case_id: str) -> PublicCaseSupportSnapshotResponse:
-    return await get_case_support_snapshot(case_id)
+async def read_case_support_snapshot(case_id: str, actor_user_id: str | None = None) -> PublicCaseSupportSnapshotResponse:
+    if actor_user_id:
+        await require_context_v2_member(case_id, actor_user_id, access="READ")
+    return await get_case_support_snapshot(case_id, include_right_panel=bool(actor_user_id))
 
 
 @app.get("/api/cases/{case_id}/customer-question-candidates", response_model=list[PublicQuestionCandidateResponse])
@@ -2537,6 +2594,30 @@ class DisplayEditRequest(BaseModel):
         return self
 
 
+class RightPanelItemMutation(BaseModel):
+    model_config = {"extra": "forbid"}
+    expected_version: int = Field(ge=0)
+    operation: Literal['ADD', 'EDIT', 'ARCHIVE', 'RESTORE', 'PERMANENT_HIDE', 'SET_STATUS']
+    text: str | None = Field(default=None, min_length=1, max_length=1200)
+    source_text: str | None = Field(default=None, max_length=1200)
+    evidence_refs: list[str] = Field(default_factory=list, max_length=20)
+    display_status: Literal['TODO', 'COMPLETED'] | None = None
+
+    @model_validator(mode='after')
+    def validate_mutation(self):
+        if self.operation in {'ADD', 'EDIT'} and (self.text is None or not self.text.strip()):
+            raise ValueError('표시할 항목 내용을 입력해 주세요.')
+        if self.operation == 'SET_STATUS' and self.display_status is None:
+            raise ValueError('업무 상태를 선택해 주세요.')
+        if self.operation != 'SET_STATUS' and self.display_status is not None:
+            raise ValueError('업무 상태 변경은 SET_STATUS에서만 보낼 수 있습니다.')
+        if self.operation not in {'ADD', 'EDIT'} and self.text is not None:
+            raise ValueError('추가·수정 외 작업에는 본문을 함께 보낼 수 없습니다.')
+        if self.operation == 'ADD' and self.expected_version != 0:
+            raise ValueError('새 항목은 expected_version 0으로 등록해야 합니다.')
+        return self
+
+
 async def context_display_repository(case_id):
     await require_case(case_id)
     return ContextItemRepository(repository) if isinstance(repository, MySqlCaseRepository) else InMemoryContextItemRepository(repository)
@@ -2923,6 +3004,34 @@ async def edit_context_display(case_id: str, section: Section, actor_user_id: st
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except KeyError as exc:
         raise HTTPException(status_code=404, detail='삭제 항목을 찾을 수 없습니다.') from exc
+
+
+@app.get('/api/cases/{case_id}/right-panel/items', response_model=list[ContextItem])
+async def read_right_panel_items(case_id: str, actor_user_id: str):
+    await require_context_v2_member(case_id, actor_user_id, access='READ')
+    store = await context_display_repository(case_id)
+    return [item for item in await store.list_items(case_id, include_deleted=True)
+            if item.section in RightPanelSection.__args__]
+
+
+@app.put('/api/cases/{case_id}/right-panel/items/{section}/{semantic_key}', response_model=ContextItem)
+async def mutate_right_panel_item(
+    case_id: str, section: RightPanelSection, semantic_key: str, actor_user_id: str,
+    request: RightPanelItemMutation,
+):
+    await require_context_v2_member(case_id, actor_user_id, access='WRITE')
+    store = await context_display_repository(case_id)
+    operation = 'DELETE' if request.operation == 'ARCHIVE' else request.operation
+    try:
+        return await store.change_right_panel_item(
+            case_id, section, semantic_key, request.expected_version, operation, actor_user_id,
+            text=request.text, source_text=request.source_text, evidence_refs=request.evidence_refs,
+            staff_authored=request.operation == 'ADD', display_status=request.display_status,
+        )
+    except ContextItemConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail='사건 또는 표시 항목을 찾을 수 없습니다.') from exc
 
 
 @app.put('/api/cases/{case_id}/customer-progress/{step}', response_model=list[CustomerProgressItem])

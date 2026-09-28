@@ -477,13 +477,76 @@ export interface CaseSupportSnapshot {
     manipulation_tactics: string[];
     customer_exposure: string[];
     next_actions: string[];
+    money_events?: Array<{
+      event_id?: string; atom_id?: string; amount_krw: number; role?: string; direction?: string;
+      scope?: string; action_state?: string | null; modality?: string | null; claim_status?: string;
+      speaker_role?: string | null; actor_role?: string | null; target_role?: string | null;
+    }>;
+    unresolved_items?: string[];
+    verification_records?: Array<Record<string, unknown>>;
+    staff_actions?: Array<Record<string, unknown>>;
   } | null;
+  right_panel?: RightPanelProjection | null;
   recommended_questions: QuestionCandidate[];
   unresolved_items: Array<{ target_field: string; description: string; priority: 'P0' | 'P1' | 'P2' }>;
   warnings: string[];
   source_revision: number | null;
   projection_revision: number | null;
   projection_status: 'CURRENT' | 'UPDATING' | 'STALE' | 'FAILED' | 'UNCACHED';
+}
+
+export type RightPanelSection = 'EXPOSURE' | 'CONTACT' | 'SIGNAL' | 'VERIFICATION' | 'WORK' | 'ACTIVITY';
+export type RightPanelBadge = '상대방 주장' | '상대방 요구' | '고객 진술' | '고객 부인' | '미확인' | '공식 확인' | '직원 기록' | '분석 정황';
+export interface RightPanelItem {
+  item_id: string;
+  section: RightPanelSection;
+  semantic_key: string;
+  title: string;
+  detail: string;
+  source_badge: RightPanelBadge | null;
+  origin: 'AI_ANALYSIS' | 'CUSTOMER_ANSWER' | 'VERIFICATION' | 'STAFF_ACTION' | 'STAFF_ADDED' | 'TASK';
+  status: string | null;
+  occurred_at: string | null;
+  evidence_refs: string[];
+  actor_id: string | null;
+  version: number | null;
+}
+export interface RightPanelProjection {
+  schema_version: 'right-panel.v1';
+  current_case_summary: string;
+  exposure: RightPanelItem[];
+  contact_information: RightPanelItem[];
+  fraud_signals: Array<{ key: string; label: string; items: RightPanelItem[] }>;
+  verification: RightPanelItem[];
+  incomplete_work: RightPanelItem[];
+  completed_work: RightPanelItem[];
+  activity: RightPanelItem[];
+  source_revision: number | null;
+}
+export type RightPanelStorageSection = `RP_${RightPanelSection}`;
+export interface RightPanelStoredItem {
+  item_id: string;
+  case_id: string;
+  section: RightPanelStorageSection;
+  semantic_key: string;
+  item_version: number;
+  ai_text: string | null;
+  staff_text: string | null;
+  evidence_refs: string[];
+  edited_by: string | null;
+  deleted_by: string | null;
+  updated_by: string | null;
+  staff_authored: boolean;
+  permanently_hidden: boolean;
+  display_status: 'TODO' | 'COMPLETED' | null;
+}
+export interface RightPanelItemMutation {
+  expected_version: number;
+  operation: 'ADD' | 'EDIT' | 'ARCHIVE' | 'RESTORE' | 'PERMANENT_HIDE' | 'SET_STATUS';
+  text?: string;
+  source_text?: string;
+  evidence_refs?: string[];
+  display_status?: 'TODO' | 'COMPLETED';
 }
 
 export type ProgressStep = 'SAFETY' | 'EVIDENCE' | 'PAYMENT_HOLD' | 'REPORT' | 'RELIEF';

@@ -153,6 +153,59 @@ class ContextItemRepository:
                 await connection.rollback()
                 raise
 
+    async def change_right_panel_item(self, case_id: str, section: str, semantic_key: str,
+                                     expected_version: int, operation: str, actor_id: str, *,
+                                     text: str | None = None, source_text: str | None = None,
+                                     evidence_refs: list[str] | None = None,
+                                     staff_authored: bool = False,
+                                     display_status: str | None = None) -> ContextItem:
+        pool = await self.cases._get_pool()
+        async with pool.acquire() as connection:
+            try:
+                await connection.begin()
+                async with connection.cursor() as cursor:
+                    await cursor.execute('SELECT case_id FROM cases WHERE case_id=%s FOR UPDATE', (case_id,))
+                    if not await cursor.fetchone():
+                        raise KeyError(case_id)
+                    await cursor.execute('SELECT state_json FROM case_context_items WHERE case_id=%s AND section=%s AND semantic_key=%s FOR UPDATE', (case_id, section, semantic_key))
+                    row = await cursor.fetchone()
+                    before = ContextItem.model_validate_json(row[0]) if row else None
+                    if before is None:
+                        if expected_version != 0:
+                            raise ContextItemConflictError('항목이 이미 변경되었습니다. 최신 내용을 다시 불러와 주세요.')
+                        seed = ContextItem(
+                            item_id=f'ctx-{uuid4().hex}', case_id=case_id, section=section,
+                            semantic_key=semantic_key, item_version=1,
+                            ai_text=(text if staff_authored and operation == 'ADD' else source_text),
+                            evidence_refs=list(evidence_refs or []), staff_authored=staff_authored,
+                            override_scope='ROW_DISPLAY',
+                        )
+                        if operation == 'ADD':
+                            if not staff_authored or not text or not text.strip():
+                                raise ValueError('직원 추가 항목의 내용이 필요합니다.')
+                            after = seed
+                        elif operation in {'PERMANENT_HIDE', 'RESTORE'}:
+                            raise ContextItemConflictError('보관된 항목만 복원하거나 패널에서 영구 숨김 처리할 수 있습니다.')
+                        else:
+                            change = ContextItemChange(expected_version=1, operation=operation, text=text, override_scope='ROW_DISPLAY')
+                            after = apply_staff_change(seed, change, actor_id).model_copy(update={'item_version': 1})
+                    else:
+                        if expected_version != before.item_version:
+                            raise ContextItemConflictError('항목이 변경되었습니다. 최신 내용을 다시 확인해 주세요.')
+                        if operation == 'ADD':
+                            raise ContextItemConflictError('이미 등록된 항목입니다.')
+                        if operation in {'RESTORE', 'PERMANENT_HIDE'} and before.deleted_by is None:
+                            raise ContextItemConflictError('먼저 항목을 보관해 주세요.')
+                        change = ContextItemChange(expected_version=expected_version, operation=operation, text=text,
+                                                   override_scope='ROW_DISPLAY', display_status=display_status)
+                        after = apply_staff_change(before, change, actor_id)
+                    await self._save(cursor, before, after, operation, actor_id)
+                await connection.commit()
+                return after
+            except BaseException:
+                await connection.rollback()
+                raise
+
     @staticmethod
     async def _save(cursor, before, after, operation, actor_id):
         if before == after:
@@ -233,3 +286,43 @@ class InMemoryContextItemRepository:
             self.cases._display_items[(case_id, section)] = restored_display
             self.cases._display_items[(case_id, archive_item_id)] = restored_archive
             return restored_display, restored_archive
+
+    async def change_right_panel_item(self, case_id, section, semantic_key, expected_version, operation, actor_id,
+                                     *, text=None, source_text=None, evidence_refs=None, staff_authored=False,
+                                     display_status=None):
+        async with self.cases._lock:
+            if await self.cases.get(case_id) is None:
+                raise KeyError(case_id)
+            before = next((item for (cid, _), item in self.cases._display_items.items()
+                           if cid == case_id and item.section == section and item.semantic_key == semantic_key), None)
+            if before is None:
+                if expected_version != 0:
+                    raise ContextItemConflictError('항목이 이미 변경되었습니다. 최신 내용을 다시 불러와 주세요.')
+                seed = ContextItem(
+                    item_id=f'ctx-{uuid4().hex}', case_id=case_id, section=section,
+                    semantic_key=semantic_key, item_version=1,
+                    ai_text=(text if staff_authored and operation == 'ADD' else source_text),
+                    evidence_refs=list(evidence_refs or []), staff_authored=staff_authored,
+                    override_scope='ROW_DISPLAY',
+                )
+                if operation == 'ADD':
+                    if not staff_authored or not text or not text.strip():
+                        raise ValueError('직원 추가 항목의 내용이 필요합니다.')
+                    after = seed
+                elif operation in {'PERMANENT_HIDE', 'RESTORE'}:
+                    raise ContextItemConflictError('보관된 항목만 복원하거나 패널에서 영구 숨김 처리할 수 있습니다.')
+                else:
+                    change = ContextItemChange(expected_version=1, operation=operation, text=text, override_scope='ROW_DISPLAY')
+                    after = apply_staff_change(seed, change, actor_id).model_copy(update={'item_version': 1})
+            else:
+                if expected_version != before.item_version:
+                    raise ContextItemConflictError('항목이 변경되었습니다. 최신 내용을 다시 확인해 주세요.')
+                if operation == 'ADD':
+                    raise ContextItemConflictError('이미 등록된 항목입니다.')
+                if operation in {'RESTORE', 'PERMANENT_HIDE'} and before.deleted_by is None:
+                    raise ContextItemConflictError('먼저 항목을 보관해 주세요.')
+                change = ContextItemChange(expected_version=expected_version, operation=operation, text=text,
+                                           override_scope='ROW_DISPLAY', display_status=display_status)
+                after = apply_staff_change(before, change, actor_id)
+            self.cases._display_items[(case_id, after.item_id)] = after
+            return after

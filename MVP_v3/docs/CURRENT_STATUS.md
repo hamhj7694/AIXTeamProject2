@@ -1,9 +1,29 @@
 # MVP v3 현재 구현 상태
 
-최종 갱신: 2026-09-28 (은행 직원 대응 가이드 미완료 우선순위 표시)
+최종 갱신: 2026-09-28 (우측 사건 패널 최신 스냅샷·기록 화면 연결)
 역할: 개발·점검 작업을 시작할 때 확인하는 단일 최신 상태 문서
 
 > 실제 코드와 최신 테스트 결과가 이 문서보다 우선한다. 완료하지 않은 기능은 구현된 것처럼 표시하지 않는다.
+
+## 2026-09-28 미적용 Case 상태 migration 및 서버 재기동
+
+- General API 시작 오류를 해결하기 위해 `030_incremental_case_analysis.sql`만 표준 migration runner의 `--only` 옵션으로 적용했다. 사전 검사에서 이 파일만 미적용이었고, 다른 migration은 실행하지 않았다.
+- 적용 전 DB `csr` 백업을 만들고 격리 DB 복원 및 동일 migration 리허설을 통과했다. 기존 Case 25건은 보존됐고 모두 `COMPLETED` 기본값을 받았다. 백업은 Git 제외 경로 `backend/data/backups/20260928T113522Z_de217b6c/`에 있다.
+- 사후 `inspect_database.py`: 미적용 migration 0건, FK 37개 검사·위반 0건, Case orphan 0건.
+- Frontend `5176`, General API `8100` (`database=mysql`), AI API `8101` health 200. VP-25 은행 case-support 응답 200, Right Panel projection `right-panel.v1` 포함.
+
+## 2026-09-28 우측 사건 패널 최신 스냅샷·기록 화면
+
+- 은행 Case Room의 우측 패널을 `현재 사건 요약`, `피해·노출`, `사칭·접촉`, `주요 보이스피싱 정황`, `확인·검증`, `업무 진행(미완료/완료)`, `처리 기록`으로 구성했다. 업무 수행은 기존 채팅/업무 UI에 두고, 패널은 저장된 현재 상태와 결과 확인을 담당한다.
+- 기존 `GET /api/cases/{case_id}/ai/case-support`에 멤버 전용 `right_panel` 읽기 projection을 추가했다. 고객 공개 API에는 추가하지 않았다. 주요 정황·인물/기관은 근거가 있는 입력만 표시하고, 요구·고객 진술·미확인·직원 기록·공식 확인을 구분한다. `case_transactions`는 실제 송금 증거로 사용하지 않는다.
+- 직원의 개별 항목 추가·수정·보관·복원·영구 숨김은 기존 `case_context_items`/history JSON 저장소와 버전 충돌 검사를 재사용한다. AI 원본과 evidence는 삭제하지 않는다. 업무 표시는 TODO/COMPLETED만 사용한다.
+- 요약 projection schema를 `case-support.v5`로 올려 기존 캐시를 새 버전에서 재생성한다. 별도 DB 테이블, 컬럼, migration은 추가하지 않았다. 요약은 현재 위험·출처가 보존된 주장·요구·고객 답변·미확인 상태를 짧은 문단으로 구성하며, 새 LLM 호출 없이 결정론적 생성 경로를 사용한다.
+- Right Panel 프론트는 구형 진단 문장으로 정황/요약을 재구성하지 않고 `right_panel` 표시 projection을 그대로 렌더링한다. 구체 요구는 피해·노출 영역으로, 인물의 확인된 역할은 인물명에 결합하며, 분류 코드는 숨긴다. AI 체크리스트는 미완료 업무로만 표시하고 완료 시 기존 Action API에 상태·담당자·시간을 기록해 업무 및 처리 기록에 반영한다.
+- 2026-09-28 후속 질문 후보 회귀 보완: 불확실 문장에 포함된 `했`을 실제 수행 답변으로 오인하지 않도록 typed 답변 판정을 재사용한다. `PROPOSED` Fact는 미확인 질문을 억제하지 않으며, `CONFIRMED` 원격 앱 설치 요구도 실제 설치 확인으로 취급하지 않는다. 확실한 실제 답변/확인만 기본 질문을 억제한다.
+- 최신 검증(2026-09-28): 관련 General API 테스트 46건, 질문 의미·Case Snapshot AI 테스트 55건 통과. Frontend Vitest 5 files / 14 tests, typecheck, Vite production build(1,479 modules) 통과. 이전 통합 실행에서 보고된 질문 후보 4개 실패는 재현 규칙을 고쳐 모두 통과시켰다.
+- 로컬 MySQL 연결 General API `/health` 정상(`database=mysql`). VP-25 은행 case-support 응답 HTTP 200, `right-panel.v1` 포함. 송금 요구는 `[상대방 요구]`, 실제 송금·개인정보·인증정보 제공·원격 앱 설치는 `[미확인]`으로 분리되며 내부 코드 토큰 검사 결과 0건이었다.
+- 남은 의미 경계: `claimed_organization` 질문은 상대방이 내세운 기관명을 확인할 뿐 공식 소속을 검증하지 않는다. 공식 소속은 별도 Verification 결과가 있어야 하며, 이번 VP-25 응답에는 Verification 행이 없어 실제 완료 UI 확인은 미수행이다.
+- 실제 Browser Smoke는 수행하지 못했다. Computer Use에서 사용 가능한 브라우저 표면이 없고 네이티브 연결도 제공되지 않아 UI 확인·새로고침·좁은 폭·hover/focus/touch 검증은 미완료다. 우측 패널 IA는 변경하지 않았다.
 
 ## 2026-09-28 새 통화 분석 음성 파일 전사
 

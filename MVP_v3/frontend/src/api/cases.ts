@@ -4,6 +4,7 @@ import type {
   AiInvocationResult, AnalyzeCaseResponse, CaseAction, CaseBundle, CaseMember, CaseMessage, CasePresence, CaseWorkCard, InitialReport,
   CaseSupportSnapshot, CustomerQuestion, MessageChannel, MessageVisibility,
   PersonalNote, QuestionCandidate, StructuredQuestionAnswer, StoredCase, VerificationTask, WorkCardType, BankStaff, CaseTransaction,
+  RightPanelStoredItem, RightPanelStorageSection, RightPanelItemMutation,
 } from './types';
 import { generateUuid } from '../uuid';
 
@@ -61,7 +62,14 @@ export const casesApi = {
   updateTransaction: (caseId: string, transactionId: number, values: Partial<Omit<CaseTransaction, 'id' | 'case_id' | 'created_at' | 'updated_at'>>) => request<CaseTransaction>(`/api/cases/${encodeURIComponent(caseId)}/transactions/${transactionId}`, { method: 'PATCH', body: JSON.stringify(values) }),
   bundle: (caseId: string) => request<CaseBundle>(`/api/cases/${encodeURIComponent(caseId)}/bundle?view=bank`),
   customerBundle: (caseId: string) => request<CaseBundle>(`/api/cases/${encodeURIComponent(caseId)}/bundle?view=customer`),
-  support: (caseId: string) => request<CaseSupportSnapshot>(`/api/cases/${encodeURIComponent(caseId)}/ai/case-support`),
+  support: (caseId: string) => request<CaseSupportSnapshot>(`/api/cases/${encodeURIComponent(caseId)}/ai/case-support?actor_user_id=${encodeURIComponent(CURRENT_BANK_USER.user_id)}`),
+  rightPanelItems: (caseId: string, signal?: AbortSignal) => request<RightPanelStoredItem[]>(
+    `/api/cases/${encodeURIComponent(caseId)}/right-panel/items?actor_user_id=${encodeURIComponent(CURRENT_BANK_USER.user_id)}`, { signal },
+  ),
+  mutateRightPanelItem: (caseId: string, section: RightPanelStorageSection, semanticKey: string, mutation: RightPanelItemMutation) => request<RightPanelStoredItem>(
+    `/api/cases/${encodeURIComponent(caseId)}/right-panel/items/${encodeURIComponent(section)}/${encodeURIComponent(semanticKey)}?actor_user_id=${encodeURIComponent(CURRENT_BANK_USER.user_id)}`,
+    { method: 'PUT', body: JSON.stringify(mutation) },
+  ),
   personalNotes: (caseId: string) => request<PersonalNote[]>(`/api/cases/${encodeURIComponent(caseId)}/personal-notes?author_id=${encodeURIComponent(CURRENT_BANK_USER.user_id)}`),
   createPersonalNote: (caseId: string, content: string) => request<PersonalNote>(`/api/cases/${encodeURIComponent(caseId)}/personal-notes`, {
     method: 'POST', body: JSON.stringify({ author_id: CURRENT_BANK_USER.user_id, content }),

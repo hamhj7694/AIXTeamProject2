@@ -93,6 +93,26 @@ class CaseSupportSnapshotEndpointTest(unittest.TestCase):
         self.assertNotIn("input_text", sent)
         self.assertNotIn("원문은 지원 AI로 보내면 안 됩니다.", json.dumps(sent, ensure_ascii=False))
 
+    def test_bank_support_response_includes_right_panel_read_model(self) -> None:
+        self.repository.list_members.return_value = [{
+            "case_id": "CASE-AI-1", "user_id": "staff", "role": "CASE_OWNER", "status": "ACTIVE",
+        }]
+
+        response = self.client.get("/api/cases/CASE-AI-1/ai/case-support?actor_user_id=staff")
+
+        self.assertEqual(response.status_code, 200, response.text)
+        panel = response.json()["right_panel"]
+        self.assertEqual(panel["schema_version"], "right-panel.v1")
+        self.assertEqual(panel["current_case_summary"], self.repository.get.return_value["diagnosis"]["context"]["summary"])
+        self.assertEqual([item["key"] for item in panel["fraud_signals"]], [
+            "identity", "claim", "demand", "pressure", "money", "exposure",
+        ])
+        self.assertTrue(any(
+            item["title"] == "실제 송금" and item["source_badge"] == "미확인"
+            for item in panel["exposure"]
+        ))
+        self.assertEqual(panel["source_revision"], 1)
+
     def test_uses_deterministic_candidates_when_ai_is_unavailable(self) -> None:
         general_main.service.ai_client.build_case_support_snapshot = AsyncMock(side_effect=general_main.AiServiceError("AI 서버 연결 실패"))
 
@@ -198,6 +218,72 @@ class CaseSupportSnapshotEndpointTest(unittest.TestCase):
                 self.assertIn("transfer_status", fields)
                 self.repository.queue_customer_questions.assert_not_awaited()
                 self.repository.dispatch_next_customer_question.assert_not_awaited()
+
+    def test_unknown_and_proposed_critical_states_remain_uncovered(self) -> None:
+        proposed_facts = [
+            {"field": "transfer_status", "value": "송금 여부 확인 필요"},
+            {"field": "personal_information_exposure", "value": "개인정보 제공 여부 미확인"},
+            {"field": "authentication_information_exposure", "value": "인증정보 제공 요구"},
+            {"field": "remote_control_app", "value": "원격제어 앱 설치 요구"},
+            {"field": "claimed_organization", "value": "검찰이라고 주장함"},
+        ]
+        facts = [{
+            "fact_id": f"proposed-{index}", "field": item["field"], "value": item["value"], "status": "PROPOSED",
+        } for index, item in enumerate(proposed_facts)]
+        uncertain_messages = [{
+            "actor_type": "CUSTOMER", "message_kind": "CHAT",
+            "content": "송금했는지 모르겠고, 개인정보·인증정보 제공 여부와 앱 설치 여부도 기억이 나지 않아요.",
+        }]
+
+        covered = general_main.question_fields_covered_by_case(facts, uncertain_messages)
+
+        self.assertEqual(covered, set())
+
+    def test_unknown_and_proposed_critical_gaps_generate_follow_up_candidates(self) -> None:
+        expected = {
+            "transfer_status", "personal_information_exposure",
+            "authentication_information_exposure", "remote_control_app",
+            "claimed_organization",
+        }
+        proposed = [
+            {"fact_id": "p-transfer", "field": "transfer_status", "value": "송금 여부 미확인", "status": "PROPOSED"},
+            {"fact_id": "p-personal", "field": "personal_information_exposure", "value": "개인정보 제공 요구", "status": "PROPOSED"},
+            {"fact_id": "p-auth", "field": "authentication_information_exposure", "value": "인증정보 제공 요구", "status": "PROPOSED"},
+            {"fact_id": "p-app", "field": "remote_control_app", "value": "원격제어 앱 설치 요구", "status": "PROPOSED"},
+            {"fact_id": "p-org", "field": "claimed_organization", "value": "검찰이라고 주장함", "status": "PROPOSED"},
+        ]
+        for facts in ([], proposed):
+            with self.subTest(state="UNKNOWN" if not facts else "PROPOSED"):
+                self._set_v2_facts(facts)
+                response = self.client.get("/api/cases/CASE-AI-1/customer-question-candidates")
+                self.assertEqual(response.status_code, 200, response.text)
+                fields = {general_main.normalize_target_field(item["target_field"]) for item in response.json()}
+                self.assertTrue(expected.issubset(fields), fields)
+
+    def test_confirmed_fact_covers_only_clear_actual_exposure_or_transfer(self) -> None:
+        confirmed_facts = [
+            {"field": "transfer_status", "value": "송금했어요", "status": "CONFIRMED"},
+            {"field": "personal_information_exposure", "value": "개인정보 일부를 제공했어요", "status": "CONFIRMED"},
+            {"field": "authentication_information_exposure", "value": "OTP를 제공했어요", "status": "CONFIRMED"},
+            {"field": "remote_control_app", "value": "원격제어 앱 설치 요구", "status": "CONFIRMED"},
+            {"field": "claimed_organization", "value": "검찰이라고 주장함", "status": "CONFIRMED"},
+        ]
+
+        covered = general_main.question_fields_covered_by_case(confirmed_facts, [])
+
+        self.assertEqual(covered, {
+            "transfer_status", "personal_information_exposure",
+            "authentication_information_exposure", "claimed_organization",
+        })
+
+    def test_uncertainty_and_requests_are_not_mistaken_for_completed_customer_answers(self) -> None:
+        fields = general_main.question_fields_answered_by_messages([
+            {"actor_type": "CUSTOMER", "message_kind": "CHAT", "content": "송금했는지 모르겠어요."},
+            {"actor_type": "CUSTOMER", "message_kind": "CHAT", "content": "OTP를 제공했는지 기억이 안 나요."},
+            {"actor_type": "CUSTOMER", "message_kind": "CHAT", "content": "원격제어 앱을 설치하라고 했어요."},
+        ])
+
+        self.assertEqual(fields, set())
 
     def test_pending_asked_skipped_clear_and_confirmed_still_suppress_basic(self) -> None:
         for status, answer, facts in (

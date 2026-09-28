@@ -107,14 +107,14 @@ class CaseSnapshotAiAdapterTest(unittest.TestCase):
         })
 
         self.assertIsNotNone(result.case_brief)
-        self.assertIn("고객 답변상 이미 송금한 상태입니다", result.case_brief.summary)
+        self.assertIn("고객은 송금했다고 답", result.case_brief.summary)
         self.assertNotIn("최신 반영", result.case_brief.summary)
         self.assertNotIn("→", result.case_brief.summary)
         self.assertNotIn("transfer_status", [item.target_field.value for item in result.unresolved_items])
         self.assertIn("기관 확인 진행: 서울중앙지검", result.case_brief.next_checks)
         self.assertIn("대응 업무 진행: 지급정지 가능 여부 확인", result.case_brief.next_checks)
 
-    def test_synthesizes_answers_and_confirmed_facts_instead_of_appending_a_log(self) -> None:
+    def test_summary_preserves_answer_sources_and_does_not_promote_legacy_fact_status(self) -> None:
         fixture = Path(__file__).resolve().parents[2] / "contracts" / "ai_internal" / "fixtures" / "diagnosis.high.v1.json"
         diagnosis = json.loads(fixture.read_text(encoding="utf-8"))["response"]
 
@@ -145,14 +145,36 @@ class CaseSnapshotAiAdapterTest(unittest.TestCase):
         })
 
         summary = result.case_brief.summary
-        self.assertIn("고객 답변상 이미 송금한 상태입니다", summary)
-        self.assertIn("고객 답변상 개인정보를 제공하지 않은 상태입니다", summary)
-        self.assertIn("확인 결과 비밀번호·인증번호 등 인증정보를 제공한 상태입니다", summary)
-        self.assertIn("서울중앙지검 확인 결과 공식 사건번호와 일치하지 않음", summary)
+        self.assertIn("고객은 송금했다고 답했고", summary)
+        self.assertIn("개인정보를 제공하지 않았다고 답했습니다", summary)
+        self.assertNotIn("인증정보를 제공했다고 답했습니다", summary)
         self.assertNotIn("상대방에게 송금했나요?", summary)
         self.assertNotIn("개인정보를 제공했나요?", summary)
         self.assertNotIn("최신 반영", summary)
+        self.assertNotIn("고객 상태:", summary)
+        self.assertNotIn("진행 업무:", summary)
+        self.assertLessEqual(len(summary.split(". ")), 3)
         self.assertLessEqual(len(summary), 600)
+
+    def test_amount_projection_accepts_literal_actor_role_values(self) -> None:
+        fixture = Path(__file__).resolve().parents[2] / "contracts" / "ai_internal" / "fixtures" / "diagnosis.high.v1.json"
+        diagnosis = json.loads(fixture.read_text(encoding="utf-8"))["response"]
+        diagnosis["semantic_atoms"] = [{
+            "atom_id": "amount-1", "atom_class": "MONEY_MOVEMENT", "speaker": "SUSPECTED_PARTY",
+            "predicate": "TRANSFER_FUNDS", "source_turn_id": 1, "semantic_fingerprint": "fp-amount-1",
+            "amount_value_krw": 3_000_000, "amount_role": "REQUESTED_AMOUNT",
+            "amount_direction": "REQUEST", "action_state": "REQUESTED",
+            "speaker_role": "SUSPECTED_PARTY", "actor_role": "SUSPECTED_PARTY",
+        }]
+
+        result = CaseSnapshotAiAdapter().build_presentation({
+            "case_id": "VP-AMOUNT-PROJECTION", "diagnosis": diagnosis,
+        })
+
+        amount = result.case_context.money_events[0]
+        self.assertEqual(amount["amount_krw"], 3_000_000)
+        self.assertEqual(amount["speaker_role"], "SUSPECTED_PARTY")
+        self.assertEqual(amount["actor_role"], "SUSPECTED_PARTY")
 
     def test_question_context_without_answer_does_not_prove_sufficiency(self) -> None:
         fixture = Path(__file__).resolve().parents[2] / "contracts" / "ai_internal" / "fixtures" / "diagnosis.high.v1.json"
@@ -222,7 +244,7 @@ class CaseSnapshotAiAdapterTest(unittest.TestCase):
         })
 
         self.assertIn("개인정보 일부 제공 발생", result.case_context.customer_exposure)
-        self.assertIn("고객 답변상 개인정보 일부를 제공한 상태입니다", result.case_brief.summary)
+        self.assertIn("고객은 개인정보 일부를 제공했다고 답", result.case_brief.summary)
 
 
 if __name__ == "__main__":

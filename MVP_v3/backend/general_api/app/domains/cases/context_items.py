@@ -11,6 +11,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 Section = Literal['SUMMARY', 'SIGNAL', 'CLAIM', 'DEMAND', 'TACTIC', 'NEXT_STEP', 'EXPOSURE']
+RightPanelSection = Literal['RP_EXPOSURE', 'RP_CONTACT', 'RP_SIGNAL', 'RP_VERIFICATION', 'RP_WORK', 'RP_ACTIVITY']
+ContextItemSection = Section | RightPanelSection
 
 
 class ContextItemConflictError(Exception):
@@ -21,7 +23,7 @@ class ContextItem(BaseModel):
     model_config = ConfigDict(extra='forbid', frozen=True)
     item_id: str
     case_id: str
-    section: Section
+    section: ContextItemSection
     semantic_key: str = Field(min_length=1, max_length=160, pattern=r'^[a-zA-Z0-9_.:/-]+$')
     item_version: int = Field(ge=1)
     ai_text: str | None = None
@@ -30,10 +32,13 @@ class ContextItem(BaseModel):
     edited_by: str | None = None
     deleted_by: str | None = None
     archive_index: int | None = Field(default=None, ge=0)
-    override_scope: Literal['SECTION_DISPLAY'] | None = None
+    override_scope: Literal['SECTION_DISPLAY', 'ROW_DISPLAY'] | None = None
     base_projection_revision: int | None = Field(default=None, ge=1)
     base_content_hash: str | None = Field(default=None, max_length=64)
     updated_by: str | None = None
+    staff_authored: bool = False
+    permanently_hidden: bool = False
+    display_status: Literal['TODO', 'COMPLETED'] | None = None
 
     @property
     def effective_text(self) -> str:
@@ -43,15 +48,20 @@ class ContextItem(BaseModel):
 class ContextItemChange(BaseModel):
     model_config = ConfigDict(extra='forbid')
     expected_version: int = Field(ge=1)
-    operation: Literal['EDIT', 'DELETE', 'RESTORE', 'RESET']
+    operation: Literal['EDIT', 'DELETE', 'RESTORE', 'RESET', 'PERMANENT_HIDE', 'SET_STATUS']
     text: str | None = Field(default=None, min_length=1, max_length=4000)
+    override_scope: Literal['SECTION_DISPLAY', 'ROW_DISPLAY'] = 'SECTION_DISPLAY'
+    display_status: Literal['TODO', 'COMPLETED'] | None = None
 
     @model_validator(mode='after')
     def validate_operation(self):
         if self.operation == 'EDIT':
             if self.text is None or not self.text.strip():
                 raise ValueError('편집 내용이 필요합니다.')
-        elif self.text is not None:
+        elif self.operation == 'SET_STATUS':
+            if self.text is not None or self.display_status is None:
+                raise ValueError('업무 상태 변경값이 필요합니다.')
+        elif self.text is not None or self.display_status is not None:
             raise ValueError('삭제·복원 시 본문을 변경할 수 없습니다.')
         return self
 
@@ -61,21 +71,27 @@ def apply_staff_change(item: ContextItem, change: ContextItemChange, actor_id: s
         raise ValueError('유효한 서버 확인 사용자 ID가 필요합니다.')
     if change.expected_version != item.item_version:
         raise ContextItemConflictError('항목이 변경되었습니다. 최신 내용을 확인해 주세요.')
+    if item.permanently_hidden:
+        raise ContextItemConflictError('패널에서 영구 숨김 처리된 항목은 복원하거나 수정할 수 없습니다.')
     if change.operation == 'EDIT' and item.deleted_by is not None:
         raise ContextItemConflictError('삭제된 항목은 복원한 뒤 수정해 주세요.')
     changes: dict = {}
     if change.operation == 'EDIT':
         changes = {
             'staff_text': change.text.strip(), 'edited_by': actor_id, 'updated_by': actor_id,
-            'override_scope': 'SECTION_DISPLAY',
+            'override_scope': change.override_scope,
             'base_content_hash': hashlib.sha256(item.effective_text.encode()).hexdigest(),
         }
     elif change.operation == 'DELETE' and item.deleted_by is None:
         changes = {'deleted_by': actor_id, 'updated_by': actor_id}
     elif change.operation == 'RESTORE' and item.deleted_by is not None:
         changes = {'deleted_by': None, 'updated_by': actor_id}
+    elif change.operation == 'PERMANENT_HIDE' and item.deleted_by is not None:
+        changes = {'permanently_hidden': True, 'updated_by': actor_id}
     elif change.operation == 'RESET':
         changes = {'staff_text': None, 'edited_by': None, 'deleted_by': None}
+    elif change.operation == 'SET_STATUS':
+        changes = {'display_status': change.display_status, 'updated_by': actor_id}
     if not changes:
         return item
     return item.model_copy(update={**changes, 'item_version': item.item_version + 1})

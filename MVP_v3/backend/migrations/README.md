@@ -53,6 +53,7 @@ General API가 소유하는 MySQL 8.0 서비스 DB의 변경 이력이다. **정
 | [003_expand_risk_score_precision.sql](shared/003_expand_risk_score_precision.sql) | 위험도 DECIMAL(9,6) | 점수 의미 변경 없음 |
 | [006_case_version.sql](cases/006_case_version.sql) | Case version | 수정 충돌 확인용 |
 | [016_case_name.sql](cases/016_case_name.sql) | 사용자 Case 이름 | 분석 요약과 별개 |
+| [030_incremental_case_analysis.sql](cases/030_incremental_case_analysis.sql) | `cases.analysis_status` | 기존 Case는 `COMPLETED` 기본값으로 보존하고 새 분석의 진행/완료/실패 상태를 기록 |
 | [017_structured_context_resources.sql](analysis/017_structured_context_resources.sql) | Atom·Relation·Signal 저장 | Case 내부 ID와 역할·출처 metadata 유지 |
 | [019_context_observations.sql](analysis/019_context_observations.sql) | 미분류 구조화 관찰 | 분류되지 않았다고 원문을 저장하지 않음 |
 

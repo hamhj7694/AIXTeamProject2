@@ -36,6 +36,8 @@ class CaseSnapshotVerification(StrictModel):
     claim: str
     status: str
     result_summary: str | None = None
+    evidence_url: str | None = None
+    rag_source: str | None = None
 
 
 class CaseSnapshotAction(StrictModel):
@@ -59,6 +61,8 @@ class CaseContextVerificationProjection(StrictModel):
     claim: str
     status: str
     result_summary: str | None = None
+    evidence_url: str | None = None
+    rag_source: str | None = None
 
 
 class CaseContextActionProjection(StrictModel):

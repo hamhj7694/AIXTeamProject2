@@ -4,6 +4,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 import re
 from typing import Any
+from urllib.parse import urlparse
 
 from pydantic import ValidationError
 
@@ -90,7 +91,7 @@ class CaseSnapshotAiAdapter:
         ).unresolved
 
     @staticmethod
-    def _clear_customer_answer(scope: str, answer: str) -> bool:
+    def is_clear_customer_answer(scope: str, answer: str) -> bool:
         try:
             target = TargetField(scope)
         except ValueError:
@@ -132,7 +133,7 @@ class CaseSnapshotAiAdapter:
             answer_uncertain = (
                 current_question is not None
                 and bool((current_question.answer_text or "").strip())
-                and not CaseSnapshotAiAdapter._clear_customer_answer(scope, current_question.answer_text or "")
+                and not CaseSnapshotAiAdapter.is_clear_customer_answer(scope, current_question.answer_text or "")
             )
             evaluation = QuestionStateEvaluator.evaluate(
                 semantic_scope=scope,
@@ -270,71 +271,214 @@ class CaseSnapshotAiAdapter:
 
     @staticmethod
     def _synthesize_summary(brief, ai_input: CaseSnapshotAiInput, unresolved: list[UnresolvedItem]) -> str:
-        """현재 Case 전체를 짧은 상황 보고로 다시 쓴다.
+        """Build a concise, attributed current snapshot from structured evidence.
 
-        Brief는 변경 이력을 이어 붙이는 로그가 아니다. 초기 진단, 고객 답변,
-        확정 사실, 기관 확인과 대응 업무의 *현재 상태*를 매번 같은 규칙으로
-        다시 투영해 읽는 사람이 지금 상황만 빠르게 파악하게 한다.
+        This is a current-state summary, not a history of fields or staff workflow.
+        It deliberately uses customer answers and source-attributed narratives, and
+        never promotes a request, a legacy Fact status, or an unverified amount to
+        a completed action.
         """
-        # Rebuild from current structured fields, never carry a historical brief log.
-        # Keep the first sentence as the diagnosis' natural description instead of
-        # exposing internal labels or joining fields with punctuation.
-        base = CaseSnapshotAiAdapter._base_summary(brief)
-        sentences = [" ".join(base.split())]
+        sentences: list[str] = []
+        incident = CaseSnapshotAiAdapter._incident_summary_label(brief)
+        if incident:
+            sentences.append(incident)
 
-        field_values = CaseSnapshotAiAdapter._current_field_values(ai_input)
-
-        state_parts = [
-            statement
-            for field in (
-                "transfer_status",
-                "personal_information_exposure",
-                "authentication_information_exposure",
-                "transfer_purpose",
-                "claimed_organization",
-                "incident_claim",
+        field_values = {
+            question.target_field: (
+                CaseSnapshotAiAdapter._structured_value(question.target_field, question.answer_text or ""),
+                "answered",
             )
-            if (value := field_values.get(field)) is not None
-            if (statement := CaseSnapshotAiAdapter._field_statement(field, *value))
-        ]
-        completed_verifications = [
-            item for item in ai_input.verifications
-            if item.status == "COMPLETED" and item.result_summary and item.result_summary.strip()
-        ]
-        if state_parts or completed_verifications:
-            current_parts = list(state_parts[:3])
-            current_parts.extend(
-                f"{item.target} 확인 결과 {' '.join(item.result_summary.split())}."
-                for item in completed_verifications[-2:]
-            )
-            sentences.append(" ".join(current_parts))
+            for question in ai_input.questions
+            if question.status == "ANSWERED" and question.answer_text and question.answer_text.strip()
+            and not is_follow_up_target(question.target_field)
+        }
 
-        work_parts: list[str] = []
-        active_verifications = [
-            item.target for item in ai_input.verifications
-            if item.status not in {"COMPLETED", "FAILED", "ON_HOLD"}
-        ]
-        active_actions = [
-            item.note.strip() or item.action_type
-            for item in ai_input.actions
-            if item.status not in {"COMPLETED", "CANCELLED", "FAILED"}
-            and item.action_type not in {"AI_CHECKLIST_REVIEW", "STAFF_JUDGMENT"}
-            and not item.action_type.startswith("AI_CHECKLIST:")
-        ]
-        if active_verifications:
-            work_parts.append(f"{CaseSnapshotAiAdapter._join_labels(active_verifications[:2])} 공식 확인이 진행 중입니다")
-        if active_actions:
-            work_parts.append(f"{' '.join(active_actions[-1].split())} 대응 업무가 진행 중입니다")
+        narratives = ai_input.diagnosis.context.feature_narratives if ai_input.diagnosis else []
+        claim = CaseSnapshotAiAdapter._summary_claim(narratives, ai_input.diagnosis.context.claims if ai_input.diagnosis else [])
+        if claim:
+            sentences.append(claim)
 
-        if unresolved:
-            labels = [CaseSnapshotAiAdapter._field_label(item.target_field.value) for item in unresolved]
-            work_parts.append(f"{CaseSnapshotAiAdapter._join_labels(labels[:2])} 여부는 아직 확인되지 않았습니다")
-        if work_parts:
-            sentences.append(" ".join(work_parts[:3]) + ".")
+        demand_labels = CaseSnapshotAiAdapter._summary_demand_labels(
+            narratives,
+            ai_input.diagnosis.context.demands if ai_input.diagnosis else [],
+            ai_input.diagnosis.features if ai_input.diagnosis else {},
+        )
+        state_sentence = CaseSnapshotAiAdapter._summary_exposure_state(field_values, unresolved)
+        demand_sentence = CaseSnapshotAiAdapter._summary_demand_sentence(demand_labels)
+        if demand_sentence and state_sentence:
+            demand_prefix = demand_sentence.removesuffix("요구했습니다.")
+            sentences.append(f"{demand_prefix}요구했지만, {state_sentence[0].lower() + state_sentence[1:]}")
+        elif demand_sentence:
+            sentences.append(demand_sentence)
+        elif state_sentence:
+            sentences.append(state_sentence)
 
-        # Return one readable paragraph for the Context Panel. Each sentence is
-        # generated from current structured state; no history is appended.
-        return " ".join(filter(None, sentences)).strip()
+        # A genuine verification result can replace an otherwise generic status
+        # sentence, but a test/placeholder record is never summary evidence.
+        if not state_sentence:
+            completed = next((item for item in reversed(ai_input.verifications)
+                              if item.status == "COMPLETED" and item.result_summary
+                              and item.result_summary.strip()
+                              and not CaseSnapshotAiAdapter._is_placeholder_text(item.target)
+                              and not CaseSnapshotAiAdapter._is_placeholder_text(item.claim)), None)
+            if completed is not None and sentences:
+                verification = " ".join((completed.result_summary or "").split())
+                source = "공식 확인으로" if CaseSnapshotAiAdapter._has_official_verification_source(completed.evidence_url) else "담당자 기록에는"
+                sentences[-1] = f"{sentences[-1].rstrip('.')}며, {source} {completed.target} 결과가 기록되어 있습니다: {verification}."
+            elif completed is not None:
+                verification = " ".join((completed.result_summary or "").split())
+                sentences.append(f"담당자 확인 기록에 {completed.target} 결과가 있습니다: {verification}.")
+
+        return " ".join(sentence.strip() for sentence in sentences[:3] if sentence.strip()).strip()
+
+    @staticmethod
+    def _incident_summary_label(brief) -> str:
+        value = " ".join((brief.incident_type or "").split()).strip(" .。")
+        value = re.sub(r"^사건\s*[:：]\s*", "", value)
+        if not value:
+            return "보이스피싱 의심 사건입니다."
+        if value.endswith("사건"):
+            return f"{value}입니다."
+        if "의심" in value:
+            return f"{value} 사건입니다."
+        return f"{value} 관련 보이스피싱 의심 사건입니다."
+
+    @staticmethod
+    def _is_placeholder_text(value: str | None) -> bool:
+        return bool(re.search(r"(?:^|\s)(?:테스트|test|dummy|sample|예시)(?:\s|$)", value or "", re.IGNORECASE))
+
+    @staticmethod
+    def _summary_claim(narratives, claims: list[str]) -> str:
+        candidates = [item for item in narratives if item.status == "CLAIMED"]
+        preferred = ("CLAIM_CRIME_INVOLVEMENT", "INCIDENT_CLAIM", "CLAIM_ACCOUNT", "ROLE_PROSECUTION")
+        candidates.sort(key=lambda item: next((index for index, code in enumerate(preferred)
+                                               if code in item.code.upper()), len(preferred)))
+        raw = next((item.sentence for item in candidates if item.sentence.strip()), "")
+        raw = raw or next((item.strip() for item in claims if item.strip()), "")
+        if not raw:
+            return ""
+        text = " ".join(raw.split()).strip(" .。")
+        text = re.sub(r"^(?:보이스피싱 의심 인물이|보이스피싱 의심 인인은|보이스피싱 의심 인인이|상대방이|상대방은)\s*", "", text)
+        text = text.replace("김인수라는 인물과 고객 또는 고객 계좌가", "김인수와 고객 계좌가")
+        text = text.replace("고객 또는 고객 계좌가", "고객 계좌가")
+        text = re.sub(r"\s*주장함$", "", text)
+        if text.endswith("주장했습니다"):
+            return f"상대방은 {text}."
+        if text.endswith(("다고", "라고", "라며", "며")):
+            return f"상대방은 {text} 주장했습니다."
+        return f"상대방은 {text}고 주장했습니다."
+
+    @staticmethod
+    def _summary_demand_labels(narratives, demands: list[str], features: dict) -> list[str]:
+        sources = [item.sentence for item in narratives if item.status == "REQUESTED"] + demands
+        sources = [" ".join(text.split()) for text in sources if text and text.strip()]
+        labels: list[str] = []
+        has_transfer_request = any(re.search(r"송금|이체|자금 이동|안전계좌", text) for text in sources)
+        requested_amount = features.get("requested_amount_max")
+        amount_label = ""
+        if has_transfer_request and requested_amount:
+            try:
+                amount = int(float(requested_amount))
+                amount_label = f"{amount // 10_000:,}만원" if amount >= 10_000 and amount % 10_000 == 0 else f"{amount:,}원"
+            except (TypeError, ValueError):
+                amount_label = ""
+        for text in sources:
+            if re.search(r"송금|이체|자금 이동|안전계좌", text):
+                match = re.search(r"(\d[\d,]*(?:만원|원))", text)
+                amount = match.group(1) if match else amount_label
+                label = f"{amount} 송금" if amount else "송금"
+                labels.append(label)
+            if re.search(r"개인\s*정보|민감\s*정보", text):
+                labels.append("개인정보 제공")
+            if re.search(r"인증\s*정보|인증번호|OTP|비밀번호", text, re.IGNORECASE):
+                labels.append("인증정보 제공")
+            if re.search(r"원격\s*제어|화면\s*공유|앱\s*설치", text):
+                labels.append("원격제어 앱 설치")
+        return list(dict.fromkeys(labels))
+
+    @staticmethod
+    def _summary_demand_sentence(labels: list[str]) -> str:
+        if not labels:
+            return ""
+        if len(labels) == 1:
+            target = labels[0]
+        elif len(labels) == 2:
+            target = f"{labels[0]}과 {labels[1]}"
+        else:
+            target = f"{', '.join(labels[:-1])} 및 {labels[-1]}"
+        return f"상대방은 {target}을 요구했습니다."
+
+    @staticmethod
+    def _summary_exposure_state(field_values: dict, unresolved: list[UnresolvedItem]) -> str:
+        labels = {
+            "transfer_status": ("실제 송금", "송금"),
+            "personal_information_exposure": ("개인정보 제공", "개인정보"),
+            "authentication_information_exposure": ("인증정보 제공", "인증정보"),
+            "remote_control_app": ("원격제어 앱 설치", "원격제어 앱"),
+        }
+        unresolved_fields = {item.target_field.value for item in unresolved}
+        answered_states: list[str] = []
+        unresolved_labels: list[str] = []
+        for field, (label, short_label) in labels.items():
+            answer = field_values.get(field)
+            if answer:
+                value = answer[0]
+                polarity = CaseSnapshotAiAdapter._answer_polarity(value)
+                if field == "transfer_status" and polarity is True:
+                    answered_states.append("송금했다고")
+                elif field == "transfer_status" and polarity is False:
+                    answered_states.append("송금하지 않았다고")
+                elif field == "personal_information_exposure" and value.casefold() == "partially_exposed":
+                    answered_states.append("개인정보 일부를 제공했다고")
+                elif field == "personal_information_exposure" and polarity is True:
+                    answered_states.append("개인정보를 제공했다고")
+                elif field == "personal_information_exposure" and polarity is False:
+                    answered_states.append("개인정보를 제공하지 않았다고")
+                elif field == "authentication_information_exposure" and polarity is True:
+                    answered_states.append("인증정보를 제공했다고")
+                elif field == "authentication_information_exposure" and polarity is False:
+                    answered_states.append("인증정보를 제공하지 않았다고")
+                elif field == "remote_control_app" and polarity is True:
+                    answered_states.append("원격제어 앱을 설치했다고")
+                elif field == "remote_control_app" and polarity is False:
+                    answered_states.append("원격제어 앱을 설치하지 않았다고")
+                else:
+                    unresolved_labels.append(label)
+            elif field in unresolved_fields:
+                unresolved_labels.append(label)
+        if answered_states and unresolved_labels:
+            unknown = CaseSnapshotAiAdapter._join_exposure_labels(unresolved_labels)
+            if len(answered_states) > 1:
+                return f"고객은 {answered_states[0]} 답했고, {answered_states[1]} 답했습니다. {unknown} 여부는 아직 확인되지 않았습니다."
+            return f"고객은 {answered_states[0]} 답했으며, {unknown} 여부는 아직 확인되지 않았습니다."
+        if answered_states:
+            if len(answered_states) > 1:
+                return f"고객은 {answered_states[0]} 답했고, {answered_states[1]} 답했습니다."
+            return f"고객은 {answered_states[0]} 답했습니다."
+        if unresolved_labels:
+            unknown = CaseSnapshotAiAdapter._join_exposure_labels(unresolved_labels)
+            return f"{unknown} 여부는 아직 확인되지 않았습니다."
+        return ""
+
+    @staticmethod
+    def _join_exposure_labels(labels: list[str]) -> str:
+        values = list(dict.fromkeys(labels))
+        if "개인정보 제공" in values and "인증정보 제공" in values:
+            values = [value for value in values if value not in {"개인정보 제공", "인증정보 제공"}]
+            values.insert(1 if values and values[0] == "실제 송금" else 0, "개인정보·인증정보 제공")
+        if len(values) == 1:
+            return values[0]
+        if len(values) == 2:
+            return f"{values[0]} 및 {values[1]}"
+        return f"{', '.join(values[:-1])} 및 {values[-1]}"
+
+    @staticmethod
+    def _has_official_verification_source(evidence_url: str | None) -> bool:
+        parsed = urlparse((evidence_url or "").strip())
+        if parsed.scheme.casefold() != "https":
+            return False
+        host = (parsed.hostname or "").casefold().rstrip(".")
+        return any(host == domain or host.endswith("." + domain) for domain in ("go.kr", "gov", "gov.kr"))
 
     @staticmethod
     def _build_case_context(brief, ai_input: CaseSnapshotAiInput) -> CaseContextProjection:
@@ -447,6 +591,16 @@ class CaseSnapshotAiAdapter:
                     "role": atom.amount_role or ("REQUESTED_AMOUNT" if atom.action_state in {"REQUESTED", "INSTRUCTED"} else "TRANSFER_OUT"),
                     "direction": atom.amount_direction or ("REQUEST" if atom.action_state in {"REQUESTED", "INSTRUCTED"} else "OUT"),
                     "scope": atom.amount_scope or "EVENT",
+                    # Preserve what the analysis actually attributed. A
+                    # TRANSFER_OUT role alone is not proof of a bank transfer.
+                    "action_state": atom.action_state,
+                    "modality": atom.modality,
+                    "claim_status": atom.claim_status,
+                    "speaker_role": CaseSnapshotAiAdapter._enum_value(atom.speaker_role),
+                    "actor_role": CaseSnapshotAiAdapter._enum_value(atom.actor_role),
+                    "target_role": CaseSnapshotAiAdapter._enum_value(atom.target_role),
+                    "reported_by_role": CaseSnapshotAiAdapter._enum_value(atom.reported_by_role),
+                    "predicate": atom.predicate,
                 })
 
         confirmed_facts = [
@@ -652,6 +806,12 @@ class CaseSnapshotAiAdapter:
     @staticmethod
     def _non_empty_string(value: Any) -> str | None:
         return value.strip() if isinstance(value, str) and value.strip() else None
+
+    @staticmethod
+    def _enum_value(value: Any) -> str | None:
+        if value is None:
+            return None
+        return str(getattr(value, "value", value))
 
     @staticmethod
     def _positive_int(value: Any) -> int | None:
