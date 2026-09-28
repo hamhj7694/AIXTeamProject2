@@ -119,8 +119,8 @@ def _task(row: dict[str, Any]) -> PublicCaseTaskV2:
     return PublicCaseTaskV2.model_validate({
         **_public_row(
             row, "related_gap_ids_json", "related_verification_ids_json", "evidence_refs_json",
-            "client_request_id",
         ),
+        "client_request_id": row.get("client_request_id"),
         "related_gap_ids": _json_load(row.get("related_gap_ids_json"), []),
         "related_verification_ids": _json_load(row.get("related_verification_ids_json"), []),
         "evidence_refs": _json_load(row.get("evidence_refs_json"), []),
@@ -434,6 +434,7 @@ class InMemoryCaseContextV2Repository:
             now = _now()
             item = PublicCaseTaskV2(
                 task_id=f"task-{uuid4().hex}", case_id=case_id, source="STAFF_CREATED",
+                client_request_id=data.get("client_request_id"),
                 task_type=data["task_type"], title=data["title"], description=data["description"],
                 priority=data["priority"], status="TODO", assignee_user_id=data.get("assignee_user_id"),
                 due_at=data.get("due_at"), related_gap_ids=data.get("related_gap_ids", []),

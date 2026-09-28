@@ -141,6 +141,7 @@ class PublicAiSuggestionV2(CaseContextV2Model):
 class PublicCaseTaskV2(CaseContextV2Model):
     task_id: str
     case_id: str
+    client_request_id: str | None = None
     source: Literal["STAFF_CREATED", "AI_SUGGESTION_ACCEPTED", "SYSTEM_REQUIRED"]
     source_suggestion_id: str | None = None
     task_type: Literal[

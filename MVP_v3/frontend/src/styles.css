@@ -325,12 +325,12 @@ body.is-resizing-conversations { cursor: col-resize; user-select: none; }
 .message-row.mine { flex-direction: row-reverse; }
 .avatar { display: grid; width: 30px; height: 30px; flex: 0 0 30px; place-items: center; border-radius: 50%; color: #344054; background: #eaecf0; }
 .avatar.customer { color: #175cd3; background: #dbeafe; }.avatar.bank_agent, .avatar.customer_agent { color: #6941c6; background: #ebe9fe; }.avatar.bank_staff { color: #fff; background: #344054; }
-.message-wrap { max-width: min(72%, 720px); }
+.message-wrap { width: fit-content; max-width: min(400px, calc(100% - 38px)); min-width: 0; }
 .message-row.mine .message-wrap { display: flex; flex-direction: column; align-items: flex-end; }
 .entry-meta { display: flex; align-items: center; gap: 7px; color: #667085; font-size: 9px; }
 .entry-meta b { color: #475467; font-size: 10px; }
 .entry-meta time { margin-left: auto; white-space: nowrap; }
-.message-bubble { margin-top: 4px; border: 1px solid var(--line); border-radius: 4px 12px 12px 12px; padding: 9px 11px; color: #1d2939; background: #fff; font-size: 12px; line-height: 1.65; box-shadow: 0 1px 2px rgba(16,24,40,.03); }
+.message-bubble { width: fit-content; max-width: 100%; box-sizing: border-box; margin-top: 4px; border: 1px solid var(--line); border-radius: 4px 12px 12px 12px; padding: 9px 11px; color: #1d2939; background: #fff; font-size: 12px; line-height: 1.65; box-shadow: 0 1px 2px rgba(16,24,40,.03); }
 .bank-ai-next-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
 .bank-ai-next-actions button { border: 1px solid #d0d5dd; border-radius: 7px; padding: 6px 9px; background: #fff; color: #344054; font-size: 10px; font-weight: 700; cursor: pointer; text-align: left; overflow-wrap: anywhere; }
 .bank-timeline-entry:has(.ai-recommendation-tray.has-official-verification) .bank-ai-next-actions { display: none; }
@@ -348,9 +348,9 @@ body.is-resizing-conversations { cursor: col-resize; user-select: none; }
 .message-time { margin-top: 3px; color: #98a2b3; font-size: 9px; }
 .message-time.sending, .customer-message-wrap > time.sending { color: #667085; }
 .message-time.failed, .customer-message-wrap > time.failed { color: #d92d20; font-weight: 750; }
-.ai-thinking-entry { display: flex; align-items: flex-start; gap: 8px; max-width: min(72%, 720px); margin: 12px 0; }
+.ai-thinking-entry { display: flex; align-items: flex-start; gap: 8px; width: fit-content; max-width: min(400px, 100%); margin: 12px 0; }
 .ai-thinking-avatar { display: grid; width: 30px; height: 30px; flex: 0 0 30px; place-items: center; border: 1px solid #c7d7fe; border-radius: 50%; color: #6941c6; background: #f4f3ff; }
-.ai-thinking-bubble { display: grid; gap: 3px; border: 1px solid #c7d7fe; border-radius: 4px 12px 12px 12px; padding: 9px 11px; color: #344054; background: #f8f7ff; box-shadow: 0 1px 2px rgba(16,24,40,.03); font-size: 11px; line-height: 1.45; }
+.ai-thinking-bubble { display: grid; width: fit-content; max-width: calc(100% - 38px); box-sizing: border-box; gap: 3px; border: 1px solid #c7d7fe; border-radius: 4px 12px 12px 12px; padding: 9px 11px; color: #344054; background: #f8f7ff; box-shadow: 0 1px 2px rgba(16,24,40,.03); font-size: 11px; line-height: 1.45; }
 .ai-thinking-bubble strong { color: #5925dc; font-size: 11px; }
 .ai-thinking-bubble > span:not(.ai-thinking-dots) { color: #667085; font-size: 10px; }
 .ai-thinking-dots { display: inline-flex; align-items: center; gap: 3px; min-height: 7px; }
@@ -761,7 +761,7 @@ body.is-resizing-conversations { cursor: col-resize; user-select: none; }
 .customer-recovery-active-status { flex: 0 0 auto; border-radius: 8px; padding: 7px 8px; color: #be123c; background: #ffe4e6; font-size: 9px; font-weight: 900; white-space: nowrap; }.customer-card-entry.recovery-entry { width: 86%; max-width: 100%; margin: 14px auto; box-sizing: border-box; }.customer-card-entry.recovery-entry .recovery-detail-card { width: 100%; max-width: 100%; box-sizing: border-box; padding: 11px; }.customer-card-entry.recovery-entry .recovery-detail-card > header { gap: 8px; }.customer-card-entry.recovery-entry .recovery-detail-card > header > span { width: 36px; height: 36px; flex-basis: 36px; border-radius: 10px; }.customer-card-entry.recovery-entry .recovery-detail-card h3 { font-size: 15px; }.customer-card-entry.recovery-entry .recovery-detail-card header p { font-size: 10px; line-height: 1.5; }.customer-card-entry.recovery-entry .recovery-detail-card > section { margin-top: 11px; padding: 10px; }.customer-card-entry.recovery-entry .recovery-detail-card ol { gap: 6px; margin-top: 8px; }.customer-card-entry.recovery-entry .recovery-notes { gap: 6px; margin-top: 8px; }.customer-card-entry.recovery-entry .recovery-notes > div { padding: 9px; }.customer-card-entry.recovery-entry .recovery-detail-card > footer { gap: 6px; margin-top: 10px; padding-top: 9px; }.customer-card-entry.recovery-entry .recovery-detail-card > footer button { padding: 7px 8px; }
 .customer-conversation-scroll { min-width: 0; overscroll-behavior: contain; padding: 14px 12px 18px; }.customer-message-row, .customer-message-wrap, .customer-card-entry, .recovery-detail-card, .customer-question-card, .customer-answer-card, .customer-verification-card { min-width: 0; width: 100%; max-width: 100%; overflow-wrap: anywhere; }
 .customer-message-row { gap: 7px; }.customer-message-wrap { width: auto; max-width: calc(100% - 41px); }.customer-message-bubble, .customer-message-bubble .safe-markdown, .customer-card-entry :is(h1,h2,h3,h4,p,small,span,li,button), .recovery-detail-card :is(h1,h2,h3,h4,p,small,span,li,button) { overflow-wrap: anywhere; word-break: normal; }
-.ai-thinking-entry { max-width: calc(100% - 2px); }.recovery-detail-card { padding: 14px; }
+.ai-thinking-entry { max-width: min(400px, calc(100% - 2px)); }.recovery-detail-card { padding: 14px; }
 .recovery-detail-card > header > div, .recovery-detail-card > section, .recovery-detail-card .recovery-notes > div { min-width: 0; }.recovery-detail-card > footer { align-items: stretch; }
 .customer-page .recovery-notes { grid-template-columns: minmax(0,1fr); }.customer-page .recovery-detail-card > footer button { flex: 1 1 150px; justify-content: center; }
 .customer-recovery-guide .recovery-step-grid button { display: grid; place-items: center; min-width: 0; min-height: 48px; padding: 5px 3px; }.customer-recovery-guide .recovery-step-grid button > span { min-width: 0; white-space: nowrap; word-break: keep-all; overflow-wrap: normal; font-size: 8px; }.customer-recovery-guide .recovery-step-grid button > small { display: none; }

@@ -2,6 +2,25 @@ import { request } from '../api/client';
 import { CURRENT_BANK_USER } from '../api/cases';
 import type { ContextPanelV3 } from './types';
 
+export type ContextTaskV2 = {
+  task_id: string;
+  case_id: string;
+  client_request_id: string | null;
+  title: string;
+  description: string;
+  status: 'TODO' | 'IN_PROGRESS' | 'BLOCKED' | 'COMPLETED' | 'CANCELLED';
+  completed_by: string | null;
+  completed_at: string | null;
+  version: number;
+};
+
+type ContextResourcesV2 = { tasks: ContextTaskV2[] };
+
+export const loadContextTasks = (caseId: string, signal?: AbortSignal) => request<ContextResourcesV2>(
+  `/api/cases/${encodeURIComponent(caseId)}/context-v2/resources?actor_user_id=${encodeURIComponent(CURRENT_BANK_USER.user_id)}`,
+  { signal },
+).then((resources) => resources.tasks);
+
 export const loadContextPanelV3 = (caseId: string, signal?: AbortSignal) => request<ContextPanelV3>(
   `/api/cases/${encodeURIComponent(caseId)}/context-v2/panel?view=bank&actor_user_id=${encodeURIComponent(CURRENT_BANK_USER.user_id)}`,
   { signal },
