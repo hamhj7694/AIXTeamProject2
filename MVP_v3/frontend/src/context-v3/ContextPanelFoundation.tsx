@@ -1,20 +1,19 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Archive, Check, ChevronDown, ChevronUp, Loader2, MoreHorizontal, PanelRightClose, PanelRightOpen, Pencil, Plus, RotateCcw, Sparkles } from 'lucide-react';
+import { Archive, Check, ChevronDown, ChevronUp, ClipboardCheck, Loader2, MoreHorizontal, PanelRightClose, PanelRightOpen, Pencil, Plus, RotateCcw, Sparkles, UserRound } from 'lucide-react';
 import { casesApi, CURRENT_BANK_USER } from '../api/cases';
 import type { CaseBundle, CaseSupportSnapshot, StoredCase } from '../api/types';
-import { completeContextTask, createContextTask, loadContextTasks, updateContextTask } from './api';
-import type { ContextTaskV2 } from './api';
 
 type BriefCategoryKey = 'identity' | 'claim' | 'demand' | 'pressure' | 'money' | 'exposure';
-type GuideStage = 'recommended' | 'completed';
+type GuideStage = 'recommended' | 'inProgress' | 'completed';
 type GuideActionKey = 'CUSTOMER_QUESTION' | 'TRANSACTION_LOOKUP' | 'OFFICIAL_VERIFICATION' | 'RESPONSE_ACTION' | 'NONE';
 type GuideType = '고객 소통' | '금융 보호' | '기록·증빙';
 type BriefEntry = { id: string; text: string };
 type ArchivedBriefEntry = BriefEntry & { categoryKey: BriefCategoryKey };
 type BriefCategory = { key: BriefCategoryKey; label: string; entries: BriefEntry[] };
-type GuideStep = { id: string; title: string; description?: string; completed?: boolean; completedBy?: string; completedAt?: string; archived?: boolean; actionKey?: GuideActionKey; actionLabel?: string; onAction?: () => void };
-type GuideEntry = { id: string; title: string; description: string; contextSummary?: string; type: GuideType; actionKey?: GuideActionKey; actionLabel?: string; onAction?: () => void; steps?: GuideStep[] };
+type GuideStep = { id: string; title: string; description?: string; completed?: boolean; archived?: boolean; actor?: string; timestamp?: string; actionKey?: GuideActionKey; actionLabel?: string; onAction?: () => void };
+type GuideEntry = { id: string; title: string; description: string; contextSummary?: string; type: GuideType; stage: GuideStage; actor?: string; timestamp?: string; actionKey?: GuideActionKey; actionLabel?: string; onAction?: () => void; steps?: GuideStep[] };
 type SummaryItem = { label: string; value: string };
+type AssigneeOption = { name: string; role?: string; displayRole?: string | null; positionTitle?: string | null };
 type RowAction = { label: string; title: string; icon: React.ReactNode; onClick: () => void; danger?: boolean };
 type NewGuideDraft = { parentId: string; parentTitle: string; stepTitle: string; stepDescription: string };
 
@@ -53,7 +52,7 @@ type Props = {
   onOpenTransactionLookup: () => void;
   onOpenVerification: () => void;
   onOpenAction: () => void;
-  staffDirectory?: { userId: string; displayName: string }[];
+  assigneeOptions?: AssigneeOption[];
   headerActions?: React.ReactNode;
 };
 
@@ -147,7 +146,7 @@ const buildBriefCategories = (caseItem: StoredCase, support: CaseSupportSnapshot
 const categoryOpenState = (categories: BriefCategory[]): Record<BriefCategoryKey, boolean> => Object.fromEntries(categories.map((category) => [category.key, category.entries.length > 0])) as Record<BriefCategoryKey, boolean>;
 
 const questionFor = (bundle: CaseBundle, targets: string[]) => bundle.questions.find((question) => targets.some((target) => question.target_field.toUpperCase().includes(target)));
-const questionStage = (_status?: string): GuideStage => 'recommended';
+const questionStage = (status?: string): GuideStage => status === 'ANSWERED' ? 'completed' : status === 'ASKED' ? 'inProgress' : 'recommended';
 const actionLabelFor = (actionKey: GuideActionKey) => ({ CUSTOMER_QUESTION: '질문 열기', TRANSACTION_LOOKUP: '송금 기록 조회', OFFICIAL_VERIFICATION: '기관 확인 열기', RESPONSE_ACTION: '대응 조치 열기', NONE: '' }[actionKey]);
 const guideActionFor = (value: string): GuideActionKey => {
   if (includesAny(value, ['송금', '이체', '거래', '금액'])) return 'TRANSACTION_LOOKUP';
@@ -205,10 +204,10 @@ const buildGuides = (caseItem: StoredCase, bundle: CaseBundle, support: CaseSupp
   return guides.map((guide) => ({ ...guide, steps: guide.steps ?? defaultSteps[guide.id] }));
 };
 
-const stageLabel: Record<GuideStage, string> = { recommended: '미완료', completed: '완료' };
-const stageIcon: Record<GuideStage, React.ReactNode> = { recommended: <Check size={14}/>, completed: <Check size={14}/> };
+const stageLabel: Record<GuideStage, string> = { recommended: '미완료', inProgress: '미완료', completed: '완료' };
+const stageIcon: Record<GuideStage, React.ReactNode> = { recommended: <ClipboardCheck size={14}/>, inProgress: <ClipboardCheck size={14}/>, completed: <Check size={14}/> };
 
-export const ContextPanelFoundation: React.FC<Props> = ({ open, onToggle, caseItem, bundle, support, onOpenQuestions, onOpenTransactionLookup, onOpenVerification, onOpenAction, staffDirectory = [], headerActions }) => {
+export const ContextPanelFoundation: React.FC<Props> = ({ open, onToggle, caseItem, bundle, support, onOpenQuestions, onOpenTransactionLookup, onOpenVerification, onOpenAction, assigneeOptions = [], headerActions }) => {
   const initialBrief = useMemo(() => buildBriefCategories(caseItem, support), [caseItem.case_id, caseItem.updated_at, support?.source_revision, support?.projection_revision]);
   const [brief, setBrief] = useState(initialBrief);
   const [archivedBrief, setArchivedBrief] = useState<ArchivedBriefEntry[]>([]);
@@ -220,9 +219,6 @@ export const ContextPanelFoundation: React.FC<Props> = ({ open, onToggle, caseIt
   const [editingBriefText, setEditingBriefText] = useState('');
   const [archivedGuides, setArchivedGuides] = useState<string[]>([]);
   const [deletedGuideIds, setDeletedGuideIds] = useState<string[]>([]);
-  const [guideTasks, setGuideTasks] = useState<ContextTaskV2[]>([]);
-  const [guideTasksError, setGuideTasksError] = useState('');
-  const [busyGuideStepKeys, setBusyGuideStepKeys] = useState<string[]>([]);
   const [customGuides, setCustomGuides] = useState<GuideEntry[]>([]);
   const [guideOverrides, setGuideOverrides] = useState<Record<string, Partial<GuideEntry>>>({});
   const [newGuideSteps, setNewGuideSteps] = useState<GuideStep[]>([]);
@@ -234,9 +230,13 @@ export const ContextPanelFoundation: React.FC<Props> = ({ open, onToggle, caseIt
   const [newGuide, setNewGuide] = useState<NewGuideDraft>({ parentId: '', parentTitle: '', stepTitle: '', stepDescription: '' });
   const [guideAiBusy, setGuideAiBusy] = useState(false);
   const [guideAiMessage, setGuideAiMessage] = useState('');
-  const [guideOpen, setGuideOpen] = useState<Record<GuideStage, boolean>>({ recommended: true, completed: false });
+  const [guideOpen, setGuideOpen] = useState<Record<GuideStage, boolean>>({ recommended: true, inProgress: false, completed: false });
   const [guideSectionOpen, setGuideSectionOpen] = useState(true);
   const [summaryExpanded, setSummaryExpanded] = useState(false);
+  const previousInProgressCount = useRef<number | null>(null);
+  const [assigningGuideId, setAssigningGuideId] = useState<string | null>(null);
+  const [assigningStepKey, setAssigningStepKey] = useState<string | null>(null);
+  const [selectedAssignee, setSelectedAssignee] = useState('');
 
   useEffect(() => {
     setBrief(initialBrief);
@@ -255,8 +255,29 @@ export const ContextPanelFoundation: React.FC<Props> = ({ open, onToggle, caseIt
   useEffect(() => {
     setDeletedGuideIds([]);
   }, [caseItem.case_id]);
+  useEffect(() => {
+    const controller = new AbortController();
+    setGuideTasks([]);
+    setGuideTasksError('');
+    void loadContextTasks(caseItem.case_id, controller.signal)
+      .then(setGuideTasks)
+      .catch((reason) => { if (!controller.signal.aborted) setGuideTasksError(reason instanceof Error ? reason.message : '가이드 완료 상태를 불러오지 못했습니다.'); });
+    return () => controller.abort();
+  }, [caseItem.case_id]);
   const baseGuides = useMemo(() => buildGuides(caseItem, bundle, support, onOpenQuestions, onOpenTransactionLookup, onOpenVerification, onOpenAction).filter((item) => item.id !== 'guide-response-action'), [caseItem.case_id, caseItem.updated_at, bundle.questions, support?.source_revision, onOpenQuestions, onOpenTransactionLookup, onOpenVerification, onOpenAction]);
-  const guides = useMemo(() => [...baseGuides, ...customGuides].filter((item) => !deletedGuideIds.includes(item.id)).map((item) => ({ ...item, ...guideOverrides[item.id] })), [baseGuides, customGuides, deletedGuideIds, guideOverrides]);
+  const guideTaskMap = useMemo(() => new Map(guideTasks.filter((task) => task.client_request_id).map((task) => [task.client_request_id as string, task])), [guideTasks]);
+  const guides = useMemo(() => [...baseGuides, ...customGuides].filter((item) => !deletedGuideIds.includes(item.id)).map((item) => {
+    const override = guideOverrides[item.id] ?? {};
+    const guide = { ...item, ...override };
+    const steps = override.steps ?? item.steps;
+    return {
+      ...guide,
+      steps: steps?.map((step) => {
+        const task = guideTaskMap.get(guideStepRequestId(item.id, step.id));
+        return { ...step, completed: task?.status === 'COMPLETED', completedBy: task?.completed_by ?? undefined, completedAt: task?.completed_at ?? undefined };
+      }),
+    };
+  }), [baseGuides, customGuides, deletedGuideIds, guideOverrides, guideTaskMap]);
   const activeGuides = guides.filter((item) => !archivedGuides.includes(item.id));
   const availableAssignees = useMemo(() => {
     const options: AssigneeOption[] = [{ name: CURRENT_BANK_USER.display_name, role: '현재 사용자' }, ...assigneeOptions, ...activeGuides.flatMap((item) => [
