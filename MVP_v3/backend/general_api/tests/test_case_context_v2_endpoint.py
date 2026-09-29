@@ -172,7 +172,7 @@ class CaseContextV2EndpointTest(unittest.TestCase):
         fact_history = [item for item in self.repository._context_v2_history if item["entity_type"] == "FACT"]
         self.assertTrue(any(item["operation"] == "SUPERSEDE" for item in fact_history))
 
-    def test_correction_proposal_remembers_replaced_fact_and_confirmation_supersedes_it(self):
+    def test_correction_replaces_active_fact_without_a_confirmation_step(self):
         first = self.create_fact().json()
         self.client.patch(
             f"{self.base}/facts/{first['fact_id']}/review?actor_user_id=owner",
@@ -184,11 +184,7 @@ class CaseContextV2EndpointTest(unittest.TestCase):
             "display_value": "이체하지 않음", "supersedes_fact_id": first["fact_id"],
         }).json()
         self.assertEqual(correction["supersedes_fact_id"], first["fact_id"])
-        confirmed = self.client.patch(
-            f"{self.base}/facts/{correction['fact_id']}/review?actor_user_id=owner",
-            json={"expected_version": 1, "decision": "CONFIRM", "reason": "정정 확인"},
-        )
-        self.assertEqual(confirmed.status_code, 200, confirmed.text)
+        self.assertEqual(correction["status"], "PROPOSED")
         self.assertEqual(self.repository._context_v2_facts[("VP-V2", first["fact_id"])].status, "SUPERSEDED")
 
     def test_confirmed_fact_can_be_unconfirmed_or_invalidated_with_history(self):

@@ -68,13 +68,15 @@ class PublicRightPanelItem(PublicWorkflowModel):
     semantic_key: str = Field(min_length=1, max_length=160)
     title: str = Field(min_length=1, max_length=500)
     detail: str = Field(default="", max_length=1200)
-    source_badge: Literal["상대방 주장", "상대방 요구", "고객 진술", "고객 부인", "미확인", "공식 확인", "직원 기록", "분석 정황"] | None = None
+    source_badge: Literal["상대방 주장", "상대방 요구", "고객 진술", "고객 부인", "미확인", "공식 확인", "직원 기록", "담당자 확인 보고", "분석 정황"] | None = None
     origin: Literal["AI_ANALYSIS", "CUSTOMER_ANSWER", "VERIFICATION", "STAFF_ACTION", "STAFF_ADDED", "TASK"] = "AI_ANALYSIS"
     status: str | None = Field(default=None, max_length=40)
     occurred_at: str | None = Field(default=None, max_length=64)
     evidence_refs: list[str] = Field(default_factory=list, max_length=20)
     actor_id: str | None = Field(default=None, max_length=64)
     version: int | None = Field(default=None, ge=1)
+    presentation_group: Literal["money", "personal_information", "authentication_information", "device_access", "other"] | None = None
+    progress_group: Literal["verification", "response"] | None = None
 
 
 class PublicRightPanelCategory(PublicWorkflowModel):
@@ -83,9 +85,16 @@ class PublicRightPanelCategory(PublicWorkflowModel):
     items: list[PublicRightPanelItem] = Field(default_factory=list, max_length=100)
 
 
+class PublicRightPanelSummaryBadge(PublicWorkflowModel):
+    key: Literal["transfer", "information", "institution"]
+    label: str = Field(min_length=1, max_length=80)
+    tone: Literal["unknown", "statement", "attention", "verified"]
+
+
 class PublicRightPanelProjection(PublicWorkflowModel):
     schema_version: Literal["right-panel.v1"] = "right-panel.v1"
     current_case_summary: str = ""
+    summary_badges: list[PublicRightPanelSummaryBadge] = Field(default_factory=list, max_length=8)
     exposure: list[PublicRightPanelItem] = Field(default_factory=list, max_length=100)
     contact_information: list[PublicRightPanelItem] = Field(default_factory=list, max_length=100)
     fraud_signals: list[PublicRightPanelCategory] = Field(default_factory=list, max_length=20)
@@ -94,6 +103,16 @@ class PublicRightPanelProjection(PublicWorkflowModel):
     completed_work: list[PublicRightPanelItem] = Field(default_factory=list, max_length=100)
     activity: list[PublicRightPanelItem] = Field(default_factory=list, max_length=100)
     source_revision: int | None = Field(default=None, ge=1)
+
+    @model_validator(mode="after")
+    def require_exposure_presentation_groups(self):
+        exposure_rows = [*self.exposure, *(
+            item for category in self.fraud_signals if category.key in {"money", "exposure"}
+            for item in category.items
+        )]
+        if any(item.presentation_group is None for item in exposure_rows):
+            raise ValueError("피해·노출 항목에는 presentation_group 분류가 필요합니다.")
+        return self
 
 
 class PublicUnresolvedItemResponse(PublicWorkflowModel):

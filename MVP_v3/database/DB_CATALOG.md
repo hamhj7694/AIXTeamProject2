@@ -1,13 +1,13 @@
 # 전체 DB 구조·현재 상태 표
 
-기준 DB: `csr` · 조회 시각(UTC): `2026-09-28T11:37:14.933749+00:00`
+기준 DB: `csr` · 조회 시각(UTC): `2026-09-29T08:54:54.903084+00:00`
 
 > 실제 information_schema와 COUNT(*)로 생성한 시점별 스냅샷이다. 개인정보·대화·계좌 값은 포함하지 않는다. 0건은 테이블 누락이 아니라 비어 있는 상태다.
 
 | 검사 | 결과 |
 |---|---|
-| 테이블 / 컬럼 | 34개 / 375개 |
-| 트리거 / 선언된 FK | 26개 / 37개 |
+| 테이블 / 컬럼 | 35개 / 391개 |
+| 트리거 / 선언된 FK | 26개 / 38개 |
 | FK 위반 / Case 연결 누락 | 0종 / 0종 |
 | 현재 migration 중 미기록 | 0개 |
 | 현재 파일 없는 과거 적용 기록 | 021_bank_staff_assignment_fields.sql, 030_context_update_proposals.sql |
@@ -25,38 +25,39 @@
 
 | 엔티티 | 테이블 | 역할 | 행 수 | 기본 키 | 물리 FK 대상 |
 |---|---|---|---:|---|---|
-| 사건·분석 | [`cases`](#table-cases) | 사건 원장·요약·상태·구조화 분석 JSON | 25 | case_id | — |
-| 사건·분석 | [`case_inputs`](#table-case_inputs) | 데모 입력 원문과 입력 유형을 보관하는 Case 입력 원장; 최초 분석 결과 화면에서만 일시 확인하고 일반 Case read/list/bundle·지원 AI에는 반환하지 않음 | 25 | input_id | cases |
-| 사건·분석 | [`analysis_segments`](#table-analysis_segments) | 원문이 아닌 정황 라벨·구간 위험도 | 208 | segment_id | cases |
-| 사건·분석 | [`context_features`](#table-context_features) | 정규화된 수치 피처 | 3800 | feature_id | analysis_segments, cases |
-| 사건·분석 | [`case_semantic_atoms`](#table-case_semantic_atoms) | 역할·행동·금액·시간을 보존하는 의미 단위 | 249 | case_id, atom_id | cases |
-| 사건·분석 | [`case_semantic_relations`](#table-case_semantic_relations) | 의미 단위 간 순서·인과 등의 관계 | 41 | case_id, relation_id | cases |
+| 사건·분석 | [`cases`](#table-cases) | 사건 원장·요약·상태·구조화 분석 JSON | 29 | case_id | — |
+| 사건·분석 | [`case_inputs`](#table-case_inputs) | 데모 입력 원문과 입력 유형을 보관하는 Case 입력 원장; 최초 분석 결과 화면에서만 일시 확인하고 일반 Case read/list/bundle·지원 AI에는 반환하지 않음 | 29 | input_id | cases |
+| 사건·분석 | [`analysis_segments`](#table-analysis_segments) | 원문이 아닌 정황 라벨·구간 위험도 | 233 | segment_id | cases |
+| 사건·분석 | [`context_features`](#table-context_features) | 정규화된 수치 피처 | 4408 | feature_id | analysis_segments, cases |
+| 사건·분석 | [`case_semantic_atoms`](#table-case_semantic_atoms) | 역할·행동·금액·시간을 보존하는 의미 단위 | 285 | case_id, atom_id | cases |
+| 사건·분석 | [`case_semantic_relations`](#table-case_semantic_relations) | 의미 단위 간 순서·인과 등의 관계 | 47 | case_id, relation_id | cases |
 | 사건·분석 | [`case_context_signals`](#table-case_context_signals) | 구조화 신호 투영 | 0 | case_id, signal_id | cases |
 | 직원·참여자 | [`bank_staff_directory`](#table-bank_staff_directory) | 등록 은행 직원과 배정 가능 직무 | 12 | staff_id | — |
-| 직원·참여자 | [`case_members`](#table-case_members) | Case별 참여자·시스템 권한·배정 역할·제거 상태 | 45 | case_id, user_id | cases |
-| 직원·참여자 | [`case_presence`](#table-case_presence) | 사용자 접속·만료 시각; 담당자 배정과 별개 | 34 | case_id, user_id | cases |
-| 대화·고객 질문 | [`messages`](#table-messages) | 고객/은행/AI 대화와 시스템 이벤트; 통화 입력 원문과 별개; attachments_json은 현재 빈 호환 필드 | 308 | message_id | cases |
-| 대화·고객 질문 | [`customer_questions`](#table-customer_questions) | 고객 질문·선택지·답변·질문 버전 | 48 | question_id | cases |
-| 대화·고객 질문 | [`message_context_extractions`](#table-message_context_extractions) | 메시지→사실 후보 추출 작업·재시도 상태 | 193 | extraction_id | cases, messages |
+| 직원·참여자 | [`case_members`](#table-case_members) | Case별 참여자·시스템 권한·배정 역할·제거 상태 | 57 | case_id, user_id | cases |
+| 직원·참여자 | [`case_presence`](#table-case_presence) | 사용자 접속·만료 시각; 담당자 배정과 별개 | 39 | case_id, user_id | cases |
+| 대화·고객 질문 | [`messages`](#table-messages) | 고객/은행/AI 대화와 시스템 이벤트; 통화 입력 원문과 별개; attachments_json은 현재 빈 호환 필드 | 368 | message_id | cases |
+| 대화·고객 질문 | [`customer_questions`](#table-customer_questions) | 고객 질문·선택지·답변·질문 버전 | 55 | question_id | cases |
+| 대화·고객 질문 | [`message_context_extractions`](#table-message_context_extractions) | 메시지→사실 후보 추출 작업·재시도 상태 | 216 | extraction_id | cases, messages |
+| 대화·고객 질문 | [`case_copilot_jobs`](#table-case_copilot_jobs) | 은행 내부 선제 브리핑의 사건 상태별 중복 방지·재시도·결과 메시지 연결 | 5 | job_id | cases |
 | 금액·거래 | [`case_transactions`](#table-case_transactions) | 외부 은행 원장이 아닌 Case 내부 확인 거래 기록; Context V2 실제 금액 사실을 직원 확인 후 승격 | 0 | id | cases |
-| 사실·확인 | [`case_context_facts_v2`](#table-case_context_facts_v2) | AI·대화·직원 확인에서 나온 사실 후보·확정·기각·대체 상태와 근거; 거래 승격 전의 기준 원장 | 446 | fact_id | case_context_facts_v2, cases |
+| 사실·확인 | [`case_context_facts_v2`](#table-case_context_facts_v2) | AI·대화·직원 확인에서 나온 사실 후보·확정·기각·대체 상태와 근거; 거래 승격 전의 기준 원장 | 533 | fact_id | case_context_facts_v2, cases |
 | 사실·확인 | [`case_gaps`](#table-case_gaps) | 미확인 사항과 해소 근거 | 0 | gap_id | case_context_facts_v2, cases |
-| 사실·확인 | [`verification_tasks`](#table-verification_tasks) | 별도 확인 업무·결과·공개 여부 | 11 | verification_task_id | cases |
+| 사실·확인 | [`verification_tasks`](#table-verification_tasks) | 별도 확인 업무·결과·공개 여부 | 13 | verification_task_id | cases |
 | 사실·확인 | [`case_context_observations`](#table-case_context_observations) | 표준 분류에 매핑되지 않은 구조화 관찰 | 0 | case_id, observation_id | cases |
-| 조치·업무·결정 | [`actions`](#table-actions) | 기존 조치 저널·고객 진행 상태 등; 실제 외부 실행 증거와 구분 | 226 | action_id | cases |
+| 조치·업무·결정 | [`actions`](#table-actions) | 기존 조치 저널·고객 진행 상태 등; 실제 외부 실행 증거와 구분 | 261 | action_id | cases |
 | 조치·업무·결정 | [`case_ai_suggestions`](#table-case_ai_suggestions) | AI 업무 제안·검토·채택 상태 | 0 | suggestion_id | cases |
 | 조치·업무·결정 | [`case_tasks`](#table-case_tasks) | 담당자 업무·진행·완료·차단 상태 | 7 | task_id | case_ai_suggestions, cases |
 | 조치·업무·결정 | [`case_decisions`](#table-case_decisions) | 직원 판단·결정 기록 | 0 | decision_id | case_decisions, cases |
-| 화면·캐시 | [`case_context_items`](#table-case_context_items) | 직원 표시 편집본과 버전; 원본 사실과 별개 | 0 | item_id | cases |
-| 화면·캐시 | [`case_context_projections`](#table-case_context_projections) | 맥락 생성 lease·revision·마지막 성공 결과 캐시; 원본 사실·직원 이력과 별개 | 25 | case_id | cases |
+| 화면·캐시 | [`case_context_items`](#table-case_context_items) | 직원 표시 편집본과 버전; 원본 사실과 별개 | 10 | item_id | cases |
+| 화면·캐시 | [`case_context_projections`](#table-case_context_projections) | 맥락 생성 lease·revision·마지막 성공 결과 캐시; 원본 사실·직원 이력과 별개 | 29 | case_id | cases |
 | 화면·캐시 | [`personal_notes`](#table-personal_notes) | 작성자 개인 메모 | 0 | note_id | cases |
-| 보고서·이력 | [`case_reports`](#table-case_reports) | LIVE/FINAL 보고서 원장; live_report는 초기 분석 snapshot이며 우측 Context Panel의 공개 계약과 분리 | 25 | report_id | cases |
-| 보고서·이력 | [`case_report_sections`](#table-case_report_sections) | 보고서 섹션 JSON·버전 | 175 | report_id, section_key | case_reports |
-| 보고서·이력 | [`case_events`](#table-case_events) | Case 업무 이벤트 타임라인 | 684 | event_id | cases |
-| 보고서·이력 | [`case_context_item_history`](#table-case_context_item_history) | 직원 표시 편집 변경 이력 | 0 | history_id | case_context_items |
-| 보고서·이력 | [`case_context_v2_history`](#table-case_context_v2_history) | 사실·업무 등 V2 자원 변경 이력 | 460 | history_id | cases |
+| 보고서·이력 | [`case_reports`](#table-case_reports) | LIVE/FINAL 보고서 원장; live_report는 초기 분석 snapshot이며 우측 Context Panel의 공개 계약과 분리 | 29 | report_id | cases |
+| 보고서·이력 | [`case_report_sections`](#table-case_report_sections) | 보고서 섹션 JSON·버전 | 203 | report_id, section_key | case_reports |
+| 보고서·이력 | [`case_events`](#table-case_events) | Case 업무 이벤트 타임라인 | 824 | event_id | cases |
+| 보고서·이력 | [`case_context_item_history`](#table-case_context_item_history) | 직원 표시 편집 변경 이력 | 31 | history_id | case_context_items |
+| 보고서·이력 | [`case_context_v2_history`](#table-case_context_v2_history) | 사실·업무 등 V2 자원 변경 이력 | 547 | history_id | cases |
 | 음성·호환 | [`voice_sessions`](#table-voice_sessions) | 음성 세션 상태·참여자 metadata; 원문 segment 저장 없음; API·bundle 호환용 | 0 | session_id | cases |
-| 스키마 운영 | [`schema_migrations`](#table-schema_migrations) | 적용 또는 검증된 기준선의 전체 migration 파일명 | 33 | migration_name | — |
+| 스키마 운영 | [`schema_migrations`](#table-schema_migrations) | 적용 또는 검증된 기준선의 전체 migration 파일명 | 34 | migration_name | — |
 | 미분류 — 계약 등록 필요 | [`case_context_proposal_scans`](#table-case_context_proposal_scans) | 신규 테이블; 엔티티 설명 필요 | 23 | case_id | cases |
 | 미분류 — 계약 등록 필요 | [`case_context_update_proposals`](#table-case_context_update_proposals) | 신규 테이블; 엔티티 설명 필요 | 0 | proposal_id | cases |
 
@@ -78,7 +79,7 @@
 
 사건·분석 — 사건 원장·요약·상태·구조화 분석 JSON
 
-Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 25행
+Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 29행
 
 | 컬럼 | 타입 | NULL 허용 | 기본값 | 키/특성 | 의미 |
 |---|---|---|---|---|---|
@@ -115,7 +116,7 @@ Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 25행
 
 사건·분석 — 데모 입력 원문과 입력 유형을 보관하는 Case 입력 원장; 최초 분석 결과 화면에서만 일시 확인하고 일반 Case read/list/bundle·지원 AI에는 반환하지 않음
 
-Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 25행
+Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 29행
 
 | 컬럼 | 타입 | NULL 허용 | 기본값 | 키/특성 | 의미 |
 |---|---|---|---|---|---|
@@ -140,7 +141,7 @@ Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 25행
 
 사건·분석 — 원문이 아닌 정황 라벨·구간 위험도
 
-Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 208행
+Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 233행
 
 | 컬럼 | 타입 | NULL 허용 | 기본값 | 키/특성 | 의미 |
 |---|---|---|---|---|---|
@@ -169,7 +170,7 @@ Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 208행
 
 사건·분석 — 정규화된 수치 피처
 
-Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 3800행
+Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 4408행
 
 | 컬럼 | 타입 | NULL 허용 | 기본값 | 키/특성 | 의미 |
 |---|---|---|---|---|---|
@@ -198,7 +199,7 @@ Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 3800행
 
 사건·분석 — 역할·행동·금액·시간을 보존하는 의미 단위
 
-Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 249행
+Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 285행
 
 | 컬럼 | 타입 | NULL 허용 | 기본값 | 키/특성 | 의미 |
 |---|---|---|---|---|---|
@@ -228,7 +229,7 @@ Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 249행
 
 사건·분석 — 의미 단위 간 순서·인과 등의 관계
 
-Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 41행
+Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 47행
 
 | 컬럼 | 타입 | NULL 허용 | 기본값 | 키/특성 | 의미 |
 |---|---|---|---|---|---|
@@ -314,8 +315,8 @@ Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 12행
 
 | FK / CHECK | 정의 |
 |---|---|
-| `chk_bank_staff_color` | `(status_color_keyin(_utf8mb4\'GREEN\',_utf8mb4\'BLUE\',_utf8mb4\'YELLOW\',_utf8mb4\'ORANGE\',_utf8mb4\'RED\',_utf8mb4\'PURPLE\',_utf8mb4\'GRAY\'))` (YES) |
 | `chk_bank_staff_assignment_role` | `(assignment_rolein(_utf8mb4\'SUPERVISOR\',_utf8mb4\'MONITORING\',_utf8mb4\'CONSULTATION\',_utf8mb4\'OTHER_VIEWER\',_utf8mb4\'HANDOVER_PENDING\'))` (YES) |
+| `chk_bank_staff_color` | `(status_color_keyin(_utf8mb4\'GREEN\',_utf8mb4\'BLUE\',_utf8mb4\'YELLOW\',_utf8mb4\'ORANGE\',_utf8mb4\'RED\',_utf8mb4\'PURPLE\',_utf8mb4\'GRAY\'))` (YES) |
 
 <a id="table-case_members"></a>
 
@@ -323,7 +324,7 @@ Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 12행
 
 직원·참여자 — Case별 참여자·시스템 권한·배정 역할·제거 상태
 
-Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 45행
+Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 57행
 
 | 컬럼 | 타입 | NULL 허용 | 기본값 | 키/특성 | 의미 |
 |---|---|---|---|---|---|
@@ -351,7 +352,7 @@ Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 45행
 
 직원·참여자 — 사용자 접속·만료 시각; 담당자 배정과 별개
 
-Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 34행
+Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 39행
 
 | 컬럼 | 타입 | NULL 허용 | 기본값 | 키/특성 | 의미 |
 |---|---|---|---|---|---|
@@ -378,7 +379,7 @@ Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 34행
 
 대화·고객 질문 — 고객/은행/AI 대화와 시스템 이벤트; 통화 입력 원문과 별개; attachments_json은 현재 빈 호환 필드
 
-Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 308행
+Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 368행
 
 | 컬럼 | 타입 | NULL 허용 | 기본값 | 키/특성 | 의미 |
 |---|---|---|---|---|---|
@@ -399,6 +400,7 @@ Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 308행
 | `message_kind` | varchar(32) | NO | CHAT |  | — |
 | `private_owner_user_id` | varchar(64) | YES | — |  | — |
 | `attachments_json` | json | YES | — |  | 구버전 채팅 계약 호환 필드; 현재는 빈 값만 유지하고 첨부 데이터 저장 금지 |
+| `ai_metadata_json` | json | YES | — |  | — |
 
 | 인덱스 | UNIQUE | 순서·컬럼 |
 |---|---|---|
@@ -416,7 +418,7 @@ Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 308행
 
 대화·고객 질문 — 고객 질문·선택지·답변·질문 버전
 
-Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 48행
+Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 55행
 
 | 컬럼 | 타입 | NULL 허용 | 기본값 | 키/특성 | 의미 |
 |---|---|---|---|---|---|
@@ -457,7 +459,7 @@ Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 48행
 
 대화·고객 질문 — 메시지→사실 후보 추출 작업·재시도 상태
 
-Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 193행
+Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 216행
 
 | 컬럼 | 타입 | NULL 허용 | 기본값 | 키/특성 | 의미 |
 |---|---|---|---|---|---|
@@ -484,8 +486,45 @@ Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 193행
 |---|---|
 | `fk_message_context_extraction_case` | case_id → cases.case_id; DELETE CASCADE; UPDATE NO ACTION |
 | `fk_message_context_extraction_message` | message_id → messages.message_id; DELETE CASCADE; UPDATE NO ACTION |
-| `chk_message_context_extraction_status` | `(statusin(_utf8mb4\'PENDING\',_utf8mb4\'PROCESSING\',_utf8mb4\'COMPLETED\',_utf8mb4\'FAILED\',_utf8mb4\'SKIPPED\'))` (YES) |
 | `chk_message_context_extraction_attempts` | `(attemptsbetween0and3)` (YES) |
+| `chk_message_context_extraction_status` | `(statusin(_utf8mb4\'PENDING\',_utf8mb4\'PROCESSING\',_utf8mb4\'COMPLETED\',_utf8mb4\'FAILED\',_utf8mb4\'SKIPPED\'))` (YES) |
+
+<a id="table-case_copilot_jobs"></a>
+
+### case_copilot_jobs
+
+대화·고객 질문 — 은행 내부 선제 브리핑의 사건 상태별 중복 방지·재시도·결과 메시지 연결
+
+Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 5행
+
+| 컬럼 | 타입 | NULL 허용 | 기본값 | 키/특성 | 의미 |
+|---|---|---|---|---|---|
+| `job_id` | varchar(64) | NO | — | PRIMARY | — |
+| `case_id` | varchar(64) | NO | — | uq_copilot_job_request | 사건 연결 키 |
+| `dedupe_key` | varchar(100) | NO | — | uq_copilot_job_request | — |
+| `trigger_kind` | varchar(24) | NO | — |  | — |
+| `source_revision` | bigint | NO | — |  | — |
+| `actor_user_id` | varchar(64) | NO | — |  | — |
+| `status` | varchar(24) | NO | PENDING | idx_copilot_jobs_retry | 자원별 처리 상태 |
+| `attempts` | int | NO | 0 |  | — |
+| `lease_token` | varchar(64) | YES | — |  | — |
+| `lease_until` | datetime(6) | YES | — |  | — |
+| `next_attempt_at` | datetime(6) | YES | — | idx_copilot_jobs_retry | — |
+| `result_message_id` | varchar(64) | YES | — |  | — |
+| `error_code` | varchar(100) | YES | — |  | — |
+| `created_at` | datetime(6) | NO | — |  | 생성 시각 |
+| `updated_at` | datetime(6) | NO | — |  | 최종 갱신 시각 |
+
+| 인덱스 | UNIQUE | 순서·컬럼 |
+|---|---|---|
+| `idx_copilot_jobs_retry` | 아니오 | status, next_attempt_at |
+| `PRIMARY` | 예 | job_id |
+| `uq_copilot_job_request` | 예 | case_id, dedupe_key |
+
+| FK / CHECK | 정의 |
+|---|---|
+| `fk_copilot_job_case` | case_id → cases.case_id; DELETE CASCADE; UPDATE NO ACTION |
+| `chk_copilot_job_status` | `(statusin(_utf8mb4\'PENDING\',_utf8mb4\'PROCESSING\',_utf8mb4\'COMPLETED\',_utf8mb4\'FAILED\',_utf8mb4\'SUPERSEDED\'))` (YES) |
 
 <a id="table-case_transactions"></a>
 
@@ -519,8 +558,8 @@ Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 0행
 | FK / CHECK | 정의 |
 |---|---|
 | `fk_case_transactions_case` | case_id → cases.case_id; DELETE CASCADE; UPDATE NO ACTION |
-| `chk_case_transactions_type` | `(transaction_typein(_utf8mb4\'TRANSFER_OUT\',_utf8mb4\'RETURN_IN\',_utf8mb4\'CANCELLED\'))` (YES) |
 | `chk_case_transactions_amount` | `(amount>=0)` (YES) |
+| `chk_case_transactions_type` | `(transaction_typein(_utf8mb4\'TRANSFER_OUT\',_utf8mb4\'RETURN_IN\',_utf8mb4\'CANCELLED\'))` (YES) |
 
 <a id="table-case_context_facts_v2"></a>
 
@@ -528,7 +567,7 @@ Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 0행
 
 사실·확인 — AI·대화·직원 확인에서 나온 사실 후보·확정·기각·대체 상태와 근거; 거래 승격 전의 기준 원장
 
-Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 446행
+Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 533행
 
 | 컬럼 | 타입 | NULL 허용 | 기본값 | 키/특성 | 의미 |
 |---|---|---|---|---|---|
@@ -563,12 +602,12 @@ Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 446행
 |---|---|
 | `fk_context_fact_v2_case` | case_id → cases.case_id; DELETE CASCADE; UPDATE NO ACTION |
 | `fk_context_fact_v2_supersedes` | supersedes_fact_id → case_context_facts_v2.fact_id; DELETE SET NULL; UPDATE NO ACTION |
-| `chk_context_fact_status` | `(statusin(_utf8mb4\'PROPOSED\',_utf8mb4\'CONFIRMED\',_utf8mb4\'REJECTED\',_utf8mb4\'SUPERSEDED\'))` (YES) |
-| `chk_context_fact_source` | `(source_kindin(_utf8mb4\'AI_EXTRACTION\',_utf8mb4\'CUSTOMER_STATEMENT\',_utf8mb4\'STAFF_OBSERVATION\',_utf8mb4\'BANK_RECORD\',_utf8mb4\'OFFICIAL_VERIFICATION\'))` (YES) |
-| `chk_context_fact_visibility` | `(visibilityin(_utf8mb4\'BANK_INTERNAL\',_utf8mb4\'CUSTOMER_SHARED\'))` (YES) |
 | `chk_context_fact_confidence` | `((confidenceisnull)or((confidence>=0)and(confidence<=1)))` (YES) |
 | `chk_context_fact_confirmed` | `((status<>_utf8mb4\'CONFIRMED\')or((confirmed_byisnotnull)and(confirmed_atisnotnull)))` (YES) |
 | `chk_context_fact_rejected` | `((status<>_utf8mb4\'REJECTED\')or(rejection_reasonisnotnull))` (YES) |
+| `chk_context_fact_source` | `(source_kindin(_utf8mb4\'AI_EXTRACTION\',_utf8mb4\'CUSTOMER_STATEMENT\',_utf8mb4\'STAFF_OBSERVATION\',_utf8mb4\'BANK_RECORD\',_utf8mb4\'OFFICIAL_VERIFICATION\'))` (YES) |
+| `chk_context_fact_status` | `(statusin(_utf8mb4\'PROPOSED\',_utf8mb4\'CONFIRMED\',_utf8mb4\'REJECTED\',_utf8mb4\'SUPERSEDED\'))` (YES) |
+| `chk_context_fact_visibility` | `(visibilityin(_utf8mb4\'BANK_INTERNAL\',_utf8mb4\'CUSTOMER_SHARED\'))` (YES) |
 
 <a id="table-case_gaps"></a>
 
@@ -613,12 +652,12 @@ Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 0행
 |---|---|
 | `fk_case_gap_case` | case_id → cases.case_id; DELETE CASCADE; UPDATE NO ACTION |
 | `fk_case_gap_resolution` | resolution_fact_id → case_context_facts_v2.fact_id; DELETE RESTRICT; UPDATE NO ACTION |
-| `chk_case_gap_status` | `(statusin(_utf8mb4\'OPEN\',_utf8mb4\'AWAITING_CUSTOMER\',_utf8mb4\'AWAITING_INSTITUTION\',_utf8mb4\'STAFF_REVIEW_REQUIRED\',_utf8mb4\'RESOLVED\',_utf8mb4\'DISMISSED\'))` (YES) |
-| `chk_case_gap_priority` | `(priorityin(_utf8mb4\'URGENT\',_utf8mb4\'HIGH\',_utf8mb4\'NORMAL\'))` (YES) |
-| `chk_case_gap_source` | `(sourcein(_utf8mb4\'AI\',_utf8mb4\'BANK_STAFF\',_utf8mb4\'SYSTEM_RULE\'))` (YES) |
-| `chk_case_gap_visibility` | `(visibility=_utf8mb4\'BANK_INTERNAL\')` (YES) |
-| `chk_case_gap_resolved` | `((status<>_utf8mb4\'RESOLVED\')or(resolution_fact_idisnotnull))` (YES) |
 | `chk_case_gap_dismissed` | `((status<>_utf8mb4\'DISMISSED\')or(dismissal_reasonisnotnull))` (YES) |
+| `chk_case_gap_priority` | `(priorityin(_utf8mb4\'URGENT\',_utf8mb4\'HIGH\',_utf8mb4\'NORMAL\'))` (YES) |
+| `chk_case_gap_resolved` | `((status<>_utf8mb4\'RESOLVED\')or(resolution_fact_idisnotnull))` (YES) |
+| `chk_case_gap_source` | `(sourcein(_utf8mb4\'AI\',_utf8mb4\'BANK_STAFF\',_utf8mb4\'SYSTEM_RULE\'))` (YES) |
+| `chk_case_gap_status` | `(statusin(_utf8mb4\'OPEN\',_utf8mb4\'AWAITING_CUSTOMER\',_utf8mb4\'AWAITING_INSTITUTION\',_utf8mb4\'STAFF_REVIEW_REQUIRED\',_utf8mb4\'RESOLVED\',_utf8mb4\'DISMISSED\'))` (YES) |
+| `chk_case_gap_visibility` | `(visibility=_utf8mb4\'BANK_INTERNAL\')` (YES) |
 
 <a id="table-verification_tasks"></a>
 
@@ -626,7 +665,7 @@ Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 0행
 
 사실·확인 — 별도 확인 업무·결과·공개 여부
 
-Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 11행
+Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 13행
 
 | 컬럼 | 타입 | NULL 허용 | 기본값 | 키/특성 | 의미 |
 |---|---|---|---|---|---|
@@ -688,7 +727,7 @@ Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 0행
 
 조치·업무·결정 — 기존 조치 저널·고객 진행 상태 등; 실제 외부 실행 증거와 구분
 
-Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 226행
+Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 261행
 
 | 컬럼 | 타입 | NULL 허용 | 기본값 | 키/특성 | 의미 |
 |---|---|---|---|---|---|
@@ -758,12 +797,12 @@ Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 0행
 | FK / CHECK | 정의 |
 |---|---|
 | `fk_ai_suggestion_case` | case_id → cases.case_id; DELETE CASCADE; UPDATE NO ACTION |
-| `chk_ai_suggestion_type` | `(suggestion_typein(_utf8mb4\'CUSTOMER_QUESTION\',_utf8mb4\'INSTITUTION_VERIFICATION\',_utf8mb4\'TRANSACTION_REVIEW\',_utf8mb4\'PROTECTIVE_ACTION\',_utf8mb4\'DOCUMENT_REQUEST\',_utf8mb4\'STAFF_REVIEW\'))` (YES) |
-| `chk_ai_suggestion_priority` | `(priorityin(_utf8mb4\'URGENT\',_utf8mb4\'HIGH\',_utf8mb4\'NORMAL\'))` (YES) |
-| `chk_ai_suggestion_status` | `(statusin(_utf8mb4\'PROPOSED\',_utf8mb4\'ACCEPTED\',_utf8mb4\'DISMISSED\',_utf8mb4\'EXPIRED\',_utf8mb4\'SUPERSEDED\'))` (YES) |
-| `chk_ai_suggestion_mode` | `(execution_modein(_utf8mb4\'HUMAN_REVIEW_REQUIRED\',_utf8mb4\'AUTO_CUSTOMER_QUESTION_ALLOWED\'))` (YES) |
-| `chk_ai_suggestion_review` | `((statusnotin(_utf8mb4\'ACCEPTED\',_utf8mb4\'DISMISSED\'))or((reviewed_byisnotnull)and(reviewed_atisnotnull)))` (YES) |
 | `chk_ai_suggestion_dismissed` | `((status<>_utf8mb4\'DISMISSED\')or(dismissal_reasonisnotnull))` (YES) |
+| `chk_ai_suggestion_mode` | `(execution_modein(_utf8mb4\'HUMAN_REVIEW_REQUIRED\',_utf8mb4\'AUTO_CUSTOMER_QUESTION_ALLOWED\'))` (YES) |
+| `chk_ai_suggestion_priority` | `(priorityin(_utf8mb4\'URGENT\',_utf8mb4\'HIGH\',_utf8mb4\'NORMAL\'))` (YES) |
+| `chk_ai_suggestion_review` | `((statusnotin(_utf8mb4\'ACCEPTED\',_utf8mb4\'DISMISSED\'))or((reviewed_byisnotnull)and(reviewed_atisnotnull)))` (YES) |
+| `chk_ai_suggestion_status` | `(statusin(_utf8mb4\'PROPOSED\',_utf8mb4\'ACCEPTED\',_utf8mb4\'DISMISSED\',_utf8mb4\'EXPIRED\',_utf8mb4\'SUPERSEDED\'))` (YES) |
+| `chk_ai_suggestion_type` | `(suggestion_typein(_utf8mb4\'CUSTOMER_QUESTION\',_utf8mb4\'INSTITUTION_VERIFICATION\',_utf8mb4\'TRANSACTION_REVIEW\',_utf8mb4\'PROTECTIVE_ACTION\',_utf8mb4\'DOCUMENT_REQUEST\',_utf8mb4\'STAFF_REVIEW\'))` (YES) |
 
 <a id="table-case_tasks"></a>
 
@@ -813,13 +852,13 @@ Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 7행
 |---|---|
 | `fk_case_task_case` | case_id → cases.case_id; DELETE CASCADE; UPDATE NO ACTION |
 | `fk_case_task_suggestion` | source_suggestion_id → case_ai_suggestions.suggestion_id; DELETE SET NULL; UPDATE NO ACTION |
-| `chk_case_task_source` | `(sourcein(_utf8mb4\'STAFF_CREATED\',_utf8mb4\'AI_SUGGESTION_ACCEPTED\',_utf8mb4\'SYSTEM_REQUIRED\'))` (YES) |
-| `chk_case_task_type` | `(task_typein(_utf8mb4\'CUSTOMER_CONTACT\',_utf8mb4\'INSTITUTION_VERIFICATION\',_utf8mb4\'TRANSACTION_REVIEW\',_utf8mb4\'PROTECTIVE_ACTION\',_utf8mb4\'DOCUMENT_REVIEW\',_utf8mb4\'OTHER\'))` (YES) |
-| `chk_case_task_priority` | `(priorityin(_utf8mb4\'URGENT\',_utf8mb4\'HIGH\',_utf8mb4\'NORMAL\'))` (YES) |
-| `chk_case_task_status` | `(statusin(_utf8mb4\'TODO\',_utf8mb4\'IN_PROGRESS\',_utf8mb4\'BLOCKED\',_utf8mb4\'COMPLETED\',_utf8mb4\'CANCELLED\'))` (YES) |
-| `chk_case_task_visibility` | `(customer_visibilityin(_utf8mb4\'INTERNAL_ONLY\',_utf8mb4\'RESULT_SHAREABLE\',_utf8mb4\'RESULT_PUBLISHED\'))` (YES) |
-| `chk_case_task_completed` | `((status<>_utf8mb4\'COMPLETED\')or((result_summaryisnotnull)and(completed_byisnotnull)and(completed_atisnotnull)))` (YES) |
 | `chk_case_task_cancelled` | `((status<>_utf8mb4\'CANCELLED\')or(cancellation_reasonisnotnull))` (YES) |
+| `chk_case_task_completed` | `((status<>_utf8mb4\'COMPLETED\')or((result_summaryisnotnull)and(completed_byisnotnull)and(completed_atisnotnull)))` (YES) |
+| `chk_case_task_priority` | `(priorityin(_utf8mb4\'URGENT\',_utf8mb4\'HIGH\',_utf8mb4\'NORMAL\'))` (YES) |
+| `chk_case_task_source` | `(sourcein(_utf8mb4\'STAFF_CREATED\',_utf8mb4\'AI_SUGGESTION_ACCEPTED\',_utf8mb4\'SYSTEM_REQUIRED\',_utf8mb4\'AI_RECOMMENDED\'))` (YES) |
+| `chk_case_task_status` | `(statusin(_utf8mb4\'TODO\',_utf8mb4\'IN_PROGRESS\',_utf8mb4\'BLOCKED\',_utf8mb4\'COMPLETED\',_utf8mb4\'CANCELLED\'))` (YES) |
+| `chk_case_task_type` | `(task_typein(_utf8mb4\'CUSTOMER_CONTACT\',_utf8mb4\'INSTITUTION_VERIFICATION\',_utf8mb4\'TRANSACTION_REVIEW\',_utf8mb4\'PROTECTIVE_ACTION\',_utf8mb4\'DOCUMENT_REVIEW\',_utf8mb4\'OTHER\'))` (YES) |
+| `chk_case_task_visibility` | `(customer_visibilityin(_utf8mb4\'INTERNAL_ONLY\',_utf8mb4\'RESULT_SHAREABLE\',_utf8mb4\'RESULT_PUBLISHED\'))` (YES) |
 
 <a id="table-case_decisions"></a>
 
@@ -855,8 +894,8 @@ Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 0행
 |---|---|
 | `fk_case_decision_case` | case_id → cases.case_id; DELETE CASCADE; UPDATE NO ACTION |
 | `fk_case_decision_supersedes` | supersedes_decision_id → case_decisions.decision_id; DELETE SET NULL; UPDATE NO ACTION |
-| `chk_case_decision_type` | `(decision_typein(_utf8mb4\'FACT_REVIEW\',_utf8mb4\'TASK_DECISION\',_utf8mb4\'CASE_STATUS\',_utf8mb4\'CUSTOMER_DISCLOSURE\',_utf8mb4\'OTHER\'))` (YES) |
 | `chk_case_decision_entity` | `(related_entity_typein(_utf8mb4\'FACT\',_utf8mb4\'GAP\',_utf8mb4\'SUGGESTION\',_utf8mb4\'TASK\',_utf8mb4\'VERIFICATION\',_utf8mb4\'CASE\'))` (YES) |
+| `chk_case_decision_type` | `(decision_typein(_utf8mb4\'FACT_REVIEW\',_utf8mb4\'TASK_DECISION\',_utf8mb4\'CASE_STATUS\',_utf8mb4\'CUSTOMER_DISCLOSURE\',_utf8mb4\'OTHER\'))` (YES) |
 | `chk_case_decision_visibility` | `(visibilityin(_utf8mb4\'BANK_INTERNAL\',_utf8mb4\'CUSTOMER_SHARED\'))` (YES) |
 
 <a id="table-case_context_items"></a>
@@ -865,7 +904,7 @@ Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 0행
 
 화면·캐시 — 직원 표시 편집본과 버전; 원본 사실과 별개
 
-Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 0행
+Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 10행
 
 | 컬럼 | 타입 | NULL 허용 | 기본값 | 키/특성 | 의미 |
 |---|---|---|---|---|---|
@@ -892,7 +931,7 @@ Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 0행
 
 화면·캐시 — 맥락 생성 lease·revision·마지막 성공 결과 캐시; 원본 사실·직원 이력과 별개
 
-Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 25행
+Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 29행
 
 | 컬럼 | 타입 | NULL 허용 | 기본값 | 키/특성 | 의미 |
 |---|---|---|---|---|---|
@@ -951,7 +990,7 @@ Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 0행
 
 보고서·이력 — LIVE/FINAL 보고서 원장; live_report는 초기 분석 snapshot이며 우측 Context Panel의 공개 계약과 분리
 
-Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 25행
+Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 29행
 
 | 컬럼 | 타입 | NULL 허용 | 기본값 | 키/특성 | 의미 |
 |---|---|---|---|---|---|
@@ -977,7 +1016,7 @@ Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 25행
 
 보고서·이력 — 보고서 섹션 JSON·버전
 
-Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 175행
+Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 203행
 
 | 컬럼 | 타입 | NULL 허용 | 기본값 | 키/특성 | 의미 |
 |---|---|---|---|---|---|
@@ -1001,7 +1040,7 @@ Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 175행
 
 보고서·이력 — Case 업무 이벤트 타임라인
 
-Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 684행
+Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 824행
 
 | 컬럼 | 타입 | NULL 허용 | 기본값 | 키/특성 | 의미 |
 |---|---|---|---|---|---|
@@ -1027,7 +1066,7 @@ Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 684행
 
 보고서·이력 — 직원 표시 편집 변경 이력
 
-Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 0행
+Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 31행
 
 | 컬럼 | 타입 | NULL 허용 | 기본값 | 키/특성 | 의미 |
 |---|---|---|---|---|---|
@@ -1055,7 +1094,7 @@ Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 0행
 
 보고서·이력 — 사실·업무 등 V2 자원 변경 이력
 
-Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 460행
+Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 547행
 
 | 컬럼 | 타입 | NULL 허용 | 기본값 | 키/특성 | 의미 |
 |---|---|---|---|---|---|
@@ -1113,7 +1152,7 @@ Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 0행
 
 스키마 운영 — 적용 또는 검증된 기준선의 전체 migration 파일명
 
-Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 33행
+Engine: `InnoDB` · Collation: `utf8mb4_unicode_ci` · 34행
 
 | 컬럼 | 타입 | NULL 허용 | 기본값 | 키/특성 | 의미 |
 |---|---|---|---|---|---|

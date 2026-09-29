@@ -53,9 +53,8 @@ const CaseBoardIntro: React.FC = () => <div className="home-board-intro">
 /** Root screen: the case board is the home workspace once cases exist. */
 export const HomeDashboardPage: React.FC<Props> = ({ cases, selectedCaseId, loading, error, trashCount, onRetry, onOpenTrash, onSelectCase, onRenameCase, onAnalysisBusyChange, trashOpen = false, trashedCases = [], trashLoading = false, trashError = '', onCloseTrash, onRestoreCase, onPurgeCase }) => {
   const [analysisOpen, setAnalysisOpen] = useState(false);
-  const [analysisBusy, setAnalysisBusy] = useState(false);
   const [bankStaffOpen, setBankStaffOpen] = useState(false);
-  const setBusy = useCallback((busy: boolean) => { setAnalysisBusy(busy); onAnalysisBusyChange?.(busy); }, [onAnalysisBusyChange]);
+  const setBusy = useCallback((busy: boolean) => onAnalysisBusyChange?.(busy), [onAnalysisBusyChange]);
   return <section className="home-empty home-board-page">
     <header className="home-case-board-header">
       <CaseBoardIntro />
@@ -68,6 +67,5 @@ export const HomeDashboardPage: React.FC<Props> = ({ cases, selectedCaseId, load
     <div className="home-case-board-body">
       {analysisOpen ? <HomePage embedded onCloseEmbedded={() => setAnalysisOpen(false)} onAnalysisBusyChange={setBusy}/> : trashOpen && onCloseTrash && onRestoreCase && onPurgeCase ? <TrashWorkspace cases={trashedCases} loading={trashLoading} error={trashError} onRetry={onRetry} onClose={onCloseTrash} onRestore={onRestoreCase} onPurge={onPurgeCase}/> : <CaseListPane cases={cases} selectedCaseId={selectedCaseId} loading={loading} error={error} mobileOpen onCloseMobile={() => undefined} onRetry={onRetry} trashCount={trashCount} onOpenTrash={onOpenTrash} onSelectCase={onSelectCase} onRenameCase={onRenameCase}/>} 
     </div>
-    <a className={`judge-guide-link home-board-guide-link ${analysisBusy ? 'is-disabled' : ''}`} href="/judge/index.html" aria-disabled={analysisBusy || undefined} onClick={(event) => { if (analysisBusy) event.preventDefault(); }}>CSR 서비스<br />자세히 살펴보기 →</a>
     {bankStaffOpen && <BankStaffManager onClose={() => setBankStaffOpen(false)}/>}</section>;
 };

@@ -54,12 +54,11 @@ def _projection_marker(fact: Any, target: str, display: str) -> tuple[str, str, 
 
 
 def _canonical_confirmed_facts(facts: list[Any]) -> list[Any]:
-    """Collapse the confirmed view without discarding multi-event transfers.
+    """Collapse the active working view without discarding transfer events.
 
     A Context Fact table is an audit-friendly history, not a ready-made
-    sentence.  Summary text must therefore remove superseded/rejected rows,
-    use the newest row for ordinary semantic slots, and retain distinct
-    confirmed money events so the UI does not silently lose a real transfer.
+    sentence. Summary text removes superseded/rejected rows, uses the newest
+    row for ordinary semantic slots, and retains distinct reported money events.
     """
     # Inference-first mode: active facts are useful context regardless of the
     # legacy confirmation value stored on them.
@@ -286,7 +285,7 @@ def _build_summary_lines(
     for fact in resources.facts:
         if fact.status in {"REJECTED", "SUPERSEDED"}:
             continue
-        marker = _projection_marker(fact, section_for_key(fact.semantic_key), _grounded_display(fact, case))
+        marker = ('money', fact.value.get('event_id') or fact.fact_id, None) if fact.semantic_key == 'transfer.actual.amount' else _projection_marker(fact, section_for_key(fact.semantic_key), _grounded_display(fact, case))
         if marker in seen_fact_markers:
             continue
         seen_fact_markers.add(marker)
@@ -301,13 +300,11 @@ def _build_summary_lines(
             mask_sensitive_text(fact.display_value) if fact.semantic_key in SENSITIVE_KEYS else fact.display_value
             for fact in actual_amounts
         ]
-        total = sum(
-            int(fact.value.get("amount_krw") or 0)
-            for fact in actual_amounts
-            if isinstance(fact.value, dict) and str(fact.value.get("amount_krw", "")).lstrip("-").isdigit()
-        )
+        from contracts.working_facts import money_rollup
+        amounts = money_rollup([fact.model_dump(mode='json') for fact in actual_amounts])
+        total = amounts['reported_outgoing_krw']
         fact_parts.append(
-            f"실제 이체 {len(values)}건 · 합계 {total:,}원: " + ", ".join(values)
+            f"송금 기록 {amounts['event_count']}건 · 보고 합계 {total:,}원 · 반환 {amounts['reported_returned_krw']:,}원: " + ", ".join(values)
         )
     for fact in [fact for fact in context_facts if fact.semantic_key != "transfer.actual.amount"][:2]:
         value = mask_sensitive_text(fact.display_value) if fact.semantic_key in SENSITIVE_KEYS else fact.display_value

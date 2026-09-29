@@ -1,3 +1,4 @@
+import json
 import os
 import unittest
 from types import SimpleNamespace
@@ -73,7 +74,9 @@ class CustomerProgressPromptTest(unittest.IsolatedAsyncioTestCase):
             self.assertIn('출처를 한 번 확인하세요', args['instructions'])
 
     async def test_bank_and_customer_can_use_separate_model_settings(self):
-        create = AsyncMock(return_value=SimpleNamespace(output_text='테스트 응답'))
+        create = AsyncMock(return_value=SimpleNamespace(output_text=json.dumps({
+            "content": "테스트 응답", "recommended_actions": [],
+        }, ensure_ascii=False)))
         client = SimpleNamespace(responses=SimpleNamespace(create=create))
         with patch.dict(os.environ, {
             'OPENAI_API_KEY': 'test-key', 'OPENAI_BANK_COPILOT_MODEL': 'bank-copilot-test-model',

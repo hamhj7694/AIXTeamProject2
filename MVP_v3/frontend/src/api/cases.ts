@@ -32,8 +32,8 @@ export const casesApi = {
   createBankStaff: (staff: Omit<BankStaff, 'staff_id' | 'is_self' | 'created_at' | 'updated_at'>) => request<BankStaff>('/api/bank/staff', { method: 'POST', body: JSON.stringify(staff) }),
   updateBankStaff: (staffId: string, staff: Omit<BankStaff, 'staff_id' | 'is_self' | 'created_at' | 'updated_at'>) => request<BankStaff>(`/api/bank/staff/${encodeURIComponent(staffId)}`, { method: 'PATCH', body: JSON.stringify(staff) }),
   deleteBankStaff: (staffId: string) => request<void>(`/api/bank/staff/${encodeURIComponent(staffId)}`, { method: 'DELETE' }),
-  list: () => request<StoredCase[]>('/api/cases'),
-  listTrash: () => request<StoredCase[]>('/api/cases/trash'),
+  list: () => request<StoredCase[]>('/api/cases', { signal: AbortSignal.timeout(10_000) }),
+  listTrash: () => request<StoredCase[]>('/api/cases/trash', { signal: AbortSignal.timeout(10_000) }),
   updateCase: (caseId: string, expectedVersion: number, values: { case_name?: string }) => request<StoredCase>(`/api/cases/${encodeURIComponent(caseId)}`, {
     method: 'PATCH', body: JSON.stringify({ expected_version: expectedVersion, ...values }),
   }),
@@ -111,6 +111,9 @@ export const casesApi = {
       requester_display_name: CURRENT_BANK_USER.display_name, client_request_id: generateUuid(),
       source_message_ids: sourceMessageIds,
     }),
+  }),
+  ensureGuidance: (caseId: string) => request<{ status: string; job_id: string | null }>(`/api/cases/${encodeURIComponent(caseId)}/ai/guidance`, {
+    method: 'POST', body: JSON.stringify({ actor_user_id: CURRENT_BANK_USER.user_id, reason: 'INITIAL' }),
   }),
   generateWorkCard: (caseId: string, cardType: WorkCardType, questionDrafts: QuestionCandidate[] = []) => request<CaseWorkCard>(`/api/cases/${encodeURIComponent(caseId)}/ai/work-cards`, {
     method: 'POST', body: JSON.stringify({ card_type: cardType, question_drafts: questionDrafts }),

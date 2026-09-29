@@ -74,6 +74,39 @@ class QuestionStateEvaluatorTest(unittest.TestCase):
         self.check("STAFF_CONFIRMED", sufficient=True, fact=fact(), is_uncertain=True,
                    question=question("ANSWERED", "제공했어요"))
 
+    def test_explicit_staff_attestation_is_near_confirmed_but_fact_stays_proposed(self):
+        attested = CaseSnapshotFact(
+            fact_id="fact-auth-staff", field=SCOPE, value="인증정보를 제공함", status="PROPOSED",
+            source_kind="STAFF_OBSERVATION", staff_attested=True,
+        )
+        result = self.check("STAFF_CONFIRMED", sufficient=True, fact=attested,
+                            question=question("ANSWERED", "기억이 안 나요"), is_uncertain=True)
+        self.assertTrue(result.is_sufficient)
+        self.assertFalse(result.allow_follow_up)
+
+    def test_staff_attested_domain_fact_aliases_resolve_only_the_matching_question(self):
+        cases = (
+            ("personal_information_exposure", "exposure.personal_information"),
+            ("authentication_information_exposure", "exposure.authentication_information"),
+            ("remote_control_app", "device.remote_control_app"),
+        )
+        for scope, fact_field in cases:
+            with self.subTest(scope=scope):
+                fact_record = CaseSnapshotFact(
+                    fact_id=f"fact-{scope}", field=fact_field, value="확인 보고된 상태", status="PROPOSED",
+                    source_kind="STAFF_OBSERVATION", staff_attested=True,
+                )
+                result = QuestionStateEvaluator.evaluate(semantic_scope=scope, fact=fact_record)
+                self.assertEqual(result.state.value, "STAFF_CONFIRMED")
+                self.assertTrue(result.is_sufficient)
+                self.assertFalse(result.allow_follow_up)
+
+                unrelated = QuestionStateEvaluator.evaluate(
+                    semantic_scope="transfer_status", fact=fact_record,
+                )
+                self.assertEqual(unrelated.state.value, "UNRESOLVED")
+                self.assertTrue(unrelated.allow_follow_up)
+
     def test_completed_verification_requires_explicit_matching_scope(self):
         self.check("VERIFIED", sufficient=True, verification=verification(), verification_scope=SCOPE)
         for scope in (None, "claimed_organization"):

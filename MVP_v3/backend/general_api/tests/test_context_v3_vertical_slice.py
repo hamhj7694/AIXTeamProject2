@@ -12,6 +12,85 @@ from general_api.app.domains.cases.repository import InMemoryCaseRepository
 
 
 class ContextV3VerticalSliceTest(unittest.IsolatedAsyncioTestCase):
+    def test_panel_includes_unapproved_chat_transfer_reports_in_case_total(self) -> None:
+        now = datetime.now(timezone.utc)
+        facts = []
+        for fact_id, message_id, amount in (("f-5m", "m-5m", 5_000_000), ("f-2m", "m-2m", 2_000_000)):
+            facts.append({
+                "fact_id": fact_id, "case_id": "VP-TRANSFER-TOTAL",
+                "semantic_key": "transfer.actual.amount", "display_label": "실제 이체 금액",
+                "value": {"amount_krw": amount, "currency": "KRW", "direction": "OUT", "amount_role": "TRANSFER_OUT", "amount_scope": "EVENT"},
+                "display_value": f"{amount:,}원 송금", "source_kind": "CUSTOMER_STATEMENT", "status": "PROPOSED",
+                "evidence_refs": [{"type": "MESSAGE", "id": message_id}], "visibility": "BANK_INTERNAL",
+                "version": 1, "created_at": now, "updated_at": now,
+            })
+        resources = PublicCaseContextResourcesV2.model_validate({
+            "case_id": "VP-TRANSFER-TOTAL", "context_revision": 1, "facts": facts,
+        })
+        panel = build_context_panel_v3(
+            {"case_id": "VP-TRANSFER-TOTAL", "context_revision": 1, "initial_brief": "송금 보고", "status": "TRIAGE"},
+            resources, view="bank", verifications=[], actions=[], messages=[], progress=[],
+        )
+        summary = " ".join(item.display_value for item in panel.sections[0].items)
+        self.assertIn("송금 기록 2건 · 보고 합계 7,000,000원", summary)
+        self.assertNotIn("확정 합계", summary)
+
+    async def test_copilot_settles_just_sent_staff_check_before_reading_case_facts(self) -> None:
+        repository = InMemoryCaseRepository()
+        repository._records = [{"case_id": "VP-STAFF-CHECK", "context_revision": 1, "status": "TRIAGE"}]
+        message = await repository.append_message("VP-STAFF-CHECK", {
+            "actor_type": "BANK_STAFF", "actor_user_id": "staff", "actor_display_name": "담당자",
+            "content": "500만원 송금 됐다고 확인 됨.", "channel": "TEAM", "audience": "BANK_INTERNAL",
+            "visibility": "BANK_INTERNAL", "message_kind": "CHAT",
+        })
+        extractor = ContextFactExtractionService()
+        with patch.object(main, "repository", repository), patch.object(
+            main.service.ai_client, "extract_context_facts", new=AsyncMock(side_effect=extractor.extract),
+        ):
+            await main.enqueue_context_extraction(message)
+            pending = await main.settle_copilot_source_extractions(
+                "VP-STAFF-CHECK", "staff", [message["message_id"]], [message],
+            )
+            resources = await main.case_context_v2_repository().list_resources("VP-STAFF-CHECK")
+
+        self.assertFalse(pending)
+        status = next(fact for fact in resources.facts if fact.semantic_key == "transfer.actual.status")
+        amount = next(fact for fact in resources.facts if fact.semantic_key == "transfer.actual.amount")
+        self.assertEqual(status.status, "PROPOSED")
+        self.assertEqual(status.source_kind, "STAFF_OBSERVATION")
+        self.assertEqual(status.value["staff_attestation"], "EXPLICIT_STAFF_CHECK")
+        self.assertEqual(amount.value["amount_krw"], 5_000_000)
+        self.assertIsNone(status.confirmed_by)
+
+    async def test_explicit_chat_correction_replaces_active_fact_immediately(self) -> None:
+        repository = InMemoryCaseRepository()
+        repository._records = [{"case_id": "VP-CHAT-CORRECTION", "context_revision": 1, "status": "TRIAGE"}]
+        with patch.object(main, "repository", repository):
+            store = main.case_context_v2_repository()
+            old = await store.create_fact("VP-CHAT-CORRECTION", {
+                "client_request_id": "old-transfer", "semantic_key": "transfer.actual.amount",
+                "display_label": "실제 이체 금액",
+                "value": {"amount_krw": 5_000_000, "currency": "KRW", "direction": "OUT", "amount_scope": "EVENT"},
+                "display_value": "5,000,000원 송금",
+                "evidence_refs": [{"type": "MESSAGE", "id": "old-message"}],
+            }, "staff", source_kind="STAFF_OBSERVATION")
+            message = await repository.append_message("VP-CHAT-CORRECTION", {
+                "actor_type": "BANK_STAFF", "actor_user_id": "staff", "actor_display_name": "담당자",
+                "content": "500만원이 아니라 700만원 송금했어. 앞의 금액을 정정해.",
+                "channel": "TEAM", "audience": "BANK_INTERNAL", "visibility": "BANK_INTERNAL", "message_kind": "CHAT",
+            })
+            extractor = ContextFactExtractionService()
+            with patch.object(main.service.ai_client, "extract_context_facts", new=AsyncMock(side_effect=extractor.extract)):
+                await main.enqueue_context_extraction(message)
+                await main.process_message_context_extraction("VP-CHAT-CORRECTION", message["message_id"])
+                resources = await store.list_resources("VP-CHAT-CORRECTION")
+
+        by_id = {fact.fact_id: fact for fact in resources.facts}
+        self.assertEqual(by_id[old.fact_id].status, "SUPERSEDED")
+        active_amounts = [fact.value["amount_krw"] for fact in resources.facts
+                          if fact.semantic_key == "transfer.actual.amount" and fact.status not in {"REJECTED", "SUPERSEDED"}]
+        self.assertEqual(active_amounts, [7_000_000])
+
     async def test_free_staff_and_customer_messages_only_create_proposals(self) -> None:
         repository = InMemoryCaseRepository()
         repository._records = [{"case_id": "VP-V3-MESSAGE", "context_revision": 1, "status": "TRIAGE"}]

@@ -2,7 +2,9 @@ import { priorityLabel } from '../userText';
 import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, Check, Loader2, Pencil, Plus, Send, Sparkles, Trash2, X } from 'lucide-react';
 import { casesApi } from '../api/cases';
-import type { CaseAction, QuestionCandidate, SuggestedResponseAction, VerificationTask } from '../api/types';
+import type { CaseAction, CaseMessage, CustomerQuestion, QuestionCandidate, SuggestedResponseAction, VerificationTask } from '../api/types';
+import { questionsFromAiMessage } from '../bank/aiQuestionDrafts';
+import { customerQuestionDispatchPayload, questionTargetKey } from '../bank/initialCustomerQuestions';
 import { actionLabel, verificationStatusLabel } from '../presentation';
 import { generateUuid } from '../uuid';
 
@@ -156,11 +158,6 @@ export const ResponseActionChecklistDialog: React.FC<{ caseId: string; actions: 
 const DialogError = ({ message }: { message: string }) => message ? <p className="dialog-error"><AlertCircle size={15}/>{message}</p> : null;
 
 type QuestionDraftState = { items: QuestionCandidate[]; selected: string[] };
-const questionTargetKey = (value: string) => ({
-  PERSONAL_INFO: 'personal_information_exposure', PERSONAL_INFO_SHARED: 'personal_information_exposure', PERSONAL_INFORMATION: 'personal_information_exposure',
-  AUTHENTICATION_INFO: 'authentication_information_exposure', AUTH_INFO: 'authentication_information_exposure', AUTH_INFO_SHARED: 'authentication_information_exposure',
-  VICTIM_TRANSFER_STATUS: 'transfer_status',
-}[value.trim().toUpperCase()] ?? value.trim().toLowerCase());
 const questionTextKey = (value: string) => value.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
 const isDynamicQuestionDraft = (item: QuestionCandidate) => item.question_id.startsWith('ai-context-')
   || item.question_id.startsWith('qf1:')
@@ -169,12 +166,13 @@ const isDynamicQuestionDraft = (item: QuestionCandidate) => item.question_id.sta
 const isPersistentQuestionDraft = (item: QuestionCandidate) => item.question_id.startsWith('staff-')
   || isDynamicQuestionDraft(item);
 
-export const reconcileQuestionDraft = (items: QuestionCandidate[], selected: string[], authoritative: QuestionCandidate[]): QuestionDraftState => {
+export const reconcileQuestionDraft = (items: QuestionCandidate[], selected: string[], authoritative: QuestionCandidate[], heldQuestions: QuestionCandidate[] = []): QuestionDraftState => {
   const validTargets = new Set(authoritative.map((item) => questionTargetKey(item.target_field)));
+  const heldTargets = new Set(heldQuestions.map((item) => questionTargetKey(item.target_field)));
   const preserved = items.filter((item) => {
     // 이전 기본 문장은 설치 요구를 물었으므로 실제 설치 여부 후보로 교체한다.
     if (item.question_id === 'candidate-remote_control_app' && item.question_text.includes('설치하라는 안내')) return false;
-    return isPersistentQuestionDraft(item) || validTargets.has(questionTargetKey(item.target_field));
+    return isPersistentQuestionDraft(item) || heldTargets.has(questionTargetKey(item.target_field)) || validTargets.has(questionTargetKey(item.target_field));
   });
   const usedTargets = new Set(preserved.map((item) => questionTargetKey(item.target_field)));
   const usedTexts = new Set(preserved.map((item) => questionTextKey(item.question_text)));
@@ -184,10 +182,10 @@ export const reconcileQuestionDraft = (items: QuestionCandidate[], selected: str
   nextItems.sort((left, right) =>
     (authoritativeOrder.get(questionTargetKey(left.target_field)) ?? Number.MAX_SAFE_INTEGER)
     - (authoritativeOrder.get(questionTargetKey(right.target_field)) ?? Number.MAX_SAFE_INTEGER));
-  const validIds = new Set(nextItems.map((item) => item.question_id));
+  const targetById = new Map(nextItems.map((item) => [item.question_id, questionTargetKey(item.target_field)]));
   return {
     items: nextItems,
-    selected: [...new Set([...selected.filter((id) => validIds.has(id)), ...added.filter((item) => item.priority === 'P0').map((item) => item.question_id)])],
+    selected: [...new Set([...selected.filter((id) => targetById.has(id) && !heldTargets.has(targetById.get(id)!)), ...added.filter((item) => item.priority === 'P0' && !heldTargets.has(questionTargetKey(item.target_field))).map((item) => item.question_id)])],
   };
 };
 
@@ -203,10 +201,19 @@ const writeQuestionDraft = (caseId: string, value: QuestionDraftState) => {
 };
 const clearQuestionDraft = (caseId: string) => window.localStorage.removeItem(questionDraftKey(caseId));
 
-export const QuestionDialog: React.FC<{ caseId: string; initial: QuestionCandidate[]; onDone: () => Promise<void>; onClose: () => void; inline?: boolean }> = ({ caseId, initial, onDone, onClose, inline = false }) => {
+export const QuestionDialog: React.FC<{ caseId: string; initial: QuestionCandidate[]; heldQuestions?: QuestionCandidate[]; sourceMessage?: CaseMessage; existingQuestions?: CustomerQuestion[]; onQuestionsQueued?: (created: CustomerQuestion[]) => void; onHeldQuestionRemoved?: (question: QuestionCandidate) => void; onDone: () => Promise<void>; onClose: () => void; inline?: boolean }> = ({ caseId, initial, heldQuestions = [], sourceMessage, existingQuestions = [], onQuestionsQueued, onHeldQuestionRemoved, onDone, onClose, inline = false }) => {
   const savedDraft = useMemo(() => readQuestionDraft(caseId), [caseId]);
-  const [items, setItems] = useState<QuestionCandidate[]>(savedDraft?.items ?? initial);
-  const [selected, setSelected] = useState<string[]>(savedDraft?.selected ?? initial.filter((item) => item.priority === 'P0').map((item) => item.question_id));
+  const [items, setItems] = useState<QuestionCandidate[]>(() => {
+    const base = savedDraft?.items ?? initial;
+    const targets = new Set(base.map((item) => questionTargetKey(item.target_field)));
+    return [...base, ...heldQuestions.filter((item) => !targets.has(questionTargetKey(item.target_field)))];
+  });
+  const [selected, setSelected] = useState<string[]>(() => {
+    const heldTargets = new Set(heldQuestions.map((item) => questionTargetKey(item.target_field)));
+    const itemById = new Map((savedDraft?.items ?? initial).map((item) => [item.question_id, item]));
+    return (savedDraft?.selected ?? initial.filter((item) => item.priority === 'P0').map((item) => item.question_id))
+      .filter((id) => !heldTargets.has(questionTargetKey(itemById.get(id)?.target_field ?? '')));
+  });
   const [custom, setCustom] = useState('');
   const [loading, setLoading] = useState(true);
   const [recommending, setRecommending] = useState(false);
@@ -217,25 +224,61 @@ export const QuestionDialog: React.FC<{ caseId: string; initial: QuestionCandida
   const [editingText, setEditingText] = useState('');
   const itemsRef = useRef(items);
   const selectedRef = useRef(selected);
+  const heldQuestionsRef = useRef(heldQuestions);
+  const heldQuestionKey = heldQuestions.map((item) => `${item.question_id}:${questionTargetKey(item.target_field)}`).join('|');
   itemsRef.current = items;
   selectedRef.current = selected;
+  heldQuestionsRef.current = heldQuestions;
   const applyAuthoritativeCandidates = (authoritative: QuestionCandidate[], baseItems = itemsRef.current, baseSelected = selectedRef.current) => {
-    const next = reconcileQuestionDraft(baseItems, baseSelected, authoritative);
+    const next = reconcileQuestionDraft(baseItems, baseSelected, authoritative, heldQuestionsRef.current);
     setItems(next.items); setSelected(next.selected);
   };
   useEffect(() => {
     let active = true;
     setLoading(true);
-    casesApi.questionCandidates(caseId).then((next) => { if (active) applyAuthoritativeCandidates(next); }).catch((reason) => active && setError(reason instanceof Error ? reason.message : '질문 후보를 불러오지 못했습니다.')).finally(() => active && setLoading(false));
+    casesApi.questionCandidates(caseId).then((next) => {
+      if (!active) return;
+      const suggested = sourceMessage ? questionsFromAiMessage(sourceMessage, next, existingQuestions) : [];
+      const combined = [...itemsRef.current];
+      for (const held of heldQuestionsRef.current) {
+        if (!combined.some((item) => questionTargetKey(item.target_field) === questionTargetKey(held.target_field))) combined.push(held);
+      }
+      const suggestedIds: string[] = [];
+      for (const item of suggested) {
+        const match = combined.find((current) => questionTargetKey(current.target_field) === questionTargetKey(item.target_field)
+          || questionTextKey(current.question_text) === questionTextKey(item.question_text));
+        if (match) suggestedIds.push(match.question_id);
+        else { combined.push(item); suggestedIds.push(item.question_id); }
+      }
+      applyAuthoritativeCandidates(next, combined, [...selectedRef.current, ...suggestedIds]);
+      if (suggested.length) setAiNote(`AI 답변의 확인 항목 ${suggested.length}개를 질문 초안으로 채웠습니다. 검토 후 발송해 주세요.`);
+    }).catch((reason) => active && setError(reason instanceof Error ? reason.message : '질문 후보를 불러오지 못했습니다.')).finally(() => active && setLoading(false));
     return () => { active = false; };
-  }, [caseId]);
+  }, [caseId, sourceMessage?.message_id]);
+  useEffect(() => {
+    if (!heldQuestions.length) return;
+    const heldTargets = new Set(heldQuestions.map((item) => questionTargetKey(item.target_field)));
+    setItems((current) => {
+      const targets = new Set(current.map((item) => questionTargetKey(item.target_field)));
+      const additions = heldQuestions.filter((item) => !targets.has(questionTargetKey(item.target_field)));
+      return additions.length ? [...current, ...additions] : current;
+    });
+    setSelected((current) => {
+      const next = current.filter((id) => {
+        const item = itemsRef.current.find((candidate) => candidate.question_id === id);
+        return !item || !heldTargets.has(questionTargetKey(item.target_field));
+      });
+      return next.length === current.length ? current : next;
+    });
+  }, [heldQuestionKey]);
   useEffect(() => {
     if (!loading) writeQuestionDraft(caseId, { items, selected });
   }, [caseId, items, loading, selected]);
-  const removeQuestion = (questionId: string) => {
-    setItems((current) => current.filter((item) => item.question_id !== questionId));
-    setSelected((current) => current.filter((id) => id !== questionId));
-    if (editingId === questionId) { setEditingId(null); setEditingText(''); }
+  const removeQuestion = (question: QuestionCandidate) => {
+    onHeldQuestionRemoved?.(question);
+    setItems((current) => current.filter((item) => item.question_id !== question.question_id));
+    setSelected((current) => current.filter((id) => id !== question.question_id));
+    if (editingId === question.question_id) { setEditingId(null); setEditingText(''); }
   };
   const startEditing = (item: QuestionCandidate) => { setEditingId(item.question_id); setEditingText(item.question_text); };
   const saveEditing = (questionId: string) => {
@@ -261,7 +304,7 @@ export const QuestionDialog: React.FC<{ caseId: string; initial: QuestionCandida
       const additions = recommended.filter((item) => !targets.has(questionTargetKey(item.target_field)) && !texts.has(questionTextKey(item.question_text)));
       const combined = [...itemsRef.current, ...additions];
       const latest = await casesApi.questionCandidates(caseId);
-      const next = reconcileQuestionDraft(combined, [...selectedRef.current, ...additions.map((item) => item.question_id)], latest);
+      const next = reconcileQuestionDraft(combined, [...selectedRef.current, ...additions.map((item) => item.question_id)], latest, heldQuestionsRef.current);
       setItems(next.items); setSelected(next.selected);
       const acceptedIds = new Set(next.items.map((item) => item.question_id));
       const accepted = additions.filter((item) => acceptedIds.has(item.question_id)).length;
@@ -276,23 +319,25 @@ export const QuestionDialog: React.FC<{ caseId: string; initial: QuestionCandida
     setSaving(true); setError('');
     try {
       const created = await casesApi.queueQuestions(caseId, selectedItems);
+      let dispatchCardError = '';
       if (created.length > 0) {
-        await casesApi.sendReportCard(caseId, {
-          card_type: 'CUSTOMER_QUESTION_DISPATCH',
-          title: '고객 확인 질문 발송',
-          created_at: new Date().toISOString(),
-          external_send: true,
-          items: created.map((item) => ({
-            question_id: item.question_id,
-            question_text: item.question_text,
-            sequence: item.sequence,
-            status: item.status,
-            asked_at: item.asked_at,
-          })),
-        }, generateUuid(), 'CUSTOMER');
+        onQuestionsQueued?.(created);
+        try {
+          await casesApi.sendReportCard(caseId, customerQuestionDispatchPayload(created),
+            `customer-question-dispatch:${created[0].question_id}`.slice(0, 100), 'CUSTOMER');
+        }
+        catch (reason) { dispatchCardError = reason instanceof Error ? reason.message : '발송 카드 저장에 실패했습니다.'; }
       }
       if (created.length === selectedItems.length) {
-        clearQuestionDraft(caseId); await onDone(); onClose(); return;
+        clearQuestionDraft(caseId); await onDone();
+        if (dispatchCardError) {
+          const createdTargets = new Set(created.map((item) => questionTargetKey(item.target_field)));
+          setItems((current) => current.filter((item) => !createdTargets.has(questionTargetKey(item.target_field))));
+          setSelected((current) => current.filter((id) => !created.some((item) => item.question_id === id)));
+          setError(`질문은 발송됐지만 발송 카드 기록에 실패했습니다. ${dispatchCardError}`);
+          return;
+        }
+        onClose(); return;
       }
       if (created.length > 0) await onDone();
       const createdTargets = new Set(created.map((item) => questionTargetKey(item.target_field)));
@@ -307,17 +352,19 @@ export const QuestionDialog: React.FC<{ caseId: string; initial: QuestionCandida
       } catch {
         setItems(remaining); setSelected((current) => current.filter((id) => remainingIds.has(id)));
       }
-      if (created.length === 0) setError('새로 발송된 질문이 없습니다. 이미 등록·발송·답변되었거나 확인이 완료된 질문일 수 있습니다.');
+      if (dispatchCardError) setError(`질문은 발송됐지만 발송 카드 기록에 실패했습니다. ${dispatchCardError}`);
+      else if (created.length === 0) setError('새로 발송된 질문이 없습니다. 이미 등록·발송·답변되었거나 확인이 완료된 질문일 수 있습니다.');
       else setAiNote(`${selectedItems.length}개 중 ${created.length}개를 고객 질문으로 발송했습니다. 이미 처리된 질문은 제외되었습니다.`);
     }
     catch (reason) { setError(reason instanceof Error ? reason.message : '질문을 고객에게 발송하지 못했습니다.'); }
     finally { setSaving(false); }
   };
-  return <DialogShell title="고객에게 확인 질문" description="AI가 이미 확인한 내용을 제외하고 제안한 질문입니다. 필요한 항목만 선택해 고객에게 바로 발송하세요." onClose={onClose} inline={inline}>
+  const heldTargets = new Set(heldQuestions.map((item) => questionTargetKey(item.target_field)));
+  return <DialogShell title="고객에게 확인 질문" description="AI가 이미 확인한 내용을 제외하고 제안한 질문입니다. 보류한 초기 질문도 이 목록에서 다시 선택해 발송할 수 있습니다." onClose={onClose} inline={inline}>
     <div className="dialog-body">
       <div className="ai-dialog-action"><div><Sparkles size={16}/><span><b>AI 질문 추천</b><small>현재 Case의 대화·답변·확인 이력을 읽고 중복되지 않는 질문을 제안합니다.</small></span></div><button type="button" onClick={() => void recommendQuestions()} disabled={recommending || saving}>{recommending ? <Loader2 className="spin" size={15}/> : <Sparkles size={15}/>}AI에게 질문 추천 받기</button></div>
       {aiNote && <p className="ai-recommendation-note">{aiNote}</p>}
-      {loading ? <div className="dialog-loading"><Loader2 className="spin" size={18}/>현재 Case에서 필요한 질문을 정리하고 있습니다.</div> : <div className="question-options">{items.length ? items.map((item) => <article className="question-option-card" key={item.question_id}><label><input type="checkbox" checked={selected.includes(item.question_id)} onChange={() => setSelected((current) => current.includes(item.question_id) ? current.filter((id) => id !== item.question_id) : [...current, item.question_id])}/><span>{editingId === item.question_id ? <input className="question-edit-input" value={editingText} autoFocus onChange={(event) => setEditingText(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); saveEditing(item.question_id); } if (event.key === 'Escape') { setEditingId(null); setEditingText(''); } }}/>: <b>{item.question_text}</b>}<small>{isDynamicQuestionDraft(item) && <strong className="ai-dynamic-question">AI 동적 추천</strong>}<em>{priorityLabel(item.priority)}</em>{item.reason}</small></span></label><div className="question-card-actions">{editingId === item.question_id ? <><button type="button" onClick={() => saveEditing(item.question_id)} disabled={!editingText.trim()} aria-label="질문 수정 저장"><Check size={14}/></button><button type="button" onClick={() => { setEditingId(null); setEditingText(''); }} aria-label="질문 수정 취소"><X size={14}/></button></> : <button type="button" onClick={() => startEditing(item)} aria-label="질문 편집"><Pencil size={14}/></button>}<button type="button" onClick={() => removeQuestion(item.question_id)} aria-label="질문 삭제"><Trash2 size={14}/></button></div></article>) : <p className="dialog-empty">추가로 추천할 질문이 없습니다. 필요한 질문을 직접 추가할 수 있습니다.</p>}</div>}
+      {loading ? <div className="dialog-loading"><Loader2 className="spin" size={18}/>현재 Case에서 필요한 질문을 정리하고 있습니다.</div> : <div className="question-options">{items.length ? items.map((item) => <article className="question-option-card" key={item.question_id}><label><input type="checkbox" checked={selected.includes(item.question_id)} onChange={() => setSelected((current) => current.includes(item.question_id) ? current.filter((id) => id !== item.question_id) : [...current, item.question_id])}/><span>{editingId === item.question_id ? <input className="question-edit-input" value={editingText} autoFocus onChange={(event) => setEditingText(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); saveEditing(item.question_id); } if (event.key === 'Escape') { setEditingId(null); setEditingText(''); } }}/>: <b>{item.question_text}</b>}<small>{heldTargets.has(questionTargetKey(item.target_field)) && <strong className="ai-dynamic-question">보류한 질문</strong>}{isDynamicQuestionDraft(item) && <strong className="ai-dynamic-question">AI 동적 추천</strong>}<em>{priorityLabel(item.priority)}</em>{item.reason}</small></span></label><div className="question-card-actions">{editingId === item.question_id ? <><button type="button" onClick={() => saveEditing(item.question_id)} disabled={!editingText.trim()} aria-label="질문 수정 저장"><Check size={14}/></button><button type="button" onClick={() => { setEditingId(null); setEditingText(''); }} aria-label="질문 수정 취소"><X size={14}/></button></> : <button type="button" onClick={() => startEditing(item)} aria-label="질문 편집"><Pencil size={14}/></button>}<button type="button" onClick={() => removeQuestion(item)} aria-label="질문 삭제"><Trash2 size={14}/></button></div></article>) : <p className="dialog-empty">추가로 추천할 질문이 없습니다. 필요한 질문을 직접 추가할 수 있습니다.</p>}</div>}
       <div className="inline-add"><input value={custom} onChange={(event) => setCustom(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addCustom(); } }} placeholder="직접 질문 추가"/><button type="button" onClick={addCustom} disabled={!custom.trim()}><Plus size={15}/>추가</button></div>
       <DialogError message={error}/>
       <p className="dialog-queue-note">선택한 질문은 지금 고객 질문으로 발송됩니다. 고객에게는 한 번에 하나씩 표시되며, 나머지는 답변 대기열에서 순서대로 이어집니다.</p>
@@ -329,7 +376,7 @@ export const QuestionDialog: React.FC<{ caseId: string; initial: QuestionCandida
 type InstitutionMessageDraft = { id: string; institution: string; target: string; claim: string; message: string; reason_codes: string[]; selected: boolean };
 
 const newInstitutionDraft = (): InstitutionMessageDraft => ({ id: generateUuid(), institution: '', target: '', claim: '', message: '', reason_codes: [], selected: true });
-export const InstitutionVerificationBoardDialog: React.FC<{ caseId: string; verificationTasks?: VerificationTask[]; onDone: () => Promise<void>; onClose: () => void }> = ({ caseId, verificationTasks = [], onDone, onClose }) => {   const [rows, setRows] = useState<InstitutionMessageDraft[]>([newInstitutionDraft()]);   const [busy, setBusy] = useState(false);   const [recommendBusy, setRecommendBusy] = useState(false);   const [error, setError] = useState('');   const [notice, setNotice] = useState('');   const [historyOpen, setHistoryOpen] = useState(false);   const [historyTask, setHistoryTask] = useState<VerificationTask | null>(null);   const setRow = (id: string, key: keyof Pick<InstitutionMessageDraft, 'institution' | 'target' | 'claim' | 'message'>, value: string) => setRows((current) => current.map((row) => row.id === id ? { ...row, [key]: value } : row));   const selected = rows.filter((row) => row.selected && row.institution.trim() && row.target.trim() && row.claim.trim() && row.message.trim());   const recommendAll = async () => {     if (recommendBusy || busy) return;     setRecommendBusy(true); setError(''); setNotice('');     try {       const card = await casesApi.generateWorkCard(caseId, 'VERIFICATION_REQUEST');       const proposals = (card.verification_messages ?? []).map((item) => ({ id: generateUuid(), institution: item.institution?.trim() ?? '', target: item.target?.trim() ?? '', claim: item.claim?.trim() ?? '', message: item.message?.trim() ?? '', reason_codes: item.reason_codes ?? [], selected: true })).filter((item) => item.institution && item.target && item.claim && item.message).slice(0, 10);       if (!proposals.length) { setNotice('구조화된 분석에서 확인할 기관을 찾지 못했습니다. 행을 직접 추가해 주세요.'); return; }       setRows((current) => {         const keys = new Set(current.map((row) => `${row.institution.toLowerCase()}|${row.target.toLowerCase()}`));         const additions = proposals.filter((row) => !keys.has(`${row.institution.toLowerCase()}|${row.target.toLowerCase()}`));         const blank = current.findIndex((row) => !row.institution.trim() && !row.target.trim());         if (blank >= 0 && additions.length) { const [first, ...rest] = additions; return current.map((row, index) => index === blank ? first : row).concat(rest).slice(0, 10); }         return [...current, ...additions].slice(0, 10);       });       setNotice(`AI가 ${proposals.length}개 기관의 확인 메시지 초안을 채웠습니다. 직원이 검토·수정한 뒤 선택해 주세요.`);     } catch (reason) { setError(reason instanceof Error ? reason.message : 'AI 추천을 불러오지 못했습니다. 직접 입력할 수 있습니다.'); }     finally { setRecommendBusy(false); }   };   const submitBoard = async (event: FormEvent) => {     event.preventDefault(); if (busy) return; if (!selected.length) { setError('선택된 행을 완성해 주세요.'); return; }     setBusy(true); setError('');     let created = 0;     try {       for (const row of selected) { await casesApi.createVerification(caseId, row.claim.trim(), row.target.trim()); created += 1; }       await casesApi.sendReportCard(caseId, { card_type: 'VERIFICATION_DISPATCH', title: '기관 확인 요청 발송 시뮬레이션', created_at: new Date().toISOString(), external_send: false, items: selected.map((row) => ({ institution: row.institution.trim(), target: row.target.trim(), claim: row.claim.trim(), message: row.message.trim(), status: 'SIMULATED_SENT' })) });       await onDone(); onClose();     } catch (reason) { setError(`${created}개 행은 저장되었습니다. ${reason instanceof Error ? reason.message : '나머지 저장에 실패했습니다.'}`); }     finally { setBusy(false); }   };   return <DialogShell title="기관 확인 요청" description="게시판에서 기관별 확인 대상을 관리하고, 선택한 행을 발송 시뮬레이션으로 기록합니다." onClose={onClose}>     <form onSubmit={submitBoard}><div className={`dialog-body verification-board-body ${historyOpen ? 'is-history-mode' : ''}`}>       <div className="verification-board-toolbar"><div><b>기관 확인 리스트</b><small>총 {rows.length}개 · 선택 {selected.length}개</small></div><button type="button" className="verification-ai-button" onClick={() => void recommendAll()} disabled={recommendBusy || busy}>{recommendBusy ? <Loader2 className="spin" size={15}/> : <Sparkles size={15}/>}AI에게 추천받기</button></div>       <button type="button" className="verification-history-button verification-history-float" onClick={() => setHistoryOpen((value) => !value)}>{historyOpen ? '목록 닫기' : '기관 확인 내역'} <span>{verificationTasks.length}</span></button>       {historyOpen && <section className="verification-history-panel"><div className="verification-history-table-wrap"><table className="verification-history-table"><thead><tr><th>기관/대상</th><th>상태</th><th>최근 회신</th><th>일시</th></tr></thead><tbody>{verificationTasks.length ? verificationTasks.map((task) => <tr key={task.verification_task_id} className={historyTask?.verification_task_id === task.verification_task_id ? 'is-selected' : ''} onClick={() => setHistoryTask((current) => current?.verification_task_id === task.verification_task_id ? null : task)}><td><b>{task.target}</b><small>{task.claim}</small></td><td>{verificationStatusLabel(task.status)}</td><td>{task.result_summary || '회신 대기'}</td><td>{new Date(task.updated_at || task.created_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}</td></tr>) : <tr><td colSpan={4}>등록된 기관 확인 내역이 없습니다.</td></tr>}</tbody></table></div>{historyTask && <div className="verification-history-detail"><b>상세 확인 정보</b><div className="verification-history-columns"><section className="verification-history-column"><dl><dt>발송 대상</dt><dd>{historyTask.target}</dd><dt>발송 내용</dt><dd>{historyTask.claim}</dd></dl></section><section className="verification-history-column"><dl><dt>근거·출처</dt><dd>{historyTask.evidence_url || historyTask.rag_source || '등록된 근거 없음'}</dd><dt>회신 내용</dt><dd>{historyTask.result_summary || '회신 없음'}</dd></dl></section></div></div>}</section>}       {notice && <p className="verification-board-notice">{notice}</p>}       <div className="verification-board-scroll"><table className="verification-board-table"><thead><tr><th scope="col">선택</th><th scope="col">기관명 · 확인 대상</th><th scope="col">확인 요청 메시지</th><th scope="col" aria-label="삭제"/></tr></thead><tbody>{rows.map((row, index) => <tr key={row.id}><td><input type="checkbox" checked={row.selected} onChange={(event) => setRows((current) => current.map((item) => item.id === row.id ? { ...item, selected: event.target.checked } : item))}/></td><td><div className="verification-board-stack"><input value={row.institution} onChange={(event) => setRow(row.id, 'institution', event.target.value)} placeholder={`기관 ${index + 1}`}/><input value={row.target} onChange={(event) => setRow(row.id, 'target', event.target.value)} placeholder="부서·직책·채널"/></div></td><td><textarea rows={3} value={row.message || row.claim} onChange={(event) => setRows((current) => current.map((item) => item.id === row.id ? { ...item, message: event.target.value, claim: event.target.value } : item))} placeholder="확인이 필요한 내용과 기관에 보낼 요청 문장을 작성해 주세요."/></td><td><button type="button" className="verification-board-delete" onClick={() => setRows((current) => current.length === 1 ? [newInstitutionDraft()] : current.filter((item) => item.id !== row.id))} aria-label={`기관 ${index + 1} 삭제`}><Trash2 size={15}/></button></td></tr>)}</tbody></table></div>       <DialogError message={error}/>     </div><footer className="dialog-footer"><button type="button" className="verification-board-add" onClick={() => setRows((current) => current.length >= 10 ? current : [...current, newInstitutionDraft()])}><Plus size={15}/>기관 행 추가</button><span className="dialog-footer-spacer"/><button type="button" className="secondary-action" onClick={onClose}>취소</button><button className="primary-action" disabled={busy || !selected.length}>{busy ? <Loader2 className="spin" size={15}/> : <Check size={15}/>}발송 시뮬레이션</button></footer></form>   </DialogShell>; };
+export const InstitutionVerificationBoardDialog: React.FC<{ caseId: string; verificationTasks?: VerificationTask[]; focusVerificationId?: string; onDone: () => Promise<void>; onClose: () => void }> = ({ caseId, verificationTasks = [], focusVerificationId, onDone, onClose }) => {   const [rows, setRows] = useState<InstitutionMessageDraft[]>([newInstitutionDraft()]);   const [busy, setBusy] = useState(false);   const [recommendBusy, setRecommendBusy] = useState(false);   const [error, setError] = useState('');   const [notice, setNotice] = useState('');   const [historyOpen, setHistoryOpen] = useState(Boolean(focusVerificationId));   const [historyTask, setHistoryTask] = useState<VerificationTask | null>(verificationTasks.find((task) => task.verification_task_id === focusVerificationId) ?? null);   const setRow = (id: string, key: keyof Pick<InstitutionMessageDraft, 'institution' | 'target' | 'claim' | 'message'>, value: string) => setRows((current) => current.map((row) => row.id === id ? { ...row, [key]: value } : row));   const selected = rows.filter((row) => row.selected && row.institution.trim() && row.target.trim() && row.claim.trim() && row.message.trim());   const recommendAll = async () => {     if (recommendBusy || busy) return;     setRecommendBusy(true); setError(''); setNotice('');     try {       const card = await casesApi.generateWorkCard(caseId, 'VERIFICATION_REQUEST');       const proposals = (card.verification_messages ?? []).map((item) => ({ id: generateUuid(), institution: item.institution?.trim() ?? '', target: item.target?.trim() ?? '', claim: item.claim?.trim() ?? '', message: item.message?.trim() ?? '', reason_codes: item.reason_codes ?? [], selected: true })).filter((item) => item.institution && item.target && item.claim && item.message).slice(0, 10);       if (!proposals.length) { setNotice('구조화된 분석에서 확인할 기관을 찾지 못했습니다. 행을 직접 추가해 주세요.'); return; }       setRows((current) => {         const keys = new Set(current.map((row) => `${row.institution.toLowerCase()}|${row.target.toLowerCase()}`));         const additions = proposals.filter((row) => !keys.has(`${row.institution.toLowerCase()}|${row.target.toLowerCase()}`));         const blank = current.findIndex((row) => !row.institution.trim() && !row.target.trim());         if (blank >= 0 && additions.length) { const [first, ...rest] = additions; return current.map((row, index) => index === blank ? first : row).concat(rest).slice(0, 10); }         return [...current, ...additions].slice(0, 10);       });       setNotice(`AI가 ${proposals.length}개 기관의 확인 메시지 초안을 채웠습니다. 직원이 검토·수정한 뒤 선택해 주세요.`);     } catch (reason) { setError(reason instanceof Error ? reason.message : 'AI 추천을 불러오지 못했습니다. 직접 입력할 수 있습니다.'); }     finally { setRecommendBusy(false); }   };   const submitBoard = async (event: FormEvent) => {     event.preventDefault(); if (busy) return; if (!selected.length) { setError('선택된 행을 완성해 주세요.'); return; }     setBusy(true); setError('');     let created = 0;     try {       for (const row of selected) { await casesApi.createVerification(caseId, row.claim.trim(), row.target.trim()); created += 1; }       await casesApi.sendReportCard(caseId, { card_type: 'VERIFICATION_DISPATCH', title: '기관 확인 요청 발송 시뮬레이션', created_at: new Date().toISOString(), external_send: false, items: selected.map((row) => ({ institution: row.institution.trim(), target: row.target.trim(), claim: row.claim.trim(), message: row.message.trim(), status: 'SIMULATED_SENT' })) });       await onDone(); onClose();     } catch (reason) { setError(`${created}개 행은 저장되었습니다. ${reason instanceof Error ? reason.message : '나머지 저장에 실패했습니다.'}`); }     finally { setBusy(false); }   };   return <DialogShell title="기관 확인 요청" description="게시판에서 기관별 확인 대상을 관리하고, 선택한 행을 발송 시뮬레이션으로 기록합니다." onClose={onClose}>     <form onSubmit={submitBoard}><div className={`dialog-body verification-board-body ${historyOpen ? 'is-history-mode' : ''}`}>       <div className="verification-board-toolbar"><div><b>기관 확인 리스트</b><small>총 {rows.length}개 · 선택 {selected.length}개</small></div><button type="button" className="verification-ai-button" onClick={() => void recommendAll()} disabled={recommendBusy || busy}>{recommendBusy ? <Loader2 className="spin" size={15}/> : <Sparkles size={15}/>}AI에게 추천받기</button></div>       <button type="button" className="verification-history-button verification-history-float" onClick={() => setHistoryOpen((value) => !value)}>{historyOpen ? '목록 닫기' : '기관 확인 내역'} <span>{verificationTasks.length}</span></button>       {historyOpen && <section className="verification-history-panel"><div className="verification-history-table-wrap"><table className="verification-history-table"><thead><tr><th>기관/대상</th><th>상태</th><th>최근 회신</th><th>일시</th></tr></thead><tbody>{verificationTasks.length ? verificationTasks.map((task) => <tr key={task.verification_task_id} className={historyTask?.verification_task_id === task.verification_task_id ? 'is-selected' : ''} onClick={() => setHistoryTask((current) => current?.verification_task_id === task.verification_task_id ? null : task)}><td><b>{task.target}</b><small>{task.claim}</small></td><td>{verificationStatusLabel(task.status)}</td><td>{task.result_summary || '회신 대기'}</td><td>{new Date(task.updated_at || task.created_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}</td></tr>) : <tr><td colSpan={4}>등록된 기관 확인 내역이 없습니다.</td></tr>}</tbody></table></div>{historyTask && <div className="verification-history-detail"><b>상세 확인 정보</b><div className="verification-history-columns"><section className="verification-history-column"><dl><dt>발송 대상</dt><dd>{historyTask.target}</dd><dt>발송 내용</dt><dd>{historyTask.claim}</dd></dl></section><section className="verification-history-column"><dl><dt>근거·출처</dt><dd>{historyTask.evidence_url || historyTask.rag_source || '등록된 근거 없음'}</dd><dt>회신 내용</dt><dd>{historyTask.result_summary || '회신 없음'}</dd></dl></section></div></div>}</section>}       {notice && <p className="verification-board-notice">{notice}</p>}       <div className="verification-board-scroll"><table className="verification-board-table"><thead><tr><th scope="col">선택</th><th scope="col">기관명 · 확인 대상</th><th scope="col">확인 요청 메시지</th><th scope="col" aria-label="삭제"/></tr></thead><tbody>{rows.map((row, index) => <tr key={row.id}><td><input type="checkbox" checked={row.selected} onChange={(event) => setRows((current) => current.map((item) => item.id === row.id ? { ...item, selected: event.target.checked } : item))}/></td><td><div className="verification-board-stack"><input value={row.institution} onChange={(event) => setRow(row.id, 'institution', event.target.value)} placeholder={`기관 ${index + 1}`}/><input value={row.target} onChange={(event) => setRow(row.id, 'target', event.target.value)} placeholder="부서·직책·채널"/></div></td><td><textarea rows={3} value={row.message || row.claim} onChange={(event) => setRows((current) => current.map((item) => item.id === row.id ? { ...item, message: event.target.value, claim: event.target.value } : item))} placeholder="확인이 필요한 내용과 기관에 보낼 요청 문장을 작성해 주세요."/></td><td><button type="button" className="verification-board-delete" onClick={() => setRows((current) => current.length === 1 ? [newInstitutionDraft()] : current.filter((item) => item.id !== row.id))} aria-label={`기관 ${index + 1} 삭제`}><Trash2 size={15}/></button></td></tr>)}</tbody></table></div>       <DialogError message={error}/>     </div><footer className="dialog-footer"><button type="button" className="verification-board-add" onClick={() => setRows((current) => current.length >= 10 ? current : [...current, newInstitutionDraft()])}><Plus size={15}/>기관 행 추가</button><span className="dialog-footer-spacer"/><button type="button" className="secondary-action" onClick={onClose}>취소</button><button className="primary-action" disabled={busy || !selected.length}>{busy ? <Loader2 className="spin" size={15}/> : <Check size={15}/>}발송 시뮬레이션</button></footer></form>   </DialogShell>; };
 
 /** Institution-by-institution verification request composer. No external send occurs. */
 const actionTypes = ['PAYMENT_HOLD_REVIEW', 'ACCOUNT_REPORT_GUIDANCE', 'EVIDENCE_PRESERVATION', 'DEVICE_SECURITY_GUIDANCE', 'CUSTOMER_CALLBACK', 'OTHER'];

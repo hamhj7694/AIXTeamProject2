@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import unittest
 from types import SimpleNamespace
@@ -21,6 +22,62 @@ def evaluation(mode: str, response: str, *, prompt: str = "송금 피해 여부�
 
 
 class CopilotQualityEvaluatorTest(unittest.TestCase):
+    def test_explicit_staff_check_is_usable_as_internal_attributed_report(self):
+        from contracts.ai_internal.case_copilot import BankCopilotSourceContext
+        from contracts.public_api.case_context_v2 import PublicCaseFactV2
+
+        fact = PublicCaseFactV2.model_validate({
+            "fact_id": "staff-transfer", "case_id": "SOURCE-CASE", "semantic_key": "transfer.actual.status",
+            "display_label": "실제 송금 여부",
+            "value": {"status": "TRANSFERRED", "amount_krw": 5_000_000,
+                      "staff_attestation": "EXPLICIT_STAFF_CHECK"},
+            "display_value": "500만원 송금함", "source_kind": "STAFF_OBSERVATION", "status": "PROPOSED",
+            "version": 1, "created_at": "2026-09-18T01:00:00Z", "updated_at": "2026-09-18T01:00:00Z",
+        })
+        source = BankCopilotSourceContext(facts=[fact])
+        supported = CopilotQualityEvaluator.evaluate(
+            assistant_mode="BANK_INTERNAL", prompt="실제 송금 확인 내용은?",
+            response="담당자 확인 보고 기준으로 500만원 송금이 완료된 것으로 Case에 기록되어 있습니다.",
+            source_context=source,
+        )
+        self.assertNotIn("unsupported_certainty", supported.failed_criteria)
+        for reply in ("은행 거래기록에서 500만원 송금이 확인되었습니다.", "500만원 송금이 공식 검증되었습니다."):
+            with self.subTest(reply=reply):
+                blocked = CopilotQualityEvaluator.evaluate(
+                    assistant_mode="BANK_INTERNAL", prompt="확인 결과는?", response=reply, source_context=source,
+                )
+                self.assertIn("unsupported_certainty", blocked.failed_criteria)
+
+    def test_explicit_staff_check_supports_exposure_and_device_domains_only(self):
+        from contracts.ai_internal.case_copilot import BankCopilotSourceContext
+        from contracts.public_api.case_context_v2 import PublicCaseFactV2
+
+        cases = (
+            ("exposure.personal_information", "실제 개인정보 제공", "개인정보 제공됨"),
+            ("exposure.authentication_information", "실제 인증정보 제공", "인증정보 제공됨"),
+            ("device.remote_control_app", "원격제어 앱 설치", "원격제어 앱 설치됨"),
+        )
+        for index, (field, label, value) in enumerate(cases):
+            with self.subTest(field=field):
+                fact = PublicCaseFactV2.model_validate({
+                    "fact_id": f"staff-attested-{index}", "case_id": "SOURCE-CASE", "semantic_key": field,
+                    "display_label": label,
+                    "value": {"status": "PROVIDED", "staff_attestation": "EXPLICIT_STAFF_CHECK"},
+                    "display_value": value, "source_kind": "STAFF_OBSERVATION", "status": "PROPOSED",
+                    "version": 1, "created_at": "2026-09-18T01:00:00Z", "updated_at": "2026-09-18T01:00:00Z",
+                })
+                source = BankCopilotSourceContext(facts=[fact])
+                supported = CopilotQualityEvaluator.evaluate(
+                    assistant_mode="BANK_INTERNAL", prompt=f"{label} 확인 결과는?",
+                    response=f"담당자 확인 보고 기준으로 {label}이 확인된 상태입니다.", source_context=source,
+                )
+                self.assertNotIn("unsupported_certainty", supported.failed_criteria)
+                official = CopilotQualityEvaluator.evaluate(
+                    assistant_mode="BANK_INTERNAL", prompt=f"{label} 공식 확인 결과는?",
+                    response=f"{label}이 공식 검증되었습니다.", source_context=source,
+                )
+                self.assertIn("unsupported_certainty", official.failed_criteria)
+
     def test_statement_confirmation_rejects_opposite_transfer_value(self) -> None:
         for record, response in (
             ("고객: 송금하지 않았어요.", "고객이 송금했다고 진술한 점이 확인되었습니다."),
@@ -210,6 +267,12 @@ class CopilotQualityEvaluatorTest(unittest.TestCase):
 
         self.assertNotIn("unsafe_instruction", result.failed_criteria)
 
+    def test_bank_question_about_transfer_is_not_a_transfer_instruction(self) -> None:
+        result = evaluation('BANK_INTERNAL', '고객에게 실제 송금 여부를 질문하세요. 답변을 기록하고 거래 내역을 조회하세요.',
+                            prompt='다음 무슨 조치 취해야 해?')
+        self.assertNotIn('unsafe_instruction', result.failed_criteria)
+        self.assertNotIn('unsupported_certainty', result.failed_criteria)
+
     def test_safe_warning_does_not_hide_later_unsafe_instruction(self) -> None:
         result = evaluation(
             "CUSTOMER_SUPPORT",
@@ -235,13 +298,96 @@ class CopilotQualityEvaluatorTest(unittest.TestCase):
 
 
 class CopilotRoleBoundaryTest(unittest.IsolatedAsyncioTestCase):
-    async def _provider_call(self, request: CaseCopilotInput, output: str = "현재 확인 가능한 내용을 안내합니다."):
-        create = AsyncMock(return_value=SimpleNamespace(output_text=output))
+    async def _provider_call(self, request: CaseCopilotInput, output: str = "현재 확인 가능한 내용을 안내합니다.", *, status="completed"):
+        if request.assistant_mode == "BANK_INTERNAL" and not output.lstrip().startswith("{"):
+            output = json.dumps({"content": output, "recommended_actions": []}, ensure_ascii=False)
+        create = AsyncMock(return_value=SimpleNamespace(
+            output_text=output, status=status,
+            incomplete_details=SimpleNamespace(reason="max_output_tokens") if status == "incomplete" else None,
+        ))
         client = SimpleNamespace(responses=SimpleNamespace(create=create))
         with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}, clear=False), \
              patch("ai_api.app.domains.case_support.copilot_service.AsyncOpenAI", return_value=client):
             result = await CaseCopilotService().generate(request)
         return result, create.await_args.kwargs
+
+    async def test_bank_output_budget_is_raised_and_bounded(self) -> None:
+        request = CaseCopilotInput(case_id="CASE-BUDGET", prompt="무엇부터 확인할까요?", assistant_mode="BANK_INTERNAL")
+        with patch.dict(os.environ, {"OPENAI_CASE_COPILOT_MAX_OUTPUT_TOKENS": "400"}):
+            _, args = await self._provider_call(request)
+        self.assertEqual(args["max_output_tokens"], 1_200)
+
+    async def test_malformed_or_incomplete_json_never_reaches_chat(self) -> None:
+        request = CaseCopilotInput(
+            case_id="CASE-MALFORMED", prompt="안녕", assistant_mode="BANK_INTERNAL",
+            response_style="CONVERSATIONAL", case_summary="사건 추가 확인 중",
+        )
+        malformed = '{"content":"answer","recommendedactions":[{"actionkey":"TRANSACTIONLOOKUP"'
+        result, _ = await self._provider_call(request, malformed)
+        self.assertIn("안녕하세요", result.content)
+        self.assertNotIn("recommendedactions", result.content)
+        self.assertNotIn("{", result.content)
+
+        truncated, _ = await self._provider_call(request, '{"content":"partial', status="incomplete")
+        self.assertIn("안녕하세요", truncated.content)
+        self.assertNotIn("partial", truncated.content)
+
+    async def test_brief_quality_fallback_uses_case_context(self) -> None:
+        request = CaseCopilotInput(
+            case_id="CASE-BRIEF", prompt="현재 사건 정리", assistant_mode="BANK_INTERNAL",
+            response_style="BRIEF", case_summary="기관 사칭과 송금 요구가 제안된 상태",
+            pending_actions=["P0: 실제 송금 여부 확인"],
+            unresolved_verifications=["상대 기관 소속 공식 확인"],
+        )
+        result, _ = await self._provider_call(request, "제가 최종 결정했습니다.")
+        self.assertIn("**현 상황:**", result.content)
+        self.assertIn("**지금 할 일:**", result.content)
+        self.assertIn("실제 송금 여부 확인", result.content)
+        self.assertNotIn("상대 기관 소속 공식 확인", result.content)
+        self.assertEqual(len(result.recommended_actions), 1)
+        self.assertNotIn("현재 확인된 근거만으로는", result.content)
+
+    async def test_brief_overlong_provider_reply_is_replaced_with_one_step(self) -> None:
+        request = CaseCopilotInput(
+            case_id="CASE-OVERLONG", prompt="현재 사건 정리", assistant_mode="BANK_INTERNAL",
+            response_style="BRIEF", case_summary="기관 사칭 신고가 접수됨",
+            pending_actions=["실제 송금 여부 확인", "기관 소속 확인"],
+        )
+        result, _ = await self._provider_call(request, "긴 설명입니다. " * 60)
+        self.assertIn("**현 상황:**", result.content)
+        self.assertIn("**지금 할 일:**", result.content)
+        self.assertNotIn("기관 소속 확인", result.content)
+        self.assertEqual(len(result.recommended_actions), 1)
+
+    async def test_provider_can_create_only_one_new_task_per_reply(self) -> None:
+        request = CaseCopilotInput(
+            case_id="CASE-ONE-TASK", prompt="다음 조치가 뭐야?", assistant_mode="BANK_INTERNAL",
+            allow_task_planning=True,
+        )
+        output = json.dumps({
+            "content": "**지금 할 일:** 고객의 정보 노출 여부를 확인하세요.",
+            "recommended_actions": [],
+            "task_intents": [
+                {"operation": "CREATE", "title": "정보 노출 확인", "task_type": "CUSTOMER_CONTACT"},
+                {"operation": "CREATE", "title": "기관 소속 확인", "task_type": "INSTITUTION_VERIFICATION"},
+            ],
+        }, ensure_ascii=False)
+        result, _ = await self._provider_call(request, output)
+        self.assertEqual([item.title for item in result.task_intents], ["정보 노출 확인"])
+
+    async def test_next_step_quality_fallback_is_prioritized_not_generic(self) -> None:
+        request = CaseCopilotInput(
+            case_id="CASE-PRIORITY", prompt="뭐부터 확인을 해야 할까?", assistant_mode="BANK_INTERNAL",
+            pending_actions=["P0: 고객의 실제 송금 여부 확인"],
+            unresolved_verifications=["검찰 사칭 주장 공식 확인"],
+        )
+        result, _ = await self._provider_call(request, "제가 최종 결정했습니다.")
+        self.assertIn("고객의 실제 송금 여부 확인", result.content)
+        self.assertNotIn("P0:", result.content)
+        self.assertTrue(result.recommended_actions)
+        self.assertNotIn("검찰 사칭 주장 공식 확인", result.content)
+        self.assertEqual(len(result.recommended_actions), 1)
+        self.assertNotIn("현재 확인된 근거만으로는", result.content)
 
     async def test_customer_provider_receives_only_customer_context_sections(self) -> None:
         _, args = await self._provider_call(CaseCopilotInput(

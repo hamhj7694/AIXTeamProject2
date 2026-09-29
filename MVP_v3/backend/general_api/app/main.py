@@ -27,6 +27,10 @@ from .domains.cases.context_items import (
 )
 from .domains.cases.context_item_repository import ContextItemRepository, InMemoryContextItemRepository
 from .domains.cases.right_panel_projection import build_right_panel_projection
+from .domains.cases.copilot_state import read_operational_state, digest
+from .domains.cases.copilot_jobs import CopilotJobs
+from .domains.cases.copilot_tasks import apply_task_intents
+from contracts.public_api.collaboration import PublicGuidanceRequest
 from .core.actor_context import normalize_legacy_actor
 
 from contracts.diagnosis import AnalyzeTextRequest
@@ -165,13 +169,16 @@ def normalize_public_recommended_actions(raw: object, channel: str) -> list[Publ
     if channel != "TEAM" or not isinstance(raw, list):
         return []
     result: list[PublicRecommendedChatAction] = []
-    seen: set[str] = set()
+    seen: set[tuple[str, str | None, str | None]] = set()
+    preference = {"CUSTOMER_QUESTION": 0, "OFFICIAL_VERIFICATION": 1, "RESPONSE_ACTION": 2,
+                  "DRAFT_REPLY": 3, "TRANSACTION_LOOKUP": 4}
     for candidate in raw[:3]:
         try:
             action = PublicRecommendedChatAction.model_validate(candidate)
         except Exception:
             continue
-        if action.action_key in seen:
+        identity = (action.action_key, action.target_type, action.target_id)
+        if identity in seen:
             continue
         if action.kind == "TOOL" and action.target_channel != "TEAM":
             continue
@@ -180,9 +187,9 @@ def normalize_public_recommended_actions(raw: object, channel: str) -> list[Publ
                 continue
         elif action.action_key == "DRAFT_REPLY":
             continue
-        seen.add(action.action_key)
+        seen.add(identity)
         result.append(action)
-    return result
+    return sorted(result, key=lambda action: preference.get(action.action_key, 99))
 from .domains.cases.service import AnalyzeCaseService, InvalidCaseTransitionError, transition_case
 
 
@@ -730,6 +737,7 @@ async def process_message_context_extraction(case_id: str, message_id: str) -> N
                 "semantic_key": proposal.semantic_key, "display_label": proposal.display_label,
                 "value": proposal.value, "display_value": proposal.display_value,
                 "confidence": proposal.confidence,
+                "supersedes_fact_id": proposal.supersedes_fact_id,
                 "evidence_refs": [{"type": "MESSAGE", "id": message_id}], "visibility": "BANK_INTERNAL",
             }, message.get("actor_user_id") or "context-extractor",
                 source_kind="CUSTOMER_STATEMENT" if message["actor_type"] == "CUSTOMER" else "STAFF_OBSERVATION")
@@ -751,6 +759,40 @@ async def enqueue_context_extraction(record: dict, background_tasks: BackgroundT
     await repository.enqueue_message_extraction(record["case_id"], record["message_id"])
     if background_tasks is not None:
         background_tasks.add_task(process_message_context_extraction, record["case_id"], record["message_id"])
+
+
+async def settle_copilot_source_extractions(case_id: str, requester_user_id: str | None,
+                                            source_message_ids: list[str], messages: list[dict]) -> bool:
+    """Prefer a persisted extraction before Copilot reads the just-sent staff message."""
+    message_by_id = {item.get("message_id"): item for item in messages if item.get("message_id")}
+    relevant = [message_by_id.get(message_id) for message_id in source_message_ids[-20:]]
+    relevant = [item for item in relevant if item
+                and item.get("case_id", case_id) == case_id
+                and item.get("actor_type") == "BANK_STAFF"
+                and item.get("actor_user_id") == requester_user_id
+                and item.get("message_kind", "CHAT") == "CHAT"
+                and item.get("visibility") == "BANK_INTERNAL"]
+    pending = False
+    for message in relevant:
+        try:
+            job = await repository.get_message_extraction(case_id, message["message_id"])
+            if not job:
+                continue
+            if job.get("status") == "PENDING":
+                await process_message_context_extraction(case_id, message["message_id"])
+                job = await repository.get_message_extraction(case_id, message["message_id"])
+            # A POST /messages background task may already own the lease. Wait
+            # briefly for it rather than reading a known-stale Fact snapshot.
+            for _ in range(10):
+                if not job or job.get("status") != "PROCESSING":
+                    break
+                await asyncio.sleep(.1)
+                job = await repository.get_message_extraction(case_id, message["message_id"])
+            pending = pending or bool(job and job.get("status") in {"PENDING", "PROCESSING", "FAILED"})
+        except Exception:
+            logger.exception("Could not settle source-message extraction before Copilot invocation")
+            pending = True
+    return pending
 
 
 async def seed_initial_context_facts(case_id: str) -> None:
@@ -1079,7 +1121,7 @@ def question_fields_covered_by_case(facts: list[dict], messages: list[dict]) -> 
     """
     covered = question_fields_answered_by_messages(messages)
     for fact in facts:
-        if fact.get("status") != "CONFIRMED":
+        if fact.get("status") != "CONFIRMED" and not fact.get('staff_reported'):
             continue
         try:
             field = normalize_target_field(str(fact.get("field", "")))
@@ -1256,27 +1298,12 @@ def to_public_case_support_snapshot(
 
 
 async def _read_case_support_source(case_id: str, *, attempts: int = 3) -> tuple[int, dict, list[dict], list[dict], list[dict], list[dict], list[dict]]:
-    """Read a source set whose semantic revision did not change mid-read."""
-    for _ in range(attempts):
-        case = await repository.get(case_id)
-        if case is None:
-            raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."})
-        before = int(case.get("context_revision", 1))
-        questions, verifications, actions = await asyncio.gather(
-            repository.list_customer_questions(case_id),
-            repository.list_verifications(case_id), repository.list_actions(case_id),
-        )
-        resources = await case_context_v2_repository().list_resources(case_id)
-        facts, actions = merge_support_records(resources, [], actions)
-        latest = await repository.get(case_id)
-        if latest is None:
-            raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."})
-        after = int(latest.get("context_revision", 1))
-        if before == after:
-            task_rows = [task.model_dump(mode="json") if hasattr(task, "model_dump") else dict(task)
-                         for task in getattr(resources, "tasks", [])]
-            return after, latest, facts, questions, verifications, actions, task_rows
-    raise RuntimeError("CASE_CONTEXT_SOURCE_CHANGED")
+    """Panel, question planning and Copilot share the same source assembly."""
+    try:
+        state = await read_operational_state(repository, case_context_v2_repository(), case_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."}) from exc
+    return state.revision, state.case, state.facts, state.questions, state.verifications, state.actions, state.tasks
 
 
 def _case_support_ai_input(case_id: str, case: dict, facts: list[dict], questions: list[dict], verifications: list[dict], actions: list[dict]) -> dict:
@@ -1294,6 +1321,10 @@ def _case_support_ai_input(case_id: str, case: dict, facts: list[dict], question
         "facts": [{
             "fact_id": item["fact_id"], "field": normalize_target_field(str(item.get("field", item.get("field_name", "")))),
             "value": str(item.get("value", "")), "status": item.get("status", "UNRESOLVED"),
+            "source_kind": item.get("source_kind"), "staff_attested": bool(item.get("staff_attested")),
+            "staff_reported": bool(item.get("staff_reported")),
+            "evidence_refs": [str(ref.get("id")) for ref in item.get("evidence_refs", [])
+                              if isinstance(ref, dict) and ref.get("id")][:20],
         } for item in facts],
         "verifications": [{
             "verification_task_id": item["verification_task_id"], "target": item.get("target", ""),
@@ -2135,28 +2166,26 @@ async def _live_question_state(case_id: str, case: dict):
 
 @app.post("/api/cases/{case_id}/ai/work-cards", response_model=CaseWorkCardOutput)
 async def generate_case_work_card(case_id: str, request: PublicWorkCardGenerateRequest) -> CaseWorkCardOutput:
-    case = await repository.get(case_id)
-    if case is None:
+    try:
+        state = await read_operational_state(repository, case_context_v2_repository(), case_id)
+    except KeyError:
         raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."})
+    case, verifications, actions, messages, resources, facts = (state.case, state.verifications,
+        state.actions, state.messages, state.resources, state.facts)
     try:
         for draft in request.question_drafts:
             normalize_target_field(draft.target_field)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail={"code": "INVALID_FOLLOW_UP", "message": str(exc)}) from exc
-    verifications = await repository.list_verifications(case_id)
-    actions = await repository.list_actions(case_id)
-    messages = await repository.list_messages(case_id)
-    resources = await case_context_v2_repository().list_resources(case_id)
-    facts, _ = merge_support_records(resources, [], [])
     support = await get_case_support_snapshot(case_id)
     staff = await read_staff_context_records(case_id)
-    previous_questions = await repository.list_customer_questions(case_id)
+    previous_questions = state.questions
     candidates = await list_customer_question_candidates(case_id)
     retrieved = retrieve_context(case_id, " ".join(q.question_text for q in candidates[:6]) or "기관 확인 담당자 다음 업무", collect_records(
         case_id, messages=messages, questions=previous_questions, facts=facts, verifications=verifications, staff=staff,
     ))
     try:
-        live_state = await _live_question_state(case_id, case) if request.card_type == "QUESTION_PLAN" else None
+        live_state = CaseSnapshotAiAdapter().adapt(_case_support_ai_input(case_id, case, facts, previous_questions, [], [])) if request.card_type == "QUESTION_PLAN" else None
         known_facts = [
             f"{item.get('field')}: {item.get('value')} ({item.get('status')})" for item in facts[:30]
         ]
@@ -2187,7 +2216,7 @@ async def generate_case_work_card(case_id: str, request: PublicWorkCardGenerateR
             "card_type": request.card_type,
             "staff_context": staff_context(staff),
             "retrieved_context": retrieved,
-            "case_summary": case.get("initial_brief", ""),
+            "case_summary": state.summary,
             "workflow_status": case.get("status", "TRIAGE"),
             "case_mode": case.get("mode", "PREVENT"),
             "fraud_type": case.get("fraud_type"),
@@ -2198,8 +2227,8 @@ async def generate_case_work_card(case_id: str, request: PublicWorkCardGenerateR
                 if item.get("channel") in {"TEAM", "CUSTOMER"}
             ],
             "pending_actions": [
-                f"{item.get('action_type')}: {item.get('note') or '상세 내용 없음'} ({item.get('status', 'REQUESTED')})"
-                for item in actions_for_ai(actions) if item.get("status") not in {"COMPLETED", "CANCELLED"}
+                f"{item['title']}: {item['description']}"
+                for item in state.tasks if item['status'] not in {"COMPLETED", "CANCELLED"}
             ][:20],
             "attachment_summaries": [],
             "unresolved_items": [f"{item.priority}: {item.description}" for item in support.unresolved_items[:20]],
@@ -2233,14 +2262,35 @@ async def generate_case_work_card(case_id: str, request: PublicWorkCardGenerateR
 
 @app.post("/api/cases/{case_id}/ai/invocations", response_model=PublicAiInvocationResponse, status_code=201)
 async def invoke_case_copilot(case_id: str, request: PublicAiInvocationRequest) -> PublicAiInvocationResponse:
+    await require_context_v2_member(case_id, request.requester_user_id, access="WRITE")
+    async with CopilotJobs(repository).serialize(case_id):
+        return await _invoke_case_copilot(case_id, request)
+
+
+async def _invoke_case_copilot(case_id: str, request: PublicAiInvocationRequest) -> PublicAiInvocationResponse:
+    if request.client_request_id:
+        existing = await repository.find_message_by_client_request_id(case_id, request.client_request_id)
+        if isinstance(existing, dict):
+            if existing.get('actor_type') != 'BANK_AGENT' or (existing.get('visibility') == 'AI_PRIVATE' and existing.get('private_owner_user_id') != request.requester_user_id):
+                raise HTTPException(status_code=409, detail={"code": "IDEMPOTENCY_CONFLICT", "message": "다른 요청에서 사용한 요청 번호입니다."})
+            metadata = existing.get("ai_metadata") or {}
+            return PublicAiInvocationResponse(invocation_id=existing["message_id"], message_id=existing["message_id"],
+                case_id=case_id, channel=existing["channel"], content=existing["content"],
+                model_mode=metadata.get("model_mode", "PERSISTED"), created_at=existing["created_at"],
+                recommended_actions=metadata.get("recommended_actions", []), source_revision=metadata.get("source_revision"),
+                mutation_results=metadata.get("mutation_results", []))
     case = await repository.get(case_id)
     if case is None:
         raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "Case를 찾을 수 없습니다."})
     verifications = await repository.list_verifications(case_id)
     actions = await repository.list_actions(case_id)
     all_messages = await repository.list_messages(case_id)
-    resources = await case_context_v2_repository().list_resources(case_id)
-    facts, _ = merge_support_records(resources, [], actions)
+    extraction_pending = await settle_copilot_source_extractions(
+        case_id, request.requester_user_id, request.source_message_ids, all_messages,
+    )
+    state = await read_operational_state(repository, case_context_v2_repository(), case_id, await context_display_repository(case_id))
+    case, resources, facts, actions = state.case, state.resources, state.facts, state.actions
+    all_messages, verifications = state.messages, state.verifications
     members = await repository.list_members(case_id)
     requester_member = next(
         (item for item in members if item.get("user_id") == request.requester_user_id and item.get("status") == "ACTIVE"),
@@ -2263,13 +2313,13 @@ async def invoke_case_copilot(case_id: str, request: PublicAiInvocationRequest) 
         case_id, messages=all_messages, questions=questions, facts=facts, verifications=verifications, staff=staff,
     ))
     try:
-        ai_reply = await service.ai_client.generate_case_copilot_reply({
+        ai_payload = {
             "case_id": case_id,
             "prompt": request.prompt,
             "requester_user_id": request.requester_user_id,
             "requester_display_name": request.requester_display_name,
             "requester_role": requester_member.get("role") if requester_member else "BANK_STAFF",
-            "case_summary": case.get("initial_brief", ""),
+            "case_summary": state.summary,
             "workflow_status": case.get("status", "TRIAGE"),
             "fraud_type": case.get("fraud_type"),
             "transfer_status": case.get("victim_transfer_status"),
@@ -2278,7 +2328,7 @@ async def invoke_case_copilot(case_id: str, request: PublicAiInvocationRequest) 
                 f"{item.get('display_name', '이름 미상')} ({member_role_labels.get(case_role_for_member(item), case_role_for_member(item) or '역할 미상')})"
                 for item in members
             ][:30],
-            "staff_context": staff_context(staff),
+            "staff_context": [*staff_context(staff), *(["최근 담당자 메시지의 구조화 저장이 진행 중입니다. 해당 메시지는 담당자 확인 보고로 귀속해 대화에 답하되, 저장 완료를 주장하지 마세요."] if extraction_pending else [])],
             "retrieved_context": retrieved,
             "known_facts": [f"{item.get('field')}: {item.get('value')} ({item.get('status')})" for item in facts[:30]],
             "recent_conversation": [
@@ -2302,13 +2352,65 @@ async def invoke_case_copilot(case_id: str, request: PublicAiInvocationRequest) 
                 diagnosis=case.get("diagnosis") or {}).model_dump(mode="json"),
             "customer_progress": progress_ai_context(build_customer_progress(actions)),
             "response_style": request.response_style,
-        })
+            "source_revision": state.revision,
+            "case_state": state.payload(),
+            "dialogue_history": [{key: item.get(key) for key in (
+                "message_id", "case_id", "actor_type", "actor_user_id", "actor_display_name", "actor_role",
+                "channel", "audience", "content", "created_at")}
+                for item in all_messages if item.get("channel") == "TEAM"
+                and item.get("visibility") == "BANK_INTERNAL" and item.get("message_kind") in {"CHAT", "AI_RESPONSE"}][-20:],
+            "allow_task_planning": not extraction_pending,
+        }
+        ai_reply = await service.ai_client.generate_case_copilot_reply(ai_payload)
+        mutation_results, task_buttons = [], []
+        if ai_reply.get("task_intents") and not extraction_pending:
+            latest = await repository.get(case_id)
+            if int(latest.get("context_revision", 1)) != state.revision:
+                raise HTTPException(status_code=409, detail={"code": "AI_GENERATION_STALE", "message": "사건 정보가 변경되어 최신 상태에서 다시 안내합니다."})
+            allow_cancel = False
+            try:
+                await require_context_v2_member(case_id, request.requester_user_id, access="REVIEW")
+                allow_cancel = True
+            except HTTPException as permission_error:
+                if permission_error.status_code != 403:
+                    raise
+            mutation_results, task_buttons = await apply_task_intents(case_context_v2_repository(), state,
+                ai_reply["task_intents"], request.requester_user_id, request.source_message_ids, allow_cancel=allow_cancel)
+            state = await read_operational_state(repository, case_context_v2_repository(), case_id, await context_display_repository(case_id))
+            ai_payload.update(case_state=state.payload(), case_summary=state.summary, source_revision=state.revision,
+                mutation_results=mutation_results, allow_task_planning=False,
+                known_facts=[f"{f.get('field')}: {f.get('value')} ({f.get('status')})" for f in state.facts[:30]],
+                pending_actions=[f"{t['title']}: {t['description']}" for t in state.tasks if t['status'] not in {'COMPLETED', 'CANCELLED'}][:20],
+                source_context=bank_source_context(case_id, state.resources, questions=state.questions,
+                    verifications=state.verifications, messages=[m for m in state.messages if m.get("visibility") in {"CUSTOMER", "BANK_INTERNAL"}],
+                    diagnosis=state.case.get("diagnosis") or {}).model_dump(mode="json"))
+            try:
+                ai_reply = await service.ai_client.generate_case_copilot_reply(ai_payload)
+            except AiServiceError:
+                titles = [r["title"] for r in mutation_results if r["status"] == "APPLIED"]
+                ai_reply = {"content": ("업무 기록에 반영했습니다: " + ", ".join(titles) + ". " if titles else "새로 반영된 업무는 없습니다. ")
+                    + "추가 AI 안내 생성에 실패했습니다. 저장된 업무는 아래 기능에서 확인할 수 있습니다.",
+                    "model_mode": "WORKFLOW_RESULT", "recommended_actions": task_buttons}
+            if task_buttons:
+                ai_reply["recommended_actions"] = [*task_buttons, *ai_reply.get("recommended_actions", [])][:3]
     except AiServiceQuotaError as exc:
         raise HTTPException(status_code=429, detail={"code": "OPENAI_QUOTA_EXHAUSTED", "message": str(exc)}) from exc
     except AiServiceAuthenticationError as exc:
         raise HTTPException(status_code=401, detail={"code": "OPENAI_AUTHENTICATION_FAILED", "message": str(exc)}) from exc
     except AiServiceError as exc:
         raise HTTPException(status_code=503, detail={"code": "AI_CASE_COPILOT_FAILED", "message": str(exc)}) from exc
+    safe_buttons = []
+    for action in normalize_public_recommended_actions(ai_reply.get('recommended_actions'), request.channel):
+        if action.target_type:
+            collection, key = ({'TASK': (state.tasks, 'task_id'), 'QUESTION': (state.questions, 'question_id'),
+                                'VERIFICATION': (state.verifications, 'verification_task_id')})[action.target_type]
+            target = next((r for r in collection if r.get(key) == action.target_id), None)
+            if not target or target.get('status') in {'COMPLETED', 'CANCELLED', 'ANSWERED', 'SKIPPED'}:
+                continue
+            action.expected_version = target.get('version')
+        safe_buttons.append(action.model_dump(mode='json'))
+        break  # One immediately usable next step per AI response.
+    ai_reply['recommended_actions'] = safe_buttons
     content = ai_reply["content"]
     is_team_request = request.channel == "TEAM"
     source_guard = ({
@@ -2323,6 +2425,9 @@ async def invoke_case_copilot(case_id: str, request: PublicAiInvocationRequest) 
         "channel": "TEAM" if is_team_request else "AI_INTERNAL", "audience": "BANK_INTERNAL",
         "visibility": "BANK_INTERNAL" if is_team_request else "AI_PRIVATE", "message_kind": "AI_RESPONSE", "mentions": ["CaseCopilot"],
         "private_owner_user_id": None if is_team_request else request.requester_user_id, "client_request_id": request.client_request_id, "log_event": True,
+        "expected_context_revision": state.revision,
+        "ai_metadata": {"recommended_actions": [item.model_dump(mode="json") for item in normalize_public_recommended_actions(ai_reply.get("recommended_actions"), request.channel)],
+                        "source_revision": state.revision, "mutation_results": mutation_results, "model_mode": ai_reply["model_mode"]},
     }, source_guard=source_guard)
     if message is None:
         raise HTTPException(status_code=409, detail={
@@ -2332,6 +2437,7 @@ async def invoke_case_copilot(case_id: str, request: PublicAiInvocationRequest) 
         invocation_id=f"ai-{uuid4().hex}", message_id=message["message_id"], case_id=case_id,
         channel="TEAM" if is_team_request else "AI_INTERNAL", content=content, model_mode=ai_reply["model_mode"], created_at=message["created_at"],
         recommended_actions=normalize_public_recommended_actions(ai_reply.get("recommended_actions"), request.channel),
+        source_revision=state.revision, mutation_results=mutation_results,
     )
 
 
@@ -2419,6 +2525,62 @@ async def invoke_customer_support_ai(case_id: str, request: PublicCustomerAiRepl
     return to_public_message(message)
 
 
+async def enqueue_copilot_guidance(case_id: str, actor: str, kind: str):
+    state = await read_operational_state(repository, case_context_v2_repository(), case_id, await context_display_repository(case_id))
+    if state.case.get("analysis_status") in {"IN_PROGRESS", "FAILED", "NO_CASE"} or not state.case.get("diagnosis"):
+        return None
+    return await CopilotJobs(repository).enqueue(case_id, state.guidance_key(), kind, state.revision, actor)
+
+
+@app.post("/api/cases/{case_id}/ai/guidance", status_code=202)
+async def ensure_copilot_guidance(case_id: str, request: PublicGuidanceRequest):
+    await require_context_v2_member(case_id, request.actor_user_id, access="WRITE")
+    job = await enqueue_copilot_guidance(case_id, request.actor_user_id, request.reason)
+    return {"status": job["status"] if job else "WAITING_ANALYSIS",
+            "job_id": job["job_id"] if job else None,
+            "message_id": job.get("result_message_id") if job else None}
+
+
+async def process_copilot_guidance(candidate):
+    jobs = CopilotJobs(repository)
+    job = await jobs.claim(candidate)
+    if not job:
+        return
+    try:
+        async with jobs.serialize(job["case_id"]):
+            await require_context_v2_member(job["case_id"], job["actor_user_id"], access="WRITE")
+            # If append succeeded but the worker crashed before finish, recover its receipt.
+            existing = await repository.find_message_by_client_request_id(job["case_id"], job["job_id"])
+            if isinstance(existing, dict):
+                await jobs.finish(job, "COMPLETED", existing["message_id"])
+                return
+            state = await read_operational_state(repository, case_context_v2_repository(), job["case_id"],
+                                                 await context_display_repository(job["case_id"]))
+            if state.guidance_key() != job["dedupe_key"] or state.case.get("status") == "CLOSED":
+                await jobs.finish(job, "SUPERSEDED")
+                return
+            pending = await repository.list_retryable_message_extractions()
+            if any(p.get('case_id') == job['case_id'] for p in pending):
+                await jobs.finish(job, "FAILED", error_code="EXTRACTION_PENDING")
+                return
+            guidance_prompt = (
+                "현재 사건을 처음 넘겨받은 은행 동료에게 킥오프 브리핑해 주세요. 현 상황 한 줄에 사칭 주체·상대 요구·현재 위험을 담고, 고객의 실제 송금·앱 설치·개인정보 제공 여부처럼 아직 미확인인 행동이 있을 때만 짧게 짚어 주세요. 이어서 지금 가장 중요한 행동 한 가지만 구체적으로 안내하고, 필요한 이유 한 문장과 그 행동에 맞는 추천 기능 하나를 연결해 주세요. 사건 근거가 없는 사실은 추정하지 말고, ‘미완료 업무 확인’ 같은 일반 문구 대신 확인 대상과 목적을 말해 주세요. 짧고 자연스러운 한국어 Markdown으로 작성해 주세요."
+                if job["trigger_kind"] == "INITIAL" else
+                "새로 반영된 고객 답변·확인 결과·업무 상태를 읽고, 달라진 점을 한 줄로 알려 주세요. 추가 대응이 필요하면 지금 가장 중요한 행동 한 가지만 안내하고 해당 추천 기능 하나를 연결해 주세요. 이전 안내를 반복하지 마세요."
+            )
+            response = await _invoke_case_copilot(job["case_id"], PublicAiInvocationRequest(
+                prompt=guidance_prompt,
+                requester_user_id=job["actor_user_id"], requester_display_name="은행 담당자",
+                channel="TEAM", response_style="BRIEF", client_request_id=job["job_id"]))
+            await jobs.finish(job, "COMPLETED", response.message_id)
+    except HTTPException as exc:
+        code = (exc.detail or {}).get("code", "GUIDANCE_FAILED") if isinstance(exc.detail, dict) else "GUIDANCE_FAILED"
+        await jobs.finish(job, "SUPERSEDED" if code == "AI_GENERATION_STALE" else "FAILED", error_code=code)
+    except Exception as exc:
+        logger.warning("Copilot guidance failed: %s", type(exc).__name__)
+        await jobs.finish(job, "FAILED", error_code=type(exc).__name__)
+
+
 async def run_proactive_case_automation(case_id: str) -> bool:
     """Refresh AI support and staff checklist without contacting the customer.
 
@@ -2428,6 +2590,9 @@ async def run_proactive_case_automation(case_id: str) -> bool:
     try:
         snapshot = await get_case_support_snapshot(case_id)
         await sync_ai_checklist_items(case_id, snapshot)
+        actor = await CopilotJobs(repository).enrolled_actor(case_id)
+        if actor:
+            await enqueue_copilot_guidance(case_id, actor, "CHANGE")
         return True
     except HTTPException as exc:
         if exc.status_code != 404:
@@ -2466,6 +2631,8 @@ async def reconcile_changed_cases_once() -> int:
             latest = await repository.get(case_id)
             _proactive_case_revisions[case_id] = str((latest or case).get("updated_at", revision))
             reconciled += 1
+    for job in await CopilotJobs(repository).pending():
+        await process_copilot_guidance(job)
     return reconciled
 
 

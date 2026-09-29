@@ -108,9 +108,18 @@ class CaseCopilotInput(StrictModel):
     assistant_mode: Literal["BANK_INTERNAL", "CUSTOMER_SUPPORT"] = "BANK_INTERNAL"
     response_style: Literal["CONVERSATIONAL", "BRIEF"] = "CONVERSATIONAL"
     source_context: BankCopilotSourceContext | None = None
+    source_revision: int = Field(default=1, ge=1)
+    case_state: dict[str, Any] = Field(default_factory=dict)
+    dialogue_history: list[CopilotMessage] = Field(default_factory=list, max_length=20)
+    mutation_results: list[dict[str, Any]] = Field(default_factory=list, max_length=20)
+    allow_task_planning: bool = False
 
     @model_validator(mode="after")
     def validate_source_context(self):
+        if self.assistant_mode != "BANK_INTERNAL" and (self.case_state or self.dialogue_history or self.mutation_results or self.allow_task_planning):
+            raise ValueError("workflow context is bank-only")
+        if any(item.case_id != self.case_id for item in self.dialogue_history):
+            raise ValueError("dialogue Case mismatch")
         if self.source_context is not None:
             if self.assistant_mode != "BANK_INTERNAL":
                 raise ValueError("source_context is bank-only")
@@ -130,9 +139,27 @@ class RecommendedChatAction(StrictModel):
     target_channel: Literal["TEAM", "CUSTOMER"]
     draft_text: str | None = Field(default=None, max_length=2_000)
     reason_code: str | None = Field(default=None, max_length=120)
+    target_type: Literal["TASK", "QUESTION", "VERIFICATION"] | None = None
+    target_id: str | None = Field(default=None, max_length=100)
+    expected_version: int | None = Field(default=None, ge=1)
+
+
+class CopilotTaskIntent(StrictModel):
+    operation: Literal["CREATE", "UPDATE", "COMPLETE", "CANCEL", "REOPEN"]
+    target_id: str | None = Field(default=None, max_length=64)
+    expected_version: int | None = Field(default=None, ge=1)
+    title: str = Field(default="", max_length=300)
+    description: str = Field(default="", max_length=3000)
+    task_type: Literal["CUSTOMER_CONTACT", "INSTITUTION_VERIFICATION", "TRANSACTION_REVIEW", "PROTECTIVE_ACTION", "DOCUMENT_REVIEW", "OTHER"] = "OTHER"
+    priority: Literal["URGENT", "HIGH", "NORMAL"] = "NORMAL"
+    # A source record, not an arbitrary model-generated deduplication key.
+    evidence_ids: list[str] = Field(default_factory=list, max_length=10)
+    source_message_id: str | None = Field(default=None, max_length=64)
+    result_summary: str = Field(default="", max_length=3000)
 
 
 class CaseCopilotOutput(StrictModel):
     content: str = Field(min_length=1, max_length=5_000)
     model_mode: str = Field(min_length=1, max_length=100)
     recommended_actions: list[RecommendedChatAction] = Field(default_factory=list, max_length=3)
+    task_intents: list[CopilotTaskIntent] = Field(default_factory=list, max_length=3)

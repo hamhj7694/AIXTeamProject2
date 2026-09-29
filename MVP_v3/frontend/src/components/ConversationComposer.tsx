@@ -28,6 +28,7 @@ interface Props {
   showUtilities?: boolean;
   /** Show the customer-question action in the quick-actions row. */
   showQuestionAction?: boolean;
+  questionsOpen?: boolean;
   /** Surface composer validation errors in the parent warning area. */
   onErrorChange?: (message: string) => void;
   /** Keep false when the parent owns the employee-facing warning area. */
@@ -40,7 +41,7 @@ interface Props {
   draftPrefill?: string | null;
 }
 
-export const ConversationComposer: React.FC<Props> = ({ busy, aiBusy, onSend, onOpenQuestions, onOpenVerification, onOpenAnalysis = () => undefined, onOpenAction, onInvokeAi, onOpenNotes, onOpenBookmarks, bookmarkCount, foundationMode = false, fixedTarget, showAi = true, showUtilities = true, showQuestionAction = false, onErrorChange, showInlineError = true, onSelectBankCard, selectedBankCard = null, draftStorageKey, draftPrefill }) => {
+export const ConversationComposer: React.FC<Props> = ({ busy, aiBusy, onSend, onOpenQuestions, onOpenVerification, onOpenAnalysis = () => undefined, onOpenAction, onInvokeAi, onOpenNotes, onOpenBookmarks, bookmarkCount, foundationMode = false, fixedTarget, showAi = true, showUtilities = true, showQuestionAction = false, questionsOpen = false, onErrorChange, showInlineError = true, onSelectBankCard, selectedBankCard = null, draftStorageKey, draftPrefill }) => {
   const target = fixedTarget ?? 'TEAM';
   const [draft, setDraft] = usePersistentDraft(draftStorageKey);
   useEffect(() => {
@@ -70,7 +71,7 @@ export const ConversationComposer: React.FC<Props> = ({ busy, aiBusy, onSend, on
   };
   return <div className={`composer-shell composer-target-${target.toLowerCase()}`}>
     <div className="context-actions" aria-label="Case 빠른 작업">
-      {showQuestionAction && <button type="button" className="customer-question-action" onClick={onOpenQuestions} disabled={busy}><MessageCircleQuestion size={15}/>고객에게 질문하기</button>}
+      {showQuestionAction && <button type="button" className={`customer-question-action${questionsOpen ? ' active' : ''}`} aria-expanded={questionsOpen} onClick={onOpenQuestions} disabled={busy}><MessageCircleQuestion size={15}/>고객에게 질문하기</button>}
       {!foundationMode && <>
         <button onClick={onOpenQuestions} disabled={busy}><MessageCircleQuestion size={15}/>고객에게 확인 질문</button>
         <button onClick={onOpenVerification} disabled={busy}><Building2 size={15}/>기관 확인 리스트</button>

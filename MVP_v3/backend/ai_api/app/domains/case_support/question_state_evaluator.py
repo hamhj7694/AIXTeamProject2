@@ -42,6 +42,16 @@ def _uncertain_answer(answer: str) -> bool:
     ))
 
 
+_FIELD_ALIASES = {
+    "transfer_status": {"transfer_status", "transfer.actual.status"},
+    "personal_information_exposure": {"personal_information_exposure", "exposure.personal_information"},
+    "authentication_information_exposure": {
+        "authentication_information_exposure", "exposure.authentication_information",
+    },
+    "remote_control_app": {"remote_control_app", "device.remote_control_app"},
+}
+
+
 class QuestionStateEvaluator:
     """이미 연결된 단일 semantic 범위를 평가한다. 원문 전체의 NLU가 아니다.
 
@@ -83,7 +93,10 @@ class QuestionStateEvaluator:
             and (verification.result_summary or "").strip()
         ):
             state = QuestionSemanticState.VERIFIED
-        elif fact and fact.field == semantic_scope and fact.status == "CONFIRMED" and fact.value.strip():
+        elif fact and fact.field in _FIELD_ALIASES.get(semantic_scope, {semantic_scope}) and fact.value.strip() and (
+            fact.status == "CONFIRMED"
+            or (fact.status == "PROPOSED" and (fact.staff_attested or fact.staff_reported) and fact.source_kind == "STAFF_OBSERVATION")
+        ):
             state = QuestionSemanticState.STAFF_CONFIRMED
         elif uncertain:
             state = QuestionSemanticState.UNCERTAIN

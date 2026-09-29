@@ -130,7 +130,7 @@ class MySqlCaseRepositoryIntegrationTest(unittest.IsolatedAsyncioTestCase):
                     {
                         "actions", "analysis_segments", "case_events", "case_inputs",
                         "case_members", "case_presence", "case_report_sections", "case_reports", "cases", "context_features",
-                        "customer_questions", "messages", "personal_notes", "schema_migrations",
+                        "customer_questions", "messages", "personal_notes", "schema_migrations", "case_copilot_jobs",
                         "verification_tasks", "voice_sessions", "case_context_items",
                         "case_context_item_history", "case_context_projections", "case_context_facts_v2",
                         "case_gaps", "case_ai_suggestions", "case_tasks", "case_decisions", "case_context_v2_history",
@@ -585,6 +585,36 @@ class MySqlCaseRepositoryIntegrationTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(sum(item is not None for item in delivered), 1)
 
+
+    async def test_copilot_metadata_tasks_and_durable_leases(self) -> None:
+        from general_api.app.domains.cases.copilot_jobs import CopilotJobs
+        case_id = f'COPILOT-{uuid4().hex[:12]}'
+        self.case_ids.append(case_id)
+        await self.repository.create(await self._record(case_id=case_id, client_request_id=uuid4().hex))
+        store = MySqlCaseContextV2Repository(self.repository)
+        task = await store.create_task(case_id, dict(client_request_id='auto-task-1', source='AI_RECOMMENDED',
+            task_type='CUSTOMER_CONTACT', title='고객에게 실제 노출 여부 질문', description='정보 종류만 질문', priority='HIGH',
+            evidence_refs=[{'type': 'STRUCTURED_SIGNAL', 'id': 'analysis'}]), 'system:case-copilot')
+        self.assertEqual(task.source, 'AI_RECOMMENDED')
+        self.assertEqual(task.evidence_refs[0].id, 'analysis')
+        metadata = dict(source_revision=2, mutation_results=[dict(operation='CREATE', status='APPLIED', target_id=task.task_id)],
+            recommended_actions=[dict(action_key='CUSTOMER_QUESTION',kind='TOOL',target_channel='TEAM',target_type='TASK',target_id=task.task_id,expected_version=1)])
+        saved = await self.repository.append_message(case_id, dict(actor_type='BANK_AGENT', actor_user_id='case-copilot',
+            actor_display_name='CaseCopilot', content='질문 업무를 등록했습니다.', channel='TEAM', visibility='BANK_INTERNAL',
+            audience='BANK_INTERNAL', message_kind='AI_RESPONSE', client_request_id='copilot-reply-1', ai_metadata=metadata))
+        self.assertEqual((await self.repository.find_message_by_client_request_id(case_id, 'copilot-reply-1'))['ai_metadata'], metadata)
+        self.assertEqual(next(m for m in await self.repository.list_messages(case_id) if m['message_id'] == saved['message_id'])['ai_metadata'], metadata)
+        jobs = CopilotJobs(self.repository)
+        one, two = await asyncio.gather(*[jobs.enqueue(case_id, 'same-state', 'INITIAL', 2, 'staff') for _ in range(2)])
+        self.assertEqual(one['job_id'], two['job_id'])
+        claimed = await asyncio.gather(jobs.claim(one), jobs.claim(two))
+        self.assertEqual(sum(j is not None for j in claimed), 1)
+        lease = next(j for j in claimed if j)
+        await jobs.finish(lease, 'COMPLETED', saved['message_id'])
+        self.assertIsNone(await CopilotJobs(self.repository).claim(one))
+        completed = await store.complete_task(case_id, task.task_id, dict(expected_version=1, result_summary='담당자 완료 보고', evidence_refs=[]), 'staff')
+        self.assertEqual(completed.completed_by, 'staff')
+        self.assertEqual(next(t for t in (await store.list_resources(case_id)).tasks if t.task_id == task.task_id).status, 'COMPLETED')
 
     async def test_atomic_customer_answer_retries_and_rollback(self) -> None:
         case_id = f'ANSWER-{uuid4().hex[:12]}'

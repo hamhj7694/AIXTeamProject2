@@ -1151,6 +1151,7 @@ def _validated_feature_narratives(context: ContextResult, payload: dict[str, Any
         seen.add(key)
         validated.append(narrative.model_copy(update={
             "code": code,
+            "brief_title": " ".join(narrative.brief_title.split()),
             "sentence": sentence,
             "source_turns": source_turns,
             "atom_ids": atom_ids,
@@ -1209,6 +1210,7 @@ CONTEXT_OUTPUT_SCHEMA = {
                 "type": "object", "additionalProperties": False,
                 "properties": {
                     "code": {"type": "string", "maxLength": 80},
+                    "brief_title": {"type": "string", "maxLength": 80},
                     "sentence": {"type": "string", "minLength": 1, "maxLength": 320},
                     "status": {"type": "string", "enum": ["CLAIMED", "REQUESTED", "REPORTED", "DENIED"]},
                     "source_turns": {"type": "array", "maxItems": 12, "items": {"type": "integer", "minimum": 1}},
@@ -1224,7 +1226,7 @@ CONTEXT_OUTPUT_SCHEMA = {
                     "occurrence_count": {"type": "integer", "minimum": 1},
                     "confidence": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
                 },
-                "required": ["code", "sentence", "status", "source_turns", "atom_ids", "speaker_role", "actor_role", "target_role", "reported_by_role", "detail_items", "entity_names", "deadline_at", "relative_deadline_minutes", "occurrence_count", "confidence"],
+                "required": ["code", "brief_title", "sentence", "status", "source_turns", "atom_ids", "speaker_role", "actor_role", "target_role", "reported_by_role", "detail_items", "entity_names", "deadline_at", "relative_deadline_minutes", "occurrence_count", "confidence"],
             },
         },
         "confidence": {"type": "number", "minimum": 0, "maximum": 1},
@@ -1249,7 +1251,9 @@ async def extract_full_context(text: str) -> ContextResult:
         model=os.getenv("OPENAI_CONTEXT_MODEL", os.getenv("OPENAI_EVENT_MODEL", "gpt-5.6-luna")),
         instructions=(
             "전체 금융 통화 맥락을 구조화한다. 확인된 주장과 권고를 구분하고, "
-            "보이스피싱 여부나 금융조치를 최종 확정하지 않는다. 입력에 없는 사실을 추가하지 않는다."
+            "보이스피싱 여부나 금융조치를 최종 확정하지 않는다. 입력에 없는 사실을 추가하지 않는다. "
+            "각 feature_narrative에는 화면용 brief_title을 40자 이내로 짧게 작성하고, sentence에는 "
+            "근거와 귀속을 보존한 전체 정황 설명을 작성한다."
         ),
         input=text,
         max_output_tokens=max_output_tokens,
@@ -1326,6 +1330,10 @@ async def extract_context_from_signal_payload(
             "Also create feature_narratives for as many distinct observed signals as possible, "
             "up to 40 items. Keep different actions, claims, pressure tactics, customer actions, "
             "amounts, roles, and time references as separate items rather than collapsing them. "
+            "For each item, write brief_title as a concise Korean gist of at most 40 characters for "
+            "the compact row; preserve whether it is a claim, request, or customer report. Put the "
+            "complete grounded explanation in sentence (up to 320 characters), without shortening "
+            "it with ellipses. Never put the full sentence into brief_title just to fill space. "
             "Each sentence must be detailed but no longer than 320 Korean characters, and must "
             "clearly distinguish a claim, request, or customer report from a verified fact. "
             "The code must be one of the known feature codes represented in the payload. "

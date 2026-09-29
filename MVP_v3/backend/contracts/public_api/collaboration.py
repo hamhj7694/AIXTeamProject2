@@ -78,6 +78,9 @@ class PublicRecommendedChatAction(PublicCollaborationModel):
     target_channel: Literal["TEAM", "CUSTOMER"]
     draft_text: str | None = Field(default=None, max_length=2_000)
     reason_code: str | None = Field(default=None, max_length=120)
+    target_type: Literal["TASK", "QUESTION", "VERIFICATION"] | None = None
+    target_id: str | None = Field(default=None, max_length=100)
+    expected_version: int | None = Field(default=None, ge=1)
 
 
 class PublicAiInvocationResponse(PublicCollaborationModel):
@@ -90,6 +93,13 @@ class PublicAiInvocationResponse(PublicCollaborationModel):
     model_mode: str = Field(min_length=1, max_length=100)
     created_at: str
     recommended_actions: list[PublicRecommendedChatAction] = Field(default_factory=list, max_length=3)
+    source_revision: int | None = None
+    mutation_results: list[dict] = Field(default_factory=list)
+
+
+class PublicGuidanceRequest(PublicCollaborationModel):
+    actor_user_id: str = Field(min_length=1, max_length=64)
+    reason: Literal["INITIAL", "MANUAL"] = "INITIAL"
 
 
 class PublicAiShareRequest(PublicCollaborationModel):

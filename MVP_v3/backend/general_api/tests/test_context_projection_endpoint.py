@@ -25,6 +25,7 @@ class ContextProjectionEndpointTest(unittest.IsolatedAsyncioTestCase):
         self.repository.list_customer_questions = AsyncMock(return_value=[])
         self.repository.list_verifications = AsyncMock(return_value=[])
         self.repository.list_actions = AsyncMock(return_value=[])
+        self.repository.list_messages = AsyncMock(return_value=[])
         general_main.repository = self.repository
         resources = AsyncMock()
         resources.list_resources.return_value = PublicCaseContextResourcesV2(case_id='VP-CACHE', context_revision=7)

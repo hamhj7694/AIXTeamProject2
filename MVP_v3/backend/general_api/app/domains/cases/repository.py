@@ -314,6 +314,9 @@ class InMemoryCaseRepository:
         async with self._lock:
             if not any(item["case_id"] == case_id for item in self._records):
                 raise KeyError(case_id)
+            case = next(item for item in self._records if item["case_id"] == case_id)
+            if record.get("expected_context_revision") is not None and int(case.get("context_revision", 1)) != record["expected_context_revision"]:
+                return None
             client_request_id = record.get("client_request_id")
             if client_request_id:
                 existing = next((item for item in self._messages if item["case_id"] == case_id and item.get("client_request_id") == client_request_id), None)

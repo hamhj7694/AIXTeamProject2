@@ -124,6 +124,22 @@ class RetrievalWiringTest(unittest.TestCase):
         self.assertEqual(legacy[0]['value'], 'YES')
         self.assertIn('transfer_status', main.build_question_recommendation_context(facts, [])['confirmed_fields'])
 
+    def test_staff_attestation_metadata_survives_v2_support_merge(self):
+        store = main.case_context_v2_repository()
+        asyncio.run(store.create_fact('VP-RAG', {
+            'client_request_id': 'staff-attested-transfer-1', 'semantic_key': 'transfer.actual.status',
+            'display_label': '실제 송금 여부',
+            'value': {'status': 'TRANSFERRED', 'staff_attestation': 'EXPLICIT_STAFF_CHECK'},
+            'display_value': '송금했음', 'evidence_refs': [{'type': 'MESSAGE', 'id': 'msg-staff-1'}],
+        }, 'staff', source_kind='STAFF_OBSERVATION'))
+        resources = asyncio.run(store.list_resources('VP-RAG'))
+        facts, _ = merge_support_records(resources, [], [])
+        fact = next(item for item in facts if item['field'] == 'transfer_status')
+        self.assertEqual(fact['status'], 'PROPOSED')
+        self.assertEqual(fact['source_kind'], 'STAFF_OBSERVATION')
+        self.assertTrue(fact['staff_attested'])
+        self.assertEqual(fact['evidence_refs'][0]['id'], 'msg-staff-1')
+
     def test_bank_production_input_preserves_source_status_evidence_and_freshness(self):
         store = main.case_context_v2_repository()
         fact = asyncio.run(store.create_fact('VP-RAG', {

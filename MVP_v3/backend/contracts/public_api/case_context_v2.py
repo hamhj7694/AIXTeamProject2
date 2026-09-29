@@ -1,8 +1,10 @@
 """Target public contract for the separated Case Context v2 resources.
 
-The General API owns these resources. AI may propose gaps and suggestions, but it
-cannot confirm facts, complete staff tasks, write staff decisions, or approve
-customer disclosure.
+The General API owns writes. Message-linked facts are available to the Case as
+soon as they are extracted; legacy PROPOSED/CONFIRMED statuses are retained for
+audit and compatibility, not as a prerequisite to use a report in the working
+view. AI cannot complete staff tasks, write staff decisions, or execute an
+external disclosure/action on its own.
 """
 from __future__ import annotations
 
@@ -142,7 +144,7 @@ class PublicCaseTaskV2(CaseContextV2Model):
     task_id: str
     case_id: str
     client_request_id: str | None = None
-    source: Literal["STAFF_CREATED", "AI_SUGGESTION_ACCEPTED", "SYSTEM_REQUIRED"]
+    source: Literal["STAFF_CREATED", "AI_SUGGESTION_ACCEPTED", "SYSTEM_REQUIRED", "AI_RECOMMENDED"]
     source_suggestion_id: str | None = None
     task_type: Literal[
         "CUSTOMER_CONTACT", "INSTITUTION_VERIFICATION", "TRANSACTION_REVIEW",

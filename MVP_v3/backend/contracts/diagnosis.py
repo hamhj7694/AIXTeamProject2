@@ -300,6 +300,7 @@ class ContextNarrative(StrictModel):
     """Grounded, staff-facing sentence for one structured case signal."""
 
     code: str = Field(min_length=1, max_length=80)
+    brief_title: str = Field(default="", max_length=80)
     sentence: str = Field(min_length=1, max_length=320)
     status: Literal["CLAIMED", "REQUESTED", "REPORTED", "DENIED"]
     source_turns: list[int] = Field(default_factory=list, max_length=12)

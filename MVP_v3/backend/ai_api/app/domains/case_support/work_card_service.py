@@ -22,6 +22,19 @@ from .case_snapshot_adapter import CaseSnapshotAiAdapter
 
 
 logger = logging.getLogger(__name__)
+DEFAULT_WORK_CARD_OUTPUT_TOKENS = 3_000
+MIN_WORK_CARD_OUTPUT_TOKENS = 1_200
+MAX_WORK_CARD_OUTPUT_TOKENS = 6_000
+MAX_QUESTION_FOLLOW_UP_CALLS = 3
+
+
+def work_card_output_token_limit() -> int:
+    """Allow complete structured cards while keeping a hard per-call ceiling."""
+    try:
+        configured = int(os.getenv("OPENAI_CASE_WORK_CARD_MAX_OUTPUT_TOKENS", str(DEFAULT_WORK_CARD_OUTPUT_TOKENS)))
+    except (TypeError, ValueError):
+        configured = DEFAULT_WORK_CARD_OUTPUT_TOKENS
+    return max(MIN_WORK_CARD_OUTPUT_TOKENS, min(configured, MAX_WORK_CARD_OUTPUT_TOKENS))
 
 WORK_CARD_SCHEMA = {
     "type": "object", "additionalProperties": False,
@@ -283,7 +296,9 @@ class CaseWorkCardService:
             parents = CaseSnapshotAiAdapter.follow_up_parents(request.question_state)
             if parents:
                 cards = []
-                for target, parent in list(parents.items())[:3]:
+                # This is the only fan-out in question recommendation. Keep it
+                # finite even if a Case accumulates many answerable questions.
+                for target, parent in list(parents.items())[:MAX_QUESTION_FOLLOW_UP_CALLS]:
                     cards.append(await self._generate_card(request, target=target, parent=parent))
                 return cards[0].model_copy(update={"questions": [q for card in cards for q in card.questions]})
         return await self._generate_card(request)
@@ -294,7 +309,13 @@ class CaseWorkCardService:
             raise CaseCopilotAuthenticationError(
                 "OPENAI_API_KEY가 설정되지 않아 실제 AI 서버에 연결할 수 없습니다."
             )
-        client = AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"], timeout=float(os.getenv("OPENAI_TIMEOUT_SECONDS", "20")))
+        # Disable SDK retries so the three-call fan-out above is also a hard
+        # upper bound on provider requests for a single recommendation click.
+        client = AsyncOpenAI(
+            api_key=os.environ["OPENAI_API_KEY"],
+            timeout=float(os.getenv("OPENAI_TIMEOUT_SECONDS", "20")),
+            max_retries=0,
+        )
         try:
             response = await client.responses.create(
                 model=os.getenv("OPENAI_CASE_WORK_CARD_MODEL", "gpt-5.6-luna"),
@@ -329,7 +350,7 @@ class CaseWorkCardService:
                         "purpose": FOLLOW_UP_PURPOSES[parent.target_field][0],
                     },
                 }, ensure_ascii=False) if target else request.model_dump_json(),
-                max_output_tokens=int(os.getenv("OPENAI_CASE_WORK_CARD_MAX_OUTPUT_TOKENS", "700")),
+                max_output_tokens=work_card_output_token_limit(),
                 text={"format": {"type": "json_schema", "name": "case_work_card_v1", "schema": WORK_CARD_SCHEMA, "strict": True}},
             )
         except RateLimitError as exc:
@@ -350,10 +371,25 @@ class CaseWorkCardService:
             raise CaseCopilotProviderError(
                 "실제 AI 서버에 연결하지 못해 AI 카드를 생성하지 않았습니다. 잠시 후 다시 시도해 주세요."
             ) from exc
+        output_text = getattr(response, "output_text", None)
+        response_status = getattr(response, "status", None)
+        incomplete_details = getattr(response, "incomplete_details", None)
+        incomplete_reason = getattr(incomplete_details, "reason", None)
+        if response_status == "incomplete":
+            logger.warning(
+                "work_card_failed stage=response_incomplete reason=%s output_chars=%d max_output_tokens=%d",
+                incomplete_reason or "unknown", len(output_text or ""), work_card_output_token_limit(),
+            )
+            raise CaseCopilotResponseError(
+                "AI 서버 응답이 출력 한도 안에 완성되지 않아 카드를 생성하지 않았습니다."
+            )
         try:
-            payload = json.loads(response.output_text)
+            payload = json.loads(output_text)
         except (TypeError, ValueError) as exc:
-            logger.warning("work_card_failed stage=response_parsing error_type=%s", type(exc).__name__)
+            logger.warning(
+                "work_card_failed stage=response_parsing error_type=%s response_status=%s output_chars=%d",
+                type(exc).__name__, response_status or "unknown", len(output_text or ""),
+            )
             raise CaseCopilotResponseError(
                 "AI 서버 응답 형식이 올바르지 않아 카드를 생성하지 않았습니다."
             ) from exc

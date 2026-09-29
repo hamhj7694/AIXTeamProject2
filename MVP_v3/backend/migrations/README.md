@@ -1,6 +1,19 @@
 # DB 마이그레이션 — 엔티티별 안내
 
-General API가 소유하는 MySQL 8.0 서비스 DB의 변경 이력이다. **정방향 SQL 31개와 rollback SQL 7개를 엔티티별 하위 폴더로 분류했다.** 실행 순서는 [manifest.json](manifest.json)에 명시한 전역 순서이며, 현재 manifest와 실제 정방향 SQL 수가 일치한다. DB 적용 이력은 경로가 아닌 기존 전체 파일명으로 유지한다. 동일 접두사 `009`의 두 파일도 각각 독립적인 migration이다.
+General API가 소유하는 MySQL 8.0 서비스 DB의 변경 이력이다. **정방향 SQL 32개와 수동 rollback SQL 7개**를 엔티티별 하위 폴더로 분류했다. 실행 순서는 [manifest.json](manifest.json)이 정하며, 이 문서 점검 시 manifest·파일 목록·문서 링크가 모두 일치했다. DB 적용 이력 식별자는 폴더 경로가 아닌 전체 파일명이다. 동일 접두사 `009`의 두 파일도 각각 독립적인 migration이다.
+
+## 2026-09-29 현재 적용 기준 — 로컬 `csr`
+
+`inspect_database.py` 읽기 전용 점검 결과, 현재 manifest의 **32개 파일은 모두 적용되어 미적용 0개**다. `schema_migrations`에는 34개 이력이 있으며, 현재 저장소 manifest에 없는 과거 이름 2개를 보존하고 있다.
+
+| 구분 | 현재 확인값 |
+|---|---|
+| 점검 시각 | 2026-09-29 08:53 UTC |
+| manifest 적용 / 미적용 | 32 / 0 |
+| 현재 manifest에 없는 과거 기록 | `021_bank_staff_assignment_fields.sql`, `030_context_update_proposals.sql` |
+| 무결성 | FK 38개 검사, 위반 0건; Case orphan 0건 |
+
+이는 현재 로컬 `csr` DB의 스냅샷이며 다른 개발자 로컬·배포 DB의 적용 상태를 뜻하지 않는다. 최신 테이블·행 수 스냅샷은 [DB_CATALOG.md](../../database/DB_CATALOG.md)를 확인한다. 과거 이력 두 개는 삭제하거나 현재 파일명으로 바꾸지 않는다. 특히 `normalize_database.py`의 이력 허용 목록과 구조 drift 허용 목록에는 이 두 역사 기록 및 현재 `csr`의 기존 확장 테이블이 반영되어 있지 않다. 따라서 해당 스크립트는 현재 `csr`에서 안전하게 중단하며, 별도 검토 전 `--apply`하지 않는다.
 
 ## 실제 폴더 구조
 
@@ -76,6 +89,7 @@ General API가 소유하는 MySQL 8.0 서비스 DB의 변경 이력이다. **정
 | [010_case_fact_question_link.sql](facts/010_case_fact_question_link.sql) | legacy Fact와 질문 연결 | 근거 연결 보존 |
 | [011_message_idempotency.sql](conversations/011_message_idempotency.sql) | Case+client_request_id UNIQUE | 재전송과 별개 메시지를 구분 |
 | [015_context_panel_v3.sql](conversations/015_context_panel_v3.sql) | 구조화 답변·버전, durable 추출 job | 사용자 답변을 자동 확정 사실로 승격하지 않음 |
+| [031_case_copilot_workflow.sql](conversations/031_case_copilot_workflow.sql) | 내부 AI 메시지의 추천 기능 메타데이터, 자동 Task 출처, 선제 가이드 작업 원장 | 기존 메시지·Task 이력 보존; 서비스 DB에는 백업·격리 복원 리허설 후 `scripts/apply_copilot_migration.py --apply`로 이 파일만 적용 |
 
 ## 거래·사실·확인·업무
 
@@ -113,11 +127,13 @@ MVP_v3/.venv/Scripts/python.exe MVP_v3/backend/scripts/build_schema_bootstrap.py
 
 - 정상 이력이 있는 DB는 runner가 적용한 파일을 건너뛴다. runner와 normalizer는 동일 DB의 migration 잠금을 공유한다.
 - MySQL DDL은 자동 커밋된다. rollback만으로 스키마를 되돌릴 수 없다. 기존 DB 변경 전 백업·복원 검증과 General API 일시 중지가 필요하다.
-- 2026-09-21 로컬 `csr`은 전체 구조·제약·트리거 대조와 백업 복원 검증 후 004~011의 미기록 9건을 기준선으로 기록했다. SQL 재실행이나 업무 데이터 변경은 하지 않았다. 등록 시각은 과거 실행 시각으로 소급하지 않았다.
-- `021_bank_staff_assignment_fields.sql`은 과거 브랜치 이력이다. 원본 파일이 현재 브랜치에 없으므로 가짜 파일을 만들거나 이름을 바꾸지 않는다. 현재 요구 구조는 020+024로 검증한다.
+- 2026-09-21 로컬 `csr`은 전체 구조·제약·트리거 대조와 백업 복원 검증 후 004~011의 미기록 9건을 기준선으로 기록했다. 이는 당시 상태에 대한 이력이다. 이후의 적용은 위 최신 스냅샷을 따른다. SQL 재실행이나 업무 데이터 변경은 하지 않았고, 등록 시각은 과거 실행 시각으로 소급하지 않았다.
+- `021_bank_staff_assignment_fields.sql`은 현재 파일이 없는 과거 브랜치 이력이다. `030_context_update_proposals.sql`도 현재 manifest에 없는 과거 적용 기록이다. 두 이력을 가짜 파일로 복구하거나 이름을 바꾸지 않는다. 직원 역할 구조는 020+024에서 관리한다. 현재 기록과 코드로 설명되지 않는 두 context proposal 테이블은 보존 대상으로 취급하며, 소유 계약과 정리 정책을 확인하기 전 삭제·변경하지 않는다.
 - `015_case_number_sequence.sql`과 `case_number_sequences`는 allocator 변경 revert 이후 현재 코드에 없다. 예전 문서의 생성 지시를 제거했다. 현재 MAX+1 방식의 동시 생성 충돌 개선은 별도 업무 로직 작업이다.
 - `rollback/`은 runner 검색 대상이 아니다. 데이터가 있는 상태에서 파괴적 rollback을 자동 실행하지 않는다.
 - 다중 transcript segment 저장 경로는 폐기했다. 과거 transcript 등록/조회 URL은 호환을 위해 410 `TRANSCRIPT_STORAGE_DISABLED`를 반환하지만 요청 본문을 파싱하거나 저장하지 않는다. 데모 분석 요청의 단일 원문은 `case_inputs.input_text`에 보관하며 최초 분석 결과 화면 외 일반 Case read/list/bundle·Case Copilot·Context AI 입력에는 포함하지 않는다. 현재 `csr`의 `transcript_segments` 행 수가 0일 때만 025 migration이 테이블을 제거하며, 1건이라도 있으면 삭제하지 않고 수동 검토를 요구한다.
 - `messages.attachments_json`과 응답의 `attachments: []`는 첨부파일 기능이 아니라 구버전 클라이언트 계약을 위한 빈 호환 필드다. 모든 클라이언트 전환·접근 로그·계약 테스트가 완료된 뒤 마지막 단계에서 컬럼·요청 필드·응답 필드를 함께 제거한다. 현재는 실제 첨부 데이터를 저장하지 않는다.
 - manifest에 없는 정방향 SQL, 중복 파일명, 누락 파일, 순서 변경, rollback 포함은 실행 전에 오류로 차단한다. `--only`에는 폴더 없는 전체 파일명을 사용한다.
+- 변경 전 `inspect_database.py`로 대상 DB와 미적용·과거 이력을 확인한다. `apply_migrations.py --only FILENAME`은 정확한 파일명을 선택하는 옵션이지 사전 백업·복원 리허설이나 의존성 검토를 대신하지 않는다. DDL은 부분 적용될 수 있으므로 실패 후에는 재실행 전에 현재 schema와 `schema_migrations`를 다시 확인한다.
+- 031 서비스 적용은 `scripts/apply_copilot_migration.py --apply` 전용 절차를 사용했다. 이 절차는 미적용 파일이 031 하나뿐인지 확인하고, SQL 백업·격리 DB 복원·동일 migration 리허설·업무 행 해시·FK 검사를 거친다. 적용 결과는 현재 `csr`에서 완료됐고, 이미 적용된 DB에서는 재적용하지 않는다. 일반적인 신규/개발 DB migration에는 표준 runner를 사용한다.
 - 신규 변경은 해당 엔티티 폴더에 새 번호 SQL로 추가하고 `manifest.json` 끝에 등록한 후 `build_schema_bootstrap.py --write`로 파생 초기화 파일을 갱신한다. 두 초기화 경로의 일치 테스트를 통과시킨다.

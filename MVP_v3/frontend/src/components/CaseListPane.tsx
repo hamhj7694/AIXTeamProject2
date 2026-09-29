@@ -64,9 +64,12 @@ export const CaseListPane: React.FC<Props> = ({ cases, selectedCaseId, loading, 
   };
   const renderCaseItem = (item: StoredCase) => {
     const editing = editingCaseId === item.case_id;
+    const recentUpdate = newCaseIds.has(item.case_id)
+      ? <span className="case-item-updated-time case-new-badge" title="아직 열어보지 않은 새 Case">새 Case</span>
+      : <time className="case-item-updated-time" title={new Date(item.updated_at).toLocaleString('ko-KR')}>수정 {relativeTime(item.updated_at)}</time>;
     const caseContent = <>
       <strong>{incidentTitle(item)}</strong>
-      <span className="case-item-bottom"><span className="case-item-status">{statusLabel(item.status, item.mode)}</span><time className="case-item-created-time" title={new Date(item.created_at).toLocaleString('ko-KR')}>생성 {relativeTime(item.created_at)}</time><time className="case-item-updated-time" title={new Date(item.updated_at).toLocaleString('ko-KR')}>수정 {relativeTime(item.updated_at)}</time></span>
+      <span className="case-item-bottom"><span className="case-item-status">{statusLabel(item.status, item.mode)}</span><time className="case-item-created-time" title={new Date(item.created_at).toLocaleString('ko-KR')}>생성 {relativeTime(item.created_at)}</time>{recentUpdate}</span>
     </>;
     const selectFromCard = (event: React.MouseEvent<HTMLDivElement>) => {
       // The rename control is intentionally an exception: clicking it must not
@@ -83,12 +86,12 @@ export const CaseListPane: React.FC<Props> = ({ cases, selectedCaseId, loading, 
       {editing ? <form className="case-item-rename" onSubmit={(event) => { event.preventDefault(); void saveRename(item); }}>
         <span className="case-item-top"><b>{item.case_id}</b><span className={`risk-pill ${caseStateTone(caseState(item))}`}>{caseStateLabel(caseState(item))}</span></span>
         <label className="sr-only" htmlFor={`case-name-${item.case_id}`}>사건 이름</label><input id={`case-name-${item.case_id}`} value={renameValue} maxLength={200} autoFocus onChange={(event) => { setRenameValue(event.target.value); setRenameError(''); }}/>
-        <span className="case-item-bottom"><span>{statusLabel(item.status, item.mode)}</span><time className="case-item-created-time" title={new Date(item.created_at).toLocaleString('ko-KR')}>생성 {relativeTime(item.created_at)}</time><time className="case-item-updated-time" title={new Date(item.updated_at).toLocaleString('ko-KR')}>수정 {relativeTime(item.updated_at)}</time></span>
+        <span className="case-item-bottom"><span>{statusLabel(item.status, item.mode)}</span><time className="case-item-created-time" title={new Date(item.created_at).toLocaleString('ko-KR')}>생성 {relativeTime(item.created_at)}</time>{recentUpdate}</span>
         {renameError && <span className="case-item-rename-error" role="alert">{renameError}</span>}
         <span className="case-item-rename-actions"><button type="button" onClick={cancelRename} disabled={renameBusy}>취소</button><button type="submit" disabled={renameBusy || !renameValue.trim()}>저장</button></span>
       </form> : <>
         <span className="case-item-top"><button type="button" className="case-item-id-open" onClick={() => openCase(item.case_id)}><b>{item.case_id}</b></button><span className="case-item-top-actions"><span className={`risk-pill ${caseStateTone(caseState(item))}`}>{item.analysis_status === 'NO_CASE' ? '최종 분석 기록' : item.analysis_status === 'FAILED' ? '후속 분석 실패' : caseStateLabel(caseState(item))}</span><button type="button" className="case-item-edit" onClick={() => startRename(item)} aria-label={`${incidentTitle(item)} 사건 이름 수정`} title="사건 이름 수정"><Pencil size={14}/></button></span></span>
-        <button type="button" className="case-list-item-open" onClick={() => openCase(item.case_id)}>{caseContent}</button>{newCaseIds.has(item.case_id) && <span className="case-new-badge">새 Case</span>}
+        <button type="button" className="case-list-item-open" onClick={() => openCase(item.case_id)}>{caseContent}</button>
       </>}
     </div>;
   };

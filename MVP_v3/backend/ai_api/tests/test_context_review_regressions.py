@@ -20,7 +20,10 @@ class ContextReviewRegressionTest(unittest.TestCase):
         result = adapter.build_presentation(snapshot)
         self.assertNotIn('송금했나요?', result.case_brief.summary)
         self.assertNotIn('대응 업무 진행: 고객 답변 대기', '\n'.join(result.case_brief.next_checks))
-        self.assertIn('지급정지 가능 여부 검토', result.case_brief.summary)
+        # v5 keeps current situation separate from work/history without dropping it.
+        self.assertNotIn('지급정지 가능 여부 검토', result.case_brief.summary)
+        self.assertEqual(next(a for a in result.case_context.staff_actions if a.action_id == 'a2').note,
+                         '지급정지 가능 여부 검토')
         self.assertEqual(result.case_brief.summary, adapter.build_presentation(snapshot).case_brief.summary)
         self.assertLessEqual(len(result.case_brief.summary.splitlines()), 4)
 
@@ -40,5 +43,7 @@ class ContextReviewRegressionTest(unittest.TestCase):
         result = CaseSnapshotAiAdapter().build_presentation(snapshot)
         self.assertNotIn('오래된 기록', result.case_brief.summary)
         self.assertNotIn('업무 기록 0 ', result.case_brief.summary)
-        self.assertIn('업무 기록 24', result.case_brief.summary)
+        self.assertNotIn('업무 기록 24', result.case_brief.summary)
+        self.assertEqual(len(result.case_context.staff_actions), 25)
+        self.assertEqual(result.case_context.staff_actions[-1].note, '업무 기록 24')
         self.assertLessEqual(len(result.case_brief.summary.splitlines()), 4)

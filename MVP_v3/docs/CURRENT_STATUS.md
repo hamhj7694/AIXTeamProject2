@@ -1,9 +1,81 @@
 # MVP v3 현재 구현 상태
 
-최종 갱신: 2026-09-28 (우측 사건 패널 최신 스냅샷·기록 화면 연결)
+최종 갱신: 2026-09-29 (DB migration 문서·카탈로그 대조)
 역할: 개발·점검 작업을 시작할 때 확인하는 단일 최신 상태 문서
 
 > 실제 코드와 최신 테스트 결과가 이 문서보다 우선한다. 완료하지 않은 기능은 구현된 것처럼 표시하지 않는다.
+
+## 2026-09-29 DB migration 문서 전체 대조
+
+- 정방향 SQL 32개, 수동 rollback SQL 7개, manifest 경로, migration 문서 내 SQL 링크를 실제 파일과 대조했다. manifest와 빈 DB bootstrap이 일치한다(`build_schema_bootstrap.py` 검사 통과).
+- 로컬 `csr`를 읽기 전용 점검했다: manifest 적용 32개, 미적용 0개, 과거 파일 없는 이력 2개(`021_bank_staff_assignment_fields.sql`, `030_context_update_proposals.sql`), FK 38개 위반 0건, Case orphan 0건. `schema_migrations`는 총 34행이다.
+- [`DB_CATALOG.md`](../database/DB_CATALOG.md)를 같은 metadata-only exporter로 갱신했다. 두 context proposal 확장 테이블은 migration manifest에 없고 현재 애플리케이션 코드 사용처도 찾지 못했다. 삭제하지 않고 계약 소유자 확인 대상으로 남긴다.
+- 현재 `normalize_database.py`는 과거 이력 허용 목록 및 참조 구조에 위 항목을 포함하지 않아 로컬 `csr`에서 안전하게 중단될 수 있다. 이 스크립트의 허용 정책은 문서 점검 범위 밖의 후속 검토 사항이다. migration 문서 갱신 중 DB schema·행은 변경하지 않았다.
+
+## 2026-09-29 새 Case 배지와 최근 업데이트 열 정리
+
+- 아직 한 번도 열지 않은 Case의 `새 Case` 배지를 행 우측 절대 위치에서 `최근 업데이트` 열로 이동했다. 첫 조회 전에는 배지로 시각을 임시 대체하고, 목록에서 Case를 열어 조회하면 기존 `updated_at` 기준 수정 시각을 표시한다. [의심] 상태 배지와 겹치지 않는다.
+- Frontend TypeScript 검사와 production build(1,481 modules), `git diff --check` 통과. Computer Use가 `apps`/`browsers` 빈 목록을 반환해 실제 화면 확인은 `NOT RUN`이다.
+
+## 2026-09-29 홈 화면의 서비스 소개 링크 제거
+
+- 홈 사건 보드의 `[CSR 서비스 자세히 살펴보기]` 링크와 통화 분석 시작 화면의 같은 소개 페이지 링크를 제거했다. 앱 UI에서 `/judge/index.html`로 이동하는 링크는 남아 있지 않다. 정적 소개 페이지 파일과 직접 URL 접근은 유지한다.
+- Frontend TypeScript 검사와 production build 통과. `git diff --check` 통과.
+
+## 2026-09-29 은행 AI의 짧은 답변과 한 단계 안내
+
+- 은행 직원의 현재 질문에 먼저 답하고, Markdown으로 핵심만 읽기 쉽게 쓰도록 지침을 바꿨다. 전체 절차를 명시적으로 요청받지 않으면 다음 행동 하나만 안내한다.
+- 사건 생성 뒤 Case 화면에 처음 들어오면 은행 내부 대화에 킥오프 브리핑을 자동 등록한다. 사칭 주체·상대 요구·현재 위험을 짚고, 실제 송금·앱 설치·정보 제공 여부 중 아직 미확인인 사항이 있을 때만 밝혀 한 가지 우선 행동과 이유, 연결 기능 하나를 안내한다. 고객 답변·확인 결과·업무 상태가 바뀌면 변경점을 짚어 다음 행동을 새로 안내하며, 이전 브리핑은 되풀이하지 않는다.
+- 브리핑 요청에서 모델 응답이 320자를 넘거나 3줄보다 길면, 긴급 업무를 먼저 고르고 그 외에는 고객 질문·기관 소속 확인 업무를 우선해 짧은 대체 안내를 만든다. 추천 기능은 대상 유효성 검사 후 AI 응답마다 하나만 저장한다. AI가 새 업무를 제안하는 경우도 한 응답에서 CREATE 한 건으로 제한한다.
+- 검증(2026-09-29): AI API 전체 **378 passed, 183 subtests passed**; General API 비통합 테스트 **307 passed, 69 subtests passed**; Frontend Vitest **9 files / 32 tests**, TypeScript 검사 및 production build(1,481 modules) 통과. 이후 킥오프 문구를 구체화한 변경은 자동 테스트·실 OpenAI 응답·브라우저 화면으로 재검증하지 않았다.
+
+## 2026-09-29 AI 추천 기능 우선순위
+
+- 고객 행동이나 피해 여부가 미확인이면 고객 질문 기능을, 사칭 기관·담당자 소속 확인이 필요하면 공식 기관 확인 기능을 우선 추천한다. 목데이터 기반 송금 조회는 AI 추천 버튼에서 제외하고, 실제 거래내역 확인은 별도 공식 은행 시스템에서 하도록 안내한다.
+- 추천 작업이 여러 개 생성되면 고객 질문·공식 기관 확인 순으로 먼저 노출한다. 이전 대화에 저장된 송금 조회 추천도 은행 내부 대화의 추천 작업 영역에는 표시하지 않는다.
+- 이 변경은 자동 테스트·실 LLM 응답·브라우저 화면으로 재검증하지 않았다.
+
+## 2026-09-29 AI 답변의 고객 질문 열기 연결
+
+- 같은 AI 답변에서 여러 Task가 고객 질문 기능을 가리켜도 `질문 열기`는 한 번만 표시한다. 누르면 대상 Task로만 이동하지 않고 고객 채널의 `[고객에게 질문하기]` 작성 패널을 열며, 버튼의 열린 상태를 표시한다.
+- 번호로 제안된 연락 지속·원격 앱 설치·링크 열람·개인정보/인증정보 제공·송금 확인 항목을 현재 후보 및 기존 질문과 대조해 편집 가능한 질문 초안으로 채운다. 고객에게 자동 발송하지 않으며 직원이 검토·선택해 발송한다. 번호 없는 자유 서술과 인식하지 못한 확인 주제는 기존 후보/수동 추가 경로를 따른다.
+- Frontend Vitest 전체 8 files / 28 tests, TypeScript 검사 포함 production build(1,480 modules), `git diff --check` 통과. 기존 `src/api/client.test.ts:4`의 `afterEach` 반환 타입 오류는 테스트 동작을 유지하는 블록 본문으로 고쳐 빌드를 통과시켰다. Computer Use native pipe가 제공되지 않고 unified browser 목록도 비어 있어 실제 브라우저 클릭·고객 발송 경로는 미검증이다.
+
+## 2026-09-29 초기 고객 질문 유지·보류 복원
+
+- Case를 처음 연 뒤 추천된 초기 질문은 고객 채팅 메시지나 `[고객에게 질문하기]` 작성 패널을 열어도 고객 소통 대화 영역에 계속 표시한다. Case별 브라우저 저장소에 질문 후보와 보류 항목을 보존해 같은 브라우저에서 새로고침해도 복원한다.
+- `[보류하기]`를 누르면 질문은 초기 질문 목록에서 빠지고 `[고객에게 질문하기]` 작성 목록에 선택 해제 상태로 남는다. 작성 목록에서 질문을 명시적으로 삭제하면 보류 기록도 함께 제거한다. 질문 발송 뒤에는 초기 후보와 보류 기록을 정리한다.
+- 초기 질문 빠른 발송과 작성 창의 질문 발송은 동일한 `CUSTOMER_QUESTION_DISPATCH` payload를 `CUSTOMER` 채널의 은행 내부 Report Card로 저장한다. 카드 저장만 실패해도 질문 자체가 발송된 상태임을 별도 오류로 표시한다.
+- 검증(2026-09-29): Frontend TypeScript 검사 통과, production build 통과(1,481 modules), `git diff --check` 통과. Vitest는 통과 결과를 확인하지 못했다. 첫 실행은 테스트 시작 전에 기본 샌드박스의 esbuild가 workspace root 접근을 거부해 실패했다. Computer Use가 빈 `apps`/`browsers` 목록을 반환해 브라우저 상호작용은 `NOT RUN`이다.
+
+## 2026-09-29 사건 목록 무한 로딩 복구
+
+- 회색 5개 행은 Frontend `CaseListPane`의 로딩 표시였다. 당시 `:8100/health`와 `/api/cases`가 모두 시간 초과였고, MySQL 자체는 응답했다. 종료된 General API의 고아 multiprocessing 하위 프로세스가 DB 연결 5개와 `messages` 메타데이터 읽기 잠금을 유지해 031 적용도 lock wait timeout으로 막았다. 해당 고아 프로세스를 종료하고 General API를 다시 시작했다.
+- 서비스 DB `csr`에 `031_case_copilot_workflow.sql`을 적용했다. 적용 전 SQL 백업은 Git 제외 경로 `backend/data/backups/20260929T070936Z_copilot_7fc9cc91/`에 있다. 격리 복원·동일 migration 리허설 통과, 기존 행 해시 유지, FK 38개 위반 0건 및 Case orphan 0건을 확인했다. 첫 적용 실패 시도는 DDL 실행 전에 lock wait timeout으로 끝났고, 그 백업 영수증은 `FAILED_INSPECT_BEFORE_RETRY`로 남겨 두었다.
+- 사건 목록·휴지통 요청은 10초 후 오류를 표시하고, 사건 목록의 5초 주기 조회가 이전 요청 위에 중복으로 쌓이지 않도록 했다. Frontend production build(1,479 modules), Vitest **7 files / 25 tests** 통과. `:8100/health` 200, Frontend 프록시 `/api/cases` 200·27건, VP-26 case-support 200을 재확인했다.
+- 실제 Browser Smoke는 CUA 브라우저 표면이 제공되지 않아 `NOT RUN`이다. 실 OpenAI 호출과 고객·은행 화면 상호작용은 이 복구 확인에 포함하지 않았다.
+
+## 2026-09-29 CaseCopilot 업무 지원·현재 사건 상태 연결
+
+- 은행 내부 Copilot의 응답 검사에서 “송금 여부를 질문하세요”를 송금 지시로 차단하던 오탐을 줄였다. 형식·표현 실패 시 한 번 재생성하고, 이후 대체 응답은 내부 코드와 어색한 문장 결합을 제거하며 실행 가능한 기능을 보존한다. 제공자 연결 실패는 정상 답변으로 위장하지 않는다.
+- Copilot·질문 후보·업무 카드·우측 패널이 최신 Fact/질문/Verification/Task/Action을 같은 사건 상태 조립 경로에서 읽는다. 최근 AI 발화는 후속 지시의 대화 맥락에만 사용하고 사실 근거로 삼지 않는다. 직원의 패널 문구 편집은 표시 정보이며 원장 사실 수정과 구분한다.
+- 직원 채팅의 명확한 송금 보고, 추가 송금, 정정, 개인정보·인증정보 제공/미제공, 원격 앱 설치/미설치 상태를 저장된 출처와 함께 내부 업무에 즉시 사용한다. `PROPOSED`/`CONFIRMED`는 호환 상태로 유지한다. “했는지 모르겠다”는 실제 수행으로 저장하지 않는다. 금액 단위가 생략된 정정은 기존 사건 한 건을 유일하게 가리킬 때만 처리한다. 노출·앱 설치 결과의 명시적 정정은 단일 기존 미검토 결과만 이력 보존 대체하고, 별도의 설치 요구나 이미 REVIEW 확정된 결과를 자동 대체하지 않는다.
+- 구조화된 Task 의도는 General API가 직원 메시지·대상 ID·버전·권한을 검사해 기존 `case_tasks`에 적용한다. 자동 생성은 최대 3건, 출처는 `AI_RECOMMENDED`이며 TODO로 시작한다. 완료는 직원의 명확한 보고나 기존 완료 버튼을 통해서만 기록한다. 같은 근거의 취소 업무는 자동으로 다시 만들지 않는다.
+- 초기 브리핑과 중요 상태 변경 안내는 사건 상태 지문별 영속 작업으로 중복을 막는다. 은행 내부 채팅에만 저장하며 고객 발송은 기존 버튼/직원 지시를 따른다. 추천 기능·대상·revision·변경 결과를 AI 메시지 메타데이터와 함께 저장해 재조회 시 복원한다. 대상 Task/질문/Verification 버튼은 기존 패널·대화·검증 화면을 연다.
+- `case-support.v5`/`right-panel.v1`과 우측 패널 IA를 유지한다. `031_case_copilot_workflow.sql` 및 백업·격리 복원·동일 migration 리허설을 수행하는 적용 스크립트를 추가했다. 격리 MySQL 테스트에서 신규 메시지 메타데이터, 자동 Task, 영속 가이드 중복 방지·완료를 검증했다. 서비스 DB `csr`의 031 적용 결과는 위 복구 절에 기록했다. migration 목록에 없는 기존 확장 테이블 2개는 검사·보존 대상으로 남겼다.
+- 실 OpenAI 호출은 연결 오류로 완료되지 않았다. 실제 은행/고객 Browser Smoke는 CUA 브라우저 표면이 없어 `NOT RUN`이다. 브라우저 확인 전에는 전체 운영 경로 완료로 판정하지 않는다.
+- 최신 회귀(2026-09-29): AI API 전체 **373 passed, 183 subtests passed**. General API non-MySQL **305 passed, 69 subtests passed**, MySQL repository 격리 통합 **18 passed**, schema normalization 격리 통합 **10 passed, 14 subtests passed**. Frontend production build(1,479 modules)와 Vitest **7 files / 25 tests** 통과, `git diff --check` 통과. 아래 담당자 보고 절의 과거 실패 집계는 이후 수정·재실행 결과로 대체한다.
+
+## 2026-09-29 은행 Copilot 담당자 확인 보고의 준확정 source 흐름
+
+- 은행 직원이 직접 조회·확인했다고 명시한 송금·개인정보·인증정보·원격 앱 상태는 `STAFF_OBSERVATION`과 `staff_attestation=EXPLICIT_STAFF_CHECK` 출처를 보존해 응답 grounding 및 동일 범위의 후속 질문 억제에 사용한다. 다른 상태/도메인으로 확대하거나 근거 없는 값을 만들지 않는다.
+- 이 보고는 내부 Case 업무에서 준확정으로 활용하지만 Fact lifecycle은 `PROPOSED`로 유지한다. 실제 은행 거래 원장, 공식기관 Verification, REVIEW 확정, 외부 조치 완료로 승격하지 않는다. 고객 진술·AI 추출·상대방 요구도 직원 직접 확인과 구분한다.
+- Copilot 조회 전에 해당 Case의 은행 내부 직원 작성 채팅에서 대기 중인 구조화 추출을 정착시키고, 처리 실패·시간 초과는 확정 정보처럼 가장하지 않는다. Fact merge와 AI Snapshot 입력은 source kind·attestation·evidence 참조를 보존한다.
+- Right Panel IA는 변경하지 않았다. 기존 피해·노출 분류에 typed Fact를 연결하고 `담당자 확인 보고` 출처 badge로 표시한다. 송금·정보 제공 요구와 실제 수행은 분리한다. Fact의 `status`를 업무 `COMPLETED`로 오용하지 않는다.
+- 검증(2026-09-29): AI 타깃 5개 suite **127 passed, 97 subtests passed**; General API vertical slice/Fact merge/Right Panel/case-support endpoint **66 passed, 14 subtests passed**; Frontend Vitest **5 files / 19 tests passed**, production build/typecheck 통과(1,479 modules). 전체 AI API는 **361 passed, 2 failed, 181 subtests passed**: 두 실패는 task note를 짧은 current-state summary에 포함하길 기대하는 요약 테스트와 현재 요약 계약의 불일치다. 전체 General API 마지막 실행은 최종 투영 수정 전이며 **314 passed, 4 failed**: grounded validation 문구 기대, public Case 응답 필드 목록 기대, migration manifest 개수 기대, 격리 schema normalization 수렴 실패다. 이 실패는 숨기거나 기대값을 완화하지 않았다.
+- 실제 local MySQL `/health`는 `database=mysql`; VP-26 `GET /api/cases/VP-26/ai/case-support?actor_user_id=mvp-v3-bank-operator`는 `right-panel.v1`, `CURRENT` 응답을 반환했다. 같은 DB의 VP-26은 Fact 23건 중 명시적 담당자 확인 보고 0건이고, 채팅 7건에도 제공된 예시 두 확인 발언이 저장되어 있지 않아 live staff-attestation 반영 검증은 미완료다. 쓰기 API·migration은 호출하지 않았다.
+- 실제 Browser Smoke는 수행하지 못했다. CUA에서 브라우저 표면이 제공되지 않아 화면 표시·새로고침·좁은 폭·hover/focus/menu/touch는 `NOT RUN`이다. 정적 코드상 React row renderer는 `semantic_key`를 표시하지 않지만, API Right Panel item에는 안정 키 용도의 `semantic_key`가 계속 포함된다. 실제 브라우저 비노출 여부는 아직 입증하지 않았다.
+- 상태 체계 제거는 이번 코드 변경에서 수행하지 않았다. 이력/출처/충돌/정정 이력을 잃지 않도록 내부 provenance를 보존하고, 사용자-facing “승격” 절차를 줄이는 안은 별도 설계 검토가 필요하다.
 
 ## 2026-09-28 미적용 Case 상태 migration 및 서버 재기동
 
@@ -14,16 +86,21 @@
 
 ## 2026-09-28 우측 사건 패널 최신 스냅샷·기록 화면
 
-- 은행 Case Room의 우측 패널을 `현재 사건 요약`, `피해·노출`, `사칭·접촉`, `주요 보이스피싱 정황`, `확인·검증`, `업무 진행(미완료/완료)`, `처리 기록`으로 구성했다. 업무 수행은 기존 채팅/업무 UI에 두고, 패널은 저장된 현재 상태와 결과 확인을 담당한다.
+- 은행 Case Room의 우측 패널을 `현재 사건 요약` 다음 정확히 네 영역 `1. 피해·노출`, `2. 확인·조치 진행`, `3. 주요 사기 정황`, `4. 처리 기록`으로 통합했다. 확인·검증과 업무 진행은 미완료/완료 lane 안에서 구분하고, 사칭·접촉 정보는 주요 정황의 semantic group으로 결합했다.
 - 기존 `GET /api/cases/{case_id}/ai/case-support`에 멤버 전용 `right_panel` 읽기 projection을 추가했다. 고객 공개 API에는 추가하지 않았다. 주요 정황·인물/기관은 근거가 있는 입력만 표시하고, 요구·고객 진술·미확인·직원 기록·공식 확인을 구분한다. `case_transactions`는 실제 송금 증거로 사용하지 않는다.
-- 직원의 개별 항목 추가·수정·보관·복원·영구 숨김은 기존 `case_context_items`/history JSON 저장소와 버전 충돌 검사를 재사용한다. AI 원본과 evidence는 삭제하지 않는다. 업무 표시는 TODO/COMPLETED만 사용한다.
+- 피해·노출 행은 additive `presentation_group`으로 금전/개인정보/인증정보/기기·접근에 표시한다. 송금·개인정보·인증정보·원격 앱 요구와 실제 수행은 분리하고, 미확인은 한 번의 상태 badge로 표현한다. 금액이 있는 요구 문장은 피해 상태에 상세값으로 표시하고 사기 수법에는 금액 없는 compact 요구명으로 표시한다.
+- 주요 사기 정황은 `identity`, `claim`, `demand`, `pressure` semantic key에 따라 사칭·접촉, 사건·상황 주장, 요구·행동, 압박·연락 통제로 묶는다. `money`/`exposure` narrative는 피해·노출 영역의 금전/기타 정황 하위 그룹에 둔다. frontend는 문자열 substring으로 의미를 판정하지 않는다.
+- 확인·조치 진행은 저장된 Verification과 Task/Action을 같은 Section 내 별도 의미 그룹 및 미완료/완료 lane에서 표시한다. 진행률은 제공된 저장 항목 개수만 세며 가짜 checklist 분자/분모를 생성하지 않는다. 내부 Verification 코드/담당자 ID는 표시하지 않고 확인 대상 중심의 human-readable 제목을 사용한다.
+- 처리 기록은 시각이 저장된 고객 질문 발송·답변, 확인 요청·결과, 완료 업무·실제 조치만 포함한다. 미완료 Action/Recommendation/TODO 및 internal enum-only Verification은 제외한다.
+- 직원의 개별 항목 추가·수정·보관·복원·영구 숨김은 기존 `case_context_items`/history JSON 저장소와 버전 충돌 검사를 재사용한다. AI 원본과 evidence는 삭제하지 않는다. 업무 완료는 기존 Task/Action API에 저장한다.
 - 요약 projection schema를 `case-support.v5`로 올려 기존 캐시를 새 버전에서 재생성한다. 별도 DB 테이블, 컬럼, migration은 추가하지 않았다. 요약은 현재 위험·출처가 보존된 주장·요구·고객 답변·미확인 상태를 짧은 문단으로 구성하며, 새 LLM 호출 없이 결정론적 생성 경로를 사용한다.
-- Right Panel 프론트는 구형 진단 문장으로 정황/요약을 재구성하지 않고 `right_panel` 표시 projection을 그대로 렌더링한다. 구체 요구는 피해·노출 영역으로, 인물의 확인된 역할은 인물명에 결합하며, 분류 코드는 숨긴다. AI 체크리스트는 미완료 업무로만 표시하고 완료 시 기존 Action API에 상태·담당자·시간을 기록해 업무 및 처리 기록에 반영한다.
+- Right Panel 응답 계약은 `right-panel.v1`을 유지하면서 핵심 상태 `summary_badges`와 의미 기반 `presentation_group`을 additive하게 노출한다. 별도 테이블·컬럼·migration은 추가하지 않았다. 기존 action/edit/archive/restore/version conflict, Task completion, Action routing 및 Case 격리는 유지한다.
+- 좁은 패널 대응으로 row 내 title/badge를 wrap 가능한 compact heading으로 배치하고 `min-width:0`, `box-sizing`, 내부 grid columns를 적용했다. `[...]` 메뉴는 clipping 부모 밖 portal로 열고 trigger 근처에 고정 배치한다. desktop hover/focus/open 및 touch 상시 표시 CSS 규칙은 유지한다.
 - 2026-09-28 후속 질문 후보 회귀 보완: 불확실 문장에 포함된 `했`을 실제 수행 답변으로 오인하지 않도록 typed 답변 판정을 재사용한다. `PROPOSED` Fact는 미확인 질문을 억제하지 않으며, `CONFIRMED` 원격 앱 설치 요구도 실제 설치 확인으로 취급하지 않는다. 확실한 실제 답변/확인만 기본 질문을 억제한다.
-- 최신 검증(2026-09-28): 관련 General API 테스트 46건, 질문 의미·Case Snapshot AI 테스트 55건 통과. Frontend Vitest 5 files / 14 tests, typecheck, Vite production build(1,479 modules) 통과. 이전 통합 실행에서 보고된 질문 후보 4개 실패는 재현 규칙을 고쳐 모두 통과시켰다.
-- 로컬 MySQL 연결 General API `/health` 정상(`database=mysql`). VP-25 은행 case-support 응답 HTTP 200, `right-panel.v1` 포함. 송금 요구는 `[상대방 요구]`, 실제 송금·개인정보·인증정보 제공·원격 앱 설치는 `[미확인]`으로 분리되며 내부 코드 토큰 검사 결과 0건이었다.
+- 최신 검증(2026-09-28): Frontend Vitest 5 files / 14 tests, typecheck, Vite production build(1,479 modules) 통과. Right Panel projection 및 저장 API·Task/Action 관련 General API 테스트 73건 통과. `git diff --check` 통과(기존 CRLF 변환 경고만 있음).
+- 로컬 General API `/health`와 VP-25 case-support GET은 HTTP 200이었다. 다만 현재 떠 있는 API 프로세스 응답에는 `summary_badges`와 `presentation_group`이 없어 수정 코드보다 오래된 projection이었다. 해당 응답은 최신 MySQL projection 검증으로 간주하지 않는다. DB 변경·migration은 수행하지 않았다.
 - 남은 의미 경계: `claimed_organization` 질문은 상대방이 내세운 기관명을 확인할 뿐 공식 소속을 검증하지 않는다. 공식 소속은 별도 Verification 결과가 있어야 하며, 이번 VP-25 응답에는 Verification 행이 없어 실제 완료 UI 확인은 미수행이다.
-- 실제 Browser Smoke는 수행하지 못했다. Computer Use에서 사용 가능한 브라우저 표면이 없고 네이티브 연결도 제공되지 않아 UI 확인·새로고침·좁은 폭·hover/focus/touch 검증은 미완료다. 우측 패널 IA는 변경하지 않았다.
+- 실제 Browser Smoke는 수행하지 못했다. Computer Use 브라우저 목록이 비어 있고, 브라우저 선택 및 in-app browser 생성 모두 사용 불가였다. 화면 내용/refresh/case switching/좁은 폭/hover/focus/menu-open/touch 동작은 미검증이며 PASS로 기록하지 않는다.
 
 ## 2026-09-28 새 통화 분석 음성 파일 전사
 
@@ -52,6 +129,7 @@
 ## 송금 기록 조회 — 데모 정책
 
 - 실제 은행·계좌 원장 API는 연결하지 않는다. `송금 기록 조회`는 Case 최초 분석, 고객·직원 채팅, 직원의 데모 확인 입력으로 수집된 정보를 보여주는 화면이다.
+- 발표 화면에서 목데이터 기능을 추천하지 않도록 은행 내부 AI 추천 버튼에서는 `송금 기록 조회`를 숨긴다. 기능 자체의 직접 실행 경로와 거래 사실의 정확성 표시는 유지한다.
 - 분석에서 언급된 금액이나 고객의 송금 진술은 은행 확인 거래로 자동 승격하지 않는다. `case_transactions`는 표시용 기록 목록이며 `cases.actual_loss_amount_krw`는 별도의 사건 요약값이다.
 - 화면과 API는 `거래 없음`, `조회 실패`, `미확인`, `송금 진술`, `데모 확인`을 구분해야 하며, 0건을 피해금액 0원으로 표시하지 않는다.
 - 각 기록에는 출처·확인 상태·방향(`TRANSFER_OUT`/`RETURN_IN` 등)을 보존한다. 실제 금융기관 확인이 완료된 것처럼 표현하지 않는다.

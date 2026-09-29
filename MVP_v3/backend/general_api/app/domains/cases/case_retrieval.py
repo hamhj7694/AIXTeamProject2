@@ -114,9 +114,14 @@ SEMANTIC_FIELDS = {
 
 
 def merge_support_records(resources, facts, actions):
+    from contracts.working_facts import staff_working_fact
     data = resources.model_dump(mode="json")
     new_facts = [{"fact_id": f["fact_id"], "field": SEMANTIC_FIELDS.get(f["semantic_key"], f["semantic_key"].removeprefix("legacy.")),
-                  "value": f["display_value"], "status": f["status"]}
+                  "value": f["display_value"], "status": f["status"], "source_kind": f.get("source_kind"),
+                  "value_json": f.get("value") or {}, "evidence_refs": f.get("evidence_refs") or [],
+                  "staff_attested": bool((f.get("value") or {}).get("staff_attestation") == "EXPLICIT_STAFF_CHECK"),
+                  "staff_reported": staff_working_fact(f.get('source_kind'), f.get('value')),
+                  "version": f.get("version")}
                  for f in data["facts"] if f["status"] in {"CONFIRMED", "PROPOSED"}]
     v2_ids = {f["fact_id"] for f in new_facts}
     confirmed = {f["field"] for f in new_facts if f["status"] == "CONFIRMED"}

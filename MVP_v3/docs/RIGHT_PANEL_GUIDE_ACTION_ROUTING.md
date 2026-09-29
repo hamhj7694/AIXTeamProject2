@@ -145,12 +145,7 @@ Projection은 기존 사건 요약/분석, 고객 답변, 검증, 업무(Task), 
 
 ### 현재 정보 구조
 
-1. 피해·노출 — 송금·개인정보·인증정보·앱 설치의 요구/언급과 실제 수행 여부를 분리한다. 확인 데이터가 비어 있으면 피해 없음이 아니라 추가 확인 필요로 표시한다.
-2. 사칭·접촉 정보 — 사람·기관·장소·연락 주체는 원천에 있는 literal entity mention만 표시한다.
-3. 주요 보이스피싱 정황 — 신분·관계, 상황·사건 주장, 요구 행동, 압박·연락 통제, 금전 관련, 고객 피해·노출로 분류한다. 정확한 중복만 제거하고, 의미가 다른 항목은 유사도만으로 합치지 않는다.
-4. 확인·검증 현황 — 저장된 검증 결과와 미확인 대상을 표시한다. 증거 없는 완료 기록은 공식 확인으로 승격하지 않는다.
-5. 업무 진행 현황 — `미완료 / 완료` 두 영역만 둔다. 별도 진행 중 lane이나 긴 수행 안내는 만들지 않으며, 실제 업무 실행은 채팅/기존 업무 기능에 둔다.
-6. 처리 기록 — 저장된 조치·검증 결과만 표시한다. 원천에 없는 시각·담당자·Turn 번호를 생성하지 않는다.
+우측 패널은 현재 사건 요약 다음에 `피해·노출`, `확인·조치 진행`, `주요 사기 정황`, `처리 기록` 네 영역을 둔다. 피해·노출 아래 금전 정황과 개인정보/인증정보/앱 설치 노출을 묶되 요구와 실제 수행은 별도 행으로 보존한다. 확인·조치 진행은 저장된 Verification과 Task/Action을 `미완료 / 완료` 두 lane으로 함께 보여준다. 사기 정황은 사칭·접촉, 사건·상황 주장, 요구·행동, 압박·연락 통제로 묶고, 금전/피해 노출 정황은 피해·노출 영역에 둔다. 처리 기록은 시각이 있는 저장 이벤트만 포함하고 열린 추천·미완료 업무는 포함하지 않는다.
 
 ### 출처·편집·캐시 규칙
 
@@ -170,28 +165,39 @@ Frontend typecheck/Vitest/production build 및 Right Panel projection·저장 AP
 - 키보드로 행 또는 메뉴에 focus가 들어오면 표시한다.
 - `[...]` 메뉴가 열린 동안은 행에서 포인터가 빠져도 계속 표시한다.
 - 모바일·터치 환경에서는 hover가 없으므로 항상 표시한다.
-- 메뉴는 행 제목·설명·다른 텍스트를 가리지 않도록 같은 행의 우측에 배치하고, 열린 메뉴의 z-index를 행보다 높게 유지한다.
+- 메뉴는 clipping되는 행 컨테이너 밖에 표시하되 트리거 주변의 위/아래 공간을 사용하고, 행 텍스트를 가리지 않으며 열린 메뉴의 z-index를 높게 유지한다.
 - 이 규칙은 가이드 제목, 하위 업무, 주요 정황 항목에 공통 적용한다.
 
-### 현재 구현된 IA
+### 현재 구현된 Right Panel IA
 
 ```text
 우측 사건 현황
 ├─ 현재 사건 요약 (문장형 Current Case Snapshot)
 ├─ 1. 피해·노출
-├─ 2. 사칭·접촉 정보
-├─ 3. 주요 보이스피싱 정황
-│  ├─ 신분·관계
-│  ├─ 상황·사건 주장
-│  ├─ 요구 행동
-│  ├─ 압박·연락 통제
 │  ├─ 금전 관련 정황
-│  └─ 고객 피해·노출
-├─ 4. 확인·검증 현황
-├─ 5. 업무 진행 현황
-│  ├─ 미완료
-│  └─ 완료
-└─ 6. 처리 기록
+│  └─ 피해·노출 정황
+├─ 2. 확인·조치 진행
+│  ├─ 미완료: 확인 대상 / 대응 업무
+│  └─ 완료: 확인 결과 / 완료된 업무
+├─ 3. 주요 사기 정황
+│  ├─ 사칭·접촉 (사람·기관·장소와 근거 있는 역할)
+│  ├─ 사건·상황 주장
+│  ├─ 요구·행동
+│  └─ 압박·연락 통제
+└─ 4. 처리 기록
 ```
 
-이 구조에서 상세 업무 실행은 Chat/기존 업무 UI에 두고, 패널은 최신 상태와 실제 저장된 결과를 보여준다.
+기존 `exposure`, `contact_information`, `fraud_signals`, `verification`, `incomplete_work`, `completed_work`, `activity` 원천을 표시 계층에서 네 영역으로 묶는다. 금전/피해 노출 정황은 첫 영역, 인물·기관과 네 semantic fraud category는 세 번째 영역에 둔다. 질문·답변·검증 결과·완료 업무 기록은 시각이 저장된 경우만 처리 기록으로 노출하고, 미완료 Action/Recommendation은 처리 이력에 복사하지 않는다.
+
+| 기존 원천 | canonical 데이터 | 새 영역/표시 그룹 |
+|---|---|---|
+| `exposure` | REQUESTED narrative, 고객 질문 답변, Case 송금 진술 | 1 피해·노출 → 금전/개인정보/인증정보/기기·접근 (`presentation_group`) |
+| `contact_information` | diagnosis의 literal `semantic_mentions`와 근거 역할 | 3 주요 사기 정황 → 사칭·접촉 |
+| `fraud_signals` | grounded `feature_narratives` / 기존 structured fallback | 3 → 사건·상황 주장/요구·행동/압박·연락 통제; `money`/`exposure`는 1 → 금전/추가 피해·노출 정황 |
+| `verification` | 기존 Verification 레코드 | 2 → 미완료 확인 대상 또는 완료 확인 결과; 제목은 검증 대상 우선 |
+| `incomplete_work` / `completed_work` | 기존 `case_tasks` 및 Action checklist | 2 → 대응 업무/완료된 업무 |
+| `activity` | timestamp가 있는 질문·답변·확인·완료 조치 이벤트 | 4 → 실제 처리 기록; open TODO/추천은 제외 |
+
+요약 상태 badge와 `presentation_group`은 기존 read projection의 additive 표시값이다. Fact·Entity·Task·Verification·Action·Evidence·History 저장, revision/version 및 visibility 계약은 바꾸지 않으며 DB migration도 없다. Section 2의 총 건수는 저장된 Verification/Task/Action row 수만 계산한다. 현재 API에 checklist 하위 항목 개수가 없으므로 `1/3` 같은 가상 진행률은 표시하지 않는다.
+
+상태 배지와 묶음/순서만 표시 계층에서 추가하며, Fact·Task·Verification·Action·evidence와 이력의 저장 계약은 유지한다. 업무 실행은 채팅/기존 업무 UI에 두고 우측 패널은 최신 상태와 실제 저장된 결과를 보여준다. 이 구성은 별도 DB 테이블 또는 migration을 요구하지 않는다.

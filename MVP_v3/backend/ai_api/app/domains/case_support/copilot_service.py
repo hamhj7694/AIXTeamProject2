@@ -12,12 +12,94 @@ from collections import defaultdict, deque
 
 from openai import AsyncOpenAI, AuthenticationError, RateLimitError
 
-from contracts.ai_internal.case_copilot import CaseCopilotInput, CaseCopilotOutput, RecommendedChatAction
+from contracts.ai_internal.case_copilot import CaseCopilotInput, CaseCopilotOutput, RecommendedChatAction, CopilotTaskIntent
+from .bank_policy import bank_instructions
 
 from .copilot_quality import CopilotQualityEvaluator
-from .copilot_accumulation import asks_total, review_transfers
+from .copilot_accumulation import asks_total, review_case_transfer_facts, review_transfers
 
 logger = logging.getLogger(__name__)
+DEFAULT_BANK_COPILOT_OUTPUT_TOKENS = 2_000
+MIN_BANK_COPILOT_OUTPUT_TOKENS = 1_200
+MAX_BANK_COPILOT_OUTPUT_TOKENS = 4_000
+
+
+def bank_copilot_output_token_limit() -> int:
+    try:
+        configured = int(os.getenv("OPENAI_CASE_COPILOT_MAX_OUTPUT_TOKENS", str(DEFAULT_BANK_COPILOT_OUTPUT_TOKENS)))
+    except (TypeError, ValueError):
+        configured = DEFAULT_BANK_COPILOT_OUTPUT_TOKENS
+    return max(MIN_BANK_COPILOT_OUTPUT_TOKENS, min(configured, MAX_BANK_COPILOT_OUTPUT_TOKENS))
+
+
+def _prioritize_bank_items(items: list[str]) -> list[str]:
+    human_fields = {
+        "transfer_status": "실제 송금 여부", "transfer.actual.status": "실제 송금 여부",
+        "transfer_purpose": "송금 요구 이유", "transfer.purpose": "송금 요구 이유",
+        "circumstance.demand": "상대방 요구", "exposure.personal_information": "개인정보 제공 여부",
+        "exposure.authentication_information": "인증정보 제공 여부", "device.remote_control_app": "원격제어 앱 설치 여부",
+    }
+
+    def humanize(item: str) -> str:
+        match = re.match(r"\s*AI_CHECKLIST:P[0-2]:([^:]+):?\s*(.*)$", item, re.I)
+        if match:
+            field, description = match.groups()
+            title = human_fields.get(field, "추가 확인 사항")
+            detail = re.sub(r"\s*\((?:REQUESTED|TODO|IN_PROGRESS|COMPLETED)\)\s*$", "", description, flags=re.I).strip()
+            return f"{title}: {detail}" if detail and detail != title else title
+        cleaned = re.sub(r"\s*\((?:REQUESTED|TODO|IN_PROGRESS|COMPLETED)\)\s*$", "", item, flags=re.I)
+        return cleaned.strip()
+
+    readable_items = [humanize(item) for item in items]
+
+    def rank(item: str) -> tuple[int, int]:
+        text = item.casefold()
+        if re.search(r"\bP0\b|긴급|즉시", text):
+            category = 0
+        elif any(word in text for word in ("송금", "이체", "거래", "지급정지")):
+            category = 1
+        elif any(word in text for word in ("인증", "개인정보", "원격제어", "앱 설치")):
+            category = 2
+        elif any(word in text for word in ("기관", "소속", "검증", "공식")):
+            category = 3
+        else:
+            category = 4
+        return category, readable_items.index(item)
+    return sorted(readable_items, key=rank)
+
+
+def _contains_internal_code(text: str) -> bool:
+    return bool(re.search(
+        r"AI_CHECKLIST|\b(?:TRIAGE|RECOVERY|REQUESTED|PROPOSED|CONFIRMED|SUPERSEDED|REJECTED|IN_PROGRESS|COMPLETED)\b|"
+        r"\b(?:semantic_key|source_kind|fact_id|task_id|verification_task_id)\b|```|\{\s*['\"]content['\"]\s*:",
+        text, re.I,
+    ))
+
+
+def _brief_reply_too_long(content: str) -> bool:
+    return len(content) > 320 or len([line for line in content.splitlines() if line.strip()]) > 3
+
+
+def _fallback_task_title(task: dict) -> str:
+    title = str(task.get("title") or "").strip()
+    if title:
+        readable = _prioritize_bank_items([title])[0]
+        if readable and not _contains_internal_code(readable):
+            return readable
+    return {
+        "CUSTOMER_CONTACT": "고객에게 현재 연락과 정보 제공 여부 확인",
+        "TRANSACTION_REVIEW": "고객 명의 거래 기록에서 실제 송금 여부 확인",
+        "INSTITUTION_VERIFICATION": "상대방이 주장한 기관의 공식 연락처로 소속 확인",
+        "PROTECTIVE_ACTION": "고객에게 추가 송금과 상대방 접촉 중단 안내",
+        "DOCUMENT_REVIEW": "관련 자료에서 핵심 사실 확인",
+    }.get(str(task.get("task_type") or ""), "가장 중요한 미완료 업무 확인")
+
+
+def _human_workflow_status(status: str) -> str:
+    return {
+        "TRIAGE": "초기 확인", "RECOVERY": "피해 대응", "RESOLVED": "처리 완료",
+        "CLOSED": "종결", "OPEN": "진행 중", "IN_PROGRESS": "진행 중",
+    }.get(status.upper(), "진행 중")
 
 
 class CaseCopilotQuotaError(RuntimeError):
@@ -81,7 +163,7 @@ COPILOT_REPLY_SCHEMA = {
         "content": {"type": "string"},
         "recommended_actions": {
             "type": "array",
-            "maxItems": 3,
+            "maxItems": 1,
             "items": {
                 "type": "object",
                 "properties": {
@@ -100,19 +182,37 @@ COPILOT_REPLY_SCHEMA = {
     "additionalProperties": False,
 }
 
+# All fields are required on the provider wire; optional values remain nullable.
+_task_schema = CopilotTaskIntent.model_json_schema()
+_task_schema["required"] = list(_task_schema["properties"])
+for _field_schema in _task_schema["properties"].values():
+    _field_schema.pop("default", None)
+COPILOT_REPLY_SCHEMA["properties"]["task_intents"] = {"type": "array", "maxItems": 3, "items": _task_schema}
+COPILOT_REPLY_SCHEMA["required"].append("task_intents")
+_action_schema = COPILOT_REPLY_SCHEMA["properties"]["recommended_actions"]["items"]
+_action_schema["properties"].update({
+    "target_type": {"type": ["string", "null"], "enum": ["TASK", "QUESTION", "VERIFICATION", None]},
+    "target_id": {"type": ["string", "null"]},
+    "expected_version": {"type": ["integer", "null"]},
+})
+_action_schema["required"] = list(_action_schema["properties"])
+
 
 def normalize_recommended_actions(raw: object, assistant_mode: str) -> list[RecommendedChatAction]:
     """Keep provider metadata within the small, bank-owned action vocabulary."""
     if assistant_mode != "BANK_INTERNAL" or not isinstance(raw, list):
         return []
     normalized: list[RecommendedChatAction] = []
-    seen: set[str] = set()
+    seen: set[tuple[str, str | None, str | None]] = set()
+    preference = {"CUSTOMER_QUESTION": 0, "OFFICIAL_VERIFICATION": 1, "RESPONSE_ACTION": 2,
+                  "DRAFT_REPLY": 3, "TRANSACTION_LOOKUP": 4}
     for candidate in raw[:3]:
         try:
             action = RecommendedChatAction.model_validate(candidate)
         except Exception:
             continue
-        if action.action_key in seen:
+        identity = (action.action_key, action.target_type, action.target_id)
+        if identity in seen:
             continue
         if action.kind == "TOOL" and action.target_channel != "TEAM":
             continue
@@ -121,9 +221,9 @@ def normalize_recommended_actions(raw: object, assistant_mode: str) -> list[Reco
                 continue
         elif action.action_key == "DRAFT_REPLY":
             continue
-        seen.add(action.action_key)
+        seen.add(identity)
         normalized.append(action)
-    return normalized
+    return sorted(normalized, key=lambda action: preference.get(action.action_key, 99))[:1]
 
 
 def _asks_about_primary_assignee(prompt: str) -> bool:
@@ -222,36 +322,214 @@ def _customer_safety_fallback(request: CaseCopilotInput) -> CaseCopilotOutput:
     return CaseCopilotOutput(content=content, model_mode="CUSTOMER_SAFETY_FALLBACK")
 
 
-def _bank_case_fallback(request: CaseCopilotInput) -> CaseCopilotOutput:
-    """Build a traceable Case-based answer when the remote model is unavailable."""
-    known = request.known_facts[:4]
-    unresolved = request.unresolved_verifications[:4]
-    pending = request.pending_actions[:4]
-    if request.response_style == "CONVERSATIONAL":
-        first_pending = pending[0] if pending else "고객의 송금·개인정보·인증정보 제공 여부를 먼저 확인해 보세요."
-        first_unresolved = unresolved[0] if unresolved else "기관 또는 상대방 주장은 공식 채널로 확인하는 것이 좋겠습니다."
-        content = (
-            f"네, 같이 보겠습니다. {request.case_summary or '현재 Case는 추가 확인이 필요한 상황'}으로 보입니다. "
-            f"우선은 {first_pending} "
-            f"그리고 {first_unresolved}를 확인하면 다음 판단이 더 명확해집니다. "
-            "원하시면 고객에게 보낼 확인 질문이나 대응 순서도 바로 정리해 드릴게요."
+def _bank_next_step(request: CaseCopilotInput) -> tuple[str, RecommendedChatAction | None]:
+    """Select one unfinished step from the same current state used by the reply."""
+    active_tasks = [task for task in request.case_state.get("tasks", [])
+                    if task.get("status") not in {"COMPLETED", "CANCELLED"} and task.get("task_id")]
+    if active_tasks:
+        priority = {"URGENT": 0, "HIGH": 1, "NORMAL": 2}
+        preference = {"CUSTOMER_CONTACT": 0, "INSTITUTION_VERIFICATION": 1, "PROTECTIVE_ACTION": 2,
+                      "DOCUMENT_REVIEW": 3, "TRANSACTION_REVIEW": 4}
+        task = min(active_tasks, key=lambda item: (
+            0 if item.get("priority") == "URGENT" else 1,
+            preference.get(item.get("task_type"), 5),
+            priority.get(item.get("priority"), 3),
+        ))
+        key = {"CUSTOMER_CONTACT": "CUSTOMER_QUESTION", "TRANSACTION_REVIEW": "TRANSACTION_LOOKUP",
+               "INSTITUTION_VERIFICATION": "OFFICIAL_VERIFICATION"}.get(task.get("task_type"), "RESPONSE_ACTION")
+        return (f"‘{_fallback_task_title(task)}’부터 진행하세요.",
+                RecommendedChatAction(action_key=key, kind="TOOL", target_channel="TEAM",
+                    target_type="TASK", target_id=task["task_id"], expected_version=task.get("version")))
+    if request.pending_actions:
+        title = _prioritize_bank_items(request.pending_actions)[0]
+        key = ("TRANSACTION_LOOKUP" if any(word in title for word in ("송금", "이체", "거래"))
+               else "OFFICIAL_VERIFICATION" if any(word in title for word in ("기관", "공식", "소속"))
+               else "RESPONSE_ACTION")
+        return f"‘{title}’부터 진행하세요.", RecommendedChatAction(action_key=key, kind="TOOL", target_channel="TEAM")
+    source = request.source_context
+    if source:
+        pending = next((item for item in source.questions if item.status == "PENDING"), None)
+        if pending:
+            return (f"고객에게 ‘{pending.question_text}’ 질문을 발송하세요.",
+                    RecommendedChatAction(action_key="CUSTOMER_QUESTION", kind="TOOL", target_channel="TEAM"))
+        asked = next((item for item in source.questions if item.status == "ASKED"), None)
+        if asked:
+            return f"발송된 ‘{asked.question_text}’ 질문의 답변을 확인하세요.", None
+    if request.unresolved_verifications:
+        return (f"‘{_prioritize_bank_items(request.unresolved_verifications)[0]}’ 기관 확인을 진행하세요.",
+                RecommendedChatAction(action_key="OFFICIAL_VERIFICATION", kind="TOOL", target_channel="TEAM"))
+    return ("고객의 현재 연락·추가 송금 여부를 먼저 확인하세요.",
+            RecommendedChatAction(action_key="CUSTOMER_QUESTION", kind="TOOL", target_channel="TEAM"))
+
+
+def _bank_case_fallback_content(request: CaseCopilotInput) -> CaseCopilotOutput:
+    """Build a source-aware, readable answer without exposing malformed model output."""
+    compact_prompt = re.sub(r"\s+", "", request.prompt).lower()
+    if re.fullmatch(r"(?:안녕|안녕하세요|안녕하십니까|하이|반가워요)[.!?~]*", compact_prompt):
+        return CaseCopilotOutput(
+            content="안녕하세요. 이 사건에서 확인할 내용이나 다음 대응을 함께 살펴볼게요. 궁금한 점을 편하게 말씀해 주세요.",
+            model_mode="BANK_CONTEXT_FALLBACK",
         )
+
+    source = request.source_context
+    if not source and any(word in compact_prompt for word in ("송금", "이체", "거래내역", "거래 기록")):
+        transfer_facts = [
+            item for item in request.known_facts
+            if any(word in item.lower() for word in ("송금", "이체", "transfer"))
+        ][:3]
+        if transfer_facts:
+            # Legacy callers may only provide strings, without typed provenance. Use
+            # them as case notes, never silently elevate them to bank-confirmed facts.
+            details = " · ".join(transfer_facts)
+            return CaseCopilotOutput(
+                content=(
+                    f"현재 전달된 Case 정보에는 다음 내용이 기록되어 있습니다: {details}. "
+                    "다만 이 정보만으로 은행 거래기록에서 확인된 사실인지는 구분할 수 없습니다. "
+                    "실제 송금 여부와 금액은 공식 거래내역과 대조해 확인해 주세요."
+                ),
+                model_mode="BANK_CONTEXT_FALLBACK",
+            )
+
+    if source and any(word in compact_prompt for word in ("송금", "이체", "거래기록", "거래내역")):
+        transfer_facts = [fact for fact in source.facts
+                          if fact.semantic_key in {"transfer_status", "transfer.actual.status", "transfer.actual.amount"}
+                          and fact.status not in {"REJECTED", "SUPERSEDED"}]
+        confirmed_records = [fact for fact in transfer_facts
+                             if fact.source_kind == "BANK_RECORD" and fact.status == "CONFIRMED" and fact.confirmed_by]
+        if confirmed_records:
+            values = " · ".join(dict.fromkeys(fact.display_value.strip() for fact in confirmed_records if fact.display_value.strip()))
+            return CaseCopilotOutput(
+                content=f"현재 Case의 확인된 은행 기록에는 {values}가 있습니다. 이 확인은 해당 기록 범위에 한정되며, 기관의 사칭 여부나 사건 전체가 공식 검증됐다는 뜻은 아닙니다.",
+                model_mode="BANK_CONTEXT_FALLBACK",
+            )
+        latest_staff_message = next((message for message in reversed(source.messages)
+                                     if message.actor_type == "BANK_STAFF"), None)
+        latest_staff_fact = None
+        if latest_staff_message:
+            latest_staff_fact = next((fact for fact in reversed(transfer_facts)
+                                      if any(ref.type == "MESSAGE" and ref.id == latest_staff_message.message_id
+                                             for ref in fact.evidence_refs)
+                                      and fact.semantic_key == "transfer.actual.amount"), None)
+        if latest_staff_message and latest_staff_fact and any(token in latest_staff_message.content for token in ("더", "추가", "또")):
+            accumulated = review_case_transfer_facts(source.facts, source.messages)
+            latest_amount = latest_staff_fact.value.get("amount_krw")
+            latest_source = "담당자 입력" if latest_staff_fact.source_kind == "STAFF_OBSERVATION" else "고객 진술"
+            if latest_amount and accumulated.total_won is not None:
+                return CaseCopilotOutput(
+                    content=(
+                        f"알겠습니다. 방금 말씀하신 추가 송금 {int(latest_amount):,}원({latest_source})을 별도 사건 기록으로 반영했습니다. "
+                        f"현재 기록된 송금 보고액은 총 {accumulated.total_won:,}원입니다. 은행 거래내역으로 검증된 금액과는 구분됩니다."
+                    ),
+                    model_mode="BANK_CONTEXT_FALLBACK",
+                )
+        staff_reports = [fact for fact in transfer_facts
+                         if fact.source_kind == "STAFF_OBSERVATION" and fact.status == "PROPOSED"
+                         and fact.value.get("staff_attestation") == "EXPLICIT_STAFF_CHECK"
+                         and fact.display_value.strip()]
+        if staff_reports:
+            details = " · ".join(dict.fromkeys(fact.display_value.strip() for fact in staff_reports[:3]))
+            return CaseCopilotOutput(
+                content=(
+                    f"담당자 확인 보고 기준으로 현재 Case에는 ‘{details}’가 반영되어 있습니다. "
+                    "이 내용은 내부 대응의 준확정 정보로 활용하되, 은행 거래원장과 별도로 대조된 결과나 공식 검증 완료를 뜻하지는 않습니다."
+                ),
+                model_mode="BANK_CONTEXT_FALLBACK",
+            )
+        if transfer_facts:
+            customer_values = list(dict.fromkeys(fact.display_value.strip() for fact in transfer_facts
+                                                  if fact.source_kind == "CUSTOMER_STATEMENT" and fact.display_value.strip()))
+            proposed_values = list(dict.fromkeys(fact.display_value.strip() for fact in transfer_facts
+                                                 if fact.status == "PROPOSED" and fact.display_value.strip()))
+            details = customer_values or proposed_values
+            if details:
+                source_label = "고객 진술" if customer_values else "확인 전 분석 정황"
+                return CaseCopilotOutput(
+                    content=f"현재 Case에는 {source_label}으로 ‘{' · '.join(details[:3])}’가 기록되어 있습니다. 이는 확인 가능한 거래기록이나 공식 검증이 완료됐다는 뜻은 아니므로, 실제 거래 여부는 은행 기록과 대조해야 합니다.",
+                    model_mode="BANK_CONTEXT_FALLBACK",
+                )
+
+    if source and any(marker in compact_prompt for marker in ("내가확인", "제가확인", "확인해보니", "확인해보니까", "그렇다고", "맞다고")):
+        attested = [fact for fact in source.facts
+                    if fact.source_kind == "STAFF_OBSERVATION" and fact.status == "PROPOSED"
+                    and fact.value.get("staff_attestation") == "EXPLICIT_STAFF_CHECK"
+                    and fact.display_value.strip()]
+        distinct_values = list(dict.fromkeys(fact.display_value.strip() for fact in attested))
+        if len(distinct_values) == 1:
+            return CaseCopilotOutput(
+                content=(
+                    f"알겠습니다. 담당자 확인 보고 기준으로 ‘{distinct_values[0]}’가 현재 Case에 반영되어 있고, "
+                    "말씀하신 내용은 그 확인 보고를 보강하는 것으로 이해했습니다. 은행 원장 대조 여부와는 구분해 두겠습니다."
+                ),
+                model_mode="BANK_CONTEXT_FALLBACK",
+            )
+
+    if source:
+        attested_scopes = (
+            ("authentication_information_exposure", ("authentication_information_exposure", "exposure.authentication_information"),
+             ("인증정보", "인증 번호", "인증번호", "otp", "비밀번호"), "인증정보 제공 여부"),
+            ("personal_information_exposure", ("personal_information_exposure", "exposure.personal_information"),
+             ("개인정보", "주민등록", "신분증"), "개인정보 제공 여부"),
+            ("remote_control_app", ("remote_control_app", "device.remote_control_app"),
+             ("원격제어", "원격 앱", "애니데스크", "팀뷰어"), "원격제어 앱 설치 여부"),
+        )
+        for _, fields, prompt_terms, label in attested_scopes:
+            if not any(term in compact_prompt for term in prompt_terms):
+                continue
+            reports = [fact for fact in source.facts
+                       if fact.semantic_key in fields and fact.status == "PROPOSED"
+                       and fact.source_kind == "STAFF_OBSERVATION"
+                       and fact.value.get("staff_attestation") == "EXPLICIT_STAFF_CHECK"
+                       and fact.display_value.strip()]
+            values = list(dict.fromkeys(fact.display_value.strip() for fact in reports))
+            if len(values) == 1:
+                return CaseCopilotOutput(
+                    content=(
+                        f"담당자 확인 보고 기준으로 {label}은 ‘{values[0]}’로 현재 Case에 반영되어 있습니다. "
+                        "내부 대응에서는 준확정 정보로 활용하되, 공식기관 검증이나 외부 원장 확인과는 구분해 두겠습니다."
+                    ),
+                    model_mode="BANK_CONTEXT_FALLBACK",
+                )
+
+    if request.response_style == "BRIEF":
+        summary = re.sub(r"\s+", " ", request.case_summary).strip() or "현재 사건은 추가 확인 중입니다."
+        step, _ = _bank_next_step(request)
+        return CaseCopilotOutput(content=f"**현 상황:** {summary}\n**지금 할 일:** {step}", model_mode="BANK_CONTEXT_FALLBACK")
+
+    if any(marker in compact_prompt for marker in ("뭐부터", "무엇부터", "먼저확인", "우선확인", "가장중요한", "뭘해야", "다음", "무슨조치", "어떤조치", "취해야", "해야해")):
+        step, _ = _bank_next_step(request)
+        return CaseCopilotOutput(content=f"**지금 할 일:** {step}", model_mode="BANK_CONTEXT_FALLBACK")
+
+    if any(marker in compact_prompt for marker in ("안내문", "초안", "고객에게보낼", "답장")):
+        return CaseCopilotOutput(
+            content="고객 안내는 확인된 내용과 아직 확인이 필요한 내용을 분리해야 합니다. 전달할 대상과 핵심 안내를 말씀해 주시면 담당자가 검토할 수 있는 문안으로 정리하겠습니다.",
+            model_mode="BANK_CONTEXT_FALLBACK",
+        )
+
+    if request.response_style == "CONVERSATIONAL":
+        step, _ = _bank_next_step(request)
+        summary = re.sub(r"\s+", " ", request.case_summary).strip()
+        content = f"{summary}\n\n**지금 할 일:** {step}".strip()
         return CaseCopilotOutput(content=content, model_mode="BANK_CONTEXT_FALLBACK")
-    known_text = "\n".join(f"- {item}" for item in known) or "- 아직 확정된 정보가 없습니다."
-    unresolved_text = "\n".join(f"- {item}" for item in unresolved) or "- 추가 기관 확인 항목이 등록되지 않았습니다."
-    pending_text = "\n".join(f"- {item}" for item in pending) or "- 진행 중인 은행 업무가 없습니다."
-    content = (
-        "## 상황 판단\n"
-        f"{request.case_summary or '현재 Case 요약을 기준으로 추가 확인이 필요합니다.'}\n\n"
-        "## 확인된 정보\n"
-        f"{known_text}\n\n"
-        "## 미확인 정보\n"
-        f"{unresolved_text}\n\n"
-        "## 권장 다음 행동\n"
-        f"{pending_text}\n"
-        "- 고객의 송금·개인정보·인증정보 제공 여부를 먼저 확인하고, 기관 주장은 공식 채널로 검증하세요."
-    )
-    return CaseCopilotOutput(content=content, model_mode="BANK_CONTEXT_FALLBACK")
+    step, _ = _bank_next_step(request)
+    return CaseCopilotOutput(content=f"**지금 할 일:** {step}", model_mode="BANK_CONTEXT_FALLBACK")
+
+
+def _bank_case_fallback(request: CaseCopilotInput) -> CaseCopilotOutput:
+    result = _bank_case_fallback_content(request)
+    step, action = _bank_next_step(request) if "**지금 할 일:**" in result.content else ("", None)
+    content = re.sub(r"\bP[012]:?\s*", "", result.content)
+    if _contains_internal_code(content):
+        summary = re.sub(r"\s+", " ", request.case_summary).strip()
+        if _contains_internal_code(summary):
+            summary = "현재 사건의 핵심 정황과 고객 피해 여부를 확인 중입니다."
+        step = re.sub(r"\bP[012]:?\s*", "", step)
+        if not step or _contains_internal_code(step):
+            step = "고객에게 실제 송금과 추가 피해 여부를 먼저 확인하세요."
+        content = f"**현 상황:** {summary[:200]}\n**지금 할 일:** {step[:110]}"
+        if _contains_internal_code(content):
+            content = "현재 사건은 고객 피해 여부를 확인해야 하는 상황입니다.\n**지금 할 일:** 고객에게 실제 송금 여부를 먼저 확인하세요."
+    return result.model_copy(update={"content": content, "recommended_actions": normalize_recommended_actions(
+        [action.model_dump()] if action else [], "BANK_INTERNAL")})
 
 
 def _context_sections(request: CaseCopilotInput) -> dict[str, list[str]]:
@@ -288,14 +566,33 @@ def _context_sections(request: CaseCopilotInput) -> dict[str, list[str]]:
         "미완료 기관 검증": request.unresolved_verifications,
     }
     if request.source_context is not None:
+        source_labels = {
+            "CUSTOMER_STATEMENT": "고객 진술", "STAFF_OBSERVATION": "담당자 입력",
+            "BANK_RECORD": "은행 기록", "OFFICIAL_VERIFICATION": "기관 확인 기록",
+            "AI_EXTRACTION": "사건 분석 기록",
+        }
+        active_facts = [fact for fact in request.source_context.facts
+                        if fact.status not in {"REJECTED", "SUPERSEDED"}]
+        bank_sections["현재 사건에 반영된 최신 정보 (아래 출처를 그대로 사용)"] = [
+            f"{fact.display_label}: {fact.display_value} · 출처: {source_labels.get(fact.source_kind, '사건 기록')}"
+            for fact in active_facts[-30:]
+        ] or ["아직 추가된 정보가 없습니다."]
         bank_sections["최신 구조화 분석 결과와 source-aware Case 기록 (현재 diagnosis 기준)"] = [
             request.source_context.model_dump_json(),
         ]
+    bank_sections["현재 사건 상태 (우측 패널과 같은 원본)"] = [json.dumps(request.case_state, ensure_ascii=False)]
+    bank_sections["대화 연결용 이력 (AI 발화는 사실 근거가 아님)"] = [item.model_dump_json() for item in request.dialogue_history]
+    bank_sections["이번 변경 처리 결과 (이 결과만 저장 완료의 근거)"] = [json.dumps(item, ensure_ascii=False) for item in request.mutation_results]
     return bank_sections
 
 
 class CaseCopilotService:
-    async def generate(self, request: CaseCopilotInput) -> CaseCopilotOutput:
+    async def _repair(self, request, reason, previous):
+        if previous is None:
+            return await self.generate(request, _repair_reason=reason)
+        return _bank_case_fallback(request)
+
+    async def generate(self, request: CaseCopilotInput, *, _repair_reason: str | None = None) -> CaseCopilotOutput:
         if len(request.prompt.strip()) > int(os.getenv("CASE_COPILOT_MAX_INPUT_CHARS", "6000")):
             raise ValueError("AI 요청은 6,000자 이하로 입력해 주세요.")
         guidance = _service_question_guidance(request)
@@ -347,7 +644,9 @@ class CaseCopilotService:
                     if q.status == "ANSWERED" and q.answer_text and q.answer_message_id not in excluded)
                 accumulation_records.extend(f"고객: {m.content}" for m in typed.messages
                     if m.actor_type == "CUSTOMER" and m.message_id not in excluded)
-            accumulation = review_transfers(accumulation_records)
+            accumulation = (review_case_transfer_facts(request.source_context.facts, request.source_context.messages)
+                            if request.source_context is not None
+                            else review_transfers(accumulation_records))
             sections["누적 질문용 산술 보조 (새 Fact나 공식 검증 결과가 아님)"] = [accumulation.context_note()]
         context = "\n".join(
             f"[{title}]\n" + ("\n".join(f"- {item}" for item in items) if items else "- 없음")
@@ -403,6 +702,10 @@ class CaseCopilotService:
                 "[현재 요청 - 최우선]의 질문을 먼저 처리하세요. 그 블록의 '나·내·내가'는 현재 요청자를 뜻하며, "
                 "요청자의 자기소개나 이름을 고객 또는 사칭 상대의 진술로 재분류하지 마세요. "
                 "짧은 직접 질문에는 필요한 답만 먼저 제시하고, 답에 필요하지 않은 사건 요약이나 확인 질문 목록을 자동으로 덧붙이지 마세요. "
+                "인사에는 자연스럽게 인사로 답하고 사건 번호나 사건 요약을 불필요하게 반복하지 마세요. "
+                "‘무엇부터/뭐부터 확인할까요?’에는 현재 대기 질문·미완료 업무·기관 확인을 우선순위에 따라 골라 첫 행동 하나를 구체적으로 답하세요. "
+                "[사건 정리] 요청에는 사건 요약, 확인된 기록, 고객 진술/AI 정황, 미확인 사항, 가장 시급한 다음 행동을 구분해 정리하세요. "
+                "코드·JSON·YAML·XML·필드 키·코드 펜스는 답변 본문에 절대 출력하지 말고 담당자가 읽을 자연스러운 한국어만 작성하세요. "
             )
             instructions += (
                 "\n\nReturn the answer as the JSON object required by the response schema. "
@@ -447,16 +750,18 @@ class CaseCopilotService:
                 " 매 요청에 포함된 최신 구조화 분석(analysis_context, case_context_features, semantic_atoms, semantic_relations, context_signals)을 우선 grounding으로 사용하세요. "
                 "그 구조화 분석은 품질 검정과 제한된 자동 수정이 반영된 현재 diagnosis의 최신본입니다. 원본 source-aware Case 기록과 문자열 대화·검색은 보조 맥락입니다. "
                 "source_kind와 status를 분리하세요. CUSTOMER_STATEMENT가 CONFIRMED여도 BANK_RECORD가 아닙니다. "
+                "단, BANK_STAFF가 직접 확인·조회했다고 명시한 사실은 source_context Fact의 staff_attestation=EXPLICIT_STAFF_CHECK로 전달됩니다. "
+                "그 사실은 해당 범위에서 내부 Case의 준확정 업무정보로 적극 활용하세요. 사용자가 재확인한 경우 먼저 확인 보고를 인정하고, 같은 사실을 불필요하게 다시 물어보지 마세요. "
+                "필요한 경우 '담당자 확인 보고 기준으로 …'라고 출처를 짧게 밝혀도 됩니다. 이는 내부 확인 보고일 뿐 BANK_RECORD, 공식기관 검증, REVIEW 확정, 실제 외부 조치 완료를 뜻하지 않습니다. "
+                "'제가 확인해 보니 그렇다'처럼 바로 앞의 한 가지 명확한 사실을 재확인한 표현은 그 사실의 보강으로 이해하되, 새 사실이나 금액을 만들어내지 마세요. "
                 "고객의 송금 진술은 '고객은 금액을 송금했다고 진술했습니다'라고 귀속하여 설명하세요. "
                 "실제 전달된 BANK_RECORD의 해당 값과 확인 상태 범위에서만 은행 거래기록 확인이라고 표현하세요. "
                 "confirmed_by/confirmed_at이 있는 범위에서 담당자 확인을 설명할 수 있으나 원 source를 승격하지 마세요. "
                 "EvidenceRef는 원본 내용 검증이 아닙니다. COMPLETED와 비어 있지 않은 result_summary, 해당 Fact의 "
                 "VERIFICATION_RESULT 참조 및 revision이 연결된 범위에서만 공식 검증 결과를 사용하세요. "
                 "참조의 revision과 결과 version이 다르거나 관계가 없으면 확인 필요로 설명하세요. "
-                "질문이 '확인된 사항'을 묻더라도, 관련 항목에 CONFIRMED와 confirmed_by/confirmed_at, 해당 값의 BANK_RECORD, "
-                "또는 연결된 COMPLETED Verification이 없으면 긍정 확정 표현을 쓰지 마세요. 이 경우 먼저 '현재 객관적으로 확인된 "
-                "사항은 없습니다'라고 직접 답하고, AI_EXTRACTION/PROPOSED는 'AI 분석에서 제안된 정황' 또는 '확인 전 정보'로만 "
-                "설명하세요. 위 승인 근거가 있는 값 범위에서는 기존처럼 확인된 사실로 표현할 수 있습니다. "
+                "질문이 '확인된 사항'을 묻더라도 근거 수준을 분명히 구분하세요. 명시적 담당자 확인 보고가 있으면 내부 Case의 준확정 정보로 적극 답하되, 그 내용을 은행 거래기록이나 공식 검증 사실로 바꾸어 말하지 마세요. "
+                "담당자 확인 보고도 없고 관련 항목에 CONFIRMED와 confirmed_by/confirmed_at, 해당 값의 BANK_RECORD, 또는 연결된 COMPLETED Verification도 없을 때에만 '현재 전달된 기록에서는 확인 근거를 찾지 못했습니다'라고 답하세요. AI_EXTRACTION/일반 PROPOSED는 '분석 정황' 또는 '확인 전 정보'로 설명하세요. "
                 "REJECTED/SUPERSEDED는 current 근거가 아니며 timestamp만으로 correction/current를 추측하지 마세요. "
                 "typed와 문자열 내용이 다르면 충돌 또는 추가 확인 필요로 설명하고 이전 고객 메시지나 AI_RESPONSE로 현재 Fact를 뒤집지 마세요. "
                 "기록은 제한된 부분집합일 수 있습니다. 거래 Evidence 미전달은 거래 미발생이 아닙니다. "
@@ -484,6 +789,17 @@ class CaseCopilotService:
                 "'이 상담 화면의 확인 질문을 말씀하시나요, 전화나 문자로 받은 질문을 말씀하시나요? 실제 비밀번호나 인증번호는 적지 말고 질문의 종류만 알려주세요.'\n"
                 "예시 문구는 응답을 이해하기 위한 기준이며 실제 질문과 현재 기록에 맞게 답하세요."
             )
+        else:
+            instructions += (
+                "\n[은행 내부 CaseCopilot의 대화·사건 반영 원칙]\n"
+                "모든 답변은 자연스럽고 정확한 한국어로 작성하세요. AI_CHECKLIST, P0/P1, semantic key, 상태 enum, 내부 ID, JSON/YAML/코드 조각을 사용자 답변에 절대 노출하지 마세요. "
+                "상태 필드는 이전 호환을 위한 기록 메타데이터이지, 담당자가 사실을 다시 승인해야 Case에서 사용할 수 있다는 권한 장벽이 아닙니다. 제외·대체 처리된 기록을 빼고 현재 Case에 들어온 고객 진술과 직원 입력을 답변의 작업 정보로 적극 사용하세요. "
+                "직원이 채팅에 사실을 추가·정정했다고 하면 먼저 그 내용을 반영했음을 인정하고, 원문에 실제 근거가 있는 변경을 대기·승인 요청으로 되돌리지 마세요. "
+                "다만 출처 귀속은 보존하세요: 고객 진술은 고객 진술, 담당자 입력은 담당자 보고, 은행 원장·기관 결과는 각 기록이 실제 존재할 때만 그렇게 부르세요. 출처를 보존하는 것은 승인 절차가 아닙니다. "
+                "송금 기록은 한 개의 현재 금액으로 덮지 말고 각각의 이체 사건으로 읽으세요. '더/추가/또 송금'은 별도 사건으로 추가하고, 이미 기록된 동일 발화를 반복한 경우에는 중복 사건으로 다시 더하지 마세요. '아니, 정정, 잘못 기록'이 명시되면 이전 값의 정정으로 보고, 상충 사실을 함께 읽어 필요한 확인 질문을 한 번만 하세요. "
+                "누계 질문에는 현재 서로 다른 송금 사건을 합산한 '기록·진술 기준 보고 합계'를 먼저 답하고, 그것이 은행 원장으로 검증된 실제 피해액이라고 바꾸어 말하지 마세요. 새 송금 진술을 받으면 기존 사건에 추가된 점과 갱신한 누계를 간단히 알려주세요. "
+                "같은 기록을 다시 물으며 회피하지 말고, 우선순위가 필요하면 현재 시점의 미완료 업무 중 가장 중요한 한 가지를 사람이 읽을 수 있는 제목으로 답하세요."
+            )
         if request.assistant_mode == "CUSTOMER_SUPPORT":
             provider_input = (
                 f"고객 공개 Case 맥락:\n{context}\n\n"
@@ -499,6 +815,8 @@ class CaseCopilotService:
                 f"요청자 역할: {request.requester_role or '미전달'}\n"
                 f"{request_label}:\n{request.prompt.strip()}"
             )
+        if request.assistant_mode == "BANK_INTERNAL":
+            instructions = bank_instructions(request, _repair_reason)
         try:
             if request.assistant_mode == "CUSTOMER_SUPPORT":
                 await _customer_support_budget.reserve(request.case_id)
@@ -507,10 +825,8 @@ class CaseCopilotService:
                     "model": model,
                     "instructions": instructions,
                     "input": provider_input,
-                    "max_output_tokens": int(os.getenv(
-                        "OPENAI_CUSTOMER_AI_MAX_OUTPUT_TOKENS" if request.assistant_mode == "CUSTOMER_SUPPORT" else "OPENAI_CASE_COPILOT_MAX_OUTPUT_TOKENS",
-                        "250" if request.assistant_mode == "CUSTOMER_SUPPORT" else "400",
-                    )),
+                    "max_output_tokens": int(os.getenv("OPENAI_CUSTOMER_AI_MAX_OUTPUT_TOKENS", "250"))
+                    if request.assistant_mode == "CUSTOMER_SUPPORT" else bank_copilot_output_token_limit(),
                 }
                 if request.assistant_mode == "BANK_INTERNAL":
                     provider_kwargs["text"] = {
@@ -541,24 +857,47 @@ class CaseCopilotService:
                 "실제 AI 서버에 연결하지 못해 답변을 생성하지 않았습니다. 잠시 후 다시 시도해 주세요."
             ) from exc
         from contracts.user_text import user_text
-        raw_output = response.output_text.strip()
+        raw_output = (getattr(response, "output_text", None) or "").strip()
         recommended_actions: list[RecommendedChatAction] = []
+        task_intents = []
         if request.assistant_mode == "BANK_INTERNAL":
+            if getattr(response, "status", None) == "incomplete":
+                detail = getattr(response, "incomplete_details", None)
+                logger.warning("CaseCopilot response incomplete: reason=%s output_chars=%d",
+                               getattr(detail, "reason", None) or "unknown", len(raw_output))
+                return await self._repair(request, "output_incomplete", _repair_reason)
             try:
                 structured = json.loads(raw_output)
                 if not isinstance(structured, dict) or not isinstance(structured.get("content"), str):
                     raise ValueError("invalid copilot response shape")
                 raw_content = structured["content"].strip()
                 recommended_actions = normalize_recommended_actions(structured.get("recommended_actions"), request.assistant_mode)
+                if request.allow_task_planning:
+                    proposed = [CopilotTaskIntent.model_validate(item) for item in structured.get("task_intents", [])[:3]]
+                    created = False
+                    for intent in proposed:
+                        if intent.operation == "CREATE":
+                            if created:
+                                continue
+                            created = True
+                        task_intents.append(intent)
             except (TypeError, ValueError, json.JSONDecodeError):
-                # Preserve the answer if a provider ignores the schema, but never expose
-                # unvalidated action metadata to the UI.
-                raw_content = raw_output
+                logger.warning("CaseCopilot structured response rejected: output_chars=%d", len(raw_output))
+                return await self._repair(request, "invalid_response_shape", _repair_reason)
+            if re.match(r"\s*(?:```|\{\s*[\"']?(?:content|recommended[_-]?actions|action[_-]?key)|(?:import |from |def |class ))", raw_content, re.I):
+                logger.warning("CaseCopilot non-prose response rejected: content_chars=%d", len(raw_content))
+                return await self._repair(request, "non_prose_content", _repair_reason)
         else:
             raw_content = raw_output
         content = user_text(raw_content)
         if not content:
             raise CaseCopilotProviderError("AI 서버가 빈 응답을 반환해 답변을 생성하지 않았습니다.")
+        if request.assistant_mode == "BANK_INTERNAL" and _contains_internal_code(content):
+            logger.warning("CaseCopilot internal code in prose; using readable Case fallback")
+            return await self._repair(request, "internal_code_in_content", _repair_reason)
+        if request.assistant_mode == "BANK_INTERNAL" and request.response_style == "BRIEF" and _brief_reply_too_long(content):
+            logger.warning("CaseCopilot brief reply exceeded the concise display budget")
+            return await self._repair(request, "brief_reply_too_long", _repair_reason)
         quality = CopilotQualityEvaluator.evaluate(
             assistant_mode=request.assistant_mode,
             prompt=request.prompt,
@@ -603,12 +942,14 @@ class CaseCopilotService:
                 ",".join(raw_rules) or "none",
                 ",".join(check.rule for check in blocking_failures if check.rule) or "none",
             )
+            if request.assistant_mode == "BANK_INTERNAL":
+                return await self._repair(request, ",".join(check.rule or check.criterion for check in blocking_failures), _repair_reason)
             # 차단된 원문은 폐기하고, 근거 상태만 설명하는 고정 응답을 기존 AI_RESPONSE 경로로 보낸다.
             return CaseCopilotOutput(
                 content="현재 확인된 근거만으로는 해당 내용을 확정하기 어렵습니다. 담당자의 추가 확인이나 관련 근거 검토가 필요합니다.",
                 model_mode=model,
             )
-        return CaseCopilotOutput(content=content, model_mode=model, recommended_actions=recommended_actions)
+        return CaseCopilotOutput(content=content, model_mode=model, recommended_actions=recommended_actions, task_intents=task_intents)
 
 
 class _null_async_context:

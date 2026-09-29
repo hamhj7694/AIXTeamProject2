@@ -42,6 +42,25 @@ class CaseSnapshotAiAdapterTest(unittest.TestCase):
         self.assertFalse(policy.evaluation.is_sufficient)
         self.assertIn("transfer_status", {item.target_field.value for item in result.recommended_questions})
 
+    def test_explicit_staff_attestation_resolves_internal_question_and_preserves_provenance(self) -> None:
+        fixture = Path(__file__).resolve().parents[2] / "contracts" / "ai_internal" / "fixtures" / "diagnosis.high.v1.json"
+        diagnosis = json.loads(fixture.read_text(encoding="utf-8"))["response"]
+        snapshot = {
+            "case_id": "VP-STAFF-ATTESTED", "diagnosis": diagnosis,
+            "facts": [{"fact_id": "f-transfer", "field": "transfer_status", "value": "송금했음",
+                       "status": "PROPOSED", "source_kind": "STAFF_OBSERVATION", "staff_attested": True,
+                       "evidence_refs": ["msg-staff-1"]}],
+        }
+        adapter = CaseSnapshotAiAdapter()
+        result = adapter.build_presentation(snapshot)
+        policy = adapter.question_eligibilities(adapter.adapt(snapshot))["transfer_status"]
+        self.assertEqual(policy.evaluation.state.value, "STAFF_CONFIRMED")
+        self.assertFalse(policy.allow_basic_question)
+        self.assertNotIn("transfer_status", {item.target_field.value for item in result.recommended_questions})
+        self.assertEqual(result.case_context.proposed_facts[0].source_kind, "STAFF_OBSERVATION")
+        self.assertTrue(result.case_context.proposed_facts[0].staff_attested)
+        self.assertIn("담당자 확인 보고 기준으로 실제 송금 완료", result.case_brief.summary)
+
     def test_skipped_and_multiple_values_are_not_sufficient(self) -> None:
         adapter = CaseSnapshotAiAdapter()
         snapshot = {
@@ -227,6 +246,23 @@ class CaseSnapshotAiAdapterTest(unittest.TestCase):
         self.assertIn("서울중앙지검 소속이라고 주장", context.offender_claims)
         self.assertNotIn("경찰청 소속이라고 주장", context.offender_claims)
         self.assertIn("안전계좌 검증 명목의 자금 이동 요구", context.offender_demands)
+
+    def test_semantic_context_dedup_keeps_one_uncertain_auth_and_transfer_item(self) -> None:
+        demands = CaseSnapshotAiAdapter._unique_context_items([
+            "인증번호, 즉 OTP를 제공 요구",
+            "인증번호를 즉시 제공 요구",
+            "인증번호, 즉 일회용 인증번호(일회용 인증번호(일회용 인증번호(OTP)))를 제공 요구",
+            "외부 계좌로 즉시 송금하도록 요구함",
+            "자금 이체 또는 송금 요구",
+        ], "demands")
+        self.assertEqual(len(demands), 3)
+        self.assertFalse(any("인증번호(인증번호(" in item for item in demands))
+
+        customer = CaseSnapshotAiAdapter._unique_context_items([
+            "통화 중 인증번호와 관련된 질문을 한 정황이 있음",
+            "인증번호 제공 또는 송금이 실제로 완료됐다는 고객 진술은 없음",
+        ], "customer")
+        self.assertEqual(len(customer), 2)
 
     def test_partial_personal_information_answer_is_visible_in_customer_exposure(self) -> None:
         fixture = Path(__file__).resolve().parents[2] / "contracts" / "ai_internal" / "fixtures" / "diagnosis.high.v1.json"

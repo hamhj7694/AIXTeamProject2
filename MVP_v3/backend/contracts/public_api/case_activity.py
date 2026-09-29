@@ -6,7 +6,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .collaboration import MessageAudience, MessageChannel
+from .collaboration import MessageAudience, MessageChannel, PublicRecommendedChatAction
 
 
 MessageActor = Literal["CUSTOMER", "BANK_STAFF", "CUSTOMER_AGENT", "BANK_AGENT", "VERIFICATION", "SYSTEM"]
@@ -78,6 +78,9 @@ class PublicMessageResponse(PublicActivityModel):
     client_request_id: str | None = None
     attachments: list[PublicAttachmentResponse] = Field(default_factory=list)
     created_at: str
+    recommended_actions: list[PublicRecommendedChatAction] = Field(default_factory=list)
+    source_revision: int | None = None
+    mutation_results: list[dict[str, Any]] = Field(default_factory=list)
 
 
 def to_public_attachment(record: dict[str, Any], *, download_view: Literal["bank", "customer"] = "customer") -> PublicAttachmentResponse:
@@ -114,6 +117,9 @@ def to_public_message(record: dict[str, Any]) -> PublicMessageResponse:
         "CUSTOMER": "고객", "BANK_STAFF": "은행 담당자", "CUSTOMER_AGENT": "Customer Agent",
         "BANK_AGENT": "CaseCopilot", "VERIFICATION": "기관 검증 담당자", "SYSTEM": "시스템",
     }.get(actor_type, actor_type)
+    metadata = record.get("ai_metadata") or {}
+    if record.get("visibility") not in {"BANK_INTERNAL", "AI_PRIVATE"} or actor_type != "BANK_AGENT":
+        metadata = {}
     return PublicMessageResponse.model_validate({
         "message_id": record["message_id"], "case_id": record["case_id"],
         "actor_type": actor_type,
@@ -131,6 +137,9 @@ def to_public_message(record: dict[str, Any]) -> PublicMessageResponse:
         "client_request_id": record.get("client_request_id"),
         "attachments": [to_public_attachment(item).model_dump(mode="json") for item in record.get("attachments", [])],
         "created_at": record["created_at"],
+        "recommended_actions": metadata.get("recommended_actions", []),
+        "source_revision": metadata.get("source_revision"),
+        "mutation_results": metadata.get("mutation_results", []),
     })
 
 

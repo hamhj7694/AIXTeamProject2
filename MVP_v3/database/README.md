@@ -33,7 +33,9 @@ MVP_v3/.venv/Scripts/python.exe MVP_v3/backend/scripts/apply_migrations.py
 
 runner는 DB가 없으면 생성하고 파일명 순으로 적용한다. 계정에는 DB 생성(신규일 때), 테이블·인덱스·제약·TRIGGER 변경 권한이 필요하다. 비밀번호는 `.env`에만 넣고 명령줄·문서·Git에는 넣지 않는다.
 
-`01_mysql_csr_schema.sql`은 동일 migration 전체에서 생성하는 **빈 DB/Docker 전용 파생 파일**이다. 업무 데이터는 없으며 023 migration의 데모 직원 2명만 포함한다. 현재 001~026 전체 구조와 적용 이력을 포함하므로 baseline을 수작업으로 편집하지 않는다.
+`01_mysql_csr_schema.sql`은 manifest의 정방향 SQL 전체에서 생성하는 **빈 DB/Docker 전용 파생 파일**이다. 현재 정방향 migration 32개의 전체 구조와 적용 이력을 포함한다. 업무 데이터는 없으며 023 migration의 데모 직원 2명만 포함한다. baseline을 수작업으로 편집하지 않는다.
+
+2026-09-29 읽기 전용 점검 당시 로컬 `csr`에는 manifest 32개가 모두 적용되어 미적용이 없었고, `schema_migrations`에는 현재 파일이 없는 과거 기록 `021_bank_staff_assignment_fields.sql`, `030_context_update_proposals.sql`도 남아 있었다. FK 38개 위반과 Case orphan은 0건이었다. 다른 DB는 각자 `inspect_database.py`로 확인한다. 현재 메타데이터 스냅샷은 [`DB_CATALOG.md`](DB_CATALOG.md)에 있다.
 
 ```powershell
 # SQL을 추가한 개발자가 파생 파일 재생성
@@ -71,6 +73,8 @@ MVP_v3/.venv/Scripts/python.exe MVP_v3/backend/scripts/normalize_database.py --a
 ```
 
 범용 자동 수정기가 아니다. 검토된 거래 테이블 누락, 과거 직원 역할 길이/제약, 004~011 이력 누락만 처리한다. 다른 스키마 차이나 알 수 없는 이력이 있으면 중단한다. 008의 데이터 보완 효과도 검사한다.
+
+현재 로컬 `csr`에는 이 도구의 `HISTORICAL_RECORDS` 허용 목록에 없는 과거 기록 `030_context_update_proposals.sql`과 참조 migration에 없는 context proposal 확장 테이블 2개가 있어 정상화 검증이 중단된다. 역사 기록과 테이블 소유 계약을 별도로 검토하기 전에는 `normalize_database.py --apply`를 실행하지 않는다. `apply_migrations.py`는 manifest에 있는 신규 파일만 처리하지만, 기존 DB에 적용하기 전 대상 DB의 이력·schema·백업을 먼저 확인한다.
 
 - PATH에 `mysqldump`·`mysql`이 있어야 하며 격리 검증 DB 생성·제거 권한이 필요하다.
 - 백업은 Git 제외 경로 `backend/data/backups/<UTC시각_식별자>/`에 둔다. 대화·고객정보를 포함하므로 로컬 접근을 제한하고 Git/공개 저장소에 업로드하지 않는다.

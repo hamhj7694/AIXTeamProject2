@@ -27,7 +27,7 @@ export const errorMessage = (payload: unknown, status: number) => {
   const codes: Record<string, string> = {
     AI_WORK_CARD_FAILED: 'AI 질문 추천을 생성하지 못했습니다. 기존 질문 목록은 유지됩니다.',
     AI_INVALID_RESPONSE: 'AI 추천 결과 형식을 확인하지 못했습니다. 기존 질문 목록은 유지됩니다.',
-    AI_PROVIDER_UNAVAILABLE: 'AI 분석 제공자에 연결할 수 없습니다. AI 서버와 외부 연결 상태를 확인한 뒤 다시 시도해 주세요.',
+    AI_PROVIDER_UNAVAILABLE: 'AI 서버에는 연결됐지만 외부 AI 제공자(OpenAI API)에 연결하지 못했습니다. 네트워크·DNS·프록시/방화벽 및 제공자 접속 상태를 확인한 뒤 다시 시도해 주세요.',
     AI_PROVIDER_TIMEOUT: 'AI 분석 응답 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.',
     CASE_NOT_FOUND: '사건을 찾을 수 없습니다. 목록을 새로고침해 주세요.',
     VERSION_CONFLICT: '다른 담당자가 먼저 내용을 변경했습니다. 최신 정보를 다시 불러와 주세요.',
@@ -82,6 +82,9 @@ export const request = async <T>(path: string, init?: RequestInit): Promise<T> =
     response = await fetch(apiUrl(path), { ...init, headers });
   } catch (reason) {
     if (reason instanceof Error && reason.name === 'AbortError') throw reason;
+    if (reason instanceof Error && reason.name === 'TimeoutError') {
+      throw new Error('서버 응답 시간이 초과되었습니다. API 실행 상태를 확인한 뒤 다시 시도해 주세요.');
+    }
     throw new Error('서버에 연결할 수 없습니다. 네트워크와 서버 실행 상태를 확인해 주세요.');
   }
   if (response.status === 204) return undefined as T;

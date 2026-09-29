@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { ArrowDown, Bookmark, Bot, CheckCircle2, CircleDot, Download, FileText, Landmark, MessageCircleQuestion, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, ShieldCheck, Sparkles, UserRound } from 'lucide-react';
 import { casesApi, CURRENT_BANK_USER } from '../api/cases';
-import type { CaseAction, CaseEvent, CaseMessage, CustomerQuestion, InitialReport, InitialReportSection, RecommendedChatAction, VerificationTask } from '../api/types';
+import type { CaseAction, CaseEvent, CaseMessage, CustomerQuestion, InitialReport, InitialReportSection, QuestionCandidate, RecommendedChatAction, VerificationTask } from '../api/types';
 import { actionLabel, formatClock, verificationStatusLabel } from '../presentation';
 import type { TimelineEntry } from '../timeline';
 import type { CaseBundle } from '../api/types';
@@ -12,6 +12,7 @@ import { SafeMarkdown } from './SafeMarkdown';
 import { AiThinkingBubble } from './AiThinkingBubble';
 import { useScrollToLatest } from '../useScrollToLatest';
 import { readLatestAiRecommendations } from '../bank/aiRecommendations';
+import { uniqueRecommendedActions } from '../bank/aiQuestionDrafts';
 
 interface Props {
   bundle: CaseBundle;
@@ -28,11 +29,14 @@ interface Props {
   inlineCard?: React.ReactNode;
   aiBusy?: boolean;
   flowCard?: React.ReactNode;
-  onOpenQuestions?: () => void;
+  onOpenQuestions?: (sourceMessage?: CaseMessage) => void;
   onOpenTransactionLookup?: () => void;
   onOpenVerification?: () => void;
   onOpenAction?: () => void;
   onUseAiDraft?: (draft: string) => void;
+  initialCustomerQuestions?: QuestionCandidate[];
+  onSendCustomerQuestion?: (question: QuestionCandidate) => Promise<void>;
+  onHoldCustomerQuestion?: (question: QuestionCandidate) => void;
 }
 
 const recommendationLabels: Record<RecommendedChatAction['action_key'], string> = {
@@ -45,23 +49,28 @@ const recommendationLabels: Record<RecommendedChatAction['action_key'], string> 
 
 const AiRecommendationTray: React.FC<{
   actions: RecommendedChatAction[];
-  onOpenQuestions?: () => void;
+  message: CaseMessage;
+  onOpenQuestions?: (sourceMessage?: CaseMessage) => void;
   onOpenTransactionLookup?: () => void;
   onOpenVerification?: () => void;
   onOpenAction?: () => void;
   onUseAiDraft?: (draft: string) => void;
-}> = ({ actions, onOpenQuestions, onOpenTransactionLookup, onOpenVerification, onOpenAction, onUseAiDraft }) => {
-  const unique = actions
-    .filter((action) => action.action_key !== 'DRAFT_REPLY' || Boolean(action.draft_text?.trim()))
-    .filter((action, index, all) => all.findIndex((candidate) => candidate.action_key === action.action_key) === index)
-    .slice(0, 3);
+}> = ({ actions, message, onOpenQuestions, onOpenTransactionLookup, onOpenVerification, onOpenAction, onUseAiDraft }) => {
+  const unique = uniqueRecommendedActions(actions);
   const invoke = (action: RecommendedChatAction) => {
+    if (action.action_key === 'CUSTOMER_QUESTION') {
+      onOpenQuestions?.(message);
+      return;
+    }
+    if (action.target_id) {
+      window.dispatchEvent(new CustomEvent('csr:focus-resource', { detail: action }));
+      if (action.target_type === 'TASK' || action.target_type === 'QUESTION' || action.target_type === 'VERIFICATION') return;
+    }
     if (action.action_key === 'DRAFT_REPLY') {
       if (action.draft_text?.trim()) onUseAiDraft?.(action.draft_text);
       return;
     }
     ({
-      CUSTOMER_QUESTION: onOpenQuestions,
       TRANSACTION_LOOKUP: onOpenTransactionLookup,
       OFFICIAL_VERIFICATION: onOpenVerification,
       RESPONSE_ACTION: onOpenAction,
@@ -72,6 +81,27 @@ const AiRecommendationTray: React.FC<{
   return <div className={`ai-recommendation-tray ${includesOfficialVerification ? 'has-official-verification' : ''}`} aria-label="AI 추천 다음 작업">
     <span className="ai-recommendation-tray-label"><Sparkles size={12}/>추천 작업</span>
     {unique.map((action) => <button key={action.action_key} type="button" onClick={() => invoke(action)}>{recommendationLabels[action.action_key]}</button>)}
+  </div>;
+};
+
+const InitialCustomerQuestionTray: React.FC<{
+  questions: QuestionCandidate[];
+  onSend: (question: QuestionCandidate) => Promise<void>;
+  onHold: (question: QuestionCandidate) => void;
+}> = ({ questions, onSend, onHold }) => {
+  const [sendingId, setSendingId] = useState<string | null>(null);
+  const [error, setError] = useState('');
+  const send = async (question: QuestionCandidate) => {
+    if (sendingId) return;
+    setSendingId(question.question_id); setError('');
+    try { await onSend(question); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : '질문 발송에 실패했습니다.'); }
+    finally { setSendingId(null); }
+  };
+  return <div className="customer-question-starter" aria-label="초기 긴급 확인 질문">
+    <div className="customer-question-starter-heading"><MessageCircleQuestion size={15}/><div><strong>초기 확인 질문</strong><small>추천 질문을 확인하고 고객에게 발송해 보세요!</small></div></div>
+    <div className="customer-question-starter-list">{questions.map((question) => <div className="customer-question-starter-row" key={question.question_id}><span>{question.question_text}</span><div className="customer-question-starter-actions"><button type="button" className="customer-question-starter-send" onClick={() => void send(question)} disabled={Boolean(sendingId)}>{sendingId === question.question_id ? '발송 중' : '발송하기'}</button><button type="button" className="customer-question-starter-hold" onClick={() => onHold(question)} disabled={Boolean(sendingId)}>보류하기</button></div></div>)}</div>
+    {error && <p className="customer-question-starter-error">{error}</p>}
   </div>;
 };
 
@@ -244,7 +274,7 @@ const MessageEntry: React.FC<{ message: CaseMessage; bookmark: React.ReactNode; 
 };
 
 const EntryCard: React.FC<{ entry: TimelineEntry; bookmark: React.ReactNode; onRetryMessage: Props['onRetryMessage']; onDismissMessage: Props['onDismissMessage']; recommendedActions: RecommendedChatAction[]; onOpenQuestions?: Props['onOpenQuestions']; onOpenTransactionLookup?: Props['onOpenTransactionLookup']; onOpenVerification?: Props['onOpenVerification']; onOpenAction?: Props['onOpenAction']; onUseAiDraft?: Props['onUseAiDraft'] }> = ({ entry, bookmark, onRetryMessage, onDismissMessage, recommendedActions, onOpenQuestions, onOpenTransactionLookup, onOpenVerification, onOpenAction, onUseAiDraft }) => {
-  if (entry.kind === 'MESSAGE') return <><MessageEntry message={entry.data as CaseMessage} bookmark={bookmark} onRetry={onRetryMessage} onDismiss={onDismissMessage}/><AiRecommendationTray actions={recommendedActions} onOpenQuestions={onOpenQuestions} onOpenTransactionLookup={onOpenTransactionLookup} onOpenVerification={onOpenVerification} onOpenAction={onOpenAction} onUseAiDraft={onUseAiDraft}/></>;
+  if (entry.kind === 'MESSAGE') return <><MessageEntry message={entry.data as CaseMessage} bookmark={bookmark} onRetry={onRetryMessage} onDismiss={onDismissMessage}/><AiRecommendationTray actions={recommendedActions} message={entry.data as CaseMessage} onOpenQuestions={onOpenQuestions} onOpenTransactionLookup={onOpenTransactionLookup} onOpenVerification={onOpenVerification} onOpenAction={onOpenAction} onUseAiDraft={onUseAiDraft}/></>;
   if (entry.kind === 'QUESTION' || entry.kind === 'ANSWER') {
     const question = entry.data as CustomerQuestion;
     if (entry.kind === 'QUESTION') {
@@ -272,7 +302,7 @@ const EntryCard: React.FC<{ entry: TimelineEntry; bookmark: React.ReactNode; onR
   return <article className="timeline-event"><CircleDot size={13}/><span>{eventLabel(event.event_type)}</span>{bookmark}<time>{formatClock(event.occurred_at)}</time></article>;
 };
 
-export const SharedConversation: React.FC<Props> = ({ bundle, view, channel, composer, inlineCard, flowCard, aiBusy = false, bookmarkedIds, onToggleBookmark, onRetryMessage, onDismissMessage, collapsed = false, collapseDisabled = false, onToggleCollapse, onOpenQuestions, onOpenTransactionLookup, onOpenVerification, onOpenAction, onUseAiDraft }) => {
+export const SharedConversation: React.FC<Props> = ({ bundle, view, channel, composer, inlineCard, flowCard, aiBusy = false, bookmarkedIds, onToggleBookmark, onRetryMessage, onDismissMessage, collapsed = false, collapseDisabled = false, onToggleCollapse, onOpenQuestions, onOpenTransactionLookup, onOpenVerification, onOpenAction, onUseAiDraft, initialCustomerQuestions = [], onSendCustomerQuestion, onHoldCustomerQuestion }) => {
   const entries = useMemo(() => buildConversationEntries(bundle, view, channel), [bundle, channel, view]);
   const latestBankAiEntry = [...entries].reverse().find((entry) => entry.kind === 'MESSAGE' && (entry.data as CaseMessage).message_kind === 'AI_RESPONSE' && (entry.data as CaseMessage).actor_type === 'BANK_AGENT' && (entry.data as CaseMessage).channel === 'TEAM');
   const latestRecommendedActions = latestBankAiEntry
@@ -282,7 +312,8 @@ export const SharedConversation: React.FC<Props> = ({ bundle, view, channel, com
     : [];
   const latestEntry = entries[entries.length - 1];
   const latestEntryKey = latestEntry ? `${latestEntry.id}:${latestEntry.occurredAt}` : 'empty';
-  const { scrollRef, showJumpToLatest, onScroll, jumpToLatest } = useScrollToLatest(`${latestEntryKey}:${inlineCard ? 'card' : 'no-card'}:${flowCard ? 'flow-card' : 'no-flow-card'}:${aiBusy ? 'ai-busy' : 'ai-idle'}`);
+  const showInitialQuestions = channel === 'CUSTOMER' && initialCustomerQuestions.length > 0 && onSendCustomerQuestion && onHoldCustomerQuestion;
+  const { scrollRef, showJumpToLatest, onScroll, jumpToLatest } = useScrollToLatest(`${latestEntryKey}:${inlineCard ? 'card' : 'no-card'}:${flowCard ? 'flow-card' : 'no-flow-card'}:${aiBusy ? 'ai-busy' : 'ai-idle'}:${showInitialQuestions ? initialCustomerQuestions.map((item) => item.question_id).join(',') : 'no-initial-questions'}`);
   const channelLabel = channel === 'CUSTOMER' ? '고객 소통용' : '은행 내부 소통용';
   const CollapseIcon = channel === 'CUSTOMER' ? (collapsed ? PanelLeftOpen : PanelLeftClose) : (collapsed ? PanelRightOpen : PanelRightClose);
   const hasInlineCards = Boolean(inlineCard || flowCard);
@@ -291,10 +322,9 @@ export const SharedConversation: React.FC<Props> = ({ bundle, view, channel, com
     {collapsed ? <div className="conversation-channel-collapsed"><span>{channel === 'CUSTOMER' ? '고객' : '내부'}</span><small>채팅창 열기</small></div> : <>
       <div className={`conversation-scroll-shell ${showJumpToLatest ? 'has-jump-to-latest' : ''}`}>
         <div ref={scrollRef} onScroll={onScroll} className="conversation-scroll" aria-live="polite">
-          {entries.length === 0 && !inlineCard && !flowCard && !aiBusy ? (
-            <div className="conversation-empty">아직 대화 기록이 없습니다.</div>
-          ) : (
-            entries.map((entry) => (
+          {entries.length === 0 && !inlineCard && !flowCard && !aiBusy && !showInitialQuestions
+            ? <div className="conversation-empty">아직 대화 기록이 없습니다.</div>
+            : entries.map((entry) => (
               <div
                 id={`${channel.toLowerCase()}-${entry.id}`}
                 className="bank-timeline-entry"
@@ -312,7 +342,8 @@ export const SharedConversation: React.FC<Props> = ({ bundle, view, channel, com
                   }
                   onRetryMessage={onRetryMessage}
                   onDismissMessage={onDismissMessage}
-                  recommendedActions={entry.id === latestBankAiEntry?.id ? latestRecommendedActions : []}
+                  recommendedActions={entry.id === latestBankAiEntry?.id ? latestRecommendedActions
+                    : entry.kind === 'MESSAGE' ? (entry.data as CaseMessage).recommended_actions ?? [] : []}
                   onOpenQuestions={onOpenQuestions}
                   onOpenTransactionLookup={onOpenTransactionLookup}
                   onOpenVerification={onOpenVerification}
@@ -320,8 +351,9 @@ export const SharedConversation: React.FC<Props> = ({ bundle, view, channel, com
                   onUseAiDraft={onUseAiDraft}
                 />
               </div>
-            ))
-          )}
+            ))}
+
+          {showInitialQuestions && <InitialCustomerQuestionTray questions={initialCustomerQuestions} onSend={onSendCustomerQuestion} onHold={onHoldCustomerQuestion}/>}
 
           {aiBusy && <AiThinkingBubble detail="현재 은행 내부 대화와 사건 기록을 확인하고 있습니다."/>}
         </div>

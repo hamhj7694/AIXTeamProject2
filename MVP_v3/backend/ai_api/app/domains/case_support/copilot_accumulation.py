@@ -91,3 +91,66 @@ def review_transfers(records: Iterable[str]) -> AccumulationReview:
     items = tuple(grouped.values())
     total = sum(item.won for item in items) if items and not needs_review else None
     return AccumulationReview(items, total, needs_review)
+
+
+def review_case_transfer_facts(facts: Iterable[object], messages: Iterable[object]) -> AccumulationReview:
+    """Sum distinct, recorded transfer events without treating review status as a gate.
+
+    Provenance remains attached to each event. Duplicate follow-up phrasings from
+    the same conversation (e.g. "했데" then "했다니까") are collapsed; explicit
+    cumulative/final amounts take precedence over event arithmetic.
+    """
+    def get(item: object, key: str, default=None):
+        if isinstance(item, dict):
+            return item.get(key, default)
+        return getattr(item, key, default)
+
+    message_text = {str(get(message, "message_id", "")): str(get(message, "content", ""))
+                    for message in messages if get(message, "message_id")}
+    events: dict[str, TransferMention] = {}
+    cumulative: list[tuple[int, str]] = []
+    final: list[tuple[int, str]] = []
+    for fact in facts:
+        if get(fact, "semantic_key") != "transfer.actual.amount":
+            continue
+        status = str(get(fact, "status", "")).upper()
+        if status in {"REJECTED", "SUPERSEDED"}:
+            continue
+        value = get(fact, "value", {}) or {}
+        if str(value.get("direction", value.get("amount_direction", "OUT"))).upper() != "OUT":
+            continue
+        try:
+            amount = int(value.get("amount_krw"))
+        except (TypeError, ValueError):
+            continue
+        if amount <= 0:
+            continue
+        scope = str(value.get("amount_scope", "EVENT")).upper()
+        source = str(get(fact, "source_kind", ""))
+        basis = "담당자 기록" if source == "STAFF_OBSERVATION" else "고객 진술" if source == "CUSTOMER_STATEMENT" else "사건 분석 기록"
+        refs = get(fact, "evidence_refs", []) or []
+        message_ids = [str(get(ref, "id", "")) for ref in refs
+                       if str(get(ref, "type", "")) == "MESSAGE" and get(ref, "id")]
+        source_text = " ".join(message_text.get(message_id, "") for message_id in message_ids)
+        if scope in {"FINAL", "CUMULATIVE"}:
+            (final if scope == "FINAL" else cumulative).append((amount, basis))
+            continue
+        # Prefer message semantics for duplicate detection; preserve each
+        # differently worded event. If no message is linked, retain fact id.
+        canonical = re.sub(r"[^가-힣A-Za-z0-9]", "", source_text)
+        canonical = re.sub(r"(?:했데|했대|했다니까|했다니깐|했어요|했습니다|했어|했다)$", "송금완료", canonical)
+        canonical = f"{canonical}|{amount}" if canonical else str(get(fact, "fact_id", amount))
+        subject = "송금 보고" if basis != "사건 분석 기록" else "송금 분석 기록"
+        events.setdefault(canonical, TransferMention(subject, amount, basis))
+
+    chosen_totals = final or cumulative
+    if chosen_totals:
+        values = {amount for amount, _ in chosen_totals}
+        if len(values) > 1:
+            return AccumulationReview((), None, True)
+        amount = chosen_totals[-1][0]
+        basis = chosen_totals[-1][1]
+        return AccumulationReview((TransferMention("최종 누계", amount, basis),), amount, False)
+
+    items = tuple(events.values())
+    return AccumulationReview(items, sum(item.won for item in items) if items else None, False)

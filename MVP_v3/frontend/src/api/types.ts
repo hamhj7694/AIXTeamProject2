@@ -360,6 +360,9 @@ export interface CaseMessage {
   delivery_error?: string | null;
   /** Structured next actions returned with the latest internal AI response. */
   recommended_actions?: RecommendedChatAction[];
+  /** Server persisted only for bank internal AI messages. */
+  source_revision?: number | null;
+  mutation_results?: Array<Record<string, unknown>>;
 }
 
 export interface CaseEvent {
@@ -496,7 +499,7 @@ export interface CaseSupportSnapshot {
 }
 
 export type RightPanelSection = 'EXPOSURE' | 'CONTACT' | 'SIGNAL' | 'VERIFICATION' | 'WORK' | 'ACTIVITY';
-export type RightPanelBadge = '상대방 주장' | '상대방 요구' | '고객 진술' | '고객 부인' | '미확인' | '공식 확인' | '직원 기록' | '분석 정황';
+export type RightPanelBadge = '상대방 주장' | '상대방 요구' | '고객 진술' | '고객 부인' | '미확인' | '공식 확인' | '직원 기록' | '담당자 확인 보고' | '분석 정황';
 export interface RightPanelItem {
   item_id: string;
   section: RightPanelSection;
@@ -508,12 +511,15 @@ export interface RightPanelItem {
   status: string | null;
   occurred_at: string | null;
   evidence_refs: string[];
-  actor_id: string | null;
-  version: number | null;
+    actor_id: string | null;
+    version: number | null;
+    presentation_group?: 'money' | 'personal_information' | 'authentication_information' | 'device_access' | 'other' | null;
+    progress_group?: 'verification' | 'response' | null;
 }
 export interface RightPanelProjection {
   schema_version: 'right-panel.v1';
   current_case_summary: string;
+  summary_badges: Array<{ key: 'transfer' | 'information' | 'institution'; label: string; tone: 'unknown' | 'statement' | 'attention' | 'verified' }>;
   exposure: RightPanelItem[];
   contact_information: RightPanelItem[];
   fraud_signals: Array<{ key: string; label: string; items: RightPanelItem[] }>;
@@ -584,6 +590,8 @@ export interface AiInvocationResult {
   model_mode: string;
   created_at: string;
   recommended_actions?: RecommendedChatAction[];
+  source_revision?: number | null;
+  mutation_results?: Array<Record<string, unknown>>;
 }
 
 export type RecommendedActionKey =
@@ -599,6 +607,9 @@ export interface RecommendedChatAction {
   target_channel: 'TEAM' | 'CUSTOMER';
   draft_text?: string | null;
   reason_code?: string | null;
+  target_type?: 'TASK' | 'QUESTION' | 'VERIFICATION' | null;
+  target_id?: string | null;
+  expected_version?: number | null;
 }
 
 export type WorkCardType = 'FACT_REVIEW' | 'QUESTION_PLAN' | 'VERIFICATION_REQUEST' | 'BANK_ACTION' | 'CUSTOMER_NOTICE' | 'CASE_TRANSITION';

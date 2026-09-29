@@ -1,19 +1,84 @@
 """Offline P2-D scenarios: supplied context, arithmetic, and advisory quality."""
 import os
 import unittest
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from contracts.ai_internal.case_copilot import CaseCopilotInput
-from ai_api.app.domains.case_support.copilot_accumulation import review_transfers, money_values
+from contracts.ai_internal.case_copilot import BankCopilotSourceContext, CaseCopilotInput, CopilotMessage
+from contracts.public_api.case_context_v2 import PublicCaseFactV2, PublicEvidenceRef
+from ai_api.app.domains.case_support.copilot_accumulation import review_case_transfer_facts, review_transfers, money_values
 from ai_api.app.domains.case_support.copilot_quality import CopilotQualityEvaluator
-from ai_api.app.domains.case_support.copilot_service import CaseCopilotService
+from ai_api.app.domains.case_support.bank_policy import bank_instructions
+from ai_api.app.domains.case_support.copilot_service import (
+    COPILOT_REPLY_SCHEMA, CaseCopilotService, _bank_case_fallback,
+    _contains_internal_code, _prioritize_bank_items, normalize_recommended_actions,
+)
 
 
 RECORDS = ["고객: 의사 사칭한테 300만원 보냈어.", "고객: 검사 사칭한테 700만원 보냈어."]
 
 
 class AccumulationTest(unittest.TestCase):
+    def test_bank_chat_acknowledges_new_transfer_and_updates_recorded_total(self):
+        now = datetime.now(timezone.utc)
+        facts = []
+        for fact_id, message_id, amount, source in (
+            ("f1", "m1", 5_000_000, "CUSTOMER_STATEMENT"),
+            ("f2", "m2", 2_000_000, "STAFF_OBSERVATION"),
+        ):
+            facts.append(PublicCaseFactV2(
+                fact_id=fact_id, case_id="VP-CHAT", semantic_key="transfer.actual.amount",
+                display_label="실제 이체 금액", value={"amount_krw": amount, "currency": "KRW", "direction": "OUT", "amount_scope": "EVENT"},
+                display_value=f"{amount:,}원 송금", source_kind=source, status="PROPOSED",
+                evidence_refs=[PublicEvidenceRef(type="MESSAGE", id=message_id)], version=1,
+                created_at=now, updated_at=now,
+            ))
+        messages = [
+            CopilotMessage(message_id="m1", case_id="VP-CHAT", actor_type="CUSTOMER", content="500만원 송금했다고 합니다"),
+            CopilotMessage(message_id="m2", case_id="VP-CHAT", actor_type="BANK_STAFF", content="200만원 더 송금했다니까?"),
+        ]
+        source = BankCopilotSourceContext(facts=facts, messages=messages)
+        result = _bank_case_fallback(CaseCopilotInput(
+            case_id="VP-CHAT", prompt="200만원 더 송금했다니까?", source_context=source,
+        ))
+        self.assertIn("추가 송금 2,000,000원", result.content)
+        self.assertIn("총 7,000,000원", result.content)
+        self.assertIn("은행 거래내역으로 검증된 금액과는 구분", result.content)
+
+    def test_separate_additional_transfer_reports_sum_and_repeated_followup_is_not_double_counted(self):
+        facts = [
+            {"fact_id": "f1", "semantic_key": "transfer.actual.amount", "status": "PROPOSED",
+             "source_kind": "CUSTOMER_STATEMENT", "value": {"amount_krw": 5_000_000, "direction": "OUT", "amount_scope": "EVENT"},
+             "evidence_refs": [{"type": "MESSAGE", "id": "m1"}]},
+            {"fact_id": "f2", "semantic_key": "transfer.actual.amount", "status": "PROPOSED",
+             "source_kind": "STAFF_OBSERVATION", "value": {"amount_krw": 2_000_000, "direction": "OUT", "amount_scope": "EVENT"},
+             "evidence_refs": [{"type": "MESSAGE", "id": "m2"}]},
+            {"fact_id": "f3", "semantic_key": "transfer.actual.amount", "status": "PROPOSED",
+             "source_kind": "STAFF_OBSERVATION", "value": {"amount_krw": 2_000_000, "direction": "OUT", "amount_scope": "EVENT"},
+             "evidence_refs": [{"type": "MESSAGE", "id": "m3"}]},
+        ]
+        messages = [
+            {"message_id": "m1", "content": "고객이 500만원 송금했다고 말함"},
+            {"message_id": "m2", "content": "200만원 더 송금했데!"},
+            {"message_id": "m3", "content": "200만원 더 송금했다니까?"},
+        ]
+        result = review_case_transfer_facts(facts, messages)
+        self.assertEqual(result.total_won, 7_000_000)
+        self.assertEqual(len(result.items), 2)
+        self.assertFalse(result.needs_review)
+
+    def test_machine_checklist_ids_are_not_presented_as_chat_advice(self):
+        readable = _prioritize_bank_items([
+            "AI_CHECKLIST:P1:circumstance.demand: 추가 확인 사항에 대한 고객 답변 검토하세요. (REQUESTED)",
+            "AI_CHECKLIST:P1:transfer_purpose: 송금 요구 이유 확인 필요 (REQUESTED)",
+        ])
+        self.assertTrue(any("상대방 요구:" in item for item in readable))
+        self.assertTrue(any("송금 요구 이유:" in item for item in readable))
+        self.assertFalse(any("AI_CHECKLIST" in item or "REQUESTED" in item for item in readable))
+        self.assertTrue(_contains_internal_code("미완료 업무: AI_CHECKLIST:P1:circumstance.demand"))
+        self.assertFalse(_contains_internal_code("우선 상대방 요구 내용을 확인해 주세요."))
+
     def test_distinct_recipients_are_added_in_won(self):
         result = review_transfers(RECORDS)
         self.assertEqual(result.total_won, 10_000_000)
@@ -69,6 +134,43 @@ class AccumulationTest(unittest.TestCase):
         self.assertEqual(result.total_won, 10_000_000)
 
 
+class BankOneStepTest(unittest.TestCase):
+    def test_brief_policy_and_schema_request_one_next_step(self):
+        request = CaseCopilotInput(case_id="one-step", prompt="지금 뭘 해야 해?", response_style="BRIEF")
+        instructions = bank_instructions(request)
+        self.assertIn("실제 질문에 직접 답변하세요", instructions)
+        self.assertIn("**현 상황:**", instructions)
+        self.assertIn("**지금 할 일:**", instructions)
+        self.assertIn("기능 하나만", instructions)
+        self.assertEqual(COPILOT_REPLY_SCHEMA["properties"]["recommended_actions"]["maxItems"], 1)
+
+    def test_recommendations_keep_only_first_valid_action(self):
+        raw = [
+            {"action_key": "DRAFT_REPLY", "kind": "TOOL", "target_channel": "TEAM"},
+            {"action_key": "CUSTOMER_QUESTION", "kind": "TOOL", "target_channel": "TEAM"},
+            {"action_key": "OFFICIAL_VERIFICATION", "kind": "TOOL", "target_channel": "TEAM"},
+        ]
+        actions = normalize_recommended_actions(raw, "BANK_INTERNAL")
+        self.assertEqual([action.action_key for action in actions], ["CUSTOMER_QUESTION"])
+
+    def test_brief_fallback_chooses_one_active_task_and_matching_tool(self):
+        request = CaseCopilotInput(
+            case_id="one-step", prompt="현재 사건 정리", response_style="BRIEF",
+            case_summary="기관 사칭 신고가 접수됨",
+            case_state={"tasks": [
+                {"task_id": "routine", "title": "자료 정리", "task_type": "DOCUMENT_REVIEW", "priority": "NORMAL", "status": "TODO", "version": 1},
+                {"task_id": "urgent", "title": "고객 노출 여부 질문", "task_type": "CUSTOMER_CONTACT", "priority": "URGENT", "status": "TODO", "version": 2},
+            ]},
+        )
+        result = _bank_case_fallback(request)
+        self.assertEqual(result.content.count("**지금 할 일:**"), 1)
+        self.assertIn("고객 노출 여부 질문", result.content)
+        self.assertNotIn("자료 정리", result.content)
+        self.assertEqual(len(result.recommended_actions), 1)
+        self.assertEqual(result.recommended_actions[0].action_key, "CUSTOMER_QUESTION")
+        self.assertEqual(result.recommended_actions[0].target_id, "urgent")
+
+
 class DirectnessEvaluationTest(unittest.TestCase):
     def evaluate(self, response, prompt="총 얼마 사기당했어?", records=RECORDS):
         return CopilotQualityEvaluator.evaluate(assistant_mode="CUSTOMER_SUPPORT", prompt=prompt, response=response, context=records)
@@ -109,6 +211,9 @@ class DirectnessEvaluationTest(unittest.TestCase):
 
 class DirectnessProviderTest(unittest.IsolatedAsyncioTestCase):
     async def call(self, mode, history, reply="고객 진술 기준 합계는 1,000만원입니다."):
+        if mode == "BANK_INTERNAL":
+            import json
+            reply = json.dumps({"content": reply, "recommended_actions": [], "task_intents": []}, ensure_ascii=False)
         create = AsyncMock(return_value=SimpleNamespace(output_text=reply))
         with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}), patch(
             "ai_api.app.domains.case_support.copilot_service.AsyncOpenAI",

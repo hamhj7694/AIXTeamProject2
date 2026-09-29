@@ -23,7 +23,7 @@ from scripts.migration_manifest import MIGRATIONS_DIR, ordered_migrations, migra
 class SchemaToolUnitTest(unittest.TestCase):
     def test_manifest_preserves_history_order_and_excludes_rollback(self):
         paths = ordered_migrations()
-        self.assertEqual(len(paths), 30)
+        self.assertEqual(len(paths), 32)
         self.assertEqual([p.name for p in paths], sorted(p.name for p in paths))
         self.assertEqual(len({p.name for p in paths}), len(paths))
         self.assertFalse(list(MIGRATIONS_DIR.glob('*.sql')))
@@ -125,14 +125,15 @@ class SchemaNormalizationIntegrationTest(unittest.TestCase):
                     # Scoped test DB only: recreate the reviewed historical drift.
                     cursor.execute('DROP TABLE case_transactions')
                     cursor.execute("ALTER TABLE bank_staff_directory MODIFY assignment_role VARCHAR(24) NOT NULL DEFAULT 'CONSULTATION', DROP CHECK chk_bank_staff_assignment_role, ADD CONSTRAINT chk_bank_staff_assignment_role CHECK (assignment_role IN ('SUPERVISOR','MONITORING','CONSULTATION'))")
-                    names = sorted(RECONCILABLE | {'021_create_case_transactions.sql','024_bank_staff_role_schema_alignment.sql'})
+                    names = sorted(RECONCILABLE | {'021_create_case_transactions.sql','024_bank_staff_role_schema_alignment.sql',
+                                                   '029_normalize_case_transaction_amounts.sql'})
                     cursor.execute('DELETE FROM schema_migrations WHERE migration_name IN ('+','.join(['%s']*len(names))+')', names)
                     cursor.execute("INSERT INTO schema_migrations (migration_name) VALUES ('021_bank_staff_assignment_fields.sql')")
                     cursor.execute("UPDATE bank_staff_directory SET display_name='직원 편집 보존 테스트' WHERE staff_id='staff-demo-kim-cheolsu'")
                 connection.commit()
                 before = row_fingerprints(connection, ['bank_staff_directory'])
                 changes = repair(connection, expected)
-                self.assertEqual(len(changes), 11)
+                self.assertEqual(len(changes), 12)
                 self.assertEqual(row_fingerprints(connection, ['bank_staff_directory']), before)
                 self.assertEqual(differences(expected, schema_snapshot(connection)), [])
                 self.assertEqual(repair(connection, expected), [])

@@ -98,18 +98,18 @@ const Evidence: React.FC<{ item: ContextPanelItemV3; compact?: boolean }> = ({ i
   return <details className="context-item-details"><summary><FileSearch size={12}/>근거와 상세 정보</summary><div><SourceBadge source={item.source_kind}/>{item.masked && <span>민감정보 가림 적용</span>}</div>{summaryList ?? <p>연결된 근거가 없습니다.</p>}</details>;
 };
 
-type FactProps = { item: ContextPanelItemV3; busy: boolean; onConfirm: () => void; onReject: () => void; onCorrect: () => void; onUnconfirm: () => void; onInvalidate: () => void };
-export const FactRow: React.FC<FactProps> = ({ item, busy, onConfirm, onReject, onCorrect, onUnconfirm, onInvalidate }) => {
+type FactProps = { item: ContextPanelItemV3; busy: boolean; readOnly?: boolean; onReject: () => void; onCorrect: () => void; onInvalidate: () => void };
+export const FactRow: React.FC<FactProps> = ({ item, busy, readOnly = false, onReject, onCorrect, onInvalidate }) => {
   const proposed = item.status === 'PROPOSED';
   const confirmed = item.status === 'CONFIRMED';
   const terminalLabel = item.status === 'REJECTED' ? '검토에서 제외된 정보' : item.status === 'SUPERSEDED' ? '새 정보로 대체된 기록' : '읽기 전용 정보';
   const lowConfidence = item.source_kind === 'AI_EXTRACTION' && item.confidence != null && item.confidence < .7;
   const tone = statusLabels[item.status] ? item.status.toLowerCase() : 'unknown';
   return <article className={`context-fact-row is-${tone}`}>
-    <div className="context-fact-main"><span className="context-fact-marker" aria-hidden="true">{confirmed ? <Check size={13}/> : proposed ? <AlertCircle size={13}/> : '·'}</span><p><strong>{item.label}</strong><span>·</span><span>{staffDisplayValue(item)}</span></p><div className="context-fact-actions">{proposed && <button className="context-primary-action" disabled={busy} onClick={onConfirm}><Check size={13}/>확정</button>}{(proposed || confirmed) && <MoreMenu label={`${item.label} 추가 작업`}>{confirmed && <button disabled={busy} onClick={onCorrect}><Pencil size={13}/>정보 정정</button>}{confirmed && <button disabled={busy} onClick={onUnconfirm}><RotateCcw size={13}/>확정 취소</button>}<button disabled={busy} onClick={confirmed ? onInvalidate : onReject}><X size={13}/>잘못된 정보로 제외</button></MoreMenu>}</div></div>
-    <div className="context-fact-meta"><SourceBadge source={item.source_kind}/><StatusBadge status={item.status}/><Evidence item={item} compact/></div>
+    <div className="context-fact-main"><span className="context-fact-marker" aria-hidden="true">{confirmed ? <Check size={13}/> : '·'}</span><p><strong>{item.label}</strong><span>·</span><span>{staffDisplayValue(item)}</span></p><div className="context-fact-actions">{!readOnly && (proposed || confirmed) && <MoreMenu label={`${item.label} 추가 작업`}><button disabled={busy} onClick={onCorrect}>정보 수정</button><button disabled={busy} onClick={confirmed ? onInvalidate : onReject}>정보 제외</button></MoreMenu>}</div></div>
+    <div className="context-fact-meta"><SourceBadge source={item.source_kind}/>{proposed ? <span className="context-status-badge tone-proposed">기록됨</span> : <StatusBadge status={item.status}/>}<Evidence item={item} compact/></div>
     {!proposed && !confirmed && <span className="context-readonly-note">{terminalLabel}</span>}
-    {lowConfidence && <div className="context-confidence-warning"><AlertCircle size={12}/>AI 추출 · 확인 필요</div>}
+    {lowConfidence && <div className="context-confidence-warning"><AlertCircle size={12}/>AI 추출 기록 · 원문 확인 가능</div>}
   </article>;
 };
 

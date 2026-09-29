@@ -13,6 +13,20 @@ from contracts.ai_internal.case_copilot import BankCopilotSourceContext
 AssistantMode = Literal["CUSTOMER_SUPPORT", "BANK_INTERNAL"]
 
 
+def _explicit_staff_attestation(text: str) -> bool:
+    compact = re.sub(r"\s+", "", text)
+    if any(term in compact for term in (
+        "확인필요", "확인부탁", "확인해주세요", "확인해야", "확인할예정", "확인해보겠습니다",
+        "확인안했", "확인못했", "확인하지않", "조회안했", "조회못했",
+    )):
+        return False
+    return bool(re.search(
+        r"(?:내가|제가|직접)?(?:확인(?:해?보니|해?보니까|해?봤더니|했(?:어|습니다|다)?|됨|됐|되었|완료)"
+        r"|조회(?:해?보니|해?보니까|해?봤더니|했(?:어|습니다|다)?|됨|됐|완료))",
+        compact,
+    ))
+
+
 @dataclass(frozen=True)
 class QualityCheck:
     criterion: str
@@ -81,9 +95,10 @@ class CopilotQualityEvaluator:
     )
     _SAFE_NEGATIONS = ("하지 마", "하지마", "말아", "말고", "금지", "중단", "않", "절대")
     _DANGEROUS_ACTIONS = (
-        re.compile(r"(?:송금|이체|입금).{0,24}(?:하세요|해\s*주세요|진행하세요|보내세요)"),
-        re.compile(r"(?:비밀번호|패스워드|otp|인증번호|보안코드|주민등록번호).{0,24}(?:입력|알려|전달|보내).{0,12}(?:하세요|해\s*주세요|주세요)"),
-        re.compile(r"(?:원격제어|원격조종|보안).{0,16}(?:앱|어플).{0,20}(?:설치하세요|설치해\s*주세요)"),
+        re.compile(r"(?:송금|이체|입금)(?:을|를)?\s*(?:하세요|해\s*주세요|진행하세요|진행해\s*주세요)"),
+        re.compile(r"(?:돈|금액|자금)(?:을|를)?\s*(?:보내세요|보내\s*주세요)"),
+        re.compile(r"(?:비밀번호|패스워드|otp|인증번호|보안코드|주민등록번호)(?:\s*(?:값|번호))?(?:을|를)?\s*(?:입력|알려|전달|보내)(?:해|해\s*|\s*)?(?:하세요|주세요)"),
+        re.compile(r"(?:원격제어|원격조종|보안)\s*(?:앱|어플)(?:을|를)?\s*(?:설치하세요|설치해\s*주세요)"),
     )
     _STOPWORDS = {
         "현재", "지금", "관련", "내용", "질문", "답변", "해주세요", "알려주세요", "어떻게",
@@ -150,6 +165,7 @@ class CopilotQualityEvaluator:
         normalized = text.replace("이체", "송금").replace("입금", "송금")
         normalized = re.sub(r"보내지\s*않|안\s*보냈", "송금하지않", normalized)
         normalized = re.sub(r"보냈|보낸|보냄", "송금했", normalized)
+        normalized = re.sub(r"송금(?:이|가|은|을)?\s*(?:됐|되었|됨|완료)", "송금했", normalized)
         return cls._transfer_value(normalized)
 
     @classmethod
@@ -163,16 +179,26 @@ class CopilotQualityEvaluator:
             text = fact.display_value + " " + json.dumps(fact.value, ensure_ascii=False)
             if isinstance(fact.value.get("amount_krw"), int):
                 text += f" {fact.value['amount_krw']}원"
+                if fact.semantic_key == 'transfer.actual.amount' and fact.value.get('direction') in {'OUT', 'TRANSFER_OUT'}:
+                    text += ' 송금했음'
+            staff_attested = (
+                fact.source_kind == "STAFF_OBSERVATION"
+                and (fact.value.get("staff_attestation") == "EXPLICIT_STAFF_CHECK" or fact.value.get('staff_reported') is True)
+            )
             rows.append((fact.semantic_key, text, fact.source_kind, fact.status,
-                         bool(fact.confirmed_by and fact.confirmed_at)))
+                         bool(fact.confirmed_by and fact.confirmed_at), staff_attested))
         for question in context.questions:
             if question.status == "ANSWERED" and question.answer_text and question.answer_message_id not in excluded_refs:
-                rows.append((question.canonical_scope, question.answer_text, "CUSTOMER_STATEMENT", "PROPOSED", False))
+                rows.append((question.canonical_scope, question.answer_text, "CUSTOMER_STATEMENT", "PROPOSED", False, False))
         for message in context.messages:
             if message.actor_type == "CUSTOMER" and message.message_id not in excluded_refs:
                 scope = cls._source_scope(message.content)
                 if scope:
-                    rows.append((scope, message.content, "CUSTOMER_STATEMENT", "PROPOSED", False))
+                    rows.append((scope, message.content, "CUSTOMER_STATEMENT", "PROPOSED", False, False))
+            elif message.actor_type == "BANK_STAFF" and message.message_id not in excluded_refs and _explicit_staff_attestation(message.content):
+                scope = cls._source_scope(message.content)
+                if scope:
+                    rows.append((scope, message.content, "STAFF_OBSERVATION", "PROPOSED", False, True))
         verified = []
         for check in context.verifications:
             if check.status != "COMPLETED" or not check.result_summary:
@@ -197,6 +223,9 @@ class CopilotQualityEvaluator:
             return polarity is None or actual == polarity
 
         for sentence in re.split(r"[.!?\n;]+|하지만|그러나", response):
+            # A recommendation/question is not a claim of an already performed check.
+            if re.search(r'(?:확인|조회|질문|검토|문의|대조)(?:해\s*주세요|하세요|하면|할까요|하시겠|하는\s*것)', sentence) and not re.search(r'했습니다|됐습니다|되었습니다|확인됨|확인된|완료했습니다', sentence):
+                continue
             scope = cls._source_scope(sentence)
             bank_claim = bool(re.search(r"(?:은행\s*)?거래\s*(?:기록|내역)|은행\s*기록", sentence))
             official = bool(re.search(r"검증(?:되|됐|했|하였|이\s*완료|\s*완료)|공식.{0,12}확인|\bVERIFIED\b", sentence, re.I))
@@ -229,6 +258,7 @@ class CopilotQualityEvaluator:
             conflict = scope == "transfer_status" and True in polarities and False in polarities
             banks = [row for row in matching if row[2] == "BANK_RECORD" and row[3] == "CONFIRMED" and row[4]]
             staff = [row for row in matching if row[3] == "CONFIRMED" and row[4]]
+            staff_attested = [row for row in matching if len(row) > 5 and row[5]]
             statements = [row for row in matching if row[2] == "CUSTOMER_STATEMENT"]
             receipts = [ref for fact in active if scope is None or cls._scope_matches(scope, fact.semantic_key)
                         for ref in fact.evidence_refs if ref.type in {"ATTACHMENT", "BANK_TRANSACTION"}
@@ -240,16 +270,16 @@ class CopilotQualityEvaluator:
                 rule = "receipt_claim_without_evidence"
             elif official and not matching_verified:
                 rule = "official_claim_without_linked_verification"
-            elif staff_claim and not staff:
+            elif staff_claim and not staff and not staff_attested:
                 rule = "staff_claim_without_confirmed_staff_source"
-            elif direct_transfer and not attributed and not staff_claim and not banks and not matching_verified:
+            elif direct_transfer and not attributed and not staff_claim and not banks and not matching_verified and not staff_attested:
                 rule = "direct_transfer_without_authorized_source"
             elif attributed and direct_transfer and not statements:
                 rule = "attributed_transfer_without_customer_statement"
             elif certainty and attributed and cls._STATEMENT_CONFIRMATION.fullmatch(sentence.strip()) is None:
                 rule = "customer_statement_confirmation_outside_narrow_form"
             elif (
-                certainty and not attributed and not staff_claim and not banks and not matching_verified
+                certainty and not attributed and not staff_claim and not banks and not matching_verified and not staff_attested
                 and not any(row[3] == "CONFIRMED" and row[4] and row[2] != "CUSTOMER_STATEMENT" for row in matching)
             ):
                 rule = "unattributed_certainty_without_confirmed_source"

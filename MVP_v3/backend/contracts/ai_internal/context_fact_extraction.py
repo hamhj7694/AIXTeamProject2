@@ -1,4 +1,4 @@
-"""Bounded AI contract for extracting reviewable Case Context facts from one message."""
+"""Bounded contract for extracting source-linked Case updates from one message."""
 from __future__ import annotations
 
 from typing import Any, Literal
@@ -59,6 +59,7 @@ class ContextFactProposal(ContextFactExtractionModel):
     display_value: str = Field(min_length=1, max_length=3000)
     confidence: float = Field(ge=0, le=1)
     evidence_message_id: str = Field(min_length=1, max_length=64)
+    supersedes_fact_id: str | None = Field(default=None, max_length=64)
 
     @model_validator(mode="after")
     def validate_typed_value(self):

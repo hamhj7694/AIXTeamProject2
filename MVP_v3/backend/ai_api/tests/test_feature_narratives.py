@@ -16,6 +16,7 @@ def test_feature_narratives_keep_grounded_references_and_drop_unknown_items() ->
         feature_narratives=[
             ContextNarrative(
                 code="REQUEST_TRANSFER",
+                brief_title="안전계좌 송금 요구",
                 sentence="상대방이 안전계좌로 이체하라고 요구했습니다.",
                 status="REQUESTED",
                 source_turns=[2, 99],
@@ -43,6 +44,7 @@ def test_feature_narratives_keep_grounded_references_and_drop_unknown_items() ->
     assert len(result.feature_narratives) == 1
     assert result.feature_narratives[0].source_turns == [2]
     assert result.feature_narratives[0].atom_ids == ["atom-1"]
+    assert result.feature_narratives[0].brief_title == "안전계좌 송금 요구"
     assert result.feature_narratives[0].actor_role == "UNKNOWN"
     assert "발화자·행위자 귀속은 확인 필요" in result.feature_narratives[0].sentence
 

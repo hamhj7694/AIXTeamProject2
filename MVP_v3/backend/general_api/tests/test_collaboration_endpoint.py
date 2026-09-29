@@ -13,6 +13,7 @@ class CollaborationEndpointTest(unittest.TestCase):
         self.client = TestClient(general_main.app)
         self.original_repository = general_main.repository
         self.repository = AsyncMock()
+        self.repository._display_items = {}
         for name in ("facts", "gaps", "suggestions", "tasks", "decisions", "requests", "observations"):
             setattr(self.repository, f"_context_v2_{name}", {})
         self.repository.get.return_value = {

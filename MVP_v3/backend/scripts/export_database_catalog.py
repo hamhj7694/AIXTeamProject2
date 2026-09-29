@@ -31,6 +31,7 @@ ENTITIES = {
         'messages':'고객/은행/AI 대화와 시스템 이벤트; 통화 입력 원문과 별개; attachments_json은 현재 빈 호환 필드',
         'customer_questions':'고객 질문·선택지·답변·질문 버전',
         'message_context_extractions':'메시지→사실 후보 추출 작업·재시도 상태',
+        'case_copilot_jobs':'은행 내부 선제 브리핑의 사건 상태별 중복 방지·재시도·결과 메시지 연결',
     },
     '금액·거래': {'case_transactions':'외부 은행 원장이 아닌 Case 내부 확인 거래 기록; Context V2 실제 금액 사실을 직원 확인 후 승격'},
     '사실·확인': {

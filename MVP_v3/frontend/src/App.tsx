@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Bell, Loader2, ShieldCheck } from 'lucide-react';
 import { BrowserRouter, Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { casesApi } from './api/cases';
@@ -16,6 +16,7 @@ const Workspace: React.FC = () => {
   const [cases, setCases] = useState<StoredCase[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const casesLoadInFlight = useRef(false);
   const [trashedCases, setTrashedCases] = useState<StoredCase[]>([]);
   const [trashLoading, setTrashLoading] = useState(true);
   const [trashError, setTrashError] = useState('');
@@ -30,9 +31,11 @@ const Workspace: React.FC = () => {
   const markNotificationsRead = () => { const next = notifications.map((item) => ({ ...item, read: true })); localStorage.setItem('csr-app-notifications-v1', JSON.stringify(next)); setNotifications(next); };
   const deleteNotification = (id: string) => { const next = notifications.filter((item) => item.id !== id); localStorage.setItem('csr-app-notifications-v1', JSON.stringify(next)); setNotifications(next); };
   const loadCases = useCallback(async () => {
+    if (casesLoadInFlight.current) return;
+    casesLoadInFlight.current = true;
     try { setCases(await casesApi.list()); setError(''); }
     catch (reason) { setError(reason instanceof Error ? reason.message : 'Case 목록을 불러오지 못했습니다.'); }
-    finally { setLoading(false); }
+    finally { casesLoadInFlight.current = false; setLoading(false); }
   }, []);
   const loadTrash = useCallback(async () => {
     try { setTrashedCases(await casesApi.listTrash()); setTrashError(''); }

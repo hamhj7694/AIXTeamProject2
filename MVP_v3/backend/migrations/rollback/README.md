@@ -1,6 +1,6 @@
 # 수동 되돌리기 SQL — 엔티티별 분류
 
-정방향 manifest에 포함하지 않는다. 이름이 같은 정방향 SQL과 동일한 엔티티 폴더에 분류했다.
+정방향 manifest에 포함하지 않는다. 현재 수동 rollback SQL은 7개이며, 이름이 같은 정방향 SQL과 동일한 엔티티 폴더에 분류했다.
 
 | 엔티티 | 파일 |
 |---|---|
@@ -12,4 +12,4 @@
 | 직원 명부 | [020_bank_staff_directory.sql](staff/020_bank_staff_directory.sql) |
 | 사건 참여자 | [022_case_member_assignment_roles.sql](members/022_case_member_assignment_roles.sql) |
 
-이 파일들은 기존 이력 보존용이며 최신 DB에서 안전한 일괄 되돌리기를 보장하지 않는다. 테이블·컬럼 삭제로 데이터가 유실될 수 있다. 복원 가능한 백업과 후속 migration/FK/트리거 의존성을 확인한 뒤 명시적으로 선택해서 사용한다. 모든 migration에 rollback이 있는 것은 아니며, 자동 역순 실행 도구는 제공하지 않는다.
+이 파일들은 기존 이력 보존용이며 최신 DB에서 안전한 일괄 되돌리기를 보장하지 않는다. 테이블·컬럼 삭제로 데이터가 유실될 수 있다. 복원 가능한 백업과 후속 migration/FK/트리거 의존성을 확인한 뒤 명시적으로 선택해서 사용한다. 모든 migration에 rollback이 있는 것은 아니며, 자동 역순 실행 도구는 제공하지 않는다. 실행 전 대상 DB와 실제 데이터 상태를 확인하고, 운영 DB에서의 rollback은 별도 복구 계획 없이 실행하지 않는다.

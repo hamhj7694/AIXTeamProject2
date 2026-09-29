@@ -497,9 +497,13 @@ class MySqlCaseRepository:
         async with pool.acquire() as connection:
             try:
                 async with connection.cursor() as cursor:
-                    await cursor.execute("SELECT case_id FROM cases WHERE case_id=%s FOR UPDATE", (case_id,))
-                    if not await cursor.fetchone():
+                    await cursor.execute("SELECT case_id, context_revision FROM cases WHERE case_id=%s FOR UPDATE", (case_id,))
+                    locked_case = await cursor.fetchone()
+                    if not locked_case:
                         raise KeyError(case_id)
+                    if record.get("expected_context_revision") is not None and locked_case[1] != record["expected_context_revision"]:
+                        await connection.rollback()
+                        return None
                     if source_guard:
                         source_ids = list(dict.fromkeys(source_guard.get("source_message_ids", [])))
                         if not source_ids:
@@ -523,14 +527,15 @@ class MySqlCaseRepository:
                             return None
                     await cursor.execute(
                         """INSERT INTO messages
-                           (message_id, case_id, actor_type, actor_user_id, actor_display_name, actor_role, content, channel, audience, visibility, message_kind, private_owner_user_id, mentions_json, reply_to_message_id, client_request_id, attachments_json, created_at)
-                           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                           (message_id, case_id, actor_type, actor_user_id, actor_display_name, actor_role, content, channel, audience, visibility, message_kind, private_owner_user_id, mentions_json, reply_to_message_id, client_request_id, attachments_json, created_at, ai_metadata_json)
+                           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                         (
                             message_id, case_id, record["actor_type"], record.get("actor_user_id"), record.get("actor_display_name"), record.get("actor_role"), record["content"],
                             record.get("channel", "CUSTOMER"), record.get("audience", "CUSTOMER"),
                             record.get("visibility", "CUSTOMER"), record.get("message_kind", "CHAT"), record.get("private_owner_user_id"),
                             json.dumps(record.get("mentions", []), ensure_ascii=False), record.get("reply_to_message_id"),
                             record.get("client_request_id"), json.dumps([], ensure_ascii=False), created_at,
+                            json.dumps(record.get("ai_metadata"), ensure_ascii=False),
                         ),
                     )
                     if record.get("log_event", True):
@@ -555,7 +560,7 @@ class MySqlCaseRepository:
         pool = await self._get_pool()
         query = """SELECT message_id, case_id, actor_type, actor_user_id, actor_display_name, actor_role, content,
                           channel, audience, visibility, message_kind, private_owner_user_id, mentions_json,
-                          reply_to_message_id, client_request_id, attachments_json, created_at
+                          reply_to_message_id, client_request_id, attachments_json, created_at, ai_metadata_json
                    FROM messages WHERE case_id=%s AND client_request_id=%s LIMIT 1"""
         async with pool.acquire() as connection, connection.cursor(aiomysql.DictCursor) as cursor:
             await cursor.execute(query, (case_id, client_request_id))
@@ -563,13 +568,14 @@ class MySqlCaseRepository:
             if row is None:
                 return None
             message = {**row, "mentions": self._json(row["mentions_json"]) or [], "created_at": _utc_iso(row["created_at"])}
+            message["ai_metadata"] = self._json(row.get("ai_metadata_json")) or {}
             message["attachments"] = []
             message["attachment_ids"] = []
             return message
 
     async def list_messages(self, case_id: str, channel: str | None = None) -> list[dict[str, Any]]:
         pool = await self._get_pool()
-        query = "SELECT message_id, case_id, actor_type, actor_user_id, actor_display_name, actor_role, content, channel, audience, visibility, message_kind, private_owner_user_id, mentions_json, reply_to_message_id, client_request_id, attachments_json, created_at FROM messages WHERE case_id=%s"
+        query = "SELECT message_id, case_id, actor_type, actor_user_id, actor_display_name, actor_role, content, channel, audience, visibility, message_kind, private_owner_user_id, mentions_json, reply_to_message_id, client_request_id, attachments_json, created_at, ai_metadata_json FROM messages WHERE case_id=%s"
         values: tuple[Any, ...] = (case_id,)
         if channel is not None:
             query += " AND channel=%s"
@@ -582,6 +588,7 @@ class MySqlCaseRepository:
                 for row in await cursor.fetchall()
             ]
             for message in messages:
+                message["ai_metadata"] = self._json(message.get("ai_metadata_json")) or {}
                 message["attachments"] = []
                 message["attachment_ids"] = []
             return messages

@@ -128,7 +128,7 @@ class CaseSnapshotAiAdapter:
                 facts = [fact for fact in facts if fact.status != "CONFIRMED"
                          or CaseSnapshotAiAdapter._clear_remote_installation(fact.value)]
             # 동일 값·상태의 중복 외에는 한 기록을 대표값으로 임의 선택하지 않는다.
-            fact_signals = {(fact.status, fact.value) for fact in facts}
+            fact_signals = {(fact.status, fact.value, fact.staff_attested, fact.source_kind) for fact in facts}
             current_question = questions[0] if len(questions) == 1 else None
             answer_uncertain = (
                 current_question is not None
@@ -292,6 +292,32 @@ class CaseSnapshotAiAdapter:
             if question.status == "ANSWERED" and question.answer_text and question.answer_text.strip()
             and not is_follow_up_target(question.target_field)
         }
+        # A staff member's explicit check-report is an internal near-confirmed
+        # working value. It may update the current summary, while its source
+        # remains attributed and the stored Fact lifecycle remains PROPOSED.
+        fact_field_aliases = {
+            "transfer.actual.status": "transfer_status",
+            "exposure.personal_information": "personal_information_exposure",
+            "exposure.authentication_information": "authentication_information_exposure",
+            "device.remote_control_app": "remote_control_app",
+        }
+        attested_by_scope: dict[str, set[str]] = {}
+        for fact in ai_input.facts:
+            if ((fact.staff_attested or fact.staff_reported) and fact.source_kind == "STAFF_OBSERVATION"
+                    and fact.status in {"PROPOSED", "CONFIRMED"} and fact.value.strip()):
+                scope = fact_field_aliases.get(fact.field, fact.field)
+                attested_by_scope.setdefault(scope, set()).add(fact.value)
+        for scope, values in attested_by_scope.items():
+            if scope not in {"transfer_status", "personal_information_exposure",
+                             "authentication_information_exposure", "remote_control_app"} or len(values) != 1:
+                continue  # conflicting values are surfaced as a conflict, never selected by order
+            value = next(iter(values))
+            existing = field_values.get(scope)
+            if existing and CaseSnapshotAiAdapter._answer_polarity(existing[0]) not in {
+                None, CaseSnapshotAiAdapter._answer_polarity(value),
+            }:
+                continue
+            field_values[scope] = (CaseSnapshotAiAdapter._structured_value(scope, value), "staff_attested")
 
         narratives = ai_input.diagnosis.context.feature_narratives if ai_input.diagnosis else []
         claim = CaseSnapshotAiAdapter._summary_claim(narratives, ai_input.diagnosis.context.claims if ai_input.diagnosis else [])
@@ -418,12 +444,34 @@ class CaseSnapshotAiAdapter:
         }
         unresolved_fields = {item.target_field.value for item in unresolved}
         answered_states: list[str] = []
+        staff_reported_states: list[str] = []
         unresolved_labels: list[str] = []
         for field, (label, short_label) in labels.items():
             answer = field_values.get(field)
             if answer:
                 value = answer[0]
                 polarity = CaseSnapshotAiAdapter._answer_polarity(value)
+                source = answer[1] if len(answer) > 1 else "answered"
+                if source == "staff_attested":
+                    if field == "transfer_status" and polarity is True:
+                        staff_reported_states.append("실제 송금 완료")
+                    elif field == "transfer_status" and polarity is False:
+                        staff_reported_states.append("송금하지 않음")
+                    elif field == "personal_information_exposure" and polarity is True:
+                        staff_reported_states.append("개인정보 제공")
+                    elif field == "personal_information_exposure" and polarity is False:
+                        staff_reported_states.append("개인정보 미제공")
+                    elif field == "authentication_information_exposure" and polarity is True:
+                        staff_reported_states.append("인증정보 제공")
+                    elif field == "authentication_information_exposure" and polarity is False:
+                        staff_reported_states.append("인증정보 미제공")
+                    elif field == "remote_control_app" and polarity is True:
+                        staff_reported_states.append("원격제어 앱 설치")
+                    elif field == "remote_control_app" and polarity is False:
+                        staff_reported_states.append("원격제어 앱 미설치")
+                    else:
+                        unresolved_labels.append(label)
+                    continue
                 if field == "transfer_status" and polarity is True:
                     answered_states.append("송금했다고")
                 elif field == "transfer_status" and polarity is False:
@@ -446,6 +494,13 @@ class CaseSnapshotAiAdapter:
                     unresolved_labels.append(label)
             elif field in unresolved_fields:
                 unresolved_labels.append(label)
+        if staff_reported_states:
+            report = "담당자 확인 보고 기준으로 " + " · ".join(staff_reported_states) + "로 기록되어 있습니다"
+            if answered_states:
+                report += ". 고객은 " + " · ".join(answered_states) + "라고 답했습니다"
+            if unresolved_labels:
+                report += f". 다만 {CaseSnapshotAiAdapter._join_exposure_labels(unresolved_labels)} 여부는 아직 확인되지 않았습니다"
+            return report + "."
         if answered_states and unresolved_labels:
             unknown = CaseSnapshotAiAdapter._join_exposure_labels(unresolved_labels)
             if len(answered_states) > 1:
@@ -604,11 +659,13 @@ class CaseSnapshotAiAdapter:
                 })
 
         confirmed_facts = [
-            {"fact_id": fact.fact_id, "field": fact.field, "value": fact.value, "status": fact.status}
+            {"fact_id": fact.fact_id, "field": fact.field, "value": fact.value, "status": fact.status,
+             "source_kind": fact.source_kind, "staff_attested": fact.staff_attested, "staff_reported": fact.staff_reported, "evidence_refs": fact.evidence_refs}
             for fact in ai_input.facts if fact.status == "CONFIRMED"
         ]
         proposed_facts = [
-            {"fact_id": fact.fact_id, "field": fact.field, "value": fact.value, "status": fact.status}
+            {"fact_id": fact.fact_id, "field": fact.field, "value": fact.value, "status": fact.status,
+             "source_kind": fact.source_kind, "staff_attested": fact.staff_attested, "staff_reported": fact.staff_reported, "evidence_refs": fact.evidence_refs}
             for fact in ai_input.facts if fact.status == "PROPOSED"
         ]
         unresolved_items = [
@@ -619,10 +676,10 @@ class CaseSnapshotAiAdapter:
         return CaseContextProjection(
             situation_summary=brief.summary,
             key_signals=CaseSnapshotAiAdapter._unique(key_signals)[:8],
-            offender_claims=CaseSnapshotAiAdapter._unique(offender_claims)[:6],
-            offender_demands=CaseSnapshotAiAdapter._unique(offender_demands)[:6],
-            manipulation_tactics=CaseSnapshotAiAdapter._unique(manipulation_tactics)[:6],
-            customer_exposure=CaseSnapshotAiAdapter._unique(customer_exposure)[:6],
+            offender_claims=CaseSnapshotAiAdapter._unique_context_items(offender_claims, "claims")[:6],
+            offender_demands=CaseSnapshotAiAdapter._unique_context_items(offender_demands, "demands")[:6],
+            manipulation_tactics=CaseSnapshotAiAdapter._unique_context_items(manipulation_tactics, "tactics")[:6],
+            customer_exposure=CaseSnapshotAiAdapter._unique_context_items(customer_exposure, "customer")[:6],
             next_actions=CaseSnapshotAiAdapter._unique(brief.next_checks)[:8],
             money_events=money_events[:100],
             confirmed_facts=confirmed_facts[:100],
@@ -651,10 +708,11 @@ class CaseSnapshotAiAdapter:
     def _current_field_values(ai_input: CaseSnapshotAiInput) -> dict[str, tuple[str, str]]:
         values: dict[str, tuple[str, str]] = {}
         follow_scopes = {canonical_question_scope(q.target_field) for q in ai_input.questions if is_follow_up_target(q.target_field)}
-        # 낮은 신뢰 상태부터 넣고, 고객 답변과 담당자 확정 사실이 차례로 덮어쓴다.
+        # 낮은 신뢰 상태부터 넣고, 고객 답변과 담당자 확인 보고가 차례로 덮어쓴다.
         for fact in ai_input.facts:
             if fact.status == "PROPOSED" and fact.value.strip():
-                values[fact.field] = (CaseSnapshotAiAdapter._structured_value(fact.field, fact.value), "proposed")
+                source = "staff_attested" if fact.staff_attested and fact.source_kind == "STAFF_OBSERVATION" else "proposed"
+                values[fact.field] = (CaseSnapshotAiAdapter._structured_value(fact.field, fact.value), source)
         for question in ai_input.questions:
             if is_follow_up_target(question.target_field):
                 continue  # 확인 행동의 답변은 부모 답변을 대체하지 않는다.
@@ -701,7 +759,12 @@ class CaseSnapshotAiAdapter:
     @staticmethod
     def _field_statement(field: str, value: str, source: str) -> str:
         polarity = CaseSnapshotAiAdapter._answer_polarity(value)
-        authority = "확인 결과" if source == "confirmed" else "고객 답변상" if source == "answered" else "AI 분석상"
+        authority = {
+            "confirmed": "담당자 확인 기록 기준으로",
+            "answered": "고객 답변상",
+            "staff_attested": "담당자 확인 보고 기준으로",
+            "staff_record": "담당자 기록상",
+        }.get(source, "AI 분석상")
         if field == "personal_information_exposure" and value.casefold() == "partially_exposed":
             return f"{authority} 개인정보 일부를 제공한 상태입니다."
         labels = {
@@ -832,6 +895,74 @@ class CaseSnapshotAiAdapter:
         if value is None:
             return QuestionRecommendationContext()
         return value if isinstance(value, QuestionRecommendationContext) else QuestionRecommendationContext.model_validate(value)
+
+    @staticmethod
+    def _unique_context_items(values: list[str], category: str) -> list[str]:
+        """Collapse repeated concepts while retaining distinct facts and attribution."""
+        result: list[str] = []
+        positions: dict[str, int] = {}
+        for raw_value in values:
+            value = re.sub(r"\s+", " ", raw_value).strip()
+            if not value:
+                continue
+            for _ in range(4):
+                compacted = re.sub(
+                    r"(일회용\s*인증번호)\s*\(\s*일회용\s*인증번호\s*\(",
+                    r"\1(", value, flags=re.IGNORECASE,
+                )
+                if compacted == value:
+                    break
+                value = compacted
+
+            text = value.casefold()
+            concept: str | None = None
+            if category == "claims":
+                if re.search(r"(?:승인되지|무단|허용되지).{0,12}결제|결제.{0,12}(?:승인되지|무단|허용되지)", text):
+                    concept = "unauthorized-payment"
+                elif re.search(r"(?:돌려주|반환|환급|환불).{0,12}(?:약속|주장)|(?:약속|주장).{0,12}(?:돌려주|반환|환급|환불)", text):
+                    concept = "refund-promise"
+                elif re.search(r"(?:소속|사칭|담당자).{0,12}(?:주장|것처럼)|(?:주장|것처럼).{0,12}(?:소속|사칭|담당자)", text):
+                    org = re.search(r"카드사|보안센터|은행|금융감독원|검찰|경찰|수사관", text)
+                    if org:
+                        concept = f"impersonation:{org.group(0)}"
+            elif category == "demands":
+                if re.search(r"\botp\b|일회용\s*인증번호|인증번호|인증정보|인증 정보", text):
+                    concept = "authentication-information"
+                elif re.search(r"송금|이체|자금 이동", text):
+                    # Keep distinct destination/purpose/amount facts in Case data;
+                    # the concise UI summary performs its own presentation grouping.
+                    if not re.search(r"계좌|명목|목적|금액|받는 사람", text):
+                        concept = "transfer"
+                elif re.search(r"(?:은행|외부|공식).{0,16}(?:연락|확인).{0,12}(?:말|금지|제한)|(?:연락|확인).{0,12}(?:하지 말|금지|제한)", text):
+                    concept = "block-official-contact"
+                elif re.search(r"(?:원격제어|원격 제어).{0,8}앱|앱.{0,8}(?:설치|실행)", text):
+                    concept = "remote-app"
+            elif category == "tactics":
+                if re.search(r"즉시|긴급|바로|시간 제한|기한", text):
+                    concept = "urgency"
+                elif re.search(r"불안|공포|처벌|피해", text):
+                    concept = "fear"
+                elif re.search(r"돌려주|반환|환급|환불", text):
+                    concept = "refund-promise"
+                elif re.search(r"(?:(?:은행|가족|직원|외부|공식).{0,14}(?:연락|확인).{0,10}(?:말|차단|제한)|연락하지 말|외부 확인)", text):
+                    concept = "isolation"
+            elif category == "customer":
+                if re.search(r"인증번호|\botp\b", text) and re.search(r"질문|물어|문의", text):
+                    concept = "authentication-question"
+                elif re.search(r"송금|이체|개인정보|인증번호", text) and re.search(r"완료되지|완료 여부|제공 여부", text):
+                    concept = "action-completion-unknown"
+
+            key = f"{category}:{concept}" if concept else re.sub(r"[\s\W_]+", "", text)
+            position = positions.get(key)
+            if position is None:
+                positions[key] = len(result)
+                result.append(value)
+                continue
+            previous = result[position]
+            score = lambda item: (1000 if re.search(r"확인되지|미확인|확인 필요|여부는 알 수 없", item) else 0) - len(item)
+            if score(value) > score(previous):
+                result[position] = value
+        return result
 
     @staticmethod
     def _unique(values: list[str]) -> list[str]:

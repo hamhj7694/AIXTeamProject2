@@ -28,6 +28,10 @@ class CaseSnapshotFact(StrictModel):
     field: str
     value: str
     status: Literal["PROPOSED", "CONFIRMED", "UNRESOLVED"]
+    source_kind: str | None = None
+    staff_attested: bool = False
+    staff_reported: bool = False
+    evidence_refs: list[str] = Field(default_factory=list, max_length=20)
 
 
 class CaseSnapshotVerification(StrictModel):
@@ -53,6 +57,10 @@ class CaseContextFactProjection(StrictModel):
     field: str
     value: str
     status: Literal["PROPOSED", "CONFIRMED", "UNRESOLVED"]
+    source_kind: str | None = None
+    staff_attested: bool = False
+    staff_reported: bool = False
+    evidence_refs: list[str] = Field(default_factory=list, max_length=20)
 
 
 class CaseContextVerificationProjection(StrictModel):

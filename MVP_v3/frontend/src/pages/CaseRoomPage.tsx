@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { AlertCircle, Bookmark, CheckCircle2, Loader2, RefreshCw, RotateCcw, StickyNote, Trash2, Users, X } from 'lucide-react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { casesApi, CURRENT_BANK_USER } from '../api/cases';
-import type { AnalyzeCaseResponse, BankStaff, CaseBundle, CaseMember, CaseMessage, CaseSupportSnapshot, StoredCase, CaseTransaction } from '../api/types';
+import type { AnalyzeCaseResponse, BankStaff, CaseBundle, CaseMember, CaseMessage, CaseSupportSnapshot, CustomerQuestion, QuestionCandidate, StoredCase, CaseTransaction } from '../api/types';
 import { loadContextWorkspace, type ContextFact } from '../api/contextWorkspace';
 import { isApiErrorCode } from '../api/client';
 import { ActionDialog, InstitutionVerificationBoardDialog, QuestionDialog, ResponseActionChecklistDialog } from '../components/CaseActionDialogs';
@@ -18,6 +18,7 @@ import { BankPersonalNotes } from '../components/BankPersonalNotes';
 import { CaseAssignmentDialog } from '../components/CaseAssignmentDialog';
 import { readBankBookmarks, writeBankBookmarks, type BankBookmark } from '../bank/bookmarks';
 import { saveLatestAiRecommendations } from '../bank/aiRecommendations';
+import { customerQuestionDispatchPayload, heldQuestionDrafts, pendingInitialQuestions, questionTargetKey, readInitialQuestionHolds, readInitialQuestions, writeInitialQuestionHolds, writeInitialQuestions, type HeldInitialQuestion } from '../bank/initialCustomerQuestions';
 import { stripBankAiMention } from '../bank/aiMention';
 import { buildConsecutiveAiPrompt, ConsecutiveAiBatcher, type AiBatchControl } from '../bank/consecutiveAiBatch';
 import { generateUuid } from '../uuid';
@@ -30,7 +31,7 @@ import { toBankCardData } from '../components/cards/cardData';
 import { hasInitialAssignmentHandled, hasInitialAssignmentPending, markInitialAssignmentHandled, shouldOpenInitialAssignment } from '../assignmentPromptState';
 import { AnalysisResult } from './HomePage';
 
-type DialogState = { type: 'questions' } | { type: 'verification'; mode: 'guide' } | { type: 'action'; mode?: 'guide' } | null;
+type DialogState = { type: 'questions'; sourceMessage?: CaseMessage } | { type: 'verification'; mode: 'guide'; targetId?: string } | { type: 'action'; mode?: 'guide' } | null;
 type AdminAction = 'finalize' | 'reopen' | 'trash' | null;
 type BankOutboxItem = {
   message: CaseMessage;
@@ -101,6 +102,24 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
   const [teamPaneCollapsed, setTeamPaneCollapsed] = useState(false);
   const [customerPaneRatio, setCustomerPaneRatio] = useState(50);
   const [customerDraftPrefill, setCustomerDraftPrefill] = useState('');
+  const [initialCustomerQuestions, setInitialCustomerQuestions] = useState<QuestionCandidate[]>([]);
+  const [heldInitialQuestions, setHeldInitialQuestions] = useState<HeldInitialQuestion[]>([]);
+  const initialCustomerQuestionsCaseRef = useRef('');
+  const guidanceCaseRef = useRef('');
+  useEffect(() => {
+    const focus = (event: Event) => {
+      const action = (event as CustomEvent<{ target_type?: string; target_id?: string }>).detail;
+      if (!action?.target_id) return;
+      if (action.target_type === 'QUESTION') {
+        setCustomerPaneCollapsed(false);
+        window.setTimeout(() => document.querySelector<HTMLElement>(`[data-question-id="${CSS.escape(action.target_id!)}"]`)?.scrollIntoView({ block: 'center' }), 0);
+      } else if (action.target_type === 'VERIFICATION') {
+        setDialog({ type: 'verification', mode: 'guide', targetId: action.target_id });
+      }
+    };
+    window.addEventListener('csr:focus-resource', focus);
+    return () => window.removeEventListener('csr:focus-resource', focus);
+  }, []);
   const [splitDragging, setSplitDragging] = useState(false);
   const lastSupportRevisionRef = useRef('');
   const aiQueueRef = useRef<Promise<void>>(Promise.resolve());
@@ -162,6 +181,12 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
       setLoading(false); setRefreshing(false); return;
     }
     setCaseItem(caseResult.value); if (!quiet) setError('');
+    if (guidanceCaseRef.current !== caseId && caseResult.value.analysis_status !== 'IN_PROGRESS' && caseResult.value.analysis_status !== 'FAILED') {
+      guidanceCaseRef.current = caseId;
+      void casesApi.ensureGuidance(caseId).then((result) => {
+        if (result.status === 'WAITING_ANALYSIS') guidanceCaseRef.current = '';
+      }).catch(() => { guidanceCaseRef.current = ''; });
+    }
     if (membersResult.status === 'fulfilled') { setCaseMembers(membersResult.value); setParticipantCount(membersResult.value.length); }
     if (staffResult.status === 'fulfilled') setBankStaffDirectory(staffResult.value);
     const assignmentPending = hasInitialAssignmentPending(caseId);
@@ -203,6 +228,37 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
     }
     setPartialWarnings(warnings); setLoading(false); setRefreshing(false);
   }, [caseId, initialAssignmentRecommendation]);
+
+  useEffect(() => {
+    if (!caseId || !bundle || bundle.case.case_id !== caseId || initialCustomerQuestionsCaseRef.current === caseId) return;
+    initialCustomerQuestionsCaseRef.current = caseId;
+    const holds = readInitialQuestionHolds(caseId);
+    const storedQuestions = readInitialQuestions(caseId);
+    const hydrateHolds = (candidates: QuestionCandidate[]) => {
+      const hydrated = holds.map((hold) => ({
+        ...hold, question: hold.question ?? candidates.find((item) => item.question_id === hold.question_id),
+      }));
+      setHeldInitialQuestions(hydrated);
+      writeInitialQuestionHolds(caseId, hydrated);
+    };
+    if (storedQuestions) {
+      setInitialCustomerQuestions(storedQuestions);
+      hydrateHolds(storedQuestions);
+      return;
+    }
+    setHeldInitialQuestions(holds);
+    let active = true;
+    void casesApi.questionCandidates(caseId).then((candidates) => {
+      if (!active) return;
+      const firstQuestions = candidates.filter((question) => question.priority === 'P0').slice(0, 4);
+      hydrateHolds(candidates);
+      setInitialCustomerQuestions(firstQuestions);
+      if (firstQuestions.length > 0) writeInitialQuestions(caseId, firstQuestions);
+    }).catch(() => {
+      if (active) { setInitialCustomerQuestions([]); initialCustomerQuestionsCaseRef.current = ''; }
+    });
+    return () => { active = false; };
+  }, [caseId, bundle?.case.case_id]);
 
   const showMessage = (message: CaseMessage) => {
     setBundle((current) => current && current.case.case_id === message.case_id ? {
@@ -250,6 +306,8 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
             attachments: [],
             created_at: reply.created_at,
             recommended_actions: reply.recommended_actions ?? [],
+            source_revision: reply.source_revision,
+            mutation_results: reply.mutation_results ?? [],
           });
           saveLatestAiRecommendations(targetCaseId, reply.message_id, reply.recommended_actions ?? []);
           void load(true, false);
@@ -283,7 +341,7 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
     loadRequestRef.current += 1;
     pendingMessagesRef.current.clear();
     outboxRef.current.clear();
-    setAiPendingCount(0); setBusy(false); setCustomerDraftPrefill('');
+    setAiPendingCount(0); setBusy(false); setCustomerDraftPrefill(''); setInitialCustomerQuestions([]); setHeldInitialQuestions([]); initialCustomerQuestionsCaseRef.current = '';
     lastSupportRevisionRef.current = '';
     setCaseItem(null); setBundle(null); setSupport(null); setFacts([]); setDialog(null); setBookmarkOpen(false); setNoteOpen(false); setParticipantOpen(false); setParticipantCount(0); setCaseMembers([]); setBankStaffDirectory([]); setAssignmentRequired(false); setAnalysisResultOpen(false); setAdminAction(null); setBookmarks(readBankBookmarks(caseId)); setError(''); setComposerWarnings({}); setCustomerPaneCollapsed(false); setTeamPaneCollapsed(false); setCustomerPaneRatio(50);
     // Register the existing demo identity before mounting editors that require membership.
@@ -310,6 +368,50 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
   }, [load]);
 
   const refreshAfterMutation = async () => { await load(true, false); onMutated(); };
+  const removeQueuedInitialQuestions = (created: CustomerQuestion[]) => {
+    const targets = new Set(created.map((item) => questionTargetKey(item.target_field)));
+    setInitialCustomerQuestions((current) => current.filter((item) => !targets.has(questionTargetKey(item.target_field))));
+    setHeldInitialQuestions((current) => {
+      const next = current.filter((item) => !item.question || !targets.has(questionTargetKey(item.question.target_field)));
+      writeInitialQuestionHolds(caseId, next);
+      return next;
+    });
+  };
+  const sendInitialCustomerQuestion = async (question: QuestionCandidate) => {
+    const created = await casesApi.queueQuestions(caseId, [question]);
+    if (created.length === 0) { await refreshAfterMutation(); throw new Error('이미 처리되었거나 확인된 질문입니다.'); }
+    removeQueuedInitialQuestions(created);
+    let cardFailed = false;
+    try {
+      await casesApi.sendReportCard(caseId, customerQuestionDispatchPayload(created),
+        `customer-question-dispatch:${created[0].question_id}`.slice(0, 100), 'CUSTOMER');
+    } catch { cardFailed = true; }
+    await refreshAfterMutation();
+    if (cardFailed) {
+      const message = '질문은 발송됐지만 발송 카드 기록에 실패했습니다. 새로고침 후 기록을 확인해 주세요.';
+      setError(message);
+      throw new Error(message);
+    }
+  };
+  const holdInitialCustomerQuestion = (question: QuestionCandidate) => {
+    setHeldInitialQuestions((current) => {
+      const next = current.some((item) => item.question_id === question.question_id)
+        ? current : [...current, { question_id: question.question_id, question }];
+      writeInitialQuestionHolds(caseId, next);
+      return next;
+    });
+  };
+  const removeHeldInitialQuestion = (question: QuestionCandidate) => {
+    setHeldInitialQuestions((current) => {
+      const target = questionTargetKey(question.target_field);
+      const next = current.filter((item) => {
+        const held = item.question ?? initialCustomerQuestions.find((candidate) => candidate.question_id === item.question_id);
+        return item.question_id !== question.question_id && (!held || questionTargetKey(held.target_field) !== target);
+      });
+      writeInitialQuestionHolds(caseId, next);
+      return next;
+    });
+  };
   const deliverMessage = async (item: BankOutboxItem) => {
     const generation = aiGenerationRef.current;
     const isCurrent = () => generation === aiGenerationRef.current && activeCaseIdRef.current === item.message.case_id;
@@ -405,7 +507,10 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
   const invokeAi = async () => {
     if (aiPendingCount > 0) return;
     setError('');
-    enqueueAiReply(undefined, 'BRIEF');
+    enqueueAiReply(
+      '현재 사건을 두 줄로 브리핑해 주세요. 현 상황을 간단히 설명하고, 지금 가장 중요한 행동 한 가지와 해당 추천 기능 하나만 안내해 주세요.',
+      'BRIEF',
+    );
   };
   const toggleBookmark = (bookmark: BankBookmark) => {
     const next = bookmarks.some((item) => item.entryId === bookmark.entryId) ? bookmarks.filter((item) => item.entryId !== bookmark.entryId) : [...bookmarks, bookmark];
@@ -434,6 +539,10 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
   const toggleQuestionsDialog = () => {
     setCustomerPaneCollapsed(false);
     setDialog((current) => current?.type === 'questions' ? null : { type: 'questions' });
+  };
+  const openAiQuestions = (sourceMessage?: CaseMessage) => {
+    setCustomerPaneCollapsed(false);
+    setDialog({ type: 'questions', sourceMessage });
   };
   const toggleVerificationDialog = () => setDialog((current) => current?.type === 'verification' ? null : { type: 'verification', mode: 'guide' });
   const toggleActionDialog = () => setDialog((current) => current?.type === 'action' ? null : { type: 'action', mode: 'guide' });
@@ -505,6 +614,8 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
   if (error && !caseItem) return <section className="room-state error"><AlertCircle size={24}/><strong>정보를 불러오지 못했습니다.</strong><span>{error}</span><button onClick={() => void load()}>다시 시도</button></section>;
   if (!caseItem || !bundle) return <section className="room-state error"><AlertCircle size={24}/><strong>Case 기록을 열 수 없습니다.</strong><span>General API의 Bundle 응답을 확인해 주세요.</span><button onClick={() => void load()}>다시 시도</button></section>;
 
+  const visibleInitialQuestions = pendingInitialQuestions(initialCustomerQuestions, heldInitialQuestions, bundle.questions);
+  const deferredQuestionDrafts = heldQuestionDrafts(heldInitialQuestions, initialCustomerQuestions, bundle.questions);
   const cardData = liveCardData!;
   const transactionCardData = cardData.transaction;
   const fdsCardData = cardData.risk;
@@ -569,9 +680,17 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
           {composerWarningMessages.map((message) => <div className="partial-warning danger" key={message}><AlertCircle size={15}/><span>{message}</span></div>)}
         </div>}
         <div ref={splitRef} className={`conversation-channel-grid ${splitDragging ? 'is-resizing' : ''}`} style={conversationGridStyle}>
-          <SharedConversation bundle={bundle} view="conversation" channel="CUSTOMER" aiBusy={false} inlineCard={dialog?.type === 'questions' ? <QuestionDialog inline caseId={caseId} initial={support?.recommended_questions ?? []} onDone={refreshAfterMutation} onClose={() => setDialog(null)}/> : undefined} collapsed={customerPaneCollapsed} collapseDisabled={false} onToggleCollapse={toggleCustomerPane} composer={<ConversationComposer foundationMode fixedTarget="CUSTOMER" showAi={false} showUtilities={false} showQuestionAction onOpenQuestions={toggleQuestionsDialog} showInlineError={false} onErrorChange={(message) => handleComposerError('CUSTOMER', message)} busy={busy} aiBusy={false} onSend={send} onOpenVerification={() => undefined} onOpenAction={() => undefined} onInvokeAi={() => undefined} onOpenNotes={() => undefined} onOpenBookmarks={() => undefined} bookmarkCount={0} draftStorageKey={`csr:composer-draft:${caseId}:bank-customer`} draftPrefill={customerDraftPrefill}/>} bookmarkedIds={new Set(bookmarks.map((item) => item.entryId))} onToggleBookmark={toggleBookmark} onRetryMessage={retryMessage} onDismissMessage={dismissMessage}/>
+          <SharedConversation bundle={bundle} view="conversation" channel="CUSTOMER" aiBusy={false}
+            initialCustomerQuestions={visibleInitialQuestions} onSendCustomerQuestion={sendInitialCustomerQuestion} onHoldCustomerQuestion={holdInitialCustomerQuestion}
+            inlineCard={dialog?.type === 'questions' ? <QuestionDialog key={dialog.sourceMessage?.message_id ?? 'manual'} inline
+              caseId={caseId} initial={support?.recommended_questions ?? []} heldQuestions={deferredQuestionDrafts}
+              sourceMessage={dialog.sourceMessage} existingQuestions={bundle.questions} onQuestionsQueued={removeQueuedInitialQuestions} onHeldQuestionRemoved={removeHeldInitialQuestion}
+              onDone={refreshAfterMutation} onClose={() => setDialog(null)}/> : undefined}
+            collapsed={customerPaneCollapsed} collapseDisabled={false} onToggleCollapse={toggleCustomerPane}
+            composer={<ConversationComposer foundationMode fixedTarget="CUSTOMER" showAi={false} showUtilities={false} showQuestionAction questionsOpen={dialog?.type === 'questions'} onOpenQuestions={toggleQuestionsDialog} showInlineError={false} onErrorChange={(message) => handleComposerError('CUSTOMER', message)} busy={busy} aiBusy={false} onSend={send} onOpenVerification={() => undefined} onOpenAction={() => undefined} onInvokeAi={() => undefined} onOpenNotes={() => undefined} onOpenBookmarks={() => undefined} bookmarkCount={0} draftStorageKey={`csr:composer-draft:${caseId}:bank-customer`} draftPrefill={customerDraftPrefill}/>}
+            bookmarkedIds={new Set(bookmarks.map((item) => item.entryId))} onToggleBookmark={toggleBookmark} onRetryMessage={retryMessage} onDismissMessage={dismissMessage}/>
           <button type="button" className="conversation-split-handle" onPointerDown={(event) => { if (customerPaneCollapsed || teamPaneCollapsed) return; event.preventDefault(); setSplitDragging(true); }} onDoubleClick={() => { if (!customerPaneCollapsed && !teamPaneCollapsed) setCustomerPaneRatio(50); }} onKeyDown={(event) => { if (event.key === 'Home') { event.preventDefault(); setCustomerPaneRatio(50); return; } if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return; event.preventDefault(); setCustomerPaneRatio((value) => Math.min(75, Math.max(25, value + (event.key === 'ArrowLeft' ? -5 : 5)))); }} aria-label="고객 소통과 은행 내부 소통 채팅창 너비 조절, 더블클릭하면 1대1로 맞춤" title="드래그하여 폭 조절 · 더블클릭하여 1:1 맞춤" aria-valuemin={25} aria-valuemax={75} aria-valuenow={Math.round(customerPaneRatio)} role="separator"><span/></button>
-          <SharedConversation bundle={bundle} view="conversation" channel="TEAM" aiBusy={aiPendingCount > 0} inlineCard={bankCardStack} collapsed={teamPaneCollapsed} collapseDisabled={customerPaneCollapsed} onToggleCollapse={toggleTeamPane} onOpenQuestions={toggleQuestionsDialog} onOpenTransactionLookup={toggleTransactionLookup} onOpenVerification={toggleVerificationDialog} onOpenAction={toggleActionDialog} onUseAiDraft={setCustomerDraftPrefill} composer={<ConversationComposer foundationMode fixedTarget="TEAM" showAi showUtilities={false} showInlineError={false} selectedBankCard={selectedBankCard} onSelectBankCard={toggleBankCard} onErrorChange={(message) => handleComposerError('TEAM', message)} busy={busy} aiBusy={aiPendingCount > 0} onSend={send} onOpenQuestions={toggleQuestionsDialog} onOpenVerification={toggleVerificationDialog} onOpenAnalysis={() => setAnalysisResultOpen(true)} onOpenAction={toggleActionDialog} onInvokeAi={() => void invokeAi()} onOpenNotes={() => setNoteOpen(true)} onOpenBookmarks={() => setBookmarkOpen(true)} bookmarkCount={bookmarks.length} draftStorageKey={`csr:composer-draft:${caseId}:bank-team`}/>} bookmarkedIds={new Set(bookmarks.map((item) => item.entryId))} onToggleBookmark={toggleBookmark} onRetryMessage={retryMessage} onDismissMessage={dismissMessage}/>
+          <SharedConversation bundle={bundle} view="conversation" channel="TEAM" aiBusy={aiPendingCount > 0} inlineCard={bankCardStack} collapsed={teamPaneCollapsed} collapseDisabled={customerPaneCollapsed} onToggleCollapse={toggleTeamPane} onOpenQuestions={openAiQuestions} onOpenTransactionLookup={toggleTransactionLookup} onOpenVerification={toggleVerificationDialog} onOpenAction={toggleActionDialog} onUseAiDraft={setCustomerDraftPrefill} composer={<ConversationComposer foundationMode fixedTarget="TEAM" showAi showUtilities={false} showInlineError={false} selectedBankCard={selectedBankCard} onSelectBankCard={toggleBankCard} onErrorChange={(message) => handleComposerError('TEAM', message)} busy={busy} aiBusy={aiPendingCount > 0} onSend={send} onOpenQuestions={toggleQuestionsDialog} onOpenVerification={toggleVerificationDialog} onOpenAnalysis={() => setAnalysisResultOpen(true)} onOpenAction={toggleActionDialog} onInvokeAi={() => void invokeAi()} onOpenNotes={() => setNoteOpen(true)} onOpenBookmarks={() => setBookmarkOpen(true)} bookmarkCount={bookmarks.length} draftStorageKey={`csr:composer-draft:${caseId}:bank-team`}/>} bookmarkedIds={new Set(bookmarks.map((item) => item.entryId))} onToggleBookmark={toggleBookmark} onRetryMessage={retryMessage} onDismissMessage={dismissMessage}/>
         </div>
       </main>
       <ContextPanelFoundation
@@ -586,7 +705,7 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
         onOpenAction={toggleActionDialog}
       />
     </CaseContextLayout>
-    {dialog?.type === 'verification' && <InstitutionVerificationBoardDialog caseId={caseId} verificationTasks={bundle.verification_tasks ?? []} onDone={refreshAfterMutation} onClose={() => setDialog(null)}/>}
+    {dialog?.type === 'verification' && <InstitutionVerificationBoardDialog caseId={caseId} verificationTasks={bundle.verification_tasks ?? []} focusVerificationId={dialog.targetId} onDone={refreshAfterMutation} onClose={() => setDialog(null)}/>}
     {dialog?.type === 'action' && (dialog.mode === 'guide' ? <ResponseActionChecklistDialog caseId={caseId} actions={bundle.recent_actions ?? []} onDone={refreshAfterMutation} onClose={() => setDialog(null)}/> : <ActionDialog caseId={caseId} recovery={caseItem.mode === 'RECOVERY'} onDone={refreshAfterMutation} onClose={() => setDialog(null)}/>)}
     <BankBookmarks open={bookmarkOpen} items={bookmarks} onClose={() => setBookmarkOpen(false)} onUpdate={updateBookmark} onDelete={deleteBookmark}/>
     <BankPersonalNotes caseId={caseId} open={noteOpen} onClose={() => setNoteOpen(false)}/>

@@ -1,5 +1,6 @@
 """Fact status grounding regressions; provider replies are fixtures, not live AI."""
 
+import json
 import os
 import unittest
 from hashlib import sha256
@@ -78,7 +79,8 @@ class FactGroundingTest(unittest.TestCase):
 
 class FactGroundingProviderTest(unittest.IsolatedAsyncioTestCase):
     async def generate(self, mode, facts, reply, **kwargs):
-        create = AsyncMock(return_value=SimpleNamespace(output_text=reply))
+        output = json.dumps({"content": reply, "recommended_actions": []}, ensure_ascii=False) if mode == "BANK_INTERNAL" else reply
+        create = AsyncMock(return_value=SimpleNamespace(output_text=output, status="completed"))
         with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}), patch(
             "ai_api.app.domains.case_support.copilot_service.AsyncOpenAI",
             return_value=SimpleNamespace(responses=SimpleNamespace(create=create)),
@@ -191,6 +193,21 @@ class SourceAwareGroundingTest(unittest.TestCase):
         self.assertNotIn("unsupported_certainty", self.check("고객은 1,000만원을 송금했다고 진술했습니다. 담당자가 이 송금 내용을 확인했습니다.", [fact]).failed_criteria)
         self.assertIn("unsupported_certainty", self.check("담당자가 이 송금 내용을 확인했습니다.", [source_fact()]).failed_criteria)
 
+    def test_explicit_staff_attestation_is_near_confirmed_but_not_ledger_or_official_proof(self):
+        attested = source_fact(
+            "STAFF_OBSERVATION", "PROPOSED",
+            value={"status": "TRANSFERRED", "amount_krw": 5_000_000, "staff_attestation": "EXPLICIT_STAFF_CHECK"},
+            display_value="500만원 송금함",
+        )
+        supported = "담당자 확인 보고 기준으로 500만원 송금이 완료된 것으로 Case에 기록되어 있습니다."
+        self.assertNotIn("unsupported_certainty", self.check(supported, [attested]).failed_criteria)
+        for unsupported in (
+            "은행 거래기록에서 500만원 송금이 확인되었습니다.",
+            "500만원 송금이 공식 검증되었습니다.",
+        ):
+            with self.subTest(reply=unsupported):
+                self.assertIn("unsupported_certainty", self.check(unsupported, [attested]).failed_criteria)
+
     def test_reference_alone_never_authorizes_verification(self):
         fact = source_fact(evidence_refs=[{"type": "BANK_TRANSACTION", "id": "transaction"}])
         self.assertIn("unsupported_certainty", self.check("1,000만원 송금한 것이 공식 검증되었습니다.", [fact]).failed_criteria)
@@ -259,7 +276,8 @@ class SourceAwareGroundingTest(unittest.TestCase):
 
 class SourceAwareProviderTest(unittest.IsolatedAsyncioTestCase):
     async def generate(self, reply, *, error=None, context=None):
-        create = AsyncMock(return_value=SimpleNamespace(output_text=reply), side_effect=error)
+        output = json.dumps({"content": reply, "recommended_actions": []}, ensure_ascii=False)
+        create = AsyncMock(return_value=SimpleNamespace(output_text=output, status="completed"), side_effect=error)
         with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}), patch(
             "ai_api.app.domains.case_support.copilot_service.AsyncOpenAI",
             return_value=SimpleNamespace(responses=SimpleNamespace(create=create)),
@@ -274,13 +292,14 @@ class SourceAwareProviderTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.content, reply)
         self.assertIn('"source_kind":"CUSTOMER_STATEMENT"', args["input"])
         self.assertIn('"status":"PROPOSED"', args["input"])
-        for rule in ("실제 질문에 직접 답변", "CONFIRMED여도 BANK_RECORD가 아닙니다", "timestamp만으로", "Evidence 미전달은 거래 미발생이 아닙니다"):
+        for rule in ("실제 질문에 직접 답변하세요", "CONFIRMED여도 BANK_RECORD가 아닙니다", "timestamp만으로", "Evidence 미전달은 거래 미발생이 아닙니다"):
             self.assertIn(rule, args["instructions"])
 
     async def test_unsupported_objective_reply_is_not_delivered(self):
         result, _ = await self.generate("고객이 1,000만원 송금했습니다.")
-        self.assertIn("확정하기 어렵습니다", result.content)
-        self.assertNotIn("1,000만원", result.content)
+        self.assertIn("고객 진술", result.content)
+        self.assertIn("1,000만원", result.content)
+        self.assertIn("아니므로", result.content)
 
     async def test_proposed_ai_extraction_prompt_requires_uncertain_wording(self):
         fact = source_fact("AI_EXTRACTION")
@@ -292,10 +311,9 @@ class SourceAwareProviderTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result.content, reply)
         for rule in (
-            "질문이 '확인된 사항'을 묻더라도",
-            "현재 객관적으로 확인된 사항은 없습니다",
-            "AI 분석에서 제안된 정황",
-            "위 승인 근거가 있는 값 범위에서는",
+            "명확한 직원 입력은 별도 승인이나 승격을 기다리는 정보가 아닙니다",
+            "AI_EXTRACTION은 분석 정황이며 실제 수행 근거가 아닙니다",
+            "직원 보고는 즉시 활용하되 은행 원장 또는 공식기관 검증으로 바꾸지 마세요",
         ):
             self.assertIn(rule, args["instructions"])
 
@@ -315,12 +333,13 @@ class SourceAwareProviderTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("normalized_rules=staff_claim_without_confirmed_staff_source", log_output)
         self.assertNotIn(provider_output, log_output)
         self.assertNotIn(provider_output, result.content)
-        self.assertIn("추가 확인", result.content)
+        self.assertIn("은행 기록과 대조", result.content)
 
     async def test_bank_record_reply_delivered_without_promoting_customer_source(self):
         result, _ = await self.generate("은행 거래기록에서 1,000만원 이체 내역이 확인됩니다.",
             context=BankCopilotSourceContext(facts=[source_fact("BANK_RECORD", "CONFIRMED")]))
-        self.assertIn("거래기록", result.content)
+        self.assertIn("1,000만원", result.content)
+        self.assertIn("1,000만원 이체 내역", result.content)
 
     async def test_provider_failure_stays_error(self):
         with self.assertRaises(CaseCopilotProviderError):

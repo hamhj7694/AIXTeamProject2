@@ -34,7 +34,8 @@ export function readLatestAiRecommendations(caseId: string, messageId: string): 
     if (!raw) return [];
     const stored = JSON.parse(raw) as { messageId?: string; actions?: RecommendedChatAction[] };
     if (stored.messageId !== messageId || !Array.isArray(stored.actions)) return [];
-    return stored.actions.filter(isValidAction).filter((action, index, all) => all.findIndex((candidate) => candidate.action_key === action.action_key) === index).slice(0, 3);
+    return stored.actions.filter(isValidAction).filter((action, index, all) => all.findIndex((candidate) =>
+      candidate.action_key === action.action_key && candidate.target_type === action.target_type && candidate.target_id === action.target_id) === index).slice(0, 3);
   } catch {
     return [];
   }

@@ -100,7 +100,7 @@ def test_customer_reported_completion_is_not_rendered_as_verified() -> None:
     context["diagnosis"]["semantic_atoms"][0]["claim_status"] = "CUSTOMER_REPORTED"
     text = grounded_fact_text(fact.semantic_key, fact.display_value, fact.value, context=context, fact=fact)
     assert "확인된" not in text
-    with pytest.raises(ValueError, match="승격"):
+    with pytest.raises(ValueError, match="고객 진술 완료를 공식 확인 결과로 단정할 수 없습니다"):
         validate_grounded_fact(fact, "공식 확인된 송금 결과입니다.", context)
 
 
