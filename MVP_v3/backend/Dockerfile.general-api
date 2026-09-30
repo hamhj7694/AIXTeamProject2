@@ -12,6 +12,7 @@ RUN python -m pip install --upgrade pip && python -m pip install -r requirements
 COPY contracts ./contracts
 COPY request_trace.py ./request_trace.py
 COPY audio_upload.py ./audio_upload.py
+COPY ai_api ./ai_api
 COPY general_api ./general_api
 
 RUN useradd --create-home --uid 10001 appuser \
