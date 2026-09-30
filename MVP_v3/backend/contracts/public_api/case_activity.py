@@ -18,6 +18,19 @@ class PublicActivityModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class CustomerUiAction(PublicActivityModel):
+    action_key: Literal["OPEN_ACTIVE_QUESTION", "OPEN_RECOVERY_GUIDE"]
+    target_id: str | None = Field(default=None, max_length=100)
+
+    @model_validator(mode="after")
+    def validate_target(self):
+        if self.action_key == "OPEN_ACTIVE_QUESTION" and not self.target_id:
+            raise ValueError("question navigation requires a current question id")
+        if self.action_key == "OPEN_RECOVERY_GUIDE" and self.target_id is not None:
+            raise ValueError("recovery guide navigation does not accept a target id")
+        return self
+
+
 class PublicAttachmentResponse(PublicActivityModel):
     attachment_id: str
     case_id: str
@@ -79,6 +92,7 @@ class PublicMessageResponse(PublicActivityModel):
     attachments: list[PublicAttachmentResponse] = Field(default_factory=list)
     created_at: str
     recommended_actions: list[PublicRecommendedChatAction] = Field(default_factory=list)
+    customer_actions: list[CustomerUiAction] = Field(default_factory=list, max_length=2)
     source_revision: int | None = None
     mutation_results: list[dict[str, Any]] = Field(default_factory=list)
 
@@ -117,7 +131,25 @@ def to_public_message(record: dict[str, Any]) -> PublicMessageResponse:
         "CUSTOMER": "고객", "BANK_STAFF": "은행 담당자", "CUSTOMER_AGENT": "Customer Agent",
         "BANK_AGENT": "CaseCopilot", "VERIFICATION": "기관 검증 담당자", "SYSTEM": "시스템",
     }.get(actor_type, actor_type)
-    metadata = record.get("ai_metadata") or {}
+    metadata = record.get("ai_metadata")
+    if not isinstance(metadata, dict):
+        metadata = {}
+    customer_actions: list[dict[str, Any]] = []
+    if (
+        actor_type == "CUSTOMER_AGENT"
+        and record.get("visibility") == "CUSTOMER"
+        and record.get("audience") == "CUSTOMER"
+        and record.get("channel") == "CUSTOMER"
+        and record.get("message_kind") == "AI_RESPONSE"
+    ):
+        candidate_actions = metadata.get("customer_actions", [])
+        if not isinstance(candidate_actions, list):
+            candidate_actions = []
+        for item in candidate_actions[:2]:
+            try:
+                customer_actions.append(CustomerUiAction.model_validate(item).model_dump())
+            except (TypeError, ValueError):
+                continue
     if record.get("visibility") not in {"BANK_INTERNAL", "AI_PRIVATE"} or actor_type != "BANK_AGENT":
         metadata = {}
     return PublicMessageResponse.model_validate({
@@ -138,6 +170,7 @@ def to_public_message(record: dict[str, Any]) -> PublicMessageResponse:
         "attachments": [to_public_attachment(item).model_dump(mode="json") for item in record.get("attachments", [])],
         "created_at": record["created_at"],
         "recommended_actions": metadata.get("recommended_actions", []),
+        "customer_actions": customer_actions,
         "source_revision": metadata.get("source_revision"),
         "mutation_results": metadata.get("mutation_results", []),
     })

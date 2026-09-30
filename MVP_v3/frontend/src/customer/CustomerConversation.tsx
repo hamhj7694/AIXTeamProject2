@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { AlertTriangle, BadgeCheck, Bookmark, Bot, CheckCircle2, ShieldCheck, UserRound } from 'lucide-react';
 import { CURRENT_CUSTOMER_USER } from '../api/cases';
-import type { CaseBundle, CaseMessage, CustomerQuestion, CustomerVerificationResult, StructuredQuestionAnswer } from '../api/types';
+import type { CaseBundle, CaseMessage, CustomerQuestion, CustomerUiAction, CustomerVerificationResult, StructuredQuestionAnswer } from '../api/types';
 import { formatClock } from '../presentation';
 import type { CustomerBookmark } from './bookmarks';
 import { CustomerQuestionCard } from './CustomerQuestionCard';
@@ -23,20 +23,21 @@ interface Props {
   onToggleBookmark: (bookmark: CustomerBookmark) => void;
   onRetryMessage: (message: CaseMessage) => void;
   onDismissMessage: (message: CaseMessage) => void;
+  onCustomerAction: (action: CustomerUiAction) => void;
 }
 
 const BookmarkButton: React.FC<{ entry: CustomerTimelineEntry; active: boolean; label: string; summary: string; onToggle: Props['onToggleBookmark'] }> = ({ entry, active, label, summary, onToggle }) => <button type="button" className={`entry-bookmark ${active ? 'active' : ''}`} aria-label={active ? '북마크 해제' : '북마크 추가'} aria-pressed={active} onClick={() => onToggle({ entryId: entry.id, label, summary, createdAt: entry.occurredAt })}><Bookmark size={14} fill={active ? 'currentColor' : 'none'}/></button>;
 
-const MessageEntry: React.FC<{ entry: CustomerTimelineEntry; message: CaseMessage; active: boolean; onToggle: Props['onToggleBookmark']; onRetry: Props['onRetryMessage']; onDismiss: Props['onDismissMessage'] }> = ({ entry, message, active, onToggle, onRetry, onDismiss }) => {
+const MessageEntry: React.FC<{ entry: CustomerTimelineEntry; message: CaseMessage; active: boolean; onToggle: Props['onToggleBookmark']; onRetry: Props['onRetryMessage']; onDismiss: Props['onDismissMessage']; onCustomerAction: Props['onCustomerAction'] }> = ({ entry, message, active, onToggle, onRetry, onDismiss, onCustomerAction }) => {
   const mine = message.actor_user_id === CURRENT_CUSTOMER_USER.user_id || message.actor_type === 'CUSTOMER';
   const ai = message.actor_type === 'CUSTOMER_AGENT' || message.message_kind === 'AI_RESPONSE';
   return <article id={entry.id} className={`customer-message-row ${mine ? 'mine' : ''}`}>
     <span className={`customer-avatar ${mine ? 'customer' : ai ? 'ai' : 'bank'}`}>{mine ? <UserRound size={17}/> : ai ? <Bot size={17}/> : <ShieldCheck size={17}/>}</span>
-    <div className="customer-message-wrap"><div className="customer-entry-meta"><b>{mine ? '나' : message.actor_display_name || (ai ? '안전 상담 AI' : '은행 담당자')}</b><BookmarkButton entry={entry} active={active} label={mine ? '내 메시지' : ai ? 'AI 안내' : '은행 안내'} summary={message.content || '메시지'} onToggle={onToggle}/></div><div className="customer-message-bubble"><SafeMarkdown content={message.content}/></div>{message.delivery_state === 'FAILED' && <div className="message-delivery-error"><span>전송되지 않았습니다.</span><button type="button" onClick={() => onRetry(message)}>다시 전송</button><button type="button" onClick={() => onDismiss(message)}>지우기</button></div>}<time className={message.delivery_state ? message.delivery_state.toLowerCase() : undefined}>{message.delivery_state === 'SENDING' ? '전송 중…' : message.delivery_state === 'FAILED' ? '전송 실패' : formatClock(message.created_at)}</time></div>
+    <div className="customer-message-wrap"><div className="customer-entry-meta"><b>{mine ? '나' : message.actor_display_name || (ai ? '안전 상담 AI' : '은행 담당자')}</b><BookmarkButton entry={entry} active={active} label={mine ? '내 메시지' : ai ? 'AI 안내' : '은행 안내'} summary={message.content || '메시지'} onToggle={onToggle}/></div><div className="customer-message-bubble"><SafeMarkdown content={message.content}/></div>{ai && message.customer_actions?.length ? <div className="customer-message-actions" aria-label="AI 답변 관련 화면 열기">{message.customer_actions.map((action) => <button key={`${action.action_key}:${action.target_id ?? ''}`} type="button" onClick={() => onCustomerAction(action)}>{action.action_key === 'OPEN_ACTIVE_QUESTION' ? '현재 확인 질문 보기' : '피해구제 안내 보기'}</button>)}</div> : null}{message.delivery_state === 'FAILED' && <div className="message-delivery-error"><span>전송되지 않았습니다.</span><button type="button" onClick={() => onRetry(message)}>다시 전송</button><button type="button" onClick={() => onDismiss(message)}>지우기</button></div>}<time className={message.delivery_state ? message.delivery_state.toLowerCase() : undefined}>{message.delivery_state === 'SENDING' ? '전송 중…' : message.delivery_state === 'FAILED' ? '전송 실패' : formatClock(message.created_at)}</time></div>
   </article>;
 };
 
-export const CustomerConversation: React.FC<Props> = ({ bundle, busy, aiBusy, bookmarkedIds, onAnswer, onRecoveryRequest, onToggleBookmark, onRetryMessage, onDismissMessage }) => {
+export const CustomerConversation: React.FC<Props> = ({ bundle, busy, aiBusy, bookmarkedIds, onAnswer, onRecoveryRequest, onToggleBookmark, onRetryMessage, onDismissMessage, onCustomerAction }) => {
   const entries = useMemo(() => buildCustomerTimeline(bundle), [bundle]);
   const latestEntry = entries[entries.length - 1];
   const latestEntryKey = latestEntry ? `${latestEntry.id}:${latestEntry.occurredAt}` : 'empty';
@@ -46,10 +47,10 @@ export const CustomerConversation: React.FC<Props> = ({ bundle, busy, aiBusy, bo
 
   const renderEntry = (entry: CustomerTimelineEntry) => {
     const active = bookmarkedIds.has(entry.id);
-    if (entry.kind === 'MESSAGE') return <MessageEntry key={entry.id} entry={entry} message={entry.data as CaseMessage} active={active} onToggle={onToggleBookmark} onRetry={onRetryMessage} onDismiss={onDismissMessage}/>;
+    if (entry.kind === 'MESSAGE') return <MessageEntry key={entry.id} entry={entry} message={entry.data as CaseMessage} active={active} onToggle={onToggleBookmark} onRetry={onRetryMessage} onDismiss={onDismissMessage} onCustomerAction={onCustomerAction}/>;
     if (entry.kind === 'QUESTION') {
       const question = entry.data as CustomerQuestion;
-      return <div id={entry.id} key={entry.id} className="customer-card-entry" data-active-question="true"><div className="customer-card-bookmark"><BookmarkButton entry={entry} active={active} label="확인 질문" summary={question.question_text} onToggle={onToggleBookmark}/></div><div id="active-customer-question"><CustomerQuestionCard question={question} position={answeredCount + 1} total={totalQuestions} busy={busy} onAnswer={(answer) => onAnswer(question, answer)}/></div><time>{formatClock(entry.occurredAt)}</time></div>;
+      return <div id={`customer-question-${question.question_id}`} data-question-id={question.question_id} tabIndex={-1} key={entry.id} className="customer-card-entry" data-active-question="true"><div className="customer-card-bookmark"><BookmarkButton entry={entry} active={active} label="확인 질문" summary={question.question_text} onToggle={onToggleBookmark}/></div><div id="active-customer-question"><CustomerQuestionCard question={question} position={answeredCount + 1} total={totalQuestions} busy={busy} onAnswer={(answer) => onAnswer(question, answer)}/></div><time>{formatClock(entry.occurredAt)}</time></div>;
     }
     if (entry.kind === 'ANSWER') {
       const question = entry.data as CustomerQuestion;

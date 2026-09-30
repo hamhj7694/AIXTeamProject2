@@ -7,9 +7,6 @@ import json
 import logging
 import os
 import re
-import time
-from collections import defaultdict, deque
-
 from openai import AsyncOpenAI, AuthenticationError, RateLimitError
 
 from contracts.ai_internal.case_copilot import CaseCopilotInput, CaseCopilotOutput, RecommendedChatAction, CopilotTaskIntent
@@ -17,6 +14,19 @@ from .bank_policy import bank_instructions
 
 from .copilot_quality import CopilotQualityEvaluator
 from .copilot_accumulation import asks_total, review_case_transfer_facts, review_transfers
+from .copilot_errors import (
+    CaseCopilotAuthenticationError,
+    CaseCopilotProviderError,
+    CaseCopilotProviderUnavailableError,
+    CaseCopilotQuotaError,
+    CaseCopilotResponseError,
+)
+from .customer_support_service import (
+    CustomerSupportCallBudget,
+    CustomerSupportService,
+    _customer_support_budget,
+    _customer_support_concurrency,
+)
 
 logger = logging.getLogger(__name__)
 DEFAULT_BANK_COPILOT_OUTPUT_TOKENS = 2_000
@@ -102,56 +112,6 @@ def _human_workflow_status(status: str) -> str:
     }.get(status.upper(), "진행 중")
 
 
-class CaseCopilotQuotaError(RuntimeError):
-    pass
-
-
-class CaseCopilotAuthenticationError(RuntimeError):
-    pass
-
-
-class CaseCopilotProviderError(RuntimeError):
-    pass
-
-
-class CaseCopilotProviderUnavailableError(CaseCopilotProviderError):
-    """The upstream model provider could not be reached."""
-
-    pass
-
-
-class CaseCopilotResponseError(CaseCopilotProviderError):
-    """The provider returned data that did not satisfy our contract."""
-
-    pass
-
-
-class CustomerSupportCallBudget:
-    """Per-process hard stop; production also needs a shared Redis/DB quota."""
-
-    def __init__(self) -> None:
-        self._calls: dict[str, deque[float]] = defaultdict(deque)
-        self._lock = asyncio.Lock()
-
-    async def reserve(self, case_id: str) -> None:
-        per_minute = max(1, int(os.getenv("CUSTOMER_AI_MAX_CALLS_PER_MINUTE", "6")))
-        per_day = max(per_minute, int(os.getenv("CUSTOMER_AI_MAX_CALLS_PER_DAY", "40")))
-        now = time.monotonic()
-        async with self._lock:
-            calls = self._calls[case_id]
-            while calls and now - calls[0] >= 86_400:
-                calls.popleft()
-            if len(calls) >= per_day:
-                raise CaseCopilotQuotaError("이 Case의 오늘 고객 AI 상담 한도에 도달했습니다. 은행 담당자에게 연결해 주세요.")
-            recent = sum(1 for called_at in calls if now - called_at < 60)
-            if recent >= per_minute:
-                raise CaseCopilotQuotaError("AI 상담 요청이 연속으로 접수되었습니다. 잠시 후 다시 시도해 주세요.")
-            calls.append(now)
-
-
-_customer_support_budget = CustomerSupportCallBudget()
-_customer_support_concurrency = asyncio.Semaphore(max(1, int(os.getenv("CUSTOMER_AI_MAX_CONCURRENCY", "2"))))
-
 _RECOMMENDED_ACTION_KEYS = (
     "CUSTOMER_QUESTION", "TRANSACTION_LOOKUP", "OFFICIAL_VERIFICATION",
     "RESPONSE_ACTION", "DRAFT_REPLY",
@@ -163,7 +123,7 @@ COPILOT_REPLY_SCHEMA = {
         "content": {"type": "string"},
         "recommended_actions": {
             "type": "array",
-            "maxItems": 1,
+            "maxItems": 3,
             "items": {
                 "type": "object",
                 "properties": {
@@ -203,7 +163,7 @@ def normalize_recommended_actions(raw: object, assistant_mode: str) -> list[Reco
     if assistant_mode != "BANK_INTERNAL" or not isinstance(raw, list):
         return []
     normalized: list[RecommendedChatAction] = []
-    seen: set[tuple[str, str | None, str | None]] = set()
+    seen: set[str] = set()
     preference = {"CUSTOMER_QUESTION": 0, "OFFICIAL_VERIFICATION": 1, "RESPONSE_ACTION": 2,
                   "DRAFT_REPLY": 3, "TRANSACTION_LOOKUP": 4}
     for candidate in raw[:3]:
@@ -211,19 +171,20 @@ def normalize_recommended_actions(raw: object, assistant_mode: str) -> list[Reco
             action = RecommendedChatAction.model_validate(candidate)
         except Exception:
             continue
-        identity = (action.action_key, action.target_type, action.target_id)
-        if identity in seen:
+        if action.action_key in seen:
             continue
         if action.kind == "TOOL" and action.target_channel != "TEAM":
+            continue
+        if action.action_key == "TRANSACTION_LOOKUP":
             continue
         if action.kind == "REPLY_DRAFT":
             if action.action_key != "DRAFT_REPLY" or action.target_channel != "CUSTOMER" or not action.draft_text or not action.draft_text.strip():
                 continue
         elif action.action_key == "DRAFT_REPLY":
             continue
-        seen.add(identity)
+        seen.add(action.action_key)
         normalized.append(action)
-    return sorted(normalized, key=lambda action: preference.get(action.action_key, 99))[:1]
+    return sorted(normalized, key=lambda action: preference.get(action.action_key, 99))[:3]
 
 
 def _asks_about_primary_assignee(prompt: str) -> bool:
@@ -595,6 +556,8 @@ class CaseCopilotService:
     async def generate(self, request: CaseCopilotInput, *, _repair_reason: str | None = None) -> CaseCopilotOutput:
         if len(request.prompt.strip()) > int(os.getenv("CASE_COPILOT_MAX_INPUT_CHARS", "6000")):
             raise ValueError("AI 요청은 6,000자 이하로 입력해 주세요.")
+        if request.assistant_mode == "CUSTOMER_SUPPORT":
+            return await CustomerSupportService().generate(request)
         guidance = _service_question_guidance(request)
         if guidance is not None:
             return guidance
@@ -710,7 +673,7 @@ class CaseCopilotService:
             instructions += (
                 "\n\nReturn the answer as the JSON object required by the response schema. "
                 "recommended_actions must contain at most three directly relevant next actions; use an empty array for a purely explanatory answer. "
-                "Use only CUSTOMER_QUESTION, TRANSACTION_LOOKUP, OFFICIAL_VERIFICATION, RESPONSE_ACTION, or DRAFT_REPLY. "
+                "Use CUSTOMER_QUESTION, OFFICIAL_VERIFICATION, RESPONSE_ACTION, or DRAFT_REPLY when relevant. Never recommend TRANSACTION_LOOKUP because it uses demo data. "
                 "TOOL actions target TEAM. DRAFT_REPLY targets CUSTOMER and must include a safe editable draft_text; never send it automatically. "
                 "Do not invent facts, institutions, case numbers, contacts, or legal conclusions."
             )

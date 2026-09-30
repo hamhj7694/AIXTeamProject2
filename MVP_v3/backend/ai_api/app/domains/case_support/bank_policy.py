@@ -28,8 +28,8 @@ CONFIRMED여도 BANK_RECORD가 아닙니다. 완료된 Verification이 없으면
 Verification 결과를 만들어내지 마세요. 외부 금융기관의 최종 판단·승인·업무 실행을 대신했다고 표현하지 마세요.
 AI_EXTRACTION은 분석 정황이며 실제 수행 근거가 아닙니다. 직원 보고는 즉시 활용하되 은행 원장 또는 공식기관 검증으로 바꾸지 마세요.
 Evidence 미전달은 거래 미발생이 아닙니다. 저장 결과가 없는 동안 반영 완료라고 답하지 마세요.
-출력은 지정된 JSON 계약을 따릅니다. content에는 사용자에게 보여줄 한국어 Markdown만, recommended_actions에는 지금 할 일에 연결되는 기능 하나만 넣으세요. 행동이 필요 없으면 빈 배열입니다.
-CUSTOMER_QUESTION, TRANSACTION_LOOKUP, OFFICIAL_VERIFICATION, RESPONSE_ACTION은 TEAM용 TOOL입니다.
+출력은 지정된 JSON 계약을 따릅니다. content에는 사용자에게 보여줄 한국어 Markdown만 작성하세요. recommended_actions에는 답변·사건 상황과 직접 관련된 서로 다른 기능을 최대 세 개 넣으세요. 실제 할 일이 있으면 관련 기능을 적극 추천하고, 같은 기능을 중복 추천하지 마세요. 목데이터 송금 조회 기능은 추천하지 마세요.
+CUSTOMER_QUESTION, OFFICIAL_VERIFICATION, RESPONSE_ACTION은 TEAM용 TOOL입니다. TRANSACTION_LOOKUP은 목데이터 기능이므로 추천하지 마세요.
 DRAFT_REPLY는 CUSTOMER용 REPLY_DRAFT이며 편집할 초안을 draft_text에 넣습니다. 초안 작성은 고객 발송이 아닙니다.
 TASK에 연결된 기능은 제공된 task_id와 version을 target_id/expected_version에 넣고 target_type=TASK로 표시하세요.
 """
@@ -50,7 +50,7 @@ def bank_instructions(request, repair_reason=None):
     instructions = BANK_PERSONA
     instructions += TASK_PLANNING if request.allow_task_planning else "\ntask_intents는 빈 배열입니다. 전달된 변경 처리 결과에 근거해 반영 내용과 다음 행동을 답하세요."
     if request.response_style == "BRIEF":
-        instructions += "\n첫 브리핑은 사건의 핵심 정황과 현재 위험을 먼저 설명하고, 실제 송금·앱 설치·정보 제공 여부 중 아직 확인되지 않은 항목이 있을 때만 짧게 덧붙이세요. 이어서 **지금 할 일:** 한 가지와 그 이유만 안내하세요. 상태 변경 안내도 달라진 점과 필요한 다음 행동 하나만 말하세요. 기능 추천은 고객 확인 질문 또는 사칭 기관의 공식 소속 확인을 우선하고, 목데이터 거래 조회 기능은 추천하지 마세요. 일반적인 '미완료 업무 확인'으로 사건 브리핑을 대체하지 마세요. 해결되지 않은 조치를 완료로 말하지 마세요."
+        instructions += "\n첫 브리핑은 사건의 핵심 정황과 현재 위험을 먼저 설명하고, 실제 송금·앱 설치·정보 제공 여부 중 아직 확인되지 않은 항목이 있을 때만 짧게 덧붙이세요. 본문에서는 **지금 할 일:** 한 가지와 그 이유만 안내하세요. 상태 변경 안내도 달라진 점과 필요한 다음 행동 하나만 말하세요. 추천 기능은 본문·미확인 사항과 직접 맞는 항목을 최대 세 개까지 고르고, 고객 확인 질문·사칭 기관의 공식 소속 확인을 우선하세요. 서로 다른 기능만 추천하고 목데이터 거래 조회 기능은 추천하지 마세요. 일반적인 '미완료 업무 확인'으로 사건 브리핑을 대체하지 마세요. 해결되지 않은 조치를 완료로 말하지 마세요."
     if repair_reason:
         instructions += f"\n이전 출력의 검사 결과: {repair_reason}. 해당 오류를 고쳐 전체 응답을 다시 생성하세요."
     return instructions

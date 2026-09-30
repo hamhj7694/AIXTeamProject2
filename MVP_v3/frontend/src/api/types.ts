@@ -355,6 +355,7 @@ export interface CaseMessage {
   client_request_id?: string | null;
   attachments: Attachment[];
   created_at: string;
+  customer_actions?: CustomerUiAction[];
   /** Frontend-only delivery state. API responses omit this field. */
   delivery_state?: 'SENDING' | 'FAILED';
   delivery_error?: string | null;
@@ -364,6 +365,10 @@ export interface CaseMessage {
   source_revision?: number | null;
   mutation_results?: Array<Record<string, unknown>>;
 }
+
+export type CustomerUiAction =
+  | { action_key: 'OPEN_ACTIVE_QUESTION'; target_id: string }
+  | { action_key: 'OPEN_RECOVERY_GUIDE'; target_id?: null };
 
 export interface CaseEvent {
   event_id: number;

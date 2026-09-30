@@ -306,8 +306,13 @@ class CopilotRoleBoundaryTest(unittest.IsolatedAsyncioTestCase):
             incomplete_details=SimpleNamespace(reason="max_output_tokens") if status == "incomplete" else None,
         ))
         client = SimpleNamespace(responses=SimpleNamespace(create=create))
+        provider_module = (
+            "ai_api.app.domains.case_support.customer_support_service.AsyncOpenAI"
+            if request.assistant_mode == "CUSTOMER_SUPPORT"
+            else "ai_api.app.domains.case_support.copilot_service.AsyncOpenAI"
+        )
         with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}, clear=False), \
-             patch("ai_api.app.domains.case_support.copilot_service.AsyncOpenAI", return_value=client):
+             patch(provider_module, return_value=client):
             result = await CaseCopilotService().generate(request)
         return result, create.await_args.kwargs
 
@@ -344,7 +349,7 @@ class CopilotRoleBoundaryTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("**지금 할 일:**", result.content)
         self.assertIn("실제 송금 여부 확인", result.content)
         self.assertNotIn("상대 기관 소속 공식 확인", result.content)
-        self.assertEqual(len(result.recommended_actions), 1)
+        self.assertNotIn("TRANSACTION_LOOKUP", [item.action_key for item in result.recommended_actions])
         self.assertNotIn("현재 확인된 근거만으로는", result.content)
 
     async def test_brief_overlong_provider_reply_is_replaced_with_one_step(self) -> None:
@@ -357,7 +362,7 @@ class CopilotRoleBoundaryTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("**현 상황:**", result.content)
         self.assertIn("**지금 할 일:**", result.content)
         self.assertNotIn("기관 소속 확인", result.content)
-        self.assertEqual(len(result.recommended_actions), 1)
+        self.assertNotIn("TRANSACTION_LOOKUP", [item.action_key for item in result.recommended_actions])
 
     async def test_provider_can_create_only_one_new_task_per_reply(self) -> None:
         request = CaseCopilotInput(
@@ -384,9 +389,9 @@ class CopilotRoleBoundaryTest(unittest.IsolatedAsyncioTestCase):
         result, _ = await self._provider_call(request, "제가 최종 결정했습니다.")
         self.assertIn("고객의 실제 송금 여부 확인", result.content)
         self.assertNotIn("P0:", result.content)
-        self.assertTrue(result.recommended_actions)
+        self.assertNotIn("TRANSACTION_LOOKUP", [item.action_key for item in result.recommended_actions])
         self.assertNotIn("검찰 사칭 주장 공식 확인", result.content)
-        self.assertEqual(len(result.recommended_actions), 1)
+        self.assertNotIn("TRANSACTION_LOOKUP", [item.action_key for item in result.recommended_actions])
         self.assertNotIn("현재 확인된 근거만으로는", result.content)
 
     async def test_customer_provider_receives_only_customer_context_sections(self) -> None:
@@ -394,30 +399,21 @@ class CopilotRoleBoundaryTest(unittest.IsolatedAsyncioTestCase):
             case_id="CASE-PRIVATE-ID",
             prompt="현재 공개된 확인 내용을 알려 주세요.",
             assistant_mode="CUSTOMER_SUPPORT",
-            case_summary="직원 전용 사건 요약",
-            primary_assignee="내부 담당자 홍길동",
-            participants=["내부 검토자"],
             known_facts=["고객 답변: 아직 송금하지 않음"],
-            staff_context=["직원 메모: 고위험"],
             retrieved_context=["고객 공개 대화: 송금하지 않음"],
             recent_conversation=["고객: 아직 송금하지 않았어요"],
-            pending_actions=["내부 Task: 계좌 추적"],
             customer_progress=["담당자 확인 대기"],
             published_verification_results=["공식 확인 결과: 기관 번호 불일치"],
             attachment_summaries=["고객 공개 통화기록.txt"],
-            unresolved_verifications=["직원용 미완료 검증"],
         ))
 
         provider_input = args["input"]
         self.assertIn("고객 답변: 아직 송금하지 않음", provider_input)
         self.assertIn("공식 확인 결과: 기관 번호 불일치", provider_input)
         self.assertIn("고객 공개 통화기록.txt", provider_input)
-        for private_value in (
-            "CASE-PRIVATE-ID", "직원 전용 사건 요약", "내부 담당자 홍길동", "내부 검토자",
-            "직원 메모: 고위험", "내부 Task: 계좌 추적", "직원용 미완료 검증",
-        ):
+        for private_value in ("CASE-PRIVATE-ID", "case_id", "staff_context", "pending_actions", "primary_assignee"):
             self.assertNotIn(private_value, provider_input)
-        self.assertIn("쉽고 차분한 한국어", args["instructions"])
+        self.assertIn("쉬운 한국어", args["instructions"])
 
     async def test_bank_provider_receives_internal_context_and_role_rules(self) -> None:
         _, args = await self._provider_call(CaseCopilotInput(
@@ -450,10 +446,9 @@ class CopilotRoleBoundaryTest(unittest.IsolatedAsyncioTestCase):
             "case_id": "CASE-SAME",
             "prompt": "현재 상황을 설명해 주세요.",
             "known_facts": ["고객 진술: 송금 여부 미확인"],
-            "staff_context": ["직원 메모: 추가 검토 필요"],
         }
         _, customer_args = await self._provider_call(CaseCopilotInput(**base, assistant_mode="CUSTOMER_SUPPORT"))
-        _, bank_args = await self._provider_call(CaseCopilotInput(**base, assistant_mode="BANK_INTERNAL"))
+        _, bank_args = await self._provider_call(CaseCopilotInput(**base, assistant_mode="BANK_INTERNAL", staff_context=["직원 메모: 추가 검토 필요"]))
 
         self.assertNotEqual(customer_args["instructions"], bank_args["instructions"])
         self.assertNotEqual(customer_args["input"], bank_args["input"])
@@ -469,7 +464,7 @@ class CopilotRoleBoundaryTest(unittest.IsolatedAsyncioTestCase):
             ),
             output="OTP 인증번호를 입력해 주세요.",
         )
-        self.assertIn("추가 확인", result.content)
+        self.assertIn("현재 기록만으로는", result.content)
         self.assertNotIn("OTP 인증번호를 입력", result.content)
 
     async def test_runtime_logs_only_blocking_criterion_identifier(self) -> None:

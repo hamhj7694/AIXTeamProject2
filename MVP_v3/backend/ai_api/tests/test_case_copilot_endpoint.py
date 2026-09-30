@@ -90,7 +90,6 @@ class CaseCopilotEndpointTest(unittest.TestCase):
             response = self.client.post("/ai/case-copilot/replies", json={
                 "case_id": "VP-1",
                 "prompt": "이미 송금했어요. 어떻게 해야 하나요?",
-                "transfer_status": "YES",
                 "assistant_mode": "CUSTOMER_SUPPORT",
             })
 

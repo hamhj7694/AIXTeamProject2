@@ -83,6 +83,7 @@ class CollaborationEndpointTest(unittest.TestCase):
         self.assertEqual(payload["requester_role"], "BANK_STAFF")
 
     def test_customer_ai_reply_uses_customer_safe_mode_and_public_channel(self) -> None:
+        self.repository.get.return_value["mode"] = "RECOVERY"
         self.repository.list_messages.return_value = [{
             "actor_display_name": "고객", "content": "이미 개인정보를 제공했어요.",
             "visibility": "CUSTOMER", "channel": "CUSTOMER",
@@ -90,7 +91,7 @@ class CollaborationEndpointTest(unittest.TestCase):
         self.repository.list_customer_questions.return_value = [{
             "question_text": "개인정보를 제공했나요?", "answer_text": "예", "status": "ANSWERED",
         }, {
-            'case_id': 'CASE-1', 'question_text': '인증번호를 제공하셨나요?', 'status': 'ASKED',
+            'case_id': 'CASE-1', 'question_id': 'question-current', 'question_text': '인증번호를 제공하셨나요?', 'status': 'ASKED',
             'customer_explanation': '인증정보 제공 여부만 확인합니다.', 'options': ['제공함', '제공하지 않음'],
             'reason': '비공개 내부 판단', 'requested_by': '비공개 직원 식별자',
         }, {
@@ -104,6 +105,10 @@ class CollaborationEndpointTest(unittest.TestCase):
             "content": "추가 정보 제공을 멈추고 공식 은행 고객센터에 연락해 주세요.",
             "channel": "CUSTOMER", "audience": "CUSTOMER", "visibility": "CUSTOMER",
             "message_kind": "AI_RESPONSE", "mentions": [], "attachments": [],
+            "ai_metadata": {"customer_actions": [
+                {"action_key": "OPEN_ACTIVE_QUESTION", "target_id": "question-current"},
+                {"action_key": "OPEN_RECOVERY_GUIDE"},
+            ]},
             "created_at": "2026-09-02T01:00:00+00:00",
         }
 
@@ -114,16 +119,50 @@ class CollaborationEndpointTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.json()["channel"], "CUSTOMER")
+        self.assertEqual(response.json()["customer_actions"], [
+            {"action_key": "OPEN_ACTIVE_QUESTION", "target_id": "question-current"},
+            {"action_key": "OPEN_RECOVERY_GUIDE", "target_id": None},
+        ])
         payload = general_main.service.ai_client.generate_case_copilot_reply.await_args.args[0]
         self.assertEqual(payload["assistant_mode"], "CUSTOMER_SUPPORT")
-        self.assertEqual(payload["pending_actions"], [])
-        self.assertEqual(payload["unresolved_verifications"], [])
+        self.assertEqual(payload["customer_ui_capabilities"], ["OPEN_ACTIVE_QUESTION", "OPEN_RECOVERY_GUIDE"])
+        for internal_field in ("pending_actions", "unresolved_verifications", "primary_assignee", "workflow_status", "fraud_type", "transfer_status"):
+            self.assertNotIn(internal_field, payload)
         self.assertEqual(payload['customer_service_questions'], [{
             'source': 'CSR_QUESTION_CARD', 'status': 'ASKED', 'question_text': '인증번호를 제공하셨나요?',
             'customer_explanation': '인증정보 제공 여부만 확인합니다.', 'options': ['제공함', '제공하지 않음'],
         }])
         saved = self.repository.append_message.await_args.args[1]
         self.assertEqual(saved["reply_to_message_id"], "msg-customer-1")
+        self.assertEqual(saved["ai_metadata"]["customer_actions"], [
+            {"action_key": "OPEN_ACTIVE_QUESTION", "target_id": "question-current"},
+            {"action_key": "OPEN_RECOVERY_GUIDE"},
+        ])
+
+    def test_customer_ai_reply_has_no_navigation_actions_when_no_controls_are_available(self) -> None:
+        self.repository.get.return_value["mode"] = "PREVENT"
+        self.repository.list_customer_questions.return_value = []
+        self.repository.append_message.return_value = {
+            "message_id": "msg-customer-ai-empty", "case_id": "CASE-1", "actor_type": "CUSTOMER_AGENT",
+            "actor_user_id": "customer-agent", "actor_display_name": "안전 상담 AI", "actor_role": "CUSTOMER_AGENT",
+            "content": "현재 공개 기록에서는 추가 확인이 필요합니다.",
+            "channel": "CUSTOMER", "audience": "CUSTOMER", "visibility": "CUSTOMER",
+            "message_kind": "AI_RESPONSE", "mentions": [], "attachments": [],
+            "created_at": "2026-09-02T01:00:00+00:00",
+            "ai_metadata": {"customer_actions": []},
+        }
+
+        response = self.client.post("/api/cases/CASE-1/ai/customer-replies", json={
+            "prompt": "현재 상황을 알려 주세요.", "requester_user_id": "customer-1",
+            "requester_display_name": "고객", "reply_to_message_id": "msg-customer-1",
+        })
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["customer_actions"], [])
+        payload = general_main.service.ai_client.generate_case_copilot_reply.await_args.args[0]
+        self.assertEqual(payload["customer_ui_capabilities"], [])
+        saved = self.repository.append_message.await_args.args[1]
+        self.assertEqual(saved["ai_metadata"]["customer_actions"], [])
 
     def test_remove_member_marks_member_removed_and_rejects_current_user(self) -> None:
         response = self.client.delete("/api/cases/CASE-1/members/staff-reviewer")

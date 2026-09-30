@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 import general_api.app.main as general_main
 from contracts.ai_internal.context_fact_extraction import ContextFactExtractionOutput
+from contracts.public_api.case_activity import to_public_message
 from contracts.public_api.case_workflow import question_option_items, to_public_customer_question_view
 
 
@@ -72,6 +73,56 @@ class CaseActivityEndpointTest(unittest.TestCase):
         self.ai_report_patch.stop()
         self.client.close()
         self.admin_env.stop()
+
+    def test_customer_agent_exposes_only_allowlisted_customer_navigation_actions(self) -> None:
+        message = to_public_message({
+            "message_id": "customer-ai", "case_id": "VP-ACTIVITY", "actor_type": "CUSTOMER_AGENT",
+            "content": "답변입니다.", "channel": "CUSTOMER", "audience": "CUSTOMER",
+            "visibility": "CUSTOMER", "message_kind": "AI_RESPONSE", "mentions": [],
+            "created_at": "2026-09-02T01:00:00+00:00",
+            "ai_metadata": {
+                "customer_actions": [
+                    {"action_key": "OPEN_ACTIVE_QUESTION", "target_id": "question-1"},
+                    {"action_key": "OPEN_RECOVERY_GUIDE"},
+                    {"action_key": "OPEN_STAFF_PANEL", "target_id": "internal"},
+                ],
+                "recommended_actions": [{"action_key": "OFFICIAL_VERIFICATION"}],
+                "source_revision": 123,
+            },
+        })
+
+        payload = message.model_dump(mode="json")
+        self.assertEqual(payload["customer_actions"], [
+            {"action_key": "OPEN_ACTIVE_QUESTION", "target_id": "question-1"},
+            {"action_key": "OPEN_RECOVERY_GUIDE", "target_id": None},
+        ])
+        self.assertEqual(payload["recommended_actions"], [])
+        self.assertNotIn("ai_metadata", payload)
+        self.assertIsNone(payload["source_revision"])
+
+    def test_customer_navigation_actions_are_not_exposed_on_other_messages(self) -> None:
+        for actor_type, visibility, kind in (
+            ("CUSTOMER", "CUSTOMER", "CHAT"),
+            ("CUSTOMER_AGENT", "BANK_INTERNAL", "AI_RESPONSE"),
+            ("BANK_AGENT", "BANK_INTERNAL", "AI_RESPONSE"),
+        ):
+            with self.subTest(actor_type=actor_type, visibility=visibility):
+                message = to_public_message({
+                    "message_id": "private", "case_id": "VP-ACTIVITY", "actor_type": actor_type,
+                    "content": "안내", "channel": "CUSTOMER", "audience": visibility,
+                    "visibility": visibility, "message_kind": kind, "mentions": [],
+                    "created_at": "2026-09-02T01:00:00+00:00",
+                    "ai_metadata": {"customer_actions": [{"action_key": "OPEN_RECOVERY_GUIDE"}]},
+                })
+                self.assertEqual(message.customer_actions, [])
+
+        malformed_metadata = to_public_message({
+            "message_id": "malformed-ai", "case_id": "VP-ACTIVITY", "actor_type": "CUSTOMER_AGENT",
+            "content": "안내", "channel": "CUSTOMER", "audience": "CUSTOMER",
+            "visibility": "CUSTOMER", "message_kind": "AI_RESPONSE", "mentions": [],
+            "created_at": "2026-09-02T01:00:00+00:00", "ai_metadata": ["unexpected"],
+        })
+        self.assertEqual(malformed_metadata.customer_actions, [])
 
     def test_create_message_returns_public_message(self) -> None:
         self.repository.append_message.return_value = {

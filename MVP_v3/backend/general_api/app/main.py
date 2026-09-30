@@ -169,27 +169,98 @@ def normalize_public_recommended_actions(raw: object, channel: str) -> list[Publ
     if channel != "TEAM" or not isinstance(raw, list):
         return []
     result: list[PublicRecommendedChatAction] = []
-    seen: set[tuple[str, str | None, str | None]] = set()
+    seen: set[str] = set()
     preference = {"CUSTOMER_QUESTION": 0, "OFFICIAL_VERIFICATION": 1, "RESPONSE_ACTION": 2,
                   "DRAFT_REPLY": 3, "TRANSACTION_LOOKUP": 4}
-    for candidate in raw[:3]:
+    for candidate in raw[:12]:
         try:
             action = PublicRecommendedChatAction.model_validate(candidate)
         except Exception:
             continue
-        identity = (action.action_key, action.target_type, action.target_id)
-        if identity in seen:
+        if action.action_key in seen:
             continue
         if action.kind == "TOOL" and action.target_channel != "TEAM":
+            continue
+        # TRANSACTION_LOOKUP is a demo-only flow. Keep it out of AI suggestions.
+        if action.action_key == "TRANSACTION_LOOKUP":
             continue
         if action.kind == "REPLY_DRAFT":
             if action.action_key != "DRAFT_REPLY" or action.target_channel != "CUSTOMER" or not action.draft_text or not action.draft_text.strip():
                 continue
         elif action.action_key == "DRAFT_REPLY":
             continue
-        seen.add(identity)
+        seen.add(action.action_key)
         result.append(action)
-    return sorted(result, key=lambda action: preference.get(action.action_key, 99))
+    return sorted(result, key=lambda action: preference.get(action.action_key, 99))[:3]
+
+
+def fallback_case_recommendations(content: str, prompt: str, state) -> list[dict]:
+    """Fill missing relevant bank tools when the model omits them or suggests demo lookup."""
+    candidates: list[dict] = []
+    active_tasks = [task for task in state.tasks
+                    if task.get("status") not in {"COMPLETED", "CANCELLED"}]
+    task_action_keys = {
+        "CUSTOMER_CONTACT": "CUSTOMER_QUESTION",
+        "INSTITUTION_VERIFICATION": "OFFICIAL_VERIFICATION",
+        "PROTECTIVE_ACTION": "RESPONSE_ACTION",
+        "DOCUMENT_REVIEW": "RESPONSE_ACTION",
+    }
+    task_priority = {"CUSTOMER_CONTACT": 0, "INSTITUTION_VERIFICATION": 1,
+                     "PROTECTIVE_ACTION": 2, "DOCUMENT_REVIEW": 3}
+    for task in sorted(active_tasks, key=lambda item: task_priority.get(item.get("task_type"), 99)):
+        action_key = task_action_keys.get(task.get("task_type"))
+        if not action_key:
+            continue
+        candidates.append({
+            "action_key": action_key,
+            "kind": "TOOL",
+            "target_channel": "TEAM",
+            "target_type": "TASK",
+            "target_id": task.get("task_id"),
+            "expected_version": task.get("version"),
+        })
+
+    answer_and_prompt = f"{content}\n{prompt}".lower()
+    diagnosis = state.case.get("diagnosis") or {}
+    case_context = f"{state.summary}\n{json.dumps(diagnosis, ensure_ascii=False, default=str)}".lower()
+    combined = f"{answer_and_prompt}\n{case_context}"
+    actionable = any(term in answer_and_prompt for term in (
+        "확인", "미확인", "질문", "필요", "해야", "안내", "조치", "대응", "검토", "진행", "중단",
+    ))
+    if not actionable:
+        return []
+    customer_uncertain = any(term in combined for term in (
+        "미확인", "아직 확인되지", "확인되지 않았", "여부", "고객에게 확인", "고객 확인", "질문해야",
+    ))
+    pending_questions = any(question.get("status") == "PENDING" for question in state.questions)
+    waiting_for_customer = any(question.get("status") == "ASKED" for question in state.questions)
+    if customer_uncertain and pending_questions:
+        candidates.append({"action_key": "CUSTOMER_QUESTION", "kind": "TOOL", "target_channel": "TEAM"})
+    elif customer_uncertain and not waiting_for_customer:
+        candidates.append({"action_key": "CUSTOMER_QUESTION", "kind": "TOOL", "target_channel": "TEAM"})
+
+    institution_uncertain = any(term in combined for term in (
+        "사칭", "소속 미확인", "공식 확인", "기관 확인", "담당자 확인",
+    ))
+    active_verifications = [item for item in state.verifications
+                            if item.get("status") not in {"COMPLETED", "CANCELLED", "SKIPPED"}]
+    institution_terms = ("기관", "담당자", "소속", "대출", "경찰", "검찰", "금융")
+    completed_institution_verification = any(
+        item.get("status") == "COMPLETED"
+        and any(term in " ".join(str(item.get(key, "")) for key in ("claim", "target", "result_summary"))
+                for term in institution_terms)
+        for item in state.verifications
+    )
+    if institution_uncertain and (active_verifications or not completed_institution_verification):
+        candidates.append({"action_key": "OFFICIAL_VERIFICATION", "kind": "TOOL", "target_channel": "TEAM"})
+
+    protection_needed = any(term in answer_and_prompt for term in (
+        "추가 송금 중단", "연락 중단", "앱 삭제", "원격 제어 차단", "계정 보호", "지급정지",
+    ))
+    has_active_protective_task = any(task.get("task_type") == "PROTECTIVE_ACTION" for task in active_tasks)
+    if protection_needed and has_active_protective_task:
+        candidates.append({"action_key": "RESPONSE_ACTION", "kind": "TOOL", "target_channel": "TEAM"})
+    return candidates
 from .domains.cases.service import AnalyzeCaseService, InvalidCaseTransitionError, transition_case
 
 
@@ -2392,7 +2463,7 @@ async def _invoke_case_copilot(case_id: str, request: PublicAiInvocationRequest)
                     + "추가 AI 안내 생성에 실패했습니다. 저장된 업무는 아래 기능에서 확인할 수 있습니다.",
                     "model_mode": "WORKFLOW_RESULT", "recommended_actions": task_buttons}
             if task_buttons:
-                ai_reply["recommended_actions"] = [*task_buttons, *ai_reply.get("recommended_actions", [])][:3]
+                ai_reply["recommended_actions"] = [*task_buttons, *ai_reply.get("recommended_actions", [])]
     except AiServiceQuotaError as exc:
         raise HTTPException(status_code=429, detail={"code": "OPENAI_QUOTA_EXHAUSTED", "message": str(exc)}) from exc
     except AiServiceAuthenticationError as exc:
@@ -2400,7 +2471,13 @@ async def _invoke_case_copilot(case_id: str, request: PublicAiInvocationRequest)
     except AiServiceError as exc:
         raise HTTPException(status_code=503, detail={"code": "AI_CASE_COPILOT_FAILED", "message": str(exc)}) from exc
     safe_buttons = []
-    for action in normalize_public_recommended_actions(ai_reply.get('recommended_actions'), request.channel):
+    seen_action_keys: set[str] = set()
+    raw_actions = ai_reply.get('recommended_actions')
+    for candidate in (raw_actions[:12] if isinstance(raw_actions, list) else []):
+        normalized = normalize_public_recommended_actions([candidate], request.channel)
+        if not normalized:
+            continue
+        action = normalized[0]
         if action.target_type:
             collection, key = ({'TASK': (state.tasks, 'task_id'), 'QUESTION': (state.questions, 'question_id'),
                                 'VERIFICATION': (state.verifications, 'verification_task_id')})[action.target_type]
@@ -2408,10 +2485,14 @@ async def _invoke_case_copilot(case_id: str, request: PublicAiInvocationRequest)
             if not target or target.get('status') in {'COMPLETED', 'CANCELLED', 'ANSWERED', 'SKIPPED'}:
                 continue
             action.expected_version = target.get('version')
+        if action.action_key in seen_action_keys:
+            continue
+        seen_action_keys.add(action.action_key)
         safe_buttons.append(action.model_dump(mode='json'))
-        break  # One immediately usable next step per AI response.
-    ai_reply['recommended_actions'] = safe_buttons
     content = ai_reply["content"]
+    if request.channel == "TEAM":
+        safe_buttons.extend(fallback_case_recommendations(content, request.prompt, state))
+    ai_reply['recommended_actions'] = [item.model_dump(mode='json') for item in normalize_public_recommended_actions(safe_buttons, request.channel)]
     is_team_request = request.channel == "TEAM"
     source_guard = ({
         "source_message_ids": request.source_message_ids,
@@ -2463,6 +2544,11 @@ async def invoke_customer_support_ai(case_id: str, request: PublicCustomerAiRepl
         for item in questions
         if item.get("status") == "ANSWERED" and item.get("answer_text")
     ][-10:]
+    asked_questions = [
+        item for item in questions
+        if item.get("status") == "ASKED" and item.get("question_text")
+        and item.get("case_id", case_id) == case_id
+    ][:5]
     # Always include visible unanswered cards, even when retrieval cannot match a vague "이 질문".
     service_questions = [
         {
@@ -2471,10 +2557,21 @@ async def invoke_customer_support_ai(case_id: str, request: PublicCustomerAiRepl
             'customer_explanation': str(item.get('customer_explanation') or '')[:1000],
             'options': [str(option)[:160] for option in (item.get('options') or [])[:10]],
         }
-        for item in questions
-        if item.get('status') == 'ASKED' and item.get('question_text')
-        and item.get('case_id', case_id) == case_id
-    ][:5]
+        for item in asked_questions
+    ]
+    customer_ui_capabilities: list[str] = []
+    customer_actions: list[dict[str, str]] = []
+    question_action_target = next((item for item in asked_questions if item.get("question_id")), None)
+    if question_action_target:
+        customer_ui_capabilities.append("OPEN_ACTIVE_QUESTION")
+        customer_actions.append({
+            "action_key": "OPEN_ACTIVE_QUESTION",
+            "target_id": str(question_action_target["question_id"]),
+        })
+    recovery_active = str(case.get("mode") or "") == "RECOVERY" or str(case.get("victim_transfer_status") or "") == "YES"
+    if recovery_active:
+        customer_ui_capabilities.append("OPEN_RECOVERY_GUIDE")
+        customer_actions.append({"action_key": "OPEN_RECOVERY_GUIDE"})
     retrieved = retrieve_context(case_id, request.prompt, collect_records(
         case_id, messages=all_messages, questions=questions, verifications=verifications, customer=True,
     ), customer=True)
@@ -2482,19 +2579,13 @@ async def invoke_customer_support_ai(case_id: str, request: PublicCustomerAiRepl
         ai_reply = await service.ai_client.generate_case_copilot_reply({
             "case_id": case_id,
             "prompt": request.prompt,
-            "case_summary": "",
-            "workflow_status": case.get("status", "TRIAGE"),
-            "fraud_type": case.get("fraud_type"),
-            "transfer_status": case.get("victim_transfer_status"),
             "known_facts": answered,
             "retrieved_context": retrieved,
             "recent_conversation": customer_history,
-            "pending_actions": [],
-            "unresolved_verifications": [],
             "assistant_mode": "CUSTOMER_SUPPORT",
-            "primary_assignee": case.get('primary_assignee'),
             "customer_progress": progress_ai_context(progress),
             "customer_service_questions": service_questions,
+            "customer_ui_capabilities": customer_ui_capabilities,
             "published_verification_results": published_results,
             "attachment_summaries": [],
         })
@@ -2512,10 +2603,11 @@ async def invoke_customer_support_ai(case_id: str, request: PublicCustomerAiRepl
     } if request.source_message_ids else None)
     message = await repository.append_message(case_id, {
         "actor_type": "CUSTOMER_AGENT", "actor_user_id": "customer-agent",
-        "actor_display_name": "서비스 이용 안내" if ai_reply.get('model_mode') == 'SERVICE_UI_GUIDANCE' else "안전 상담 AI", "actor_role": "CUSTOMER_AGENT",
+        "actor_display_name": "안전 상담 AI", "actor_role": "CUSTOMER_AGENT",
         "content": ai_reply["content"], "channel": "CUSTOMER", "audience": "CUSTOMER",
         "visibility": "CUSTOMER", "message_kind": "AI_RESPONSE", "mentions": [],
         "reply_to_message_id": request.reply_to_message_id, "client_request_id": request.client_request_id,
+        "ai_metadata": {"customer_actions": customer_actions},
         "log_event": False,
     }, source_guard=source_guard)
     if message is None:
@@ -2564,9 +2656,9 @@ async def process_copilot_guidance(candidate):
                 await jobs.finish(job, "FAILED", error_code="EXTRACTION_PENDING")
                 return
             guidance_prompt = (
-                "현재 사건을 처음 넘겨받은 은행 동료에게 킥오프 브리핑해 주세요. 현 상황 한 줄에 사칭 주체·상대 요구·현재 위험을 담고, 고객의 실제 송금·앱 설치·개인정보 제공 여부처럼 아직 미확인인 행동이 있을 때만 짧게 짚어 주세요. 이어서 지금 가장 중요한 행동 한 가지만 구체적으로 안내하고, 필요한 이유 한 문장과 그 행동에 맞는 추천 기능 하나를 연결해 주세요. 사건 근거가 없는 사실은 추정하지 말고, ‘미완료 업무 확인’ 같은 일반 문구 대신 확인 대상과 목적을 말해 주세요. 짧고 자연스러운 한국어 Markdown으로 작성해 주세요."
+                "현재 사건을 처음 넘겨받은 은행 동료에게 킥오프 브리핑해 주세요. 현 상황 한 줄에 사칭 주체·상대 요구·현재 위험을 담고, 고객의 실제 송금·앱 설치·개인정보 제공 여부처럼 아직 미확인인 행동이 있을 때만 짧게 짚어 주세요. 이어서 지금 가장 중요한 행동 한 가지만 구체적으로 안내하고 필요한 이유를 덧붙여 주세요. 본문과 직접 관련된 서로 다른 추천 기능을 최대 세 개까지 연결하되, 고객 확인 질문과 사칭 기관의 공식 소속 확인을 우선하고 목데이터 송금 조회는 추천하지 마세요. 사건 근거가 없는 사실은 추정하지 말고, ‘미완료 업무 확인’ 같은 일반 문구 대신 확인 대상과 목적을 말해 주세요. 짧고 자연스러운 한국어 Markdown으로 작성해 주세요."
                 if job["trigger_kind"] == "INITIAL" else
-                "새로 반영된 고객 답변·확인 결과·업무 상태를 읽고, 달라진 점을 한 줄로 알려 주세요. 추가 대응이 필요하면 지금 가장 중요한 행동 한 가지만 안내하고 해당 추천 기능 하나를 연결해 주세요. 이전 안내를 반복하지 마세요."
+                "새로 반영된 고객 답변·확인 결과·업무 상태를 읽고, 달라진 점을 한 줄로 알려 주세요. 추가 대응이 필요하면 지금 가장 중요한 행동 한 가지만 안내하고 그 행동과 직접 관련된 서로 다른 기능을 최대 세 개까지 추천해 주세요. 고객 확인 질문과 사칭 기관의 공식 소속 확인을 우선하고 목데이터 송금 조회는 추천하지 마세요. 이전 안내를 반복하지 마세요."
             )
             response = await _invoke_case_copilot(job["case_id"], PublicAiInvocationRequest(
                 prompt=guidance_prompt,

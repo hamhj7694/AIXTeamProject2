@@ -81,8 +81,13 @@ class FactGroundingProviderTest(unittest.IsolatedAsyncioTestCase):
     async def generate(self, mode, facts, reply, **kwargs):
         output = json.dumps({"content": reply, "recommended_actions": []}, ensure_ascii=False) if mode == "BANK_INTERNAL" else reply
         create = AsyncMock(return_value=SimpleNamespace(output_text=output, status="completed"))
+        provider_module = (
+            "ai_api.app.domains.case_support.customer_support_service.AsyncOpenAI"
+            if mode == "CUSTOMER_SUPPORT"
+            else "ai_api.app.domains.case_support.copilot_service.AsyncOpenAI"
+        )
         with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}), patch(
-            "ai_api.app.domains.case_support.copilot_service.AsyncOpenAI",
+            provider_module,
             return_value=SimpleNamespace(responses=SimpleNamespace(create=create)),
         ):
             result = await CaseCopilotService().generate(CaseCopilotInput(
@@ -98,15 +103,17 @@ class FactGroundingProviderTest(unittest.IsolatedAsyncioTestCase):
             with self.subTest(mode=mode):
                 result, args = await self.generate(mode, facts, "송금 여부는 추가 확인이 필요합니다.")
                 self.assertTrue(all(fact in args["input"] for fact in facts))
-                for rule in ("PROPOSED", "CONFIRMED", "값이 충돌", "완료된 Verification", "상태 없는 고객 답변"):
-                    self.assertIn(rule, args["instructions"])
+                if mode == "BANK_INTERNAL":
+                    for rule in ("PROPOSED", "CONFIRMED", "값이 충돌", "완료된 Verification", "상태 없는 고객 답변"):
+                        self.assertIn(rule, args["instructions"])
+                else:
+                    self.assertIn("모르는 내용은 확인되지 않았다고", args["instructions"])
+                    self.assertNotIn("PROPOSED", args["instructions"])
                 self.assertNotIn("PROPOSED", result.content)
-                if mode == "CUSTOMER_SUPPORT":
-                    self.assertIn("그대로 출력하지 마세요", args["instructions"])
 
     async def test_customer_proposed_reply_is_replaced_with_safe_explanation(self):
         result, _ = await self.generate("CUSTOMER_SUPPORT", ["송금함 (PROPOSED)"], "송금한 것이 확인되었습니다.")
-        self.assertIn("확정하기 어렵습니다", result.content)
+        self.assertIn("확인하기 어렵습니다", result.content)
         self.assertNotIn("송금한 것이 확인되었습니다", result.content)
 
     async def test_confirmed_bank_reply_is_delivered(self):
@@ -118,7 +125,7 @@ class FactGroundingProviderTest(unittest.IsolatedAsyncioTestCase):
             "CUSTOMER_SUPPORT", ["질문: 송금 여부 / 고객 답변: 송금했어요"],
             "송금한 것이 확인되었습니다.", recent_conversation=["이전 AI: 송금함 (CONFIRMED)"],
         )
-        self.assertIn("확정하기 어렵습니다", result.content)
+        self.assertIn("확인하기 어렵습니다", result.content)
 
 
 def source_fact(source="CUSTOMER_STATEMENT", status="PROPOSED", **updates):

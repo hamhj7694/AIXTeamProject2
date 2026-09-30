@@ -3,9 +3,10 @@ import { AlertCircle, AlertTriangle, ArrowLeft, Bookmark, ChevronDown, Loader2, 
 import { Link, useParams } from 'react-router-dom';
 import { casesApi, CURRENT_CUSTOMER_USER } from '../api/cases';
 import { isApiErrorCode } from '../api/client';
-import type { CaseBundle, CaseMessage, CustomerQuestion } from '../api/types';
+import type { CaseBundle, CaseMessage, CustomerQuestion, CustomerUiAction } from '../api/types';
 import { readCustomerBookmarks, writeCustomerBookmarks, type CustomerBookmark } from '../customer/bookmarks';
 import { CustomerBookmarks } from '../customer/CustomerBookmarks';
+import { isCurrentCustomerUiAction } from '../customer/customerActions';
 import { CustomerComposer } from '../customer/CustomerComposer';
 import { CustomerConversation } from '../customer/CustomerConversation';
 import { RecoveryNavigator } from '../customer/RecoveryCards';
@@ -45,16 +46,17 @@ export const CustomerCaseRoomPage: React.FC = () => {
   const outboxRef = useRef(new Map<string, CustomerOutboxItem>());
 
   const load = useCallback(async (quiet = false) => {
-    if (!caseId) return;
+    if (!caseId) return null;
     const requestId = ++loadRequestRef.current;
     if (quiet) setRefreshing(true); else setLoading(true);
     try {
       const nextBundle = await casesApi.customerBundle(caseId);
-      if (requestId !== loadRequestRef.current) return;
+      if (requestId !== loadRequestRef.current) return null;
       setBundle({ ...nextBundle, recent_messages: mergePendingMessages(nextBundle.recent_messages, pendingMessagesRef.current.values()) });
       setError('');
+      return nextBundle;
     }
-    catch (reason) { if (requestId === loadRequestRef.current && !quiet) setError(reason instanceof Error ? reason.message : '안전 상담 정보를 불러오지 못했습니다.'); }
+    catch (reason) { if (requestId === loadRequestRef.current && !quiet) setError(reason instanceof Error ? reason.message : '안전 상담 정보를 불러오지 못했습니다.'); return null; }
     finally { if (requestId === loadRequestRef.current) { setLoading(false); setRefreshing(false); } }
   }, [caseId]);
 
@@ -132,6 +134,33 @@ export const CustomerCaseRoomPage: React.FC = () => {
 
   const refresh = async () => { await load(true); };
   const recovery = String(bundle?.case.mode ?? '') === 'RECOVERY' || String(bundle?.case.victim_transfer_status ?? '') === 'YES';
+  const handleCustomerAction = async (action: CustomerUiAction) => {
+    const latest = await load(true);
+    if (!latest) {
+      setNotice('최신 상담 정보를 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.');
+      return;
+    }
+    if (!isCurrentCustomerUiAction(latest, action)) {
+      setNotice(action.action_key === 'OPEN_ACTIVE_QUESTION'
+        ? '질문 상태가 바뀌어 최신 상담 정보를 불러왔습니다. 현재 화면의 질문을 확인해 주세요.'
+        : '피해구제 안내 상태가 바뀌어 최신 상담 정보를 불러왔습니다.');
+      return;
+    }
+    if (action.action_key === 'OPEN_ACTIVE_QUESTION') {
+      window.requestAnimationFrame(() => {
+        const card = document.getElementById(`customer-question-${action.target_id}`);
+        card?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        card?.focus({ preventScroll: true });
+      });
+      return;
+    }
+    setDetailsOpen(true);
+    window.requestAnimationFrame(() => {
+      const guide = document.getElementById('customer-recovery-menu');
+      guide?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      guide?.focus({ preventScroll: true });
+    });
+  };
   useEffect(() => {
     if (recovery) setDetailsOpen(true);
   }, [recovery]);
@@ -311,8 +340,8 @@ export const CustomerCaseRoomPage: React.FC = () => {
       <div className="customer-app-grid">
         <section className="customer-chat-panel">
           <header><div><h1>보이스피싱 대응 AI 상담</h1><p>필요한 내용을 한 가지씩 확인하고 은행 담당자와 연결합니다.</p></div><span>고객 공개 채널</span></header>
-          <div className="customer-conversation-host"><CustomerConversation bundle={bundle} busy={busy} aiBusy={aiPendingCount > 0} bookmarkedIds={new Set(bookmarks.map((item) => item.entryId))} onAnswer={answer} onRecoveryRequest={requestRecoveryHelp} onToggleBookmark={toggleBookmark} onRetryMessage={retryMessage} onDismissMessage={dismissMessage}/><CustomerBookmarks open={bookmarkOpen} items={bookmarks} onClose={() => setBookmarkOpen(false)}/></div>
-          {detailsOpen && <div className="customer-recovery-menu"><div className="customer-recovery-menu-intro"><strong><AlertTriangle size={15} aria-hidden="true"/>보이스피싱 피해 구제 안내</strong><span>피해 발생 시 필요한 대응 단계를 선택해주세요.</span><button type="button" className="customer-recovery-close-button" onClick={() => setDetailsOpen(false)} aria-label="구제 안내 닫기"><ChevronDown size={14}/></button></div><RecoveryNavigator selected={selectedStep} busy={busy} onSelect={selectRecoveryStep}/></div>}
+          <div className="customer-conversation-host"><CustomerConversation bundle={bundle} busy={busy} aiBusy={aiPendingCount > 0} bookmarkedIds={new Set(bookmarks.map((item) => item.entryId))} onAnswer={answer} onRecoveryRequest={requestRecoveryHelp} onToggleBookmark={toggleBookmark} onRetryMessage={retryMessage} onDismissMessage={dismissMessage} onCustomerAction={handleCustomerAction}/><CustomerBookmarks open={bookmarkOpen} items={bookmarks} onClose={() => setBookmarkOpen(false)}/></div>
+          {detailsOpen && <div id="customer-recovery-menu" tabIndex={-1} className="customer-recovery-menu"><div className="customer-recovery-menu-intro"><strong><AlertTriangle size={15} aria-hidden="true"/>보이스피싱 피해 구제 안내</strong><span>피해 발생 시 필요한 대응 단계를 선택해주세요.</span><button type="button" className="customer-recovery-close-button" onClick={() => setDetailsOpen(false)} aria-label="구제 안내 닫기"><ChevronDown size={14}/></button></div><RecoveryNavigator selected={selectedStep} busy={busy} onSelect={selectRecoveryStep}/></div>}
           <CustomerComposer busy={busy} aiBusy={aiPendingCount > 0} disabled={closed} showEmergency={!closed} emergencyActive={recoveryUiActive} guideOpen={detailsOpen} onEmergency={() => { setDetailsOpen(true); setConfirmRecovery(true); }} onOpenRecoveryGuide={() => setDetailsOpen(true)} onSend={send} draftStorageKey={`csr:composer-draft:${caseId}:customer`}/>
         </section>
       </div>

@@ -16,12 +16,13 @@ from general_api.app.domains.cases.copilot_jobs import CopilotJobs
 
 
 class CopilotWorkflowTest(unittest.IsolatedAsyncioTestCase):
-    def test_distinct_task_buttons_share_a_tool_without_disappearing(self):
+    def test_recommendations_are_unique_by_feature(self):
         raw = [dict(action_key='CUSTOMER_QUESTION', kind='TOOL', target_channel='TEAM',
                     target_type='TASK', target_id=task_id, expected_version=1)
                for task_id in ('task-one', 'task-two')]
+        raw.append(dict(action_key='OFFICIAL_VERIFICATION', kind='TOOL', target_channel='TEAM'))
         actions = main.normalize_public_recommended_actions(raw, 'TEAM')
-        self.assertEqual([action.target_id for action in actions], ['task-one', 'task-two'])
+        self.assertEqual([action.action_key for action in actions], ['CUSTOMER_QUESTION', 'OFFICIAL_VERIFICATION'])
         self.assertEqual(main.normalize_public_recommended_actions(raw, 'CUSTOMER'), [])
 
     async def asyncSetUp(self):
@@ -142,7 +143,7 @@ class CopilotWorkflowTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(customer.recommended_actions, [])
         self.assertEqual(customer.mutation_results, [])
 
-    async def test_reply_persists_only_one_recommended_tool(self):
+    async def test_reply_persists_up_to_three_relevant_unique_tools(self):
         provider = AsyncMock(return_value=dict(
             content='고객의 정보 제공 여부를 확인하세요.', model_mode='test',
             recommended_actions=[
@@ -157,7 +158,7 @@ class CopilotWorkflowTest(unittest.IsolatedAsyncioTestCase):
         with patch.object(main.service.ai_client, 'generate_case_copilot_reply', provider):
             reply = await main.invoke_case_copilot('C', request)
         saved = to_public_message((await self.repo.list_messages('C'))[-1])
-        self.assertEqual([item.action_key for item in reply.recommended_actions], ['CUSTOMER_QUESTION'])
+        self.assertEqual([item.action_key for item in reply.recommended_actions], ['CUSTOMER_QUESTION', 'OFFICIAL_VERIFICATION'])
         self.assertEqual(saved.recommended_actions, reply.recommended_actions)
 
     async def test_guidance_durable_dedup_and_self_loop(self):

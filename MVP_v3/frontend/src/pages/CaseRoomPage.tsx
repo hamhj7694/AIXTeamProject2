@@ -508,7 +508,7 @@ export const CaseRoomPage: React.FC<CaseRoomPageProps> = ({ caseName, onMutated,
     if (aiPendingCount > 0) return;
     setError('');
     enqueueAiReply(
-      '현재 사건을 두 줄로 브리핑해 주세요. 현 상황을 간단히 설명하고, 지금 가장 중요한 행동 한 가지와 해당 추천 기능 하나만 안내해 주세요.',
+      '현재 사건을 두 줄로 브리핑해 주세요. 현 상황을 간단히 설명하고 지금 가장 중요한 행동 한 가지를 안내해 주세요. 본문과 직접 관련된 서로 다른 기능을 최대 세 개까지 추천하되 고객 확인 질문과 사칭 기관의 공식 소속 확인을 우선하고 목데이터 송금 조회는 추천하지 마세요.',
       'BRIEF',
     );
   };

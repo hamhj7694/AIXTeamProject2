@@ -135,23 +135,21 @@ class AccumulationTest(unittest.TestCase):
 
 
 class BankOneStepTest(unittest.TestCase):
-    def test_brief_policy_and_schema_request_one_next_step(self):
+    def test_brief_policy_and_schema_allow_three_relevant_actions(self):
         request = CaseCopilotInput(case_id="one-step", prompt="지금 뭘 해야 해?", response_style="BRIEF")
         instructions = bank_instructions(request)
-        self.assertIn("실제 질문에 직접 답변하세요", instructions)
-        self.assertIn("**현 상황:**", instructions)
         self.assertIn("**지금 할 일:**", instructions)
-        self.assertIn("기능 하나만", instructions)
-        self.assertEqual(COPILOT_REPLY_SCHEMA["properties"]["recommended_actions"]["maxItems"], 1)
+        self.assertIn("최대 세 개까지", instructions)
+        self.assertEqual(COPILOT_REPLY_SCHEMA["properties"]["recommended_actions"]["maxItems"], 3)
 
-    def test_recommendations_keep_only_first_valid_action(self):
+    def test_recommendations_keep_up_to_three_distinct_valid_actions(self):
         raw = [
             {"action_key": "DRAFT_REPLY", "kind": "TOOL", "target_channel": "TEAM"},
             {"action_key": "CUSTOMER_QUESTION", "kind": "TOOL", "target_channel": "TEAM"},
             {"action_key": "OFFICIAL_VERIFICATION", "kind": "TOOL", "target_channel": "TEAM"},
         ]
         actions = normalize_recommended_actions(raw, "BANK_INTERNAL")
-        self.assertEqual([action.action_key for action in actions], ["CUSTOMER_QUESTION"])
+        self.assertEqual([action.action_key for action in actions], ["CUSTOMER_QUESTION", "OFFICIAL_VERIFICATION"])
 
     def test_brief_fallback_chooses_one_active_task_and_matching_tool(self):
         request = CaseCopilotInput(
@@ -215,35 +213,38 @@ class DirectnessProviderTest(unittest.IsolatedAsyncioTestCase):
             import json
             reply = json.dumps({"content": reply, "recommended_actions": [], "task_intents": []}, ensure_ascii=False)
         create = AsyncMock(return_value=SimpleNamespace(output_text=reply))
+        provider_module = (
+            "ai_api.app.domains.case_support.customer_support_service.AsyncOpenAI"
+            if mode == "CUSTOMER_SUPPORT"
+            else "ai_api.app.domains.case_support.copilot_service.AsyncOpenAI"
+        )
         with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}), patch(
-            "ai_api.app.domains.case_support.copilot_service.AsyncOpenAI",
+            provider_module,
             return_value=SimpleNamespace(responses=SimpleNamespace(create=create)),
         ):
             result = await CaseCopilotService().generate(CaseCopilotInput(
                 case_id=f"direct-{self._testMethodName[:40]}-{mode}", prompt="총 얼마 사기당했어?",
                 assistant_mode=mode, recent_conversation=history,
-                staff_context=["직원 메모: 고객 비공개"] if mode == "CUSTOMER_SUPPORT" else [],
             ))
         self.assertEqual(create.await_count, 1)
         return result, create.await_args.kwargs
 
-    async def test_both_roles_receive_all_turns_and_arithmetic_with_grounding(self):
-        for mode in ("CUSTOMER_SUPPORT", "BANK_INTERNAL"):
-            with self.subTest(mode=mode):
-                _, args = await self.call(mode, RECORDS)
-                self.assertTrue(all(r in args["input"] for r in RECORDS))
-                self.assertIn("10,000,000원", args["input"])
-                self.assertNotIn("직원 메모: 고객 비공개", args["input"])
-                for rule in ("직접 답변", "최신 정보 하나만", "중복 합산하지", "CONFIRMED", "PROPOSED", "번호 목록"):
-                    self.assertIn(rule, args["instructions"])
-                self.assertIn("쉽고 차분한 한국어" if mode == "CUSTOMER_SUPPORT" else "은행 직원의 내부 작업", args["instructions"])
+    async def test_bank_role_receives_case_turns_and_arithmetic_grounding(self):
+        _, args = await self.call("BANK_INTERNAL", RECORDS)
+        self.assertTrue(all(r in args["input"] for r in RECORDS))
+        self.assertIn("10,000,000원", args["input"])
+        for rule in ("직접 답변", "최신 정보 하나만", "중복 합산하지", "CONFIRMED", "PROPOSED", "번호 목록"):
+            self.assertIn(rule, args["instructions"])
+        self.assertIn("은행 직원의 내부 작업", args["instructions"])
 
-    async def test_missing_history_stays_missing_in_provider_input(self):
-        _, args = await self.call("CUSTOMER_SUPPORT", [RECORDS[1]], "현재 대화에는 700만원 송금 진술이 있습니다.")
+    async def test_customer_receives_only_the_public_recent_conversation(self):
+        _, args = await self.call("CUSTOMER_SUPPORT", [RECORDS[1]], "현재 상황을 알려 주세요.")
         self.assertNotIn("의사 사칭", args["input"])
         self.assertNotIn("10,000,000원", args["input"])
+        self.assertIn(RECORDS[1], args["input"])
+        self.assertIn("현재 질문에 먼저 직접 답하고", args["instructions"])
 
-    async def test_ux_failure_does_not_block_response_or_retry(self):
+    async def test_customer_direct_reply_is_delivered_without_retry(self):
         reply = "은행에 문의하세요."
         result, _ = await self.call("CUSTOMER_SUPPORT", RECORDS, reply)
         self.assertEqual(result.content, reply)

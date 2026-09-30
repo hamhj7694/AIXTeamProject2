@@ -102,6 +102,7 @@ class CaseCopilotInput(StrictModel):
     pending_actions: list[str] = Field(default_factory=list, max_length=20)
     customer_progress: list[str] = Field(default_factory=list, max_length=10)
     customer_service_questions: list[CustomerServiceQuestion] = Field(default_factory=list, max_length=5)
+    customer_ui_capabilities: list[Literal["OPEN_ACTIVE_QUESTION", "OPEN_RECOVERY_GUIDE"]] = Field(default_factory=list, max_length=2)
     published_verification_results: list[str] = Field(default_factory=list, max_length=10)
     attachment_summaries: list[str] = Field(default_factory=list, max_length=10)
     unresolved_verifications: list[str] = Field(default_factory=list, max_length=10)
@@ -116,8 +117,17 @@ class CaseCopilotInput(StrictModel):
 
     @model_validator(mode="after")
     def validate_source_context(self):
+        if self.assistant_mode == "BANK_INTERNAL" and self.customer_ui_capabilities:
+            raise ValueError("customer UI capabilities are customer-only")
         if self.assistant_mode != "BANK_INTERNAL" and (self.case_state or self.dialogue_history or self.mutation_results or self.allow_task_planning):
             raise ValueError("workflow context is bank-only")
+        if self.assistant_mode == "CUSTOMER_SUPPORT" and (
+            self.staff_context or self.pending_actions or self.unresolved_verifications
+            or self.source_context is not None or self.participants or self.primary_assignee
+            or self.workflow_status != "TRIAGE" or self.fraud_type or self.transfer_status
+            or self.case_summary or self.requester_user_id or self.requester_display_name or self.requester_role
+        ):
+            raise ValueError("bank-only context is not allowed for customer support")
         if any(item.case_id != self.case_id for item in self.dialogue_history):
             raise ValueError("dialogue Case mismatch")
         if self.source_context is not None:

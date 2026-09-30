@@ -1817,6 +1817,11 @@ body.is-resizing-conversations { cursor: col-resize; user-select: none; }
 @media (hover: none), (max-width: 760px) {
   .rp-item-row > .right-panel-row-actions { opacity: 1; pointer-events: auto; }
 }
+
+.customer-message-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+.customer-message-actions button { min-height: 32px; border: 1px solid #b2ccff; border-radius: 8px; padding: 6px 10px; color: #1849a9; background: #eff4ff; font: inherit; font-size: 11px; font-weight: 750; cursor: pointer; }
+.customer-message-actions button:hover { border-color: #84adff; background: #e0eaff; }
+.customer-message-actions button:focus-visible { outline: 2px solid #175cd3; outline-offset: 2px; }
 .notification-icon.error { color: #b42318; background: #fef3f2; }
 
 /* Fraud-signal rows keep a compact gist visible and reveal context on click. */
