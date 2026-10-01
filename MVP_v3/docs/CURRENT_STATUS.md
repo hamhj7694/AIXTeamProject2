@@ -1,9 +1,15 @@
 # MVP v3 현재 구현 상태
 
-최종 갱신: 2026-09-30 (은행 AI 추천 기능 최대 3개 복원)
+최종 갱신: 2026-09-30 (온디바이스 분석 데이터 연동 명세 정리)
 역할: 개발·점검 작업을 시작할 때 확인하는 단일 최신 상태 문서
 
 > 실제 코드와 최신 테스트 결과가 이 문서보다 우선한다. 완료하지 않은 기능은 구현된 것처럼 표시하지 않는다.
+
+## 2026-09-30 온디바이스·통신사 분석 데이터 연동 명세
+
+- 현행 `AnalysisEnvelope` v1의 실제 필드/제약, 데모 원문 분해 경로, CSR의 재구성·위험 판정·Case 저장 경로를 [`36_ON_DEVICE_ANALYSIS_DATA_HANDOFF.md`](36_ON_DEVICE_ANALYSIS_DATA_HANDOFF.md)에 정리했다. 업체에는 원문 대신 Envelope JSON을 생성해 전달하도록 요청하는 경계를 권장한다.
+- 외부 업체가 Envelope를 제출할 General API endpoint는 아직 없다. 현재 공개 `/api/cases/analyze`는 텍스트만 받으며, 내부 `/ai/analyze/signals`는 진단 결과만 반환한다. MySQL `case_inputs.input_text`도 현재 NOT NULL이어서 Envelope-only Case 저장 전에 원문 없는 저장 경로가 필요하다.
+- 문서/코드 대조만 했다. 구현·migration·업체 연동·자동 테스트는 수행하지 않았다.
 
 ## 2026-09-29 DB migration 문서 전체 대조
 
