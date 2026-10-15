@@ -18,6 +18,7 @@ on:
       - "MVP_v3/docs/33_ANALYSIS_ENVELOPE_FREEZE_CONTRACT.md"
       - "MVP_v3/docs/34_ANALYSIS_ENVELOPE_INTEGRATION_BACKLOG.md"
       - ".github/workflows/analysis-envelope-guard.yml"
+      - "README.md"
   workflow_dispatch:
 
 permissions:
