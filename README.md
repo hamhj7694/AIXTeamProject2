@@ -207,7 +207,7 @@ AI 모델 ID는 환경변수로 교체할 수 있으며, 저장소의 예시 설
 | 사실 모순 | 7건 | 2건 |
 
 > [!CAUTION]
-> **이 수치를 동일 조건에서 재현된 공식 모델 개선율이나 상용 환경 성능으로 해석하면 안 됩니다.** 현재 저장소의 공식 비교 자료에는 평가 조건·정답 투영 및 의미 점수화에서 미완료 항목이 남아 있습니다. 수치는 **Notion에 기록된 개발 단계 후속 관측치**이며, 동일 조건의 독립 재검증이 필요합니다.  
+> **이 수치를 동일 조건에서 재현된 공식 모델 개선율이나 상용 환경 성능으로 해석하면 안 됩니다.** 현재 저장소의 공식 비교 자료에는 평가 조건·정답 투영 및 의미 점수화에서 미완료 항목이 남아 있습니다. 수치는 **Notion에 기록된 개발 단계 후속 관측치**이며, 동일 조건의 독립 재검증이 필요합니다.
 > 근거: [공식 비교 상태 JSON](MVP_v3/docs/now_md/A_part/A%ED%8C%8C%ED%8A%B8%20%ED%85%8C%EC%8A%A4%ED%8A%B8%20%EB%B0%8F%20%ED%8C%8C%EC%9D%B4%ED%94%84%EB%9D%BC%EC%9D%B8%20%EA%B5%AC%EC%A1%B0%20%EC%A0%95%EB%A6%AC/run_comparison/official_comparison_metrics.json) · [품질 보고서 예시](MVP_v3/docs/now_md/A_part/A%ED%8C%8C%ED%8A%B8%20%ED%85%8C%EC%8A%A4%ED%8A%B8%20%EB%B0%8F%20%ED%8C%8C%EC%9D%B4%ED%94%84%EB%9D%BC%EC%9D%B8%20%EA%B5%AC%EC%A1%B0%20%EC%A0%95%EB%A6%AC/reports/sample-20260916/metrics/quality-metrics-report.md)
 
 **외부 검토:** 「2026 AI·디지털 기반 사회문제 해결 챌린지」 **서류심사 통과** (수상이나 금융기관 도입을 의미하지 않음).
