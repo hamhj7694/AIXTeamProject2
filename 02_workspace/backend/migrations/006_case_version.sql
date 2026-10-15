@@ -1,2 +1,0 @@
-ALTER TABLE cases
-    ADD COLUMN version INT NOT NULL DEFAULT 1 AFTER status;

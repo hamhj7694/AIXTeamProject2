@@ -1,1 +1,0 @@
-Live AI provider and isolated MySQL/Docker environment are unavailable.
