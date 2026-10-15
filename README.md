@@ -12,7 +12,7 @@
 [![MySQL](https://img.shields.io/badge/MySQL-Shared%20Case-4479A1?logo=mysql&logoColor=white)](MVP_v3/database/)
 [![PoC](https://img.shields.io/badge/Status-Prototype-orange)](MVP_v3/README.md)
 
-**[📖 상세 Notion 포트폴리오](https://app.notion.com/p/e9ac753ff28a82cfa92a81ef1abcccd0)** · **[💻 MVP 실행 안내](MVP_v3/README.md)** · **[🛠 전체 기술·역할별 구현 근거](%EC%A0%84%EC%B2%B4%20%EA%B8%B0%EC%88%A0%20%EC%8A%A4%ED%83%9D.md)** · **[📚 팀 개발 기록](%EC%A0%84%EC%B2%B4%20%ED%8F%AC%ED%8A%B8%ED%8F%B4%EB%A6%AC%EC%98%A4.md)**
+**[📖 상세 Notion 포트폴리오](https://app.notion.com/p/e9ac753ff28a82cfa92a81ef1abcccd0)** · **[💻 MVP 실행 안내](MVP_v3/README.md)** · **[🛠 전체 기술·역할별 구현 근거](MVP_v3/docs/README.md)** · **[📚 구현 상태·개발 기록](MVP_v3/docs/CURRENT_STATUS.md)**
 
 > [!IMPORTANT]
 > 본 저장소는 **금융기관 운영 환경에 적용된 상용 제품이 아닌 PoC**입니다. 온디바이스·통신사·FDS·ASAP 연동은 **설계 시나리오**이며 실제 기관 API 연동이 아닙니다. 아래 화면은 시연용 데이터와 개발 환경을 기반으로 합니다.
@@ -99,7 +99,7 @@ flowchart TB
 - **AI API**: 구조화된 분석 결과·제안을 반환합니다. AI API가 금융업무 원장에 직접 조치를 확정하지 않습니다.
 - **외부 연계**: 원문·녹음 대신 구조화 JSON을 수신하는 목표 구조를 설계했지만, **실제 금융기관의 데이터 수신과 연동은 미구현**입니다. 현재 시연 입력 경로와 동일시하지 않습니다.
 
-자세한 실제 데이터 계약: **[온디바이스 분석 정보 인계 문서](MVP_v3/docs/36_ON_DEVICE_ANALYSIS_DATA_HANDOFF.md)** · **[시스템 기술 스택](%EC%A0%84%EC%B2%B4%20%EA%B8%B0%EC%88%A0%20%EC%8A%A4%ED%83%9D.md)**
+자세한 실제 데이터 계약: **[온디바이스 분석 정보 인계 문서](MVP_v3/docs/36_ON_DEVICE_ANALYSIS_DATA_HANDOFF.md)** · **[시스템 기술 스택](MVP_v3/docs/README.md)**
 
 ## 05. 주요 AI·데이터 구현
 
@@ -175,7 +175,7 @@ AI가 반환한 JSON을 그대로 출력하지 않고, 출처와 확인 상태�
 | 음성 파일 | **OpenAI Audio Transcriptions API** | 파일 업로드 음성 전사 경로(실시간 통화 인식과 구분) |
 | 실행·검증 | **Docker Compose · Nginx · pytest · Vitest · GitHub Actions** | 컨테이너 실행, 프록시, 회귀 테스트 |
 
-AI 모델 ID는 환경변수로 교체할 수 있으며, 저장소의 예시 설정과 실제 실행·평가에 사용된 모델이 동일하다고 단정하지 않습니다. 자세한 모델/기능 연결은 [기술 스택 문서](%EC%A0%84%EC%B2%B4%20%EA%B8%B0%EC%88%A0%20%EC%8A%A4%ED%83%9D.md#3-aillm-%EA%B5%AC%EC%84%B1%EC%9A%94%EC%86%8C%EB%8A%94-%EB%AA%87-%EA%B0%9C%EC%9D%B4%EB%A9%B0-%EC%96%B4%EB%94%94%EC%97%90-%EC%97%B0%EA%B2%B0%ED%96%88%EB%8A%94%EA%B0%80)를 참고해 주세요.
+AI 모델 ID는 환경변수로 교체할 수 있으며, 저장소의 예시 설정과 실제 실행·평가에 사용된 모델이 동일하다고 단정하지 않습니다. 자세한 모델/기능 연결은 [기술 스택 문서](MVP_v3/docs/README.md)를 참고해 주세요.
 
 ## 07. 팀 구성과 나의 기여
 
@@ -191,7 +191,7 @@ AI 모델 ID는 환경변수로 교체할 수 있으며, 저장소의 예시 설
 
 초기 역할은 **Backend·MySQL / AI·ML·LLM / Frontend·서비스 통합**으로 나누어 진행했고, 설계·계약 협의·테스트·통합은 팀이 함께 수행했습니다. **모든 AI/Backend 코드를 팀장 혼자 개발했다고 주장하지 않습니다.**
 
-자세한 팀 단위 구현 및 역할 분담: **[팀 전체 포트폴리오](%EC%A0%84%EC%B2%B4%20%ED%8F%AC%ED%8A%B8%ED%8F%B4%EB%A6%AC%EC%98%A4.md)**
+자세한 팀 단위 구현 및 역할 분담: **[구현 상태·개발 기록](MVP_v3/docs/CURRENT_STATUS.md)**
 
 ## 08. 검증 결과 및 한계
 
@@ -243,7 +243,7 @@ MVP_v3/
 - [MVP_v3 설치·실행](MVP_v3/README.md)
 - [Backend 환경 설정과 API 실행](MVP_v3/backend/README.md)
 - [현재 구현 상태와 미완료 항목](MVP_v3/docs/CURRENT_STATUS.md)
-- [전체 시스템 기술 스택](%EC%A0%84%EC%B2%B4%20%EA%B8%B0%EC%88%A0%20%EC%8A%A4%ED%83%9D.md)
+- [전체 시스템 기술 스택](MVP_v3/docs/README.md)
 
 ---
 
