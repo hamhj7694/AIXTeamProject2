@@ -195,7 +195,24 @@ AI 모델 ID는 환경변수로 교체할 수 있으며, 저장소의 예시 설
 
 ## 08. 검증 결과 및 한계
 
-### AI 보조 정답셋의 사용자 검수 및 최신 탐색 평가
+> **평가 구분:** 아래 두 결과는 서로 다른 평가 기준의 **내부 실험 결과 기록**으로, 직접 비교하거나 동일 입력·동일 정답·동일 평가기에서 재현된 공식 개선율로 해석하지 않습니다. 금융기관 상용 환경의 성능을 의미하지 않습니다.
+
+### AI 정보 구조 개선 · 내부 실험 결과 기록
+
+[Notion 포트폴리오](https://app.notion.com/p/e9ac753ff28a82cfa92a81ef1abcccd0)에는 AI 정보 구조 개선 과정의 **내부 실험 결과**로 다음 관측치가 기록되어 있습니다.
+
+| 항목 | 초기 기록 | 후속 기록 |
+|---|---:|---:|
+| Critical Fact Recall | 31.37% | 61.0% |
+| Context Feature Recall | 41.45% | 68.0% |
+| Hallucination | 76건 | 18건 |
+| 사실 모순 | 7건 | 2건 |
+
+> [!CAUTION]
+> **이 수치를 동일 조건에서 재현된 공식 모델 개선율이나 상용 환경 성능으로 해석하면 안 됩니다.** 현재 저장소의 공식 비교 자료에는 평가 조건·정답 투영 및 의미 점수화에서 미완료 항목이 남아 있습니다. 수치는 **Notion에 기록된 개발 단계 후속 관측치**이며, 동일 조건의 독립 재검증이 필요합니다.
+> 근거: [공식 비교 상태 JSON](https://github.com/hamhj7694/AIXTeamProject2/blob/b297c2fa430d517908430e14e167d14c87ad8f53/MVP_v3/docs/now_md/A_part/A%ED%8C%8C%ED%8A%B8%20%ED%85%8C%EC%8A%A4%ED%8A%B8%20%EB%B0%8F%20%ED%8C%8C%EC%9D%B4%ED%94%84%EB%9D%BC%EC%9D%B8%20%EA%B5%AC%EC%A1%B0%20%EC%A0%95%EB%A6%AC/run_comparison/official_comparison_metrics.json) · [품질 보고서 예시](https://github.com/hamhj7694/AIXTeamProject2/blob/b297c2fa430d517908430e14e167d14c87ad8f53/MVP_v3/docs/now_md/A_part/A%ED%8C%8C%ED%8A%B8%20%ED%85%8C%EC%8A%A4%ED%8A%B8%20%EB%B0%8F%20%ED%8C%8C%EC%9D%B4%ED%94%84%EB%9D%BC%EC%9D%B8%20%EA%B5%AC%EC%A1%B0%20%EC%A0%95%EB%A6%AC/reports/sample-20260916/metrics/quality-metrics-report.md)
+
+### 핵심 사실 추출 품질 · 별도 내부 평가 결과 기록
 
 **정답 라벨은 GPT가 1차 작성하고, 프로젝트 소유자가 원문과 대조해 검토·승인했다고 확인했습니다.**
 이 검수 사실은 2026-10-16에 별도 기록으로 남겼습니다. 정답을 사람이 처음부터 직접 라벨링했다고 주장하지 않습니다.
@@ -213,21 +230,6 @@ AI 모델 ID는 환경변수로 교체할 수 있으며, 저장소의 예시 설
 **평가 근거:** [사람 검수 확인 기록](MVP_v3/tests/context_test/run_comparison/HUMAN_REVIEW_ATTESTATION_20261016.json) · [비교·해석 보고서](MVP_v3/tests/context_test/run_comparison/AI_ASSISTED_QUALITY_SCORECARD_20261016.md) · [30건별 평가 수치](MVP_v3/tests/context_test/run_comparison/AI_ASSISTED_QUALITY_SCORECARD_20261016.json) · [재계산 코드](MVP_v3/tests/context_test/run_comparison/score_ai_assisted_reference.py)
 
 > **평가 범위:** 이 검수 확인은 소유자 본인의 확인 기록으로, 외부 독립 전문가의 사례별 감사 결과는 아닙니다. 2026-09-16 VP-18 단일 샘플의 Event·Atom·Critical Slot Precision/Recall/F1은 당시 정답 미등록으로 **미산출**이었으며, 위의 5종 사실 점수가 해당 수치들을 대체하지는 않습니다.
-
-### 후속 실험 별도 기록
-
-[Notion 포트폴리오](https://app.notion.com/p/e9ac753ff28a82cfa92a81ef1abcccd0)에는 후속 내부 실험에서 다음 **관측치**가 기록되어 있습니다.
-
-| 항목 | 초기 기록 | 후속 기록 |
-|---|---:|---:|
-| Critical Fact Recall | 31.37% | 61.0% |
-| Context Feature Recall | 41.45% | 68.0% |
-| Hallucination | 76건 | 18건 |
-| 사실 모순 | 7건 | 2건 |
-
-> [!CAUTION]
-> **이 수치를 동일 조건에서 재현된 공식 모델 개선율이나 상용 환경 성능으로 해석하면 안 됩니다.** 현재 저장소의 공식 비교 자료에는 평가 조건·정답 투영 및 의미 점수화에서 미완료 항목이 남아 있습니다. 수치는 **Notion에 기록된 개발 단계 후속 관측치**이며, 동일 조건의 독립 재검증이 필요합니다.
-> 근거: [공식 비교 상태 JSON](https://github.com/hamhj7694/AIXTeamProject2/blob/b297c2fa430d517908430e14e167d14c87ad8f53/MVP_v3/docs/now_md/A_part/A%ED%8C%8C%ED%8A%B8%20%ED%85%8C%EC%8A%A4%ED%8A%B8%20%EB%B0%8F%20%ED%8C%8C%EC%9D%B4%ED%94%84%EB%9D%BC%EC%9D%B8%20%EA%B5%AC%EC%A1%B0%20%EC%A0%95%EB%A6%AC/run_comparison/official_comparison_metrics.json) · [품질 보고서 예시](https://github.com/hamhj7694/AIXTeamProject2/blob/b297c2fa430d517908430e14e167d14c87ad8f53/MVP_v3/docs/now_md/A_part/A%ED%8C%8C%ED%8A%B8%20%ED%85%8C%EC%8A%A4%ED%8A%B8%20%EB%B0%8F%20%ED%8C%8C%EC%9D%B4%ED%94%84%EB%9D%BC%EC%9D%B8%20%EA%B5%AC%EC%A1%B0%20%EC%A0%95%EB%A6%AC/reports/sample-20260916/metrics/quality-metrics-report.md)
 
 **외부 검토:** 「2026 AI·디지털 기반 사회문제 해결 챌린지」 **서류심사 통과** (수상이나 금융기관 도입을 의미하지 않음).
 
