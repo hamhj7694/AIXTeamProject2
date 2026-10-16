@@ -2,7 +2,8 @@
 
 This is *not* the 6.5 Event/Atom/Slot evaluator. It reads the existing
 AI-assisted canonical reference and the archived 30-case v3.1 live replay;
-it neither calls an LLM nor creates human-confirmed gold labels.
+it neither calls an LLM nor creates its own gold labels. A separate
+owner attestation records subsequent human review of AI-assisted labels.
 """
 
 from __future__ import annotations
@@ -62,7 +63,8 @@ def expected_slot_presence(gold_case: dict[str, Any]) -> dict[str, bool]:
     }
 
 
-def score(replay: dict[str, Any], reference: dict[str, Any]) -> dict[str, Any]:
+def score(replay: dict[str, Any], reference: dict[str, Any],
+          review_record: dict[str, Any] | None = None) -> dict[str, Any]:
     predicted_cases = replay.get("cases") or []
     gold_cases = reference.get("cases") or []
     by_id = {item["case_id"]: item for item in gold_cases}
@@ -73,6 +75,13 @@ def score(replay: dict[str, Any], reference: dict[str, Any]) -> dict[str, Any]:
     if {item["case_id"] for item in predicted_cases} != set(by_id):
         raise ValueError("Replay case IDs do not match canonical reference")
 
+    if review_record is not None:
+        if review_record.get("attestation_status") != "HUMAN_REVIEWED_OWNER_ATTESTED":
+            raise ValueError("Review status must be owner-attested human reviewed")
+        if set(review_record.get("attested_case_ids", [])) != set(by_id):
+            raise ValueError("Human review attestation case IDs do not match gold")
+        if review_record.get("reference_case_count") != len(gold_cases):
+            raise ValueError("Review attestation count does not match gold")
     counts = {key: {"tp": 0, "fp": 0, "fn": 0, "tn": 0} for key in SLOT_KEYS}
     per_case = []
     for item in predicted_cases:
@@ -99,10 +108,13 @@ def score(replay: dict[str, Any], reference: dict[str, Any]) -> dict[str, Any]:
     recall = tp / (tp + fn) if tp + fn else 0.0
     f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
     return {
-        "evaluation_type": "AI_ASSISTED_EXPLORATORY_NOT_HUMAN_SIGNED",
+        "evaluation_type": "AI_ASSISTED_EXPLORATORY_USER_REVIEW_ATTESTED" if review_record else "AI_ASSISTED_EXPLORATORY_NOT_HUMAN_SIGNED",
         "metric_family": "FIVE_CANONICAL_SLOT_BINARY_PRESENCE_V1",
         "comparison_to_v3_0": "NOT_SAME_SCORER_DO_NOT_CALCULATE_DELTA",
         "gold_annotation_status": reference.get("annotation_status"),
+        "review_record_status": review_record.get("attestation_status") if review_record else "NOT_PROVIDED",
+        "review_record_basis": review_record.get("evidence_status") if review_record else None,
+        "labeling_method": "AI assisted draft; project owner review and approval attested" if review_record else "AI assisted draft",
         "replay_status": replay.get("status"),
         "case_count": len(predicted_cases),
         "reference_slot_count": len(predicted_cases) * len(SLOT_KEYS),
@@ -115,7 +127,7 @@ def score(replay: dict[str, Any], reference: dict[str, Any]) -> dict[str, Any]:
         "f1": round(f1, 6),
         "per_case": per_case,
         "limitations": [
-            "AI-assisted canonical reference is not a fully human-verified gold set.",
+            "Original gold labels are AI-assisted; user-reported human review is not an independently audited annotation log.",
             "30 case IDs reuse only two unique five-turn source sequences.",
             "Presence scoring ignores some evidence, polarity, status and nuanced omissions.",
             "Different evaluator/projection from historical v3.0 corrected-Gold score.",
@@ -128,10 +140,11 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--replay", required=True, type=Path)
     parser.add_argument("--reference", required=True, type=Path)
+    parser.add_argument("--review-record", type=Path, help="Optional separate owner-attested human review record")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
 
-    result = score(read_json(args.replay), read_json(args.reference))
+    result = score(read_json(args.replay), read_json(args.reference), read_json(args.review_record) if args.review_record else None)
     serialized = json.dumps(result, ensure_ascii=False, indent=2) + "\n"
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
