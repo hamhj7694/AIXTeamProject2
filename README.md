@@ -12,12 +12,43 @@
 [![MySQL](https://img.shields.io/badge/MySQL-Shared%20Case-4479A1?logo=mysql&logoColor=white)](MVP_v3/database/)
 [![PoC](https://img.shields.io/badge/Status-Prototype-orange)](MVP_v3/README.md)
 
-**[📖 상세 Notion 포트폴리오](https://app.notion.com/p/e9ac753ff28a82cfa92a81ef1abcccd0)** · **[💻 MVP 실행 안내](MVP_v3/README.md)** · **[🛠 보관된 기술·역할별 구현 근거](https://github.com/hamhj7694/AIXTeamProject2/blob/b297c2fa430d517908430e14e167d14c87ad8f53/MVP_v3/docs/README.md)** · **[📚 보관된 구현 상태·개발 기록](https://github.com/hamhj7694/AIXTeamProject2/blob/b297c2fa430d517908430e14e167d14c87ad8f53/MVP_v3/docs/CURRENT_STATUS.md)**
+**🌐 [CSR 배포 서비스 체험하기](http://13.209.110.99/)** · **[상세 Notion 포트폴리오](https://app.notion.com/p/e9ac753ff28a82cfa92a81ef1abcccd0)** · **[💻 MVP 실행 안내](MVP_v3/README.md)** · **[🛠 보관된 기술·역할별 구현 근거](https://github.com/hamhj7694/AIXTeamProject2/blob/b297c2fa430d517908430e14e167d14c87ad8f53/MVP_v3/docs/README.md)** · **[📚 보관된 구현 상태·개발 기록](https://github.com/hamhj7694/AIXTeamProject2/blob/b297c2fa430d517908430e14e167d14c87ad8f53/MVP_v3/docs/CURRENT_STATUS.md)**
 
 > [!IMPORTANT]
 > 본 저장소는 **금융기관 운영 환경에 적용된 상용 제품이 아닌 PoC**입니다. 온디바이스·통신사·FDS·ASAP 연동은 **설계 시나리오**이며 실제 기관 API 연동이 아닙니다. 실제 사용자·은행망 연동 서비스가 아니며, 시연용 입력과 개발 환경에서 구현·평가했습니다.
 
 ---
+
+## 프로젝트 요약
+
+CSR은 보이스피싱 **위험 탐지 이후** 담당자가 사기범의 주장·요구와 고객의 실제 행동, 피해·노출 및 미확인 사항을 다시 파악해야 하는 문제를 다룹니다. 통화·상담의 사건 맥락을 구조화하고, 은행 담당자와 고객이 하나의 Shared Case를 바탕으로 확인·질문·조치 이력을 공유하는 **AI 업무 지원 PoC**입니다.
+
+```text
+상담·통화 텍스트 / 고객·담당자 입력
+  → LLM 사건 구조화·근거/상태 검사
+  → Shared Case 기록·상태 관리
+  → 은행·고객 Case Room에서 확인·질문·대응
+  → 처리 이력·인계·종결 보고서
+```
+
+- **팀·기여:** 3인 팀 프로젝트의 팀장으로 문제 정의, 업무 흐름·사건 데이터 구조, React 사용자 화면·서비스 통합 및 품질 평가에 참여했습니다.
+- **핵심 구현:** OpenAI Responses API·Structured Output·Pydantic, FastAPI(General/AI API), MySQL, React·TypeScript, Human-in-the-Loop.
+- **배포 범위:** 위 링크는 PoC 시연 환경에 접근하기 위한 제공 주소이며, 금융기관 실운영 환경이나 외부 기관 연동을 의미하지 않습니다.
+
+## 핵심 성과
+
+| 구분 | 내부 평가 결과 | 해석 |
+|---|---|---|
+| AI 정보 구조 개선 · 후속 실험 | 핵심 사실 재현율 **31.37% → 61.0%**, 문맥 요소 재현율 **41.45% → 68.0%** | 다른 버전의 실험 기록; 동일 조건에서 공식 개선율을 검증한 결과는 아님 |
+| 근거 없는 생성·모순 · 후속 실험 | 환각 **76건 → 18건**, 사실 모순 **7건 → 2건** | 위 구조 개선 실험과 함께 기록한 수치 |
+| 핵심 사실 존재 여부 · 별도 30-Case 평가 | **Precision 96.7% / Recall 87.0% / F1 91.6%** | 핵심 사실 5종 평가, 고유 대화 시퀀스 2종을 재사용 |
+| 대외 결과 | **2026 AI·디지털 기반 사회문제 해결 챌린지 서류심사 통과** | 프로젝트 출품 결과 |
+
+> **평가 조건:** 두 내부 평가는 서로 다른 기준으로 수행되어 직접 비교할 수 없습니다. 30-Case 평가는 AI 보조 정답 초안을 사용자 검토·승인한 기준으로 산출했으며, 전체 사건 분석 성능이나 상용 운영 성능을 의미하지 않습니다. 세부 지표와 한계는 아래 [검증 결과](#08-검증-결과-및-한계)에 보존했습니다.
+
+## README 안내
+
+[프로젝트 요약](#프로젝트-요약) · [핵심 성과](#핵심-성과) · [주요 기능](#01-서비스-화면주요-기능) · [문제 정의](#02-문제-정의--해결-접근) · [업무 흐름](#03-사용자-관점의-핵심-흐름) · [아키텍처](#04-아키텍처--실제-poc와-외부-연계-설계-구분) · [기술·구현](#05-주요-ai데이터-구현) · [검증](#08-검증-결과-및-한계) · [실행 안내](#09-실행-및-저장소-안내)
 
 ## 01. 서비스 화면·주요 기능
 
