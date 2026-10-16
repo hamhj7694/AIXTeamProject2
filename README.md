@@ -4,7 +4,7 @@
 
 > **AI가 사건 정보를 구조화하고, 은행 담당자와 고객이 같은 Case를 바탕으로 확인·질문·대응·기록을 이어가도록 설계한 팀 프로젝트 PoC**
 >
-> **2026.08–09 · 팀 프로젝트(3인) · 팀장 / AI 서비스 기획·Frontend·서비스 통합·품질 검증**
+> **2026.08–09 PoC 개발 · 2026.10 후속 품질 평가 · 팀 프로젝트(3인) · 팀장 / AI 서비스 기획·Frontend·서비스 통합·품질 검증**
 
 [![React](https://img.shields.io/badge/React-TypeScript-149ECA?logo=react&logoColor=white)](MVP_v3/frontend/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-Python-009688?logo=fastapi&logoColor=white)](MVP_v3/backend/)
@@ -15,32 +15,22 @@
 **[📖 상세 Notion 포트폴리오](https://app.notion.com/p/e9ac753ff28a82cfa92a81ef1abcccd0)** · **[💻 MVP 실행 안내](MVP_v3/README.md)** · **[🛠 보관된 기술·역할별 구현 근거](https://github.com/hamhj7694/AIXTeamProject2/blob/b297c2fa430d517908430e14e167d14c87ad8f53/MVP_v3/docs/README.md)** · **[📚 보관된 구현 상태·개발 기록](https://github.com/hamhj7694/AIXTeamProject2/blob/b297c2fa430d517908430e14e167d14c87ad8f53/MVP_v3/docs/CURRENT_STATUS.md)**
 
 > [!IMPORTANT]
-> 본 저장소는 **금융기관 운영 환경에 적용된 상용 제품이 아닌 PoC**입니다. 온디바이스·통신사·FDS·ASAP 연동은 **설계 시나리오**이며 실제 기관 API 연동이 아닙니다. 아래 화면은 시연용 데이터와 개발 환경을 기반으로 합니다.
+> 본 저장소는 **금융기관 운영 환경에 적용된 상용 제품이 아닌 PoC**입니다. 온디바이스·통신사·FDS·ASAP 연동은 **설계 시나리오**이며 실제 기관 API 연동이 아닙니다. 실제 사용자·은행망 연동 서비스가 아니며, 시연용 입력과 개발 환경에서 구현·평가했습니다.
 
 ---
 
-## 01. 서비스 미리보기
+## 01. 서비스 화면·주요 기능
 
 **탐지된 위험 신호만으로는 은행 직원이 '무슨 일이 있었고, 고객이 실제로 무엇을 했으며, 지금 무엇을 확인해야 하는지'를 바로 알기 어렵다**는 문제에서 시작했습니다.
 
-| 사건 목록·상태 관리 | 은행 담당자 Case Room |
-|:--:|:--:|
-| ![사건 현황과 목록](MVP_v3/frontend/public/judge/assets/screenshots/home.png) | ![은행 담당자 Case Room](MVP_v3/frontend/public/judge/assets/screenshots/bank-case-room.png) |
-| **사건 상태, 최근 변경, 담당자 업무 접근** | **같은 사건의 대화·분석·확인·조치** |
+| 사용자 화면·영역 | 주요 기능 |
+|---|---|
+| **은행 담당자 · 사건 목록** | 신규·진행·종결 Case의 상태, 최근 변경 사항과 담당 업무 조회 |
+| **은행 담당자 · Case Room** | 고객 대화, AI 사건 분석, 미확인 사항·질문·검증·조치 이력 통합 |
+| **사건 맥락·근거 패널** | 사기범의 요구, 고객 실제 행동 진술, 담당자 확인 사실, 원문 근거와 상태를 구분 |
+| **고객 Case Room** | 고객 공개 범위에 따라 질문·답변·안전 안내 제공, 고객 응답을 사건 맥락에 반영 |
 
-| 현재 사건 맥락·근거 패널 | 고객 질문·상담 |
-|:--:|:--:|
-| ![사건 맥락 패널](MVP_v3/frontend/public/judge/assets/screenshots/context-panel.png) | ![고객 대화와 확인 질문](MVP_v3/frontend/public/judge/assets/screenshots/customer-chat.png) |
-| **요구·실행·미확인·근거·업무 상태 구분** | **고객 공개 범위에 맞는 질문·답변·안내** |
-
-<details>
-<summary>다른 시연 화면 보기 — 새 사건 분석 / 분석 결과</summary>
-
-| 새 분석 | 분석 결과 |
-|:--:|:--:|
-| ![새 사건 분석](MVP_v3/frontend/public/judge/assets/screenshots/new-analysis.png) | ![AI 분석 결과](MVP_v3/frontend/public/judge/assets/screenshots/analysis-result.png) |
-
-</details>
+> **화면 자료 안내:** 기존 시연용 프론트엔드 캡처는 현재 UI와 차이가 있어 README에서 제외했습니다. 최신 구현 화면을 재촬영한 뒤 추가할 예정이며, 소스의 과거 이미지 파일 자체는 삭제하지 않았습니다.
 
 ## 02. 문제 정의 → 해결 접근
 
@@ -91,6 +81,34 @@ flowchart TB
     RET --> AI
     ENV -. "계약/데모 경로; 운영용<br/>외부 수신 API는 미구현" .-> AI
 ```
+
+### 실제 PoC 처리 파이프라인
+
+```text
+[상담·통화 텍스트 / 고객·담당자 확인 입력]  ← 실제 PoC 입력
+                  ↓
+     [General API: Case·권한·현재 상태 조립]
+                  ↓
+     [AI API: LLM 추출 / 실험용 Window ML]
+         Event · Semantic Atom · Fact · Context
+                  ↓
+     [Structured Output · Pydantic · Quality Guard]
+         근거·출처·상태·허용 액션 검증
+                  ↓
+     [General API: 데이터 계약·상태 전이·공개 범위 검증]
+                  ↓
+     [MySQL Shared Case: 사실·질문·검증·업무·이력 저장]
+                  ↓
+     [은행 CaseCopilot / 고객 Case Room]
+           확인·질문·안내·조치 기록
+                  ↓
+          [인계·종결 보고서 초안]
+```
+
+- **원문·분석 결과의 역할 분리:** AI API는 분석 결과와 후보를 반환하며, Case 기록의 저장·상태 갱신과 공개 범위 검증은 General API에서 수행합니다.
+- **ML·검색 기술의 실제 범위:** 위험 신호의 Window Logistic 추론은 실험용 모델을 사용하고, 사건 내부 검색은 **문자 n-gram TF-IDF 기반**입니다. ChromaDB 같은 외부 Vector DB나 별도 의미 임베딩 검색 모델을 사용했다고 주장하지 않습니다.
+- **외부 연계의 구현 경계:** 온디바이스·통신사·FDS·ASAP → AnalysisEnvelope 수신은 목표 아키텍처의 **설계 경로**이며, 금융기관과 실시간 연결한 기능은 아닙니다.
+- **Human-in-the-Loop:** AI의 위험 신호·추천·업무 초안은 담당자 검토를 돕는 자료입니다. 실제 금융기관 시스템의 차단·송금·지급정지 작업을 수행하지 않습니다.
 
 **데이터 흐름에서 지킨 경계**
 
