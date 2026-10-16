@@ -1,3 +1,5 @@
+> **보관 메모:** 아래 내용은 v3.0 평가 당시 작성한 Notion 업데이트 초안입니다. 현행 품질 점수 및 사용자 검수 확인은 [신규 평가 보고서](../run_comparison/AI_ASSISTED_QUALITY_SCORECARD_20261016.md)와 [검수 기록](../run_comparison/HUMAN_REVIEW_ATTESTATION_20261016.json)을 우선 참조하세요. 당시 `NOT_RUN` 상태를 최신 프로젝트의 전체 평가 미실행으로 오해하지 마세요.
+
 === NOTION UPDATE PAYLOAD ===
 
 평가 기준:
