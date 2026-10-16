@@ -1,10 +1,10 @@
-# CSR A파트 6.5 보충 평가 — AI 보조 정답 기준 (2026-10-16)
+# CSR A파트 6.5 보충 평가 — AI 초안 + 사용자 검수 정답 기준 (2026-10-16)
 
 > **평가 구분: 탐색적·재현 가능한 내부 분석. 공식 동일 조건 개선율이 아님.**
 >
 > 이 보고서는 2026-09-16 VP-18 *단일 샘플* 보고서의 미산출 값에 임의의 점수를 채워 넣지 않고,
-> **별도의 v3.1 30-Case 재실행 결과**를 기존 AI-assisted canonical reference 초안과
-> 대조해 실제 계산한 보충 점수표다. 사람 검증을 마친 Gold라고 주장하지 않는다.
+> **별도의 v3.1 30-Case 재실행 결과**를 AI 보조 라벨링 후 사용자가 검토·승인했다고 확인한
+> canonical reference와 대조한 보충 점수표다. 검수 사실은 프로젝트 소유자의 확인을 별도 파일로 기록했으며, 독립 전문가의 검증을 주장하지 않는다.
 
 ## 1. 기존 VP-18 보고서의 0과 빈칸 해석
 
@@ -27,8 +27,9 @@
 - 범죄 연루 주장, 인증번호 제공 요구, 송금 요구/지시, 안전계좌 명분, 긴급성(IMMEDIATE)
 - v3.1 예측 판정: 저장된 `structured_output.case_context_features`의 선언된 코드와
   `semantic_atoms`의 T4 `CLAIMED_SAFE_ACCOUNT` 목적지를 검사하는 규칙 기반 projection.
-- v3.1 기준 정답: `FACT_CONTEXT_CANONICAL_REFERENCE_WITH_EVIDENCE_v1.json`,
-  **AI_ASSISTED_REFERENCE_DRAFT_FOR_HUMAN_SIGNOFF**.
+- v3.1 기준 정답: `FACT_CONTEXT_CANONICAL_REFERENCE_WITH_EVIDENCE_v1.json`(원본은 AI 보조 초안 메타데이터 유지),
+  이후 사용자가 **직접 확인·승인했다고 밝힌 내역**을 [검수 확인 기록](HUMAN_REVIEW_ATTESTATION_20261016.json)에 별도 저장.
+  본 보고서에서 **Human-Reviewed Gold**는 이 두 자료를 합쳐 지칭한다.
 - 30 Case / 150 Turn이지만 **고유 5-Turn 대화 시퀀스는 2개뿐**이다.
 
 | 지표 | v3.0 보정 Gold 과거 집계 | v3.1 신규 5-슬롯 탐색 집계 |
@@ -39,7 +40,7 @@
 | Precision | 100.0% | **96.7%** |
 | Recall | 14.0% | **87.0%** |
 | F1 | 24.6% | **91.6%** |
-| 성격 | 기존 v3.0 결과를 보정 Gold로 감사한 기록 | 실제 v3.1 Raw Replay + AI 보조 reference + 새 규칙 |
+| 성격 | 기존 v3.0 결과를 보정 Gold로 감사한 기록 | 실제 v3.1 Raw Replay + 사용자 검수 확인된 AI 보조 reference + 새 규칙 |
 | 동일 평가기로 재실행했는가 | **아니오** | **아니오** |
 
 **이 표에서 +73.0%p 개선 등 직접 비교 변화량은 산출하지 않는다.**
@@ -71,9 +72,11 @@
 - v3.1 `risk_level`은 위험 시퀀스 20개 중 1개를 NORMAL로,
   정상 시퀀스 10개 중 4개를 HIGH로 기록했다. 이는 별도 위험도 판정 진단이며
   위 **사실 추출 점수와는 다른 평가 대상**이다.
-- 정답 30건 전부가 전문가/사람이 독립적으로 라벨링한 것이 아니다.
-  기존 저장소에는 일부 Case의 사용자 검토 결정이 있으나, 전체 reference는
-  AI 보조 초안이며 **사람 최종 승인 상태로 승격하지 않는다**.
+- 정답 30건은 **AI가 초안을 작성했고, 프로젝트 소유자가 검토·승인했다고 확인했다.**
+  GitHub에는 이전까지 FACT-01~03의 검수 기록만 존재했으므로, 사용자가 확인한 검수 사실을
+  별도 [30건 검수 확인 기록](HUMAN_REVIEW_ATTESTATION_20261016.json)으로 보완했다.
+  다만 이 기록은 **소유자 본인의 확인**이지, 독립 심사자가 매 건마다 서명한 감사 기록이 아니다.
+  **AI 초안을 사람이 처음부터 직접 라벨링한 것으로 표현하지 않는다.**
 - 동일 원문이 반복된 fixture이므로 평균·분산·일반화 성능의 근거로 부족하다.
   2개 고유 시퀀스 이상의 새 사례를 확보해야 한다.
 
@@ -95,6 +98,7 @@
 python MVP_v3/tests/context_test/run_comparison/score_ai_assisted_reference.py \
   --replay /path/to/v3_1_live_ai_20260917_30case.json \
   --reference /path/to/FACT_CONTEXT_CANONICAL_REFERENCE_WITH_EVIDENCE_v1.json \
+  --review-record MVP_v3/tests/context_test/run_comparison/HUMAN_REVIEW_ATTESTATION_20261016.json \
   --output /path/to/exploratory_5_slot_metrics.json
 ```
 
