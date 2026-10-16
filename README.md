@@ -12,7 +12,7 @@
 [![MySQL](https://img.shields.io/badge/MySQL-Shared%20Case-4479A1?logo=mysql&logoColor=white)](MVP_v3/database/)
 [![PoC](https://img.shields.io/badge/Status-Prototype-orange)](MVP_v3/README.md)
 
-**[📖 상세 Notion 포트폴리오](https://app.notion.com/p/e9ac753ff28a82cfa92a81ef1abcccd0)** · **[💻 MVP 실행 안내](MVP_v3/README.md)** · **[🛠 전체 기술·역할별 구현 근거](MVP_v3/docs/README.md)** · **[📚 구현 상태·개발 기록](MVP_v3/docs/CURRENT_STATUS.md)**
+**[📖 상세 Notion 포트폴리오](https://app.notion.com/p/e9ac753ff28a82cfa92a81ef1abcccd0)** · **[💻 MVP 실행 안내](MVP_v3/README.md)** · **[🛠 보관된 기술·역할별 구현 근거](https://github.com/hamhj7694/AIXTeamProject2/blob/b297c2fa430d517908430e14e167d14c87ad8f53/MVP_v3/docs/README.md)** · **[📚 보관된 구현 상태·개발 기록](https://github.com/hamhj7694/AIXTeamProject2/blob/b297c2fa430d517908430e14e167d14c87ad8f53/MVP_v3/docs/CURRENT_STATUS.md)**
 
 > [!IMPORTANT]
 > 본 저장소는 **금융기관 운영 환경에 적용된 상용 제품이 아닌 PoC**입니다. 온디바이스·통신사·FDS·ASAP 연동은 **설계 시나리오**이며 실제 기관 API 연동이 아닙니다. 아래 화면은 시연용 데이터와 개발 환경을 기반으로 합니다.
@@ -99,7 +99,7 @@ flowchart TB
 - **AI API**: 구조화된 분석 결과·제안을 반환합니다. AI API가 금융업무 원장에 직접 조치를 확정하지 않습니다.
 - **외부 연계**: 원문·녹음 대신 구조화 JSON을 수신하는 목표 구조를 설계했지만, **실제 금융기관의 데이터 수신과 연동은 미구현**입니다. 현재 시연 입력 경로와 동일시하지 않습니다.
 
-자세한 실제 데이터 계약: **[온디바이스 분석 정보 인계 문서](MVP_v3/docs/36_ON_DEVICE_ANALYSIS_DATA_HANDOFF.md)** · **[시스템 기술 스택](MVP_v3/docs/README.md)**
+자세한 실제 데이터 계약: **[온디바이스 분석 정보 인계 문서](https://github.com/hamhj7694/AIXTeamProject2/blob/b297c2fa430d517908430e14e167d14c87ad8f53/MVP_v3/docs/36_ON_DEVICE_ANALYSIS_DATA_HANDOFF.md)** · **[시스템 기술 스택](https://github.com/hamhj7694/AIXTeamProject2/blob/b297c2fa430d517908430e14e167d14c87ad8f53/MVP_v3/docs/README.md)**
 
 ## 05. 주요 AI·데이터 구현
 
@@ -175,7 +175,7 @@ AI가 반환한 JSON을 그대로 출력하지 않고, 출처와 확인 상태�
 | 음성 파일 | **OpenAI Audio Transcriptions API** | 파일 업로드 음성 전사 경로(실시간 통화 인식과 구분) |
 | 실행·검증 | **Docker Compose · Nginx · pytest · Vitest · GitHub Actions** | 컨테이너 실행, 프록시, 회귀 테스트 |
 
-AI 모델 ID는 환경변수로 교체할 수 있으며, 저장소의 예시 설정과 실제 실행·평가에 사용된 모델이 동일하다고 단정하지 않습니다. 자세한 모델/기능 연결은 [기술 스택 문서](MVP_v3/docs/README.md)를 참고해 주세요.
+AI 모델 ID는 환경변수로 교체할 수 있으며, 저장소의 예시 설정과 실제 실행·평가에 사용된 모델이 동일하다고 단정하지 않습니다. 자세한 모델/기능 연결은 [기술 스택 문서](https://github.com/hamhj7694/AIXTeamProject2/blob/b297c2fa430d517908430e14e167d14c87ad8f53/MVP_v3/docs/README.md)를 참고해 주세요.
 
 ## 07. 팀 구성과 나의 기여
 
@@ -191,11 +191,30 @@ AI 모델 ID는 환경변수로 교체할 수 있으며, 저장소의 예시 설
 
 초기 역할은 **Backend·MySQL / AI·ML·LLM / Frontend·서비스 통합**으로 나누어 진행했고, 설계·계약 협의·테스트·통합은 팀이 함께 수행했습니다. **모든 AI/Backend 코드를 팀장 혼자 개발했다고 주장하지 않습니다.**
 
-자세한 팀 단위 구현 및 역할 분담: **[구현 상태·개발 기록](MVP_v3/docs/CURRENT_STATUS.md)**
+자세한 팀 단위 구현 및 역할 분담: **[구현 상태·개발 기록](https://github.com/hamhj7694/AIXTeamProject2/blob/b297c2fa430d517908430e14e167d14c87ad8f53/MVP_v3/docs/CURRENT_STATUS.md)**
 
 ## 08. 검증 결과 및 한계
 
-### 내부 품질 개선 기록
+### AI 보조 정답셋의 사용자 검수 및 최신 탐색 평가
+
+**정답 라벨은 GPT가 1차 작성하고, 프로젝트 소유자가 원문과 대조해 검토·승인했다고 확인했습니다.**
+이 검수 사실은 2026-10-16에 별도 기록으로 남겼습니다. 정답을 사람이 처음부터 직접 라벨링했다고 주장하지 않습니다.
+
+| v3.1 핵심 사실 5종 존재 여부 평가 | 결과 |
+|---|---:|
+| 내부 평가 Case | **30건** (고유 대화 시퀀스 2개) |
+| 정답 양성 / TP / FP / FN | 100 / **87** / **3** / **13** |
+| Precision | **96.7%** |
+| Recall | **87.0%** |
+| F1 | **91.6%** |
+
+이는 기존에 실제로 실행해 저장된 v3.1 결과를 대상으로 계산한 **5종 핵심 사실 존재 여부의 제한적 내부 평가**입니다. 송금 요구 탐지에서는 실제 양성 20개 중 13개를 놓쳤습니다. 과거 v3.0 보정 Gold의 Recall 14.0%는 판정 규칙이 달라 **87.0%와 직접 비교한 성능 개선율이 아닙니다.** 30개 Case에도 고유한 통화 시퀀스는 2개뿐이므로 일반화된 정확도를 의미하지 않습니다.
+
+**평가 근거:** [사람 검수 확인 기록](MVP_v3/tests/context_test/run_comparison/HUMAN_REVIEW_ATTESTATION_20261016.json) · [비교·해석 보고서](MVP_v3/tests/context_test/run_comparison/AI_ASSISTED_QUALITY_SCORECARD_20261016.md) · [30건별 평가 수치](MVP_v3/tests/context_test/run_comparison/AI_ASSISTED_QUALITY_SCORECARD_20261016.json) · [재계산 코드](MVP_v3/tests/context_test/run_comparison/score_ai_assisted_reference.py)
+
+> **평가 범위:** 이 검수 확인은 소유자 본인의 확인 기록으로, 외부 독립 전문가의 사례별 감사 결과는 아닙니다. 2026-09-16 VP-18 단일 샘플의 Event·Atom·Critical Slot Precision/Recall/F1은 당시 정답 미등록으로 **미산출**이었으며, 위의 5종 사실 점수가 해당 수치들을 대체하지는 않습니다.
+
+### 후속 실험 별도 기록
 
 [Notion 포트폴리오](https://app.notion.com/p/e9ac753ff28a82cfa92a81ef1abcccd0)에는 후속 내부 실험에서 다음 **관측치**가 기록되어 있습니다.
 
@@ -208,7 +227,7 @@ AI 모델 ID는 환경변수로 교체할 수 있으며, 저장소의 예시 설
 
 > [!CAUTION]
 > **이 수치를 동일 조건에서 재현된 공식 모델 개선율이나 상용 환경 성능으로 해석하면 안 됩니다.** 현재 저장소의 공식 비교 자료에는 평가 조건·정답 투영 및 의미 점수화에서 미완료 항목이 남아 있습니다. 수치는 **Notion에 기록된 개발 단계 후속 관측치**이며, 동일 조건의 독립 재검증이 필요합니다.
-> 근거: [공식 비교 상태 JSON](MVP_v3/docs/now_md/A_part/A%ED%8C%8C%ED%8A%B8%20%ED%85%8C%EC%8A%A4%ED%8A%B8%20%EB%B0%8F%20%ED%8C%8C%EC%9D%B4%ED%94%84%EB%9D%BC%EC%9D%B8%20%EA%B5%AC%EC%A1%B0%20%EC%A0%95%EB%A6%AC/run_comparison/official_comparison_metrics.json) · [품질 보고서 예시](MVP_v3/docs/now_md/A_part/A%ED%8C%8C%ED%8A%B8%20%ED%85%8C%EC%8A%A4%ED%8A%B8%20%EB%B0%8F%20%ED%8C%8C%EC%9D%B4%ED%94%84%EB%9D%BC%EC%9D%B8%20%EA%B5%AC%EC%A1%B0%20%EC%A0%95%EB%A6%AC/reports/sample-20260916/metrics/quality-metrics-report.md)
+> 근거: [공식 비교 상태 JSON](https://github.com/hamhj7694/AIXTeamProject2/blob/b297c2fa430d517908430e14e167d14c87ad8f53/MVP_v3/docs/now_md/A_part/A%ED%8C%8C%ED%8A%B8%20%ED%85%8C%EC%8A%A4%ED%8A%B8%20%EB%B0%8F%20%ED%8C%8C%EC%9D%B4%ED%94%84%EB%9D%BC%EC%9D%B8%20%EA%B5%AC%EC%A1%B0%20%EC%A0%95%EB%A6%AC/run_comparison/official_comparison_metrics.json) · [품질 보고서 예시](https://github.com/hamhj7694/AIXTeamProject2/blob/b297c2fa430d517908430e14e167d14c87ad8f53/MVP_v3/docs/now_md/A_part/A%ED%8C%8C%ED%8A%B8%20%ED%85%8C%EC%8A%A4%ED%8A%B8%20%EB%B0%8F%20%ED%8C%8C%EC%9D%B4%ED%94%84%EB%9D%BC%EC%9D%B8%20%EA%B5%AC%EC%A1%B0%20%EC%A0%95%EB%A6%AC/reports/sample-20260916/metrics/quality-metrics-report.md)
 
 **외부 검토:** 「2026 AI·디지털 기반 사회문제 해결 챌린지」 **서류심사 통과** (수상이나 금융기관 도입을 의미하지 않음).
 
@@ -221,7 +240,7 @@ AI 모델 ID는 환경변수로 교체할 수 있으며, 저장소의 예시 설
 
 ## 09. 실행 및 저장소 안내
 
-실행 중심 폴더는 **`MVP_v3/`**입니다. 이전 버전·작업 문서와 구분해 주세요.
+실행 중심 폴더는 **`MVP_v3/`**입니다. 이전 버전·작업 문서와 구분해 주세요. 일부 과거 `docs/` 문서는 저장소 정리 과정에서 `main`에서 삭제되어 위 링크는 보관 커밋을 가리킵니다.
 
 ```text
 MVP_v3/
@@ -233,7 +252,7 @@ MVP_v3/
 │   ├── migrations/       # MySQL 스키마 변경 이력
 │   └── scripts/          # DB·API 점검 도구
 ├── database/             # MySQL 초기 스키마
-├── docs/                 # 현재 상태 및 아키텍처/계약 문서
+├── tests/context_test/   # 평가 이력과 AI 보조 정답·사람 검수 기록
 ├── docker-compose.yml
 └── .env.example
 ```
@@ -242,8 +261,8 @@ MVP_v3/
 
 - [MVP_v3 설치·실행](MVP_v3/README.md)
 - [Backend 환경 설정과 API 실행](MVP_v3/backend/README.md)
-- [현재 구현 상태와 미완료 항목](MVP_v3/docs/CURRENT_STATUS.md)
-- [전체 시스템 기술 스택](MVP_v3/docs/README.md)
+- [현재 구현 상태와 미완료 항목](https://github.com/hamhj7694/AIXTeamProject2/blob/b297c2fa430d517908430e14e167d14c87ad8f53/MVP_v3/docs/CURRENT_STATUS.md)
+- [전체 시스템 기술 스택](https://github.com/hamhj7694/AIXTeamProject2/blob/b297c2fa430d517908430e14e167d14c87ad8f53/MVP_v3/docs/README.md)
 
 ---
 
