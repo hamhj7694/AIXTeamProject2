@@ -1,3 +1,5 @@
+> **과거 평가 스냅샷 안내 (2026-10-16 갱신):** 아래 v3.0 보정 Gold 평가와 당시 v3.1 `NOT_RUN` 상태는 **그때 수행한 특정 평가**의 기록입니다. 이후 보관된 v3.1 30건 실행 출력을 별도 규칙으로 채점한 [새 탐색 평가 보고서](../run_comparison/AI_ASSISTED_QUALITY_SCORECARD_20261016.md)가 작성됐습니다. 사용자가 AI 생성 정답 초안을 검토·승인했다고 확인한 [검수 기록](../run_comparison/HUMAN_REVIEW_ATTESTATION_20261016.json)도 별도 보관합니다. 두 평가 결과를 공식 동일 조건 개선으로 직접 비교하지 않습니다.
+
 # CSR v3.0 vs v3.1 — Corrected / High-Fidelity Gold 재평가
 
 ## A. 평가 환경
