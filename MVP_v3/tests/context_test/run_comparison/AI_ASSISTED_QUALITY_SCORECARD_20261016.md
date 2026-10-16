@@ -9,11 +9,11 @@
 ## 1. 기존 VP-18 보고서의 0과 빈칸 해석
 
 - 원래 보고서는 Event 5건, Semantic Atom 9건, Critical Slot 28건을 **예측**했고,
-  정답 라벨은 0건 **미등록**이었다. Precision / Recall / F1의 \`-\`는 **0점이 아니라 미산출**이다.
+  정답 라벨은 0건 **미등록**이었다. Precision / Recall / F1의 `-`는 **0점이 아니라 미산출**이다.
 - 당시 Event→Atom turn coverage 1.0, Relation lineage rate 1.0,
   Context Signal lineage rate 1.0은 **참조 무결성 성격의 구조 지표**이지 의미 정확도가 아니다.
   Context Signal이 0개인 샘플에서 lineage rate 1.0은 빈 대상에 대한 기본 반환값이다.
-- 기존 스크립트의 \`privacy_status: PASS\`는 하드코딩된 상태값이므로
+- 기존 스크립트의 `privacy_status: PASS`는 하드코딩된 상태값이므로
   별도의 실질적인 개인정보 유출 테스트 합격 증거로 해석하지 않는다.
 - VP-18의 실제 입력 원문과 독립적으로 확정된 6.5 Event/Atom/Slot gold는 확보하지 못했다.
   따라서 **원본 VP-18의 네 품질지표는 여전히 미산출**이다.
@@ -25,9 +25,9 @@
 
 평가 단위: Case 단위 5개의 정답 슬롯이 **긍정적으로 존재하는지** 여부.
 - 범죄 연루 주장, 인증번호 제공 요구, 송금 요구/지시, 안전계좌 명분, 긴급성(IMMEDIATE)
-- v3.1 예측 판정: 저장된 \`structured_output.case_context_features\`의 선언된 코드와
-  \`semantic_atoms\`의 T4 \`CLAIMED_SAFE_ACCOUNT\` 목적지를 검사하는 규칙 기반 projection.
-- v3.1 기준 정답: \`FACT_CONTEXT_CANONICAL_REFERENCE_WITH_EVIDENCE_v1.json\`,
+- v3.1 예측 판정: 저장된 `structured_output.case_context_features`의 선언된 코드와
+  `semantic_atoms`의 T4 `CLAIMED_SAFE_ACCOUNT` 목적지를 검사하는 규칙 기반 projection.
+- v3.1 기준 정답: `FACT_CONTEXT_CANONICAL_REFERENCE_WITH_EVIDENCE_v1.json`,
   **AI_ASSISTED_REFERENCE_DRAFT_FOR_HUMAN_SIGNOFF**.
 - 30 Case / 150 Turn이지만 **고유 5-Turn 대화 시퀀스는 2개뿐**이다.
 
@@ -61,14 +61,14 @@
 위 점수는 **해당 다섯 항목에 대한 존재 탐지만 측정**한다.
 기관·역할의 실제 확인 여부, 송금 완료와 요구의 구분, 금액 근거, 부정·정정 상태,
 원문 근거 정확도, Relation/Context Signal 정밀도 등은 이 평가에서 다루지 않았다.
-그러므로 기존 6.5 \`event_decomposition\`·\`semantic_atom\`·\`critical_slot\`·
-\`observed_lexical_code\`의 Precision/Recall/F1을 대신하지 않는다.
+그러므로 기존 6.5 `event_decomposition`·`semantic_atom`·`critical_slot`·
+`observed_lexical_code`의 Precision/Recall/F1을 대신하지 않는다.
 
 ## 3. 실무상 관찰과 검증 필요 사항
 
 - 가장 눈에 띄는 결손은 **송금 요구 누락 13/20**, 정상 시퀀스에서
   **송금 요구 오탐 3/10**이다. 해당 구조의 polarity / action_state를 재검토할 필요가 있다.
-- v3.1 \`risk_level\`은 위험 시퀀스 20개 중 1개를 NORMAL로,
+- v3.1 `risk_level`은 위험 시퀀스 20개 중 1개를 NORMAL로,
   정상 시퀀스 10개 중 4개를 HIGH로 기록했다. 이는 별도 위험도 판정 진단이며
   위 **사실 추출 점수와는 다른 평가 대상**이다.
 - 정답 30건 전부가 전문가/사람이 독립적으로 라벨링한 것이 아니다.
@@ -81,22 +81,22 @@
 
 원래의 30-Case raw 및 AI reference 파일은
 [보관 커밋 b297c2f](https://github.com/hamhj7694/AIXTeamProject2/tree/b297c2fa430d517908430e14e167d14c87ad8f53)의
-\`MVP_v3/docs/now_md/A_part/A파트 테스트 및 파이프라인 구조 정리/\` 아래에 있었다.
-해당 폴더는 이후 \`main\`에서 제거됐으므로 이 새 문서는 **원본을 복구·덮어쓰지 않는다**.
+`MVP_v3/docs/now_md/A_part/A파트 테스트 및 파이프라인 구조 정리/` 아래에 있었다.
+해당 폴더는 이후 `main`에서 제거됐으므로 이 새 문서는 **원본을 복구·덮어쓰지 않는다**.
 
 아래 두 파일을 보관 커밋에서 로컬로 추출하여 입력으로 사용한다.
 
-- **REPLAY**: \`run_comparison/v3_1_live_ai_20260917_30case.json\` (blob SHA \`7d8fb779777995a6509c184760d9f751ff1998ad\`)
-- **REFERENCE**: \`fixtures/official_gold/FACT_CONTEXT_CANONICAL_REFERENCE_WITH_EVIDENCE_v1.json\` (blob SHA \`02a5e63a9191db6f371eb7cfa88f01ecf7f4532e\`)
+- **REPLAY**: `run_comparison/v3_1_live_ai_20260917_30case.json` (blob SHA `7d8fb779777995a6509c184760d9f751ff1998ad`)
+- **REFERENCE**: `fixtures/official_gold/FACT_CONTEXT_CANONICAL_REFERENCE_WITH_EVIDENCE_v1.json` (blob SHA `02a5e63a9191db6f371eb7cfa88f01ecf7f4532e`)
 
 추출한 파일 위치를 지정해서 실행:
 
-\`\`\`bash
+```bash
 python MVP_v3/tests/context_test/run_comparison/score_ai_assisted_reference.py \
   --replay /path/to/v3_1_live_ai_20260917_30case.json \
   --reference /path/to/FACT_CONTEXT_CANONICAL_REFERENCE_WITH_EVIDENCE_v1.json \
   --output /path/to/exploratory_5_slot_metrics.json
-\`\`\`
+```
 
 이 evaluator는 별도의 LLM 호출이나 API 비용이 필요 없다.
 새 gold를 모델 자신의 output에서 추출하지 않고, **이미 존재하는 AI-assisted reference와
