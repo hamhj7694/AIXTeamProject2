@@ -1,0 +1,575 @@
+{
+  "evaluation_type": "AI_ASSISTED_EXPLORATORY_USER_REVIEW_ATTESTED",
+  "metric_family": "FIVE_CANONICAL_SLOT_BINARY_PRESENCE_V1",
+  "comparison_to_v3_0": "NOT_SAME_SCORER_DO_NOT_CALCULATE_DELTA",
+  "gold_annotation_status": "AI_ASSISTED_REFERENCE_DRAFT_FOR_HUMAN_SIGNOFF",
+  "replay_status": "LIVE_AI_REPLAY",
+  "case_count": 30,
+  "reference_slot_count": 150,
+  "positive_reference_count": 100,
+  "predicted_positive_count": 90,
+  "counts_by_slot": {
+    "crime_involvement_claim": {
+      "tp": 20,
+      "fp": 0,
+      "fn": 0,
+      "tn": 10
+    },
+    "auth_code_disclosure_requested": {
+      "tp": 20,
+      "fp": 0,
+      "fn": 0,
+      "tn": 10
+    },
+    "transfer_requested_or_instructed": {
+      "tp": 7,
+      "fp": 3,
+      "fn": 13,
+      "tn": 7
+    },
+    "safe_account_destination_claimed": {
+      "tp": 20,
+      "fp": 0,
+      "fn": 0,
+      "tn": 10
+    },
+    "urgency": {
+      "tp": 20,
+      "fp": 0,
+      "fn": 0,
+      "tn": 10
+    }
+  },
+  "totals": {
+    "tp": 87,
+    "fp": 3,
+    "fn": 13,
+    "tn": 47
+  },
+  "precision": 0.966667,
+  "recall": 0.87,
+  "f1": 0.915789,
+  "per_case": [
+    {
+      "case_id": "FACT-01",
+      "prediction": {
+        "crime_involvement_claim": true,
+        "auth_code_disclosure_requested": true,
+        "transfer_requested_or_instructed": true,
+        "safe_account_destination_claimed": true,
+        "urgency": true
+      },
+      "reference": {
+        "crime_involvement_claim": true,
+        "auth_code_disclosure_requested": true,
+        "transfer_requested_or_instructed": true,
+        "safe_account_destination_claimed": true,
+        "urgency": true
+      }
+    },
+    {
+      "case_id": "FACT-02",
+      "prediction": {
+        "crime_involvement_claim": true,
+        "auth_code_disclosure_requested": true,
+        "transfer_requested_or_instructed": true,
+        "safe_account_destination_claimed": true,
+        "urgency": true
+      },
+      "reference": {
+        "crime_involvement_claim": true,
+        "auth_code_disclosure_requested": true,
+        "transfer_requested_or_instructed": true,
+        "safe_account_destination_claimed": true,
+        "urgency": true
+      }
+    },
+    {
+      "case_id": "FACT-03",
+      "prediction": {
+        "crime_involvement_claim": true,
+        "auth_code_disclosure_requested": true,
+        "transfer_requested_or_instructed": true,
+        "safe_account_destination_claimed": true,
+        "urgency": true
+      },
+      "reference": {
+        "crime_involvement_claim": true,
+        "auth_code_disclosure_requested": true,
+        "transfer_requested_or_instructed": true,
+        "safe_account_destination_claimed": true,
+        "urgency": true
+      }
+    },
+    {
+      "case_id": "FACT-04",
+      "prediction": {
+        "crime_involvement_claim": true,
+        "auth_code_disclosure_requested": true,
+        "transfer_requested_or_instructed": false,
+        "safe_account_destination_claimed": true,
+        "urgency": true
+      },
+      "reference": {
+        "crime_involvement_claim": true,
+        "auth_code_disclosure_requested": true,
+        "transfer_requested_or_instructed": true,
+        "safe_account_destination_claimed": true,
+        "urgency": true
+      }
+    },
+    {
+      "case_id": "FACT-05",
+      "prediction": {
+        "crime_involvement_claim": true,
+        "auth_code_disclosure_requested": true,
+        "transfer_requested_or_instructed": true,
+        "safe_account_destination_claimed": true,
+        "urgency": true
+      },
+      "reference": {
+        "crime_involvement_claim": true,
+        "auth_code_disclosure_requested": true,
+        "transfer_requested_or_instructed": true,
+        "safe_account_destination_claimed": true,
+        "urgency": true
+      }
+    },
+    {
+      "case_id": "FACT-06",
+      "prediction": {
+        "crime_involvement_claim": true,
+        "auth_code_disclosure_requested": true,
+        "transfer_requested_or_instructed": false,
+        "safe_account_destination_claimed": true,
+        "urgency": true
+      },
+      "reference": {
+        "crime_involvement_claim": true,
+        "auth_code_disclosure_requested": true,
+        "transfer_requested_or_instructed": true,
+        "safe_account_destination_claimed": true,
+        "urgency": true
+      }
+    },
+    {
+      "case_id": "FACT-07",
+      "prediction": {
+        "crime_involvement_claim": true,
+        "auth_code_disclosure_requested": true,
+        "transfer_requested_or_instructed": true,
+        "safe_account_destination_claimed": true,
+        "urgency": true
+      },
+      "reference": {
+        "crime_involvement_claim": true,
+        "auth_code_disclosure_requested": true,
+        "transfer_requested_or_instructed": true,
+        "safe_account_destination_claimed": true,
+        "urgency": true
+      }
+    },
+    {
+      "case_id": "FACT-08",
+      "prediction": {
+        "crime_involvement_claim": true,
+        "auth_code_disclosure_requested": true,
+        "transfer_requested_or_instructed": false,
+        "safe_account_destination_claimed": true,
+        "urgency": true
+      },
+      "reference": {
+        "crime_involvement_claim": true,
+        "auth_code_disclosure_requested": true,
+        "transfer_requested_or_instructed": true,
+        "safe_account_destination_claimed": true,
+        "urgency": true
+      }
+    },
+    {
+      "case_id": "FACT-09",
+      "prediction": {
+        "crime_involvement_claim": true,
+        "auth_code_disclosure_requested": true,
+        "transfer_requested_or_instructed": true,
+        "safe_account_destination_claimed": true,
+        "urgency": true
+      },
+      "reference": {
+        "crime_involvement_claim": true,
+        "auth_code_disclosure_requested": true,
+        "transfer_requested_or_instructed": true,
+        "safe_account_destination_claimed": true,
+        "urgency": true
+      }
+    },
+    {
+      "case_id": "FACT-10",
+      "prediction": {
+        "crime_involvement_claim": true,
+        "auth_code_disclosure_requested": true,
+        "transfer_requested_or_instructed": false,
+        "safe_account_destination_claimed": true,
+        "urgency": true
+      },
+      "reference": {
+        "crime_involvement_claim": true,
+        "auth_code_disclosure_requested": true,
+        "transfer_requested_or_instructed": true,
+        "safe_account_destination_claimed": true,
+        "urgency": true
+      }
+    },
+    {
+      "case_id": "FACT-11",
+      "prediction": {
+        "crime_involvement_claim": true,
+        "auth_code_disclosure_requested": true,
+        "transfer_requested_or_instructed": false,
+        "safe_account_destination_claimed": true,
+        "urgency": true
+      },
+      "reference": {
+        "crime_involvement_claim": true,
+        "auth_code_disclosure_requested": true,
+        "transfer_requested_or_instructed": true,
+        "safe_account_destination_claimed": true,
+        "urgency": true
+      }
+    },
+    {
+      "case_id": "FACT-12",
+      "prediction": {
+        "crime_involvement_claim": true,
+        "auth_code_disclosure_requested": true,
+        "transfer_requested_or_instructed": false,
+        "safe_account_destination_claimed": true,
+        "urgency": true
+      },
+      "reference": {
+        "crime_involvement_claim": true,
+        "auth_code_disclosure_requested": true,
+        "transfer_requested_or_instructed": true,
+        "safe_account_destination_claimed": true,
+        "urgency": true
+      }
+    },
+    {
+      "case_id": "FACT-13",
+      "prediction": {
+        "crime_involvement_claim": true,
+        "auth_code_disclosure_requested": true,
+        "transfer_requested_or_instructed": false,
+        "safe_account_destination_claimed": true,
+        "urgency": true
+      },
+      "reference": {
+        "crime_involvement_claim": true,
+        "auth_code_disclosure_requested": true,
+        "transfer_requested_or_instructed": true,
+        "safe_account_destination_claimed": true,
+        "urgency": true
+      }
+    },
+    {
+      "case_id": "FACT-14",
+      "prediction": {
+        "crime_involvement_claim": true,
+        "auth_code_disclosure_requested": true,
+        "transfer_requested_or_instructed": false,
+        "safe_account_destination_claimed": true,
+        "urgency": true
+      },
+      "reference": {
+        "crime_involvement_claim": true,
+        "auth_code_disclosure_requested": true,
+        "transfer_requested_or_instructed": true,
+        "safe_account_destination_claimed": true,
+        "urgency": true
+      }
+    },
+    {
+      "case_id": "FACT-15",
+      "prediction": {
+        "crime_involvement_claim": true,
+        "auth_code_disclosure_requested": true,
+        "transfer_requested_or_instructed": true,
+        "safe_account_destination_claimed": true,
+        "urgency": true
+      },
+      "reference": {
+        "crime_involvement_claim": true,
+        "auth_code_disclosure_requested": true,
+        "transfer_requested_or_instructed": true,
+        "safe_account_destination_claimed": true,
+        "urgency": true
+      }
+    },
+    {
+      "case_id": "FACT-16",
+      "prediction": {
+        "crime_involvement_claim": true,
+        "auth_code_disclosure_requested": true,
+        "transfer_requested_or_instructed": false,
+        "safe_account_destination_claimed": true,
+        "urgency": true
+      },
+      "reference": {
+        "crime_involvement_claim": true,
+        "auth_code_disclosure_requested": true,
+        "transfer_requested_or_instructed": true,
+        "safe_account_destination_claimed": true,
+        "urgency": true
+      }
+    },
+    {
+      "case_id": "FACT-17",
+      "prediction": {
+        "crime_involvement_claim": true,
+        "auth_code_disclosure_requested": true,
+        "transfer_requested_or_instructed": false,
+        "safe_account_destination_claimed": true,
+        "urgency": true
+      },
+      "reference": {
+        "crime_involvement_claim": true,
+        "auth_code_disclosure_requested": true,
+        "transfer_requested_or_instructed": true,
+        "safe_account_destination_claimed": true,
+        "urgency": true
+      }
+    },
+    {
+      "case_id": "FACT-18",
+      "prediction": {
+        "crime_involvement_claim": true,
+        "auth_code_disclosure_requested": true,
+        "transfer_requested_or_instructed": false,
+        "safe_account_destination_claimed": true,
+        "urgency": true
+      },
+      "reference": {
+        "crime_involvement_claim": true,
+        "auth_code_disclosure_requested": true,
+        "transfer_requested_or_instructed": true,
+        "safe_account_destination_claimed": true,
+        "urgency": true
+      }
+    },
+    {
+      "case_id": "FACT-19",
+      "prediction": {
+        "crime_involvement_claim": true,
+        "auth_code_disclosure_requested": true,
+        "transfer_requested_or_instructed": false,
+        "safe_account_destination_claimed": true,
+        "urgency": true
+      },
+      "reference": {
+        "crime_involvement_claim": true,
+        "auth_code_disclosure_requested": true,
+        "transfer_requested_or_instructed": true,
+        "safe_account_destination_claimed": true,
+        "urgency": true
+      }
+    },
+    {
+      "case_id": "FACT-20",
+      "prediction": {
+        "crime_involvement_claim": true,
+        "auth_code_disclosure_requested": true,
+        "transfer_requested_or_instructed": false,
+        "safe_account_destination_claimed": true,
+        "urgency": true
+      },
+      "reference": {
+        "crime_involvement_claim": true,
+        "auth_code_disclosure_requested": true,
+        "transfer_requested_or_instructed": true,
+        "safe_account_destination_claimed": true,
+        "urgency": true
+      }
+    },
+    {
+      "case_id": "FACT-21",
+      "prediction": {
+        "crime_involvement_claim": false,
+        "auth_code_disclosure_requested": false,
+        "transfer_requested_or_instructed": false,
+        "safe_account_destination_claimed": false,
+        "urgency": false
+      },
+      "reference": {
+        "crime_involvement_claim": false,
+        "auth_code_disclosure_requested": false,
+        "transfer_requested_or_instructed": false,
+        "safe_account_destination_claimed": false,
+        "urgency": false
+      }
+    },
+    {
+      "case_id": "FACT-22",
+      "prediction": {
+        "crime_involvement_claim": false,
+        "auth_code_disclosure_requested": false,
+        "transfer_requested_or_instructed": false,
+        "safe_account_destination_claimed": false,
+        "urgency": false
+      },
+      "reference": {
+        "crime_involvement_claim": false,
+        "auth_code_disclosure_requested": false,
+        "transfer_requested_or_instructed": false,
+        "safe_account_destination_claimed": false,
+        "urgency": false
+      }
+    },
+    {
+      "case_id": "FACT-23",
+      "prediction": {
+        "crime_involvement_claim": false,
+        "auth_code_disclosure_requested": false,
+        "transfer_requested_or_instructed": true,
+        "safe_account_destination_claimed": false,
+        "urgency": false
+      },
+      "reference": {
+        "crime_involvement_claim": false,
+        "auth_code_disclosure_requested": false,
+        "transfer_requested_or_instructed": false,
+        "safe_account_destination_claimed": false,
+        "urgency": false
+      }
+    },
+    {
+      "case_id": "FACT-24",
+      "prediction": {
+        "crime_involvement_claim": false,
+        "auth_code_disclosure_requested": false,
+        "transfer_requested_or_instructed": false,
+        "safe_account_destination_claimed": false,
+        "urgency": false
+      },
+      "reference": {
+        "crime_involvement_claim": false,
+        "auth_code_disclosure_requested": false,
+        "transfer_requested_or_instructed": false,
+        "safe_account_destination_claimed": false,
+        "urgency": false
+      }
+    },
+    {
+      "case_id": "FACT-25",
+      "prediction": {
+        "crime_involvement_claim": false,
+        "auth_code_disclosure_requested": false,
+        "transfer_requested_or_instructed": false,
+        "safe_account_destination_claimed": false,
+        "urgency": false
+      },
+      "reference": {
+        "crime_involvement_claim": false,
+        "auth_code_disclosure_requested": false,
+        "transfer_requested_or_instructed": false,
+        "safe_account_destination_claimed": false,
+        "urgency": false
+      }
+    },
+    {
+      "case_id": "FACT-26",
+      "prediction": {
+        "crime_involvement_claim": false,
+        "auth_code_disclosure_requested": false,
+        "transfer_requested_or_instructed": false,
+        "safe_account_destination_claimed": false,
+        "urgency": false
+      },
+      "reference": {
+        "crime_involvement_claim": false,
+        "auth_code_disclosure_requested": false,
+        "transfer_requested_or_instructed": false,
+        "safe_account_destination_claimed": false,
+        "urgency": false
+      }
+    },
+    {
+      "case_id": "FACT-27",
+      "prediction": {
+        "crime_involvement_claim": false,
+        "auth_code_disclosure_requested": false,
+        "transfer_requested_or_instructed": false,
+        "safe_account_destination_claimed": false,
+        "urgency": false
+      },
+      "reference": {
+        "crime_involvement_claim": false,
+        "auth_code_disclosure_requested": false,
+        "transfer_requested_or_instructed": false,
+        "safe_account_destination_claimed": false,
+        "urgency": false
+      }
+    },
+    {
+      "case_id": "FACT-28",
+      "prediction": {
+        "crime_involvement_claim": false,
+        "auth_code_disclosure_requested": false,
+        "transfer_requested_or_instructed": true,
+        "safe_account_destination_claimed": false,
+        "urgency": false
+      },
+      "reference": {
+        "crime_involvement_claim": false,
+        "auth_code_disclosure_requested": false,
+        "transfer_requested_or_instructed": false,
+        "safe_account_destination_claimed": false,
+        "urgency": false
+      }
+    },
+    {
+      "case_id": "FACT-29",
+      "prediction": {
+        "crime_involvement_claim": false,
+        "auth_code_disclosure_requested": false,
+        "transfer_requested_or_instructed": false,
+        "safe_account_destination_claimed": false,
+        "urgency": false
+      },
+      "reference": {
+        "crime_involvement_claim": false,
+        "auth_code_disclosure_requested": false,
+        "transfer_requested_or_instructed": false,
+        "safe_account_destination_claimed": false,
+        "urgency": false
+      }
+    },
+    {
+      "case_id": "FACT-30",
+      "prediction": {
+        "crime_involvement_claim": false,
+        "auth_code_disclosure_requested": false,
+        "transfer_requested_or_instructed": true,
+        "safe_account_destination_claimed": false,
+        "urgency": false
+      },
+      "reference": {
+        "crime_involvement_claim": false,
+        "auth_code_disclosure_requested": false,
+        "transfer_requested_or_instructed": false,
+        "safe_account_destination_claimed": false,
+        "urgency": false
+      }
+    }
+  ],
+  "limitations": [
+    "Original labels were AI-assisted; owner-attested human review is not an independent case-by-case audited sign-off.",
+    "30 case IDs reuse only two unique five-turn source sequences.",
+    "Presence scoring ignores some evidence, polarity, status and nuanced omissions.",
+    "Different evaluator/projection from historical v3.0 corrected-Gold score.",
+    "Scores do not replace pending event/atom/critical-slot 6.5 metrics."
+  ],
+  "review_record_status": "HUMAN_REVIEWED_OWNER_ATTESTED",
+  "review_record_basis": "OWNER_SELF_ATTESTATION_NOT_AN_INDEPENDENT_CASE_BY_CASE_AUDIT_LOG",
+  "labeling_method": "AI-assisted labels subsequently reviewed/approved by project owner (owner's confirmation, 2026-10-16)",
+  "human_review_record_path": "MVP_v3/tests/context_test/run_comparison/HUMAN_REVIEW_ATTESTATION_20261016.json"
+}
