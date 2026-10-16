@@ -1,5 +1,5 @@
 {
-  "evaluation_type": "AI_ASSISTED_EXPLORATORY_NOT_HUMAN_SIGNED",
+  "evaluation_type": "AI_ASSISTED_EXPLORATORY_USER_REVIEW_ATTESTED",
   "metric_family": "FIVE_CANONICAL_SLOT_BINARY_PRESENCE_V1",
   "comparison_to_v3_0": "NOT_SAME_SCORER_DO_NOT_CALCULATE_DELTA",
   "gold_annotation_status": "AI_ASSISTED_REFERENCE_DRAFT_FOR_HUMAN_SIGNOFF",
@@ -562,10 +562,14 @@
     }
   ],
   "limitations": [
-    "AI-assisted canonical reference is not a fully human-verified gold set.",
+    "Original labels were AI-assisted; owner-attested human review is not an independent case-by-case audited sign-off.",
     "30 case IDs reuse only two unique five-turn source sequences.",
     "Presence scoring ignores some evidence, polarity, status and nuanced omissions.",
     "Different evaluator/projection from historical v3.0 corrected-Gold score.",
     "Scores do not replace pending event/atom/critical-slot 6.5 metrics."
-  ]
+  ],
+  "review_record_status": "HUMAN_REVIEWED_OWNER_ATTESTED",
+  "review_record_basis": "OWNER_SELF_ATTESTATION_NOT_AN_INDEPENDENT_CASE_BY_CASE_AUDIT_LOG",
+  "labeling_method": "AI-assisted labels subsequently reviewed/approved by project owner (owner's confirmation, 2026-10-16)",
+  "human_review_record_path": "MVP_v3/tests/context_test/run_comparison/HUMAN_REVIEW_ATTESTATION_20261016.json"
 }
