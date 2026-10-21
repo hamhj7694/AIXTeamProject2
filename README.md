@@ -12,7 +12,7 @@
 [![MySQL](https://img.shields.io/badge/MySQL-Shared%20Case-4479A1?logo=mysql&logoColor=white)](MVP_v3/database/)
 [![PoC](https://img.shields.io/badge/Status-Prototype-orange)](MVP_v3/README.md)
 
-### 🌐 [CSR 배포 서비스 체험하기](http://13.209.110.99/) · [상세 Notion 포트폴리오](https://app.notion.com/p/e9ac753ff28a82cfa92a81ef1abcccd0)
+### 🌐 [CSR 배포 서비스 체험하기](http://13.209.110.99/) · [상세 Notion 포트폴리오](https://app.notion.com/p/3ffc753ff28a81b5b9c4f4c6fe14de79)
 
 **[💻 MVP 실행 안내](MVP_v3/README.md)** · **[🛠 보관된 기술·역할별 구현 근거](https://github.com/hamhj7694/AIXTeamProject2/blob/b297c2fa430d517908430e14e167d14c87ad8f53/MVP_v3/docs/README.md)** · **[📚 보관된 구현 상태·개발 기록](https://github.com/hamhj7694/AIXTeamProject2/blob/b297c2fa430d517908430e14e167d14c87ad8f53/MVP_v3/docs/CURRENT_STATUS.md)**
 
@@ -181,7 +181,7 @@ Shared Case → 직원 검토 · 고객 질문 · 업무 카드
 - **Window Logistic:** scikit-learn 기반 실험용 모델 파일로 위험 점수 추론; 임계값·가드레일 적용
 - **담당자:** 모델 위험 점수와 사건 근거를 참고하되, 실제 조치 판단은 별도로 수행
 
-이 저장소에 연결된 모델은 **`WINDOW_LOGISTIC_DASHBOARD_EXPERIMENTAL_SAMPLE_v1.pkl`**입니다. **별도 보이스피싱 ML 프로젝트에서 선택한 최종 Random Forest 모델과 동일한 아티팩트가 아닙니다.**
+이 저장소에 연결된 모델은 **`WINDOW_LOGISTIC_DASHBOARD_EXPERIMENTAL_SAMPLE_v1.pkl`**입니다. **별도 보이스피싱 ML 프로젝트의 평가·검증용 Random Forest 모델과 동일한 아티팩트가 아닙니다.**
 
 근거: [ML Adapter](MVP_v3/backend/ai_api/app/domains/diagnosis/model_adapter.py) · [모델 상태](MVP_v3/backend/ai_api/models/README.md) · [별도 ML 프로젝트](https://github.com/hamhj7694/AIXTeamProject1)
 
@@ -250,7 +250,7 @@ AI 모델 ID는 환경변수로 교체할 수 있으며, 저장소의 예시 설
 
 ### AI 정보 구조 개선 · 내부 실험 결과 기록
 
-[Notion 포트폴리오](https://app.notion.com/p/e9ac753ff28a82cfa92a81ef1abcccd0)에는 AI 정보 구조 개선 과정의 **내부 실험 결과**로 다음 관측치가 기록되어 있습니다.
+[Notion 포트폴리오](https://app.notion.com/p/3ffc753ff28a81b5b9c4f4c6fe14de79)에는 AI 정보 구조 개선 과정의 **내부 실험 결과**로 다음 관측치가 기록되어 있습니다.
 
 | 항목 | 초기 기록 | 후속 기록 |
 |---|---:|---:|
