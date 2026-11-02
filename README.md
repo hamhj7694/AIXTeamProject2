@@ -183,6 +183,12 @@ Shared Case → 직원 검토 · 고객 질문 · 업무 카드
 
 이 저장소에 연결된 모델은 **`WINDOW_LOGISTIC_DASHBOARD_EXPERIMENTAL_SAMPLE_v1.pkl`**입니다. **별도 보이스피싱 ML 프로젝트의 평가·검증용 Random Forest 모델과 동일한 아티팩트가 아닙니다.**
 
+**모델 생성 출처 확인:** [12_07 Recall-first Window Logistic 학습](https://drive.google.com/file/d/1SdI-c2CEZXDS_ZfFDN_9DGwzNOCdzF-Y/view)의 **18통화 SAMPLE** 실행에서 생성한 `WINDOW_EXPERIMENTAL_SAMPLE_v1.joblib`을 [12_08 Pickle Export](https://drive.google.com/file/d/1vu0eqIKg-CKFYimSb3biNSOWnTRF5i0x/view)가 23개 Feature·원본 임계값 **0.95**·Guardrail과 함께 묶어 저장한 파일입니다. [12_08 Drive 원본 PKL](https://drive.google.com/file/d/1z_hmQTM3toEaJtN3lnfukQBRafOuySWT/view)과 본 CSR 아티팩트, [대시보드 V2 모델](https://github.com/hamhj7694/AIXTeamProject1/blob/main/a_%ED%95%A8%ED%98%95%EC%A4%80/MLmodel_v2/WINDOW_LOGISTIC_DASHBOARD_EXPERIMENTAL_SAMPLE_v1.pkl)은 모두 **SHA-256 `662db2a9351dc4ca2c453776ae6f45750e465234cc9abcecc65b58a6b047c5fc`**로 동일합니다.
+
+**성능 구분:** 별도 09_02의 *Window + 통화 종료 후 Case OR* 통합 경고 Recall 99.13%는 **이 CSR Window Logistic 자체의 검증 수치가 아닙니다**. 12_07 SAMPLE 모델의 원본 95점 Hold-out Test에서는 양성 2통화 중 0통화 탐지(Recall 0%); 12_11의 60점 합성 400시나리오에서는 Recall 95.0%, Precision 80.5%가 기록됐지만 실제 CSR 추론 경로의 독립 평가가 아닙니다. CSR은 **최근 10발화 누적 Feature**와 **금전 이동 단독 신호 차단 Guardrail** 등을 사용하므로 문장별 독립 평가하는 V2의 운영 점수와 동일하지 않습니다.
+
+**Runtime 임계값 주의:** PKL 내부 기본값은 **0.95**입니다. `WINDOW_RISK_THRESHOLD` 환경변수가 실제 AI API 프로세스에 주입된 경우에만 override됩니다. `.env.example`은 0.60으로 적혀 있지만 현재 `docker-compose.yml`의 `ai-api.environment`에 해당 키가 없어 Compose 구동 시 자동 전달되지 않습니다. 실제 컨테이너에서 어떤 임계값이 사용됐는지는 실행 환경 확인이 필요합니다. 외부 탐지 시스템과의 운영 연동이나 상용 탐지율을 입증하지 않습니다.
+
 근거: [ML Adapter](MVP_v3/backend/ai_api/app/domains/diagnosis/model_adapter.py) · [모델 상태](MVP_v3/backend/ai_api/models/README.md) · [별도 ML 프로젝트](https://github.com/hamhj7694/AIXTeamProject1)
 
 ### 5-3. 사건 내부 검색과 역할별 AI
